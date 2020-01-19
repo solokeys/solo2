@@ -1,0 +1,45 @@
+[package]
+name = "app"
+version = "0.1.0"
+authors = ["the SoloKeys engineers"]
+edition = "2018"
+
+[[bin]]
+name = "rt"
+path = "src/app_rt.rs"
+
+[[bin]]
+name = "rtfm"
+path = "src/app_rtfm.rs"
+
+[lib]
+name = "app"
+
+[dependencies]
+cortex-m-funnel = "0.1.0-alpha.1"
+cortex-m-rtfm = "0.5.1"
+cortex-m-semihosting = "0.3.5"
+ufmt = "0.1.0"
+usbd-serial = "0.1.0"
+
+# board
+lpcxpresso55 = { path = "../boards/lpcxpresso55", optional = true }
+prototype-bee = { path = "../boards/prototype-bee", optional = true }
+
+# components
+# fido-authenticator = { path = "../components/fido-authencator" }
+# usbd-ctaphid = { path = "../components/usbd-ctaphid" }
+usbd-ctaphid = { path = "../../usbd-ctaphid", features = ["insecure-ram-authenticator"] }
+usb-device = "0.2.3"
+
+# panic
+panic-halt = "0.2.0"
+panic-semihosting = { version = "0.5.3", features = ["jlink-quirks"] }
+
+# storage
+# littlefs2 = { git = "https://github.com/nickray/littlefs2", branch = "main" }
+
+[features]
+default = ["board-lpcxpresso"]
+board-lpcxpresso = ["lpcxpresso55"]
+board-prototype = ["prototype-bee"]

@@ -1,0 +1,14 @@
+[target.thumbv8m.main-none-eabi]
+runner = "gdb-multiarch -q -x jlink.gdb"
+rustflags = [
+  "-C", "link-arg=-Tlink.x",
+]
+
+[target.thumbv8m.main-none-eabihf]
+runner = "gdb-multiarch -q -x jlink.gdb"
+rustflags = [
+  "-C", "link-arg=-Tlink.x",
+]
+
+[build]
+target = "thumbv8m.main-none-eabi"

@@ -1,0 +1,10 @@
+[package]
+name = "lpcxpresso55"
+version = "0.1.0"
+authors = ["Nicolas Stalder <n@stalder.io>"]
+edition = "2018"
+
+[dependencies]
+cortex-m = "0.6.1"
+cortex-m-rt = "0.6.10"
+lpc55-hal = { git = "https://github.com/nickray/lpc55-hal", branch = "main" }
