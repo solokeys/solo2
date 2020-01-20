@@ -15,13 +15,14 @@ dependencies = [
  "cortex-m-funnel 0.1.0-alpha.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "cortex-m-rtfm 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "cortex-m-semihosting 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "fido-authenticator 0.1.0",
  "lpcxpresso55 0.1.0",
  "panic-halt 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "panic-semihosting 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "prototype-bee 0.1.0",
  "ufmt 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "usb-device 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "usbd-ctaphid 0.0.0-unreleased",
+ "usbd-ctaphid 0.0.0-unreleased (git+https://github.com/nickray/usbd-ctaphid?branch=main)",
  "usbd-serial 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -108,7 +109,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "proc-macro2 1.0.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "quote 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "syn 1.0.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "syn 1.0.14 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -127,7 +128,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "proc-macro2 1.0.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "quote 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "syn 1.0.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "syn 1.0.14 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -150,7 +151,7 @@ dependencies = [
  "proc-macro2 1.0.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "quote 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "rtfm-syntax 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "syn 1.0.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "syn 1.0.14 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -164,6 +165,7 @@ dependencies = [
 [[package]]
 name = "cosey"
 version = "0.1.0-unreleased"
+source = "git+https://github.com/ycrypto/cosey?branch=main#49994cf1d96ae389faf47895431d8052fd9b8770"
 dependencies = [
  "heapless-bytes 0.1.0-unreleased (git+https://github.com/ycrypto/heapless-bytes?branch=main)",
  "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -178,6 +180,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "derpy"
 version = "0.1.0-unreleased"
+source = "git+https://github.com/ycrypto/derpy?branch=main#d021cccdd0d07bfc977a205a9e934d0974a533db"
 dependencies = [
  "heapless-bytes 0.1.0-unreleased (git+https://github.com/ycrypto/heapless-bytes?branch=main)",
 ]
@@ -203,6 +206,10 @@ dependencies = [
 name = "fake-simd"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "fido-authenticator"
+version = "0.1.0"
 
 [[package]]
 name = "generic-array"
@@ -265,7 +272,7 @@ dependencies = [
 [[package]]
 name = "lpc55-hal"
 version = "0.0.3"
-source = "git+https://github.com/nickray/lpc55-hal?branch=main#8adcc06d119ed7b660fb92d432ffe63b9553df83"
+source = "git+https://github.com/nickray/lpc55-hal?branch=main#7bd174092e382b3d353e6344388ff679541b699b"
 dependencies = [
  "bare-metal 0.2.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "cortex-m 0.6.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -318,9 +325,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "nisty"
 version = "0.1.0-alpha.0"
+source = "git+https://github.com/ycrypto/nisty?branch=main#1cbafd56f1b5ce7474e46e0efd6ce2cc135203e3"
 dependencies = [
- "cosey 0.1.0-unreleased",
- "derpy 0.1.0-unreleased",
+ "cosey 0.1.0-unreleased (git+https://github.com/ycrypto/cosey?branch=main)",
+ "derpy 0.1.0-unreleased (git+https://github.com/ycrypto/derpy?branch=main)",
  "micro-ecc-sys 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "sha2 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -351,7 +359,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "proc-macro2 1.0.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "quote 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "syn 1.0.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "syn 1.0.14 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -391,7 +399,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "indexmap 1.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "proc-macro2 1.0.8 (registry+https://github.com/rust-lang/crates.io-index)",
- "syn 1.0.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "syn 1.0.14 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -405,8 +413,9 @@ dependencies = [
 [[package]]
 name = "salty"
 version = "0.1.0-alpha.0"
+source = "git+https://github.com/ycrypto/salty?branch=main#1e6df871a95a46deee9e5aa754e997e1aa26e238"
 dependencies = [
- "cosey 0.1.0-unreleased",
+ "cosey 0.1.0-unreleased (git+https://github.com/ycrypto/cosey?branch=main)",
  "subtle 2.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -438,7 +447,7 @@ source = "git+https://github.com/ycrypto/serde-indexed?branch=main#b641e54875833
 dependencies = [
  "proc-macro2 1.0.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "quote 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "syn 1.0.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "syn 1.0.14 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -457,7 +466,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "proc-macro2 1.0.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "quote 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "syn 1.0.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "syn 1.0.14 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -467,7 +476,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "proc-macro2 1.0.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "quote 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "syn 1.0.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "syn 1.0.14 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -493,7 +502,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "syn"
-version = "1.0.13"
+version = "1.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "proc-macro2 1.0.8 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -524,7 +533,7 @@ dependencies = [
  "proc-macro-hack 0.5.11 (registry+https://github.com/rust-lang/crates.io-index)",
  "proc-macro2 1.0.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "quote 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "syn 1.0.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "syn 1.0.14 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -545,14 +554,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "usbd-ctaphid"
 version = "0.0.0-unreleased"
+source = "git+https://github.com/nickray/usbd-ctaphid?branch=main#c771c830e16e7812c5fec48b702a0f92a6b15376"
 dependencies = [
  "cortex-m-semihosting 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "cosey 0.1.0-unreleased",
- "derpy 0.1.0-unreleased",
+ "cosey 0.1.0-unreleased (git+https://github.com/ycrypto/cosey?branch=main)",
+ "derpy 0.1.0-unreleased (git+https://github.com/ycrypto/derpy?branch=main)",
  "heapless 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "heapless-bytes 0.1.0-unreleased (git+https://github.com/ycrypto/heapless-bytes?branch=main)",
- "nisty 0.1.0-alpha.0",
- "salty 0.1.0-alpha.0",
+ "nisty 0.1.0-alpha.0 (git+https://github.com/ycrypto/nisty?branch=main)",
+ "salty 0.1.0-alpha.0 (git+https://github.com/ycrypto/salty?branch=main)",
  "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde-indexed 0.0.2 (git+https://github.com/ycrypto/serde-indexed?branch=main)",
  "serde_cbor 0.11.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -607,7 +617,9 @@ dependencies = [
 "checksum cortex-m-rtfm 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)" = "eaf0b9fd3f042cb3793d15daf3cea201b2f25c99b0b5b936a551bb6909c3ae5b"
 "checksum cortex-m-rtfm-macros 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)" = "c62092f6ff344e9b0adb748f0302ed69889ba2fae1fce446e3788d4726ea73bb"
 "checksum cortex-m-semihosting 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)" = "113ef0ecffee2b62b58f9380f4469099b30e9f9cbee2804771b4203ba1762cfa"
+"checksum cosey 0.1.0-unreleased (git+https://github.com/ycrypto/cosey?branch=main)" = "<none>"
 "checksum cty 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "7313c0d620d0cb4dbd9d019e461a4beb501071ff46ec0ab933efb4daa76d73e3"
+"checksum derpy 0.1.0-unreleased (git+https://github.com/ycrypto/derpy?branch=main)" = "<none>"
 "checksum digest 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)" = "f3d0c8c8752312f9713efd397ff63acb9f85585afbf179282e720e7704954dd5"
 "checksum embedded-hal 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)" = "ee4908a155094da7723c2d60d617b820061e3b4efcc3d9e293d206a5a76c170b"
 "checksum fake-simd 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "e88a8acf291dafb59c2d96e8f59828f3838bb1a70398823ade51a84de6a6deed"
@@ -622,6 +634,7 @@ dependencies = [
 "checksum lpc55s6x-pac 0.0.5 (registry+https://github.com/rust-lang/crates.io-index)" = "24789c03e3f2fa11faed74726b27e1cbf60e368ff257bc27a9e81b90841107ec"
 "checksum micro-ecc-sys 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)" = "6134e973fed222804ffbbce8e1cd7a3021fd54b18c1e5a814828a82af52c7ac9"
 "checksum nb 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "b1411551beb3c11dedfb0a90a0fa256b47d28b9ec2cdff34c25a2fa59e45dbdc"
+"checksum nisty 0.1.0-alpha.0 (git+https://github.com/ycrypto/nisty?branch=main)" = "<none>"
 "checksum opaque-debug 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)" = "2839e79665f131bdb5782e51f2c6c9599c133c6098982a54c794358bf432529c"
 "checksum panic-halt 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "de96540e0ebde571dc55c73d60ef407c653844e6f9a1e2fdbd40c07b9252d812"
 "checksum panic-semihosting 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)" = "c03864ac862876c16a308f5286f4aa217f1a69ac45df87ad3cd2847f818a642c"
@@ -632,6 +645,7 @@ dependencies = [
 "checksum rtfm-core 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "9ec893edb2aa5b70320b94896ffea22a7ebb1cf3f942bb67cd5b60a865a63493"
 "checksum rtfm-syntax 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "4455e23c34df3d66454e7e218a4d76a7f83321d04a806be614463341cec4116e"
 "checksum rustc_version 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)" = "138e3e0acb6c9fb258b19b67cb8abd63c00679d2851805ea151465464fe9030a"
+"checksum salty 0.1.0-alpha.0 (git+https://github.com/ycrypto/salty?branch=main)" = "<none>"
 "checksum semver 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)" = "1d7eb9ef2c18661902cc47e535f9bc51b78acd254da71d375c2f6720d9a40403"
 "checksum semver-parser 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)" = "388a1df253eca08550bef6c72392cfe7c30914bf41df5269b68cbd6ff8f570a3"
 "checksum serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)" = "414115f25f818d7dfccec8ee535d76949ae78584fc4f79a6f45a904bf8ab4449"
@@ -642,13 +656,14 @@ dependencies = [
 "checksum sha2 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)" = "27044adfd2e1f077f649f59deb9490d3941d674002f7d062870a60ebe9bd47a0"
 "checksum stable_deref_trait 1.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "dba1a27d3efae4351c8051072d619e3ade2820635c3958d826bfea39d59b54c8"
 "checksum subtle 2.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "7c65d530b10ccaeac294f349038a597e435b18fb456aadd0840a623f83b9e941"
-"checksum syn 1.0.13 (registry+https://github.com/rust-lang/crates.io-index)" = "1e4ff033220a41d1a57d8125eab57bf5263783dfdcc18688b1dacc6ce9651ef8"
+"checksum syn 1.0.14 (registry+https://github.com/rust-lang/crates.io-index)" = "af6f3550d8dff9ef7dc34d384ac6f107e5d31c8f57d9f28e0081503f547ac8f5"
 "checksum typenum 1.11.2 (registry+https://github.com/rust-lang/crates.io-index)" = "6d2783fe2d6b8c1101136184eb41be8b1ad379e4657050b8aaff0c79ee7575f9"
 "checksum ufmt 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "2e7ecea7ef79d3f8f878eee614afdf5256475c63ad76139d4da6125617c784a0"
 "checksum ufmt-macros 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "57e1908fca9a873e58027cc81e06172c60908377481a8db4d714aae7f15f890b"
 "checksum ufmt-write 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "e87a2ed6b42ec5e28cc3b94c09982969e9227600b2e3dcbc1db927a84c06bd69"
 "checksum unicode-xid 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "826e7639553986605ec5979c7dd957c7895e93eabed50ab2ffa7f6128a75097c"
 "checksum usb-device 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)" = "e09f7a42b2591eb587456754fadf0e58d21721601431fd333a4a18c0646112a8"
+"checksum usbd-ctaphid 0.0.0-unreleased (git+https://github.com/nickray/usbd-ctaphid?branch=main)" = "<none>"
 "checksum usbd-serial 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "b45051be4bc25e6f85caacb1d3f45ace644fcc6e662b3d976330912542b7f69e"
 "checksum vcell 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "876e32dcadfe563a4289e994f7cb391197f362b6315dc45e8ba4aa6f564a4b3c"
 "checksum void 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)" = "6a02e4885ed3bc0f2de90ea6dd45ebcbb66dacffe03547fadbb0eeae2770887d"

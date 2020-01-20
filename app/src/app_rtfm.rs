@@ -7,7 +7,8 @@
 
 use app::{board, hal};
 
-// use cortex_m_semihosting::hprintln;
+#[allow(unused_imports)]
+use cortex_m_semihosting::{dbg, hprintln};
 // use rtfm::Exclusive;
 use funnel::info;
 
@@ -24,26 +25,10 @@ const APP: () = {
         usbd: app::types::Usbd,
     }
 
-    #[idle(resources = [ctaphid, serial, usbd])]
-    fn idle(mut c: idle::Context) -> ! {
-        let idle::Resources { mut ctaphid, mut serial, mut usbd } = c.resources;
-
-        loop {
-            // not sure why we can't use `Exclusive` here, should we? how?
-            // https://rtfm.rs/0.5/book/en/by-example/tips.html#generics
-            // Important: do not pass unlocked serial :)
-            app::drain_log_to_serial(&mut serial);
-
-            usbd.lock(|usbd| ctaphid.lock(|ctaphid| serial.lock(|serial|
-                usbd.poll(&mut [ctaphid, serial])
-            )));
-        }
-    }
-
     #[init(schedule = [toggle_red])]
     fn init(c: init::Context) -> init::LateResources {
 
-        let (ctaphid, mut rgb, serial, usbd) = app::init_board(c.device, c.core);
+        let (ctaphid, rgb, serial, usbd) = app::init_board(c.device, c.core);
 
         c.schedule.toggle_red(Instant::now() + PERIOD.cycles()).unwrap();
 
@@ -56,25 +41,48 @@ const APP: () = {
         }
     }
 
-    // #[task(binds = USB0_NEEDCLK, resources = [ctaphid, serial, usbd])]
-    // fn usb0_needclk(c: usb0_needclk::Context) {
-    //     c.resources.usbd.poll(&mut [c.resources.ctaphid, c.resources.serial]);
-    // }
+    // #[idle(resources = [ctaphid, serial, usbd])]
+    #[idle(resources = [serial])]
+    fn idle(c: idle::Context) -> ! {
+        // let idle::Resources { mut ctaphid, mut serial, mut usbd } = c.resources;
+        let idle::Resources { mut serial } = c.resources;
+
+        loop {
+            // not sure why we can't use `Exclusive` here, should we? how?
+            // https://rtfm.rs/0.5/book/en/by-example/tips.html#generics
+            // Important: do not pass unlocked serial :)
+            app::drain_log_to_serial(&mut serial);
+
+            // usbd.lock(|usbd| ctaphid.lock(|ctaphid| serial.lock(|serial|
+            //     usbd.poll(&mut [ctaphid, serial])
+            // )));
+        }
+    }
+
+    #[task(binds = USB0_NEEDCLK, resources = [ctaphid, serial, usbd])]
+    fn usb0_needclk(c: usb0_needclk::Context) {
+        c.resources.usbd.poll(&mut [c.resources.ctaphid, c.resources.serial]);
+    }
 
     #[task(binds = USB0, resources = [ctaphid, serial, usbd])]
     fn usb0(c: usb0::Context) {
+        let before = Instant::now();
         c.resources.usbd.poll(&mut [c.resources.ctaphid, c.resources.serial]);
-        // these logs turn up but too noisy
-        // info!("handled USB0 interrupt").ok();
+        let after = Instant::now();
+        let length = (after - before).as_cycles();
+        if length > 5_000 {
+            info!("poll took {:?} cycles", length).ok();
+        }
     }
 
     #[task(resources = [rgb], schedule = [toggle_red], priority = 3)]
     fn toggle_red(c: toggle_red::Context) {
+        static mut TOGGLES: u32 = 1;
         use hal::traits::wg::digital::v2::ToggleableOutputPin;
         c.resources.rgb.red.toggle().ok();
-        // these logs never turn up - why?
-        info!("toggled red LED").unwrap();
         c.schedule.toggle_red(Instant::now() + PERIOD.cycles()).unwrap();
+        info!("toggled red LED #{}", TOGGLES).ok();
+        *TOGGLES += 1;
     }
 
     // something to dispatch software tasks from

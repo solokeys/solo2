@@ -7,4 +7,8 @@ edition = "2018"
 [dependencies]
 cortex-m = "0.6.1"
 cortex-m-rt = "0.6.10"
-lpc55-hal = { git = "https://github.com/nickray/lpc55-hal", branch = "main" }
+
+[dependencies.lpc55-hal]
+git = "https://github.com/nickray/lpc55-hal"
+branch = "main"
+features = ["rtfm-peripherals"]
