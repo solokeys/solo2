@@ -554,8 +554,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "usbd-ctaphid"
 version = "0.0.0-unreleased"
-source = "git+https://github.com/nickray/usbd-ctaphid?branch=main#c771c830e16e7812c5fec48b702a0f92a6b15376"
+source = "git+https://github.com/nickray/usbd-ctaphid?branch=main#333594c4fa4711593a086a5354d9b6b0a57685fe"
 dependencies = [
+ "cortex-m-funnel 0.1.0-alpha.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "cortex-m-semihosting 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "cosey 0.1.0-unreleased (git+https://github.com/ycrypto/cosey?branch=main)",
  "derpy 0.1.0-unreleased (git+https://github.com/ycrypto/derpy?branch=main)",
@@ -568,6 +569,7 @@ dependencies = [
  "serde_cbor 0.11.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_repr 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "sha2 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ufmt 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "usb-device 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 

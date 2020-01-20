@@ -41,11 +41,11 @@ const APP: () = {
         }
     }
 
-    // #[idle(resources = [ctaphid, serial, usbd])]
-    #[idle(resources = [serial])]
+    #[idle(resources = [ctaphid, serial, usbd])]
+    // #[idle(resources = [serial])]
     fn idle(c: idle::Context) -> ! {
-        // let idle::Resources { mut ctaphid, mut serial, mut usbd } = c.resources;
-        let idle::Resources { mut serial } = c.resources;
+        let idle::Resources { mut ctaphid, mut serial, mut usbd } = c.resources;
+        // let idle::Resources { mut serial } = c.resources;
 
         loop {
             // not sure why we can't use `Exclusive` here, should we? how?
@@ -53,9 +53,9 @@ const APP: () = {
             // Important: do not pass unlocked serial :)
             app::drain_log_to_serial(&mut serial);
 
-            // usbd.lock(|usbd| ctaphid.lock(|ctaphid| serial.lock(|serial|
-            //     usbd.poll(&mut [ctaphid, serial])
-            // )));
+            usbd.lock(|usbd| ctaphid.lock(|ctaphid| serial.lock(|serial|
+                usbd.poll(&mut [ctaphid, serial])
+            )));
         }
     }
 

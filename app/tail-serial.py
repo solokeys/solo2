@@ -21,8 +21,8 @@ while True:
             if recv:
                 print(recv.decode(), sep="", end="")
                 # print(recv.decode())
-            # else:
-            #     time.sleep(0.1)
+            else:
+                time.sleep(0.1)
 
     except serial.SerialException as e:
         print("\n\n==== SERIAL EXCEPTION ====")

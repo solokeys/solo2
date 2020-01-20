@@ -38,7 +38,7 @@ panic-semihosting = { version = "0.5.3", features = ["jlink-quirks"] }
 # littlefs2 = { git = "https://github.com/nickray/littlefs2", branch = "main" }
 
 [dependencies.usbd-ctaphid]
-features = ["insecure-ram-authenticator"]
+features = ["insecure-ram-authenticator", "logging"]
 git = "https://github.com/nickray/usbd-ctaphid"
 branch = "main"
 
@@ -53,4 +53,4 @@ board-prototype = ["prototype-bee"]
 # [patch."https://github.com/nickray/lpc55-hal"]
 # lpc55-hal = { path = "../../lpc55-hal" }
 # [patch."https://github.com/nickray/usbd-ctaphid"]
-# usbd-ctaphid = { path = "../../usbd-ctaphid" }
+# usbd-ctaphid = { path = "../../usbd-ctaphid", features = ["logging"] }
