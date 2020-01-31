@@ -1,9 +1,19 @@
 [package]
 name = "fido-authenticator"
-version = "0.1.0"
+version = "0.0.0-unreleased"
 authors = ["Nicolas Stalder <n@stalder.io>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+cortex-m-semihosting = "0.3.5"
+embedded-hal = { version = "0.2", features = ["unproven"] }
+littlefs2 = { git = "https://github.com/nickray/littlefs2", branch = "main" }
+usbd-ctaphid = { git = "https://github.com/nickray/usbd-ctaphid", branch = "main", features = ["logging"] }
+
+[patch."https://github.com/nickray/littlefs2"]
+littlefs2 = { path = "../../../littlefs2" }
+
+[patch.crates-io]
+rustc-hash = { git = "https://github.com/nickray/rustc-hash", branch = "nickray-remove-byteorder" }

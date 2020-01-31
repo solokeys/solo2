@@ -32,3 +32,7 @@ while True:
 
     except KeyboardInterrupt as e:
         sys.exit(0)
+
+    except Exception as e:
+        print(f"other exception: {e}")
+        time.sleep(0.1)
