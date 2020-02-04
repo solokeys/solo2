@@ -7,5 +7,34 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+aes = "0.3.2"
+chacha20 = "0.3.3"
+embedded-hal = { version = "0.2.3", features = ["unproven"] }
 heapless = "0.5.3"
-heapless-bytes = { path = "../../../heapless-bytes" }
+
+[dependencies.heapless-bytes]
+git = "https://github.com/ycrypto/heapless-bytes"
+branch = "main"
+
+[dependencies.littlefs2]
+git = "https://github.com/nickray/littlefs2"
+branch = "main"
+
+[dependencies.nisty]
+git = "https://github.com/ycrypto/nisty"
+branch = "main"
+features = ["cose"]
+
+[dependencies.salty]
+git = "https://github.com/ycrypto/salty"
+branch = "main"
+features = ["cose", "tweetnacl"]
+
+[features]
+verbose-tests = []
+
+# [patch."https://github.com/nickray/littlefs2".littlefs2]
+# path = "../../../littlefs2"
+
+# [patch."https://github.com/ycrypto/heapless-bytes".heapless-bytes]
+# path = "../../../heapless-bytes"
