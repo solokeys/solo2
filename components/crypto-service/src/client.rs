@@ -14,12 +14,47 @@ impl<'a> RawClient<'a> {
         Self { ep }
     }
 
-    pub fn request<'c>(&'c mut self, req: Request) -> FutureResult<'a, 'c> {
+    // call with any of `crate::api::request::*`
+    pub fn request<'c>(&'c mut self, req: impl Into<Request>) -> FutureResult<'a, 'c> {
         // TODO: handle failure
-        self.ep.send.enqueue(req).ok();
+        self.ep.send.enqueue(req.into()).ok();
         FutureResult::new(self)
     }
 }
+
+pub struct FutureResult<'a, 'c> {
+    c: &'c mut RawClient<'a>,
+}
+
+impl<'a, 'c> FutureResult<'a, 'c> {
+
+    pub fn new(client: &'c mut RawClient<'a>) -> Self {
+        Self { c: client }
+    }
+
+    pub fn poll(&mut self) -> core::task::Poll<core::result::Result<Reply, Error>> {
+        match self.c.ep.recv.dequeue() {
+            Some(reply) => {
+                #[cfg(all(test, feature = "verbose-tests"))]
+                println!("got a reply: {:?}", &reply);
+                core::task::Poll::Ready(reply)
+            },
+            _ => core::task::Poll::Pending
+        }
+    }
+}
+
+// instead of: `let mut future = client.request(request)`
+// allows: `let mut future = request.submit(&mut client)`
+pub trait SubmitRequest: Into<Request> {
+    fn submit<'a, 'c>(self, client: &'c mut RawClient<'a>) -> FutureResult<'a, 'c> {
+        client.request(self)
+    }
+}
+
+impl SubmitRequest for request::GenerateKey {}
+impl SubmitRequest for request::GenerateKeypair {}
+impl SubmitRequest for request::Sign {}
 
 pub struct Client {
 }

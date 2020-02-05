@@ -109,7 +109,7 @@ fn dummy() {
 
     // client gets injected into "app"
     // may perform crypto request at any time
-    let mut future = client.request(Request::DummyRequest);
+    let mut future = client.request(crate::api::Request::DummyRequest);
 
     // service is assumed to be running in other thread
     // actually, the "request" method should pend an interrupt,
@@ -149,11 +149,13 @@ fn sign_ed25519() {
 
     // client gets injected into "app"
     // may perform crypto request at any time
-    let request = api::GenerateKeypairRequest {
+    let request = api::request::GenerateKeypair {
         mechanism: Mechanism::Ed25519,
         key_parameters: types::KeyParameters::default(),
     };
-    let mut future = client.request(Request::GenerateKeypair(request));
+    // let mut future = client.request(request);
+    use crate::client::SubmitRequest;
+    let mut future = request.submit(&mut client);
 
     // service is assumed to be running in other thread
     // actually, the "request" method should pend an interrupt,

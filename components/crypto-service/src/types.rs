@@ -14,6 +14,8 @@ pub use littlefs2::{
 
 use crate::config::*;
 
+pub use crate::client::FutureResult;
+
 // for counters use the pkcs#11 idea of
 // a monotonic incrementing counter that
 // "increments on each read" --> save +=1 operation

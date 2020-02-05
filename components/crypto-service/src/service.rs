@@ -75,6 +75,10 @@ impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> Service<'a, 's, R, P, V> 
 
                     // TODO: use the `?` operator
                     // TODO: how to handle queue failure?
+                    // TODO: decouple this in such a way that we can easily extend the
+                    //       cryptographic capabilities on two axes:
+                    //        - mechanisms
+                    //        - backends
                     Request::GenerateKeypair(request) => {
                         match request.mechanism {
                             Mechanism::Ed25519 => {
@@ -135,7 +139,7 @@ impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> Service<'a, 's, R, P, V> 
 
                                 // return key handle
                                 ep.send.enqueue(Ok(Reply::GenerateKey(
-                                    GenerateKeyReply { key_handle: KeyHandle { key_id: unique_id } }))).unwrap();
+                                    reply::GenerateKey { key_handle: KeyHandle { key_id: unique_id } }))).unwrap();
                             },
 
                             #[allow(unreachable_patterns)]

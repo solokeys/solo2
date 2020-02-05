@@ -1,7 +1,7 @@
-use core::task::Poll;
+// use core::task::Poll;
 
-use crate::api::Reply;
-use crate::client::RawClient;
+// use crate::api::Reply;
+// use crate::client::RawClient;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Error {
@@ -11,26 +11,26 @@ pub enum Error {
     RequestNotAvailable,
 }
 
-pub struct FutureResult<'a, 'c> {
-    c: &'c mut RawClient<'a>,
-}
+// pub struct FutureResult<'a, 'c> {
+//     c: &'c mut RawClient<'a>,
+// }
 
-impl<'a, 'c> FutureResult<'a, 'c> {
-    pub fn new(client: &'c mut RawClient<'a>) -> Self {
-        Self { c: client }
-    }
+// impl<'a, 'c> FutureResult<'a, 'c> {
+//     pub fn new(client: &'c mut RawClient<'a>) -> Self {
+//         Self { c: client }
+//     }
 
-    pub fn poll(&mut self) -> Poll<core::result::Result<Reply, Error>> {
-        // pop request in channel
-        match self.c.ep.recv.dequeue() {
-            Some(reply) => {
-                #[cfg(all(test, feature = "verbose-tests"))]
-                println!("got a reply");
-                Poll::Ready(reply)
-            },
-            _ => Poll::Pending
-        }
-    }
-}
+//     pub fn poll(&mut self) -> Poll<core::result::Result<Reply, Error>> {
+//         // pop request in channel
+//         match self.c.ep.recv.dequeue() {
+//             Some(reply) => {
+//                 #[cfg(all(test, feature = "verbose-tests"))]
+//                 println!("got a reply");
+//                 Poll::Ready(reply)
+//             },
+//             _ => Poll::Pending
+//         }
+//     }
+// }
 
 
