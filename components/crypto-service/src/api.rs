@@ -29,13 +29,13 @@ pub mod request {
     #[derive(Copy, Clone, Eq, PartialEq, Debug)]
     pub struct GenerateKey {
         pub mechanism: Mechanism,
-        pub key_parameters: KeyParameters,
+        pub key_attributes: KeyAttributes,
     }
 
     #[derive(Copy, Clone, Eq, PartialEq, Debug)]
     pub struct GenerateKeypair {
         pub mechanism: Mechanism,
-        pub key_parameters: KeyParameters,
+        pub key_attributes: KeyAttributes,
         // private_key_template: PrivateKeyTemplate,
         // public_key_template: PublicKeyTemplate,
     }

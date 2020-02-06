@@ -17,12 +17,16 @@ use crate::error::Error;
 pub type RequestPipe = Queue::<Request, U1, u8>;
 pub type ReplyPipe = Queue::<Result<Reply, Error>, U1, u8>;
 
-pub /*unsafe*/ fn new_endpoints<'a>(request_pipe: &'a mut RequestPipe, reply_pipe: &'a mut ReplyPipe)
+pub /*unsafe*/ fn new_endpoints<'a>(
+    request_pipe: &'a mut RequestPipe,
+    reply_pipe: &'a mut ReplyPipe,
+    client_id: &'a str,
+    )
     -> (ServiceEndpoint<'a>, ClientEndpoint<'a>)
 {
     let (req_send, req_recv) = request_pipe.split();
     let (rep_send, rep_recv) = reply_pipe.split();
-    let service_endpoint = ServiceEndpoint { recv: req_recv, send: rep_send };
+    let service_endpoint = ServiceEndpoint { recv: req_recv, send: rep_send, client_id };
     let client_endpoint = ClientEndpoint { recv: rep_recv, send: req_send };
     (service_endpoint, client_endpoint)
 }
@@ -30,6 +34,9 @@ pub /*unsafe*/ fn new_endpoints<'a>(request_pipe: &'a mut RequestPipe, reply_pip
 pub struct ServiceEndpoint<'a> {
     pub recv: Consumer<'a, Request, U1, u8>,
     pub send: Producer<'a, Result<Reply, Error>, U1, u8>,
+    // service (trusted) has this, not client (untrusted)
+    // used among other things to namespace cryptographic material
+    pub client_id: &'a str,
 }
 
 pub struct ClientEndpoint<'a> {

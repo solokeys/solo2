@@ -1,3 +1,5 @@
+pub use generic_array::GenericArray;
+
 pub use heapless::{
     consts,
     String,
@@ -20,6 +22,18 @@ pub use crate::client::FutureResult;
 // a monotonic incrementing counter that
 // "increments on each read" --> save +=1 operation
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct AeadUniqueId {
+    unique_id: [u8; 16],
+    nonce: [u8; 12],
+    tag: [u8; 16],
+}
+
+pub type AeadKey = [u8; 32];
+pub type AeadNonce = [u8; 12];
+pub type AeadTag = [u8; 16];
+
+
 /// Opaque key handle
 ///
 /// Ideally, this would be authenticated encryption
@@ -29,16 +43,24 @@ pub use crate::client::FutureResult;
 ///
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct KeyHandle{
-    pub key_id: KeyId,
+    pub key_id: UniqueId,
 }
 
-impl KeyHandle {
-    pub fn unique_id(&self) -> KeyId {
-        self.key_id
-    }
+// Object Hierarchy according to Cryptoki
+// - Storage
+//   - Domain parameters
+//   - Key
+//   - Certificate
+//   - Data
+// - Hardware feature
+// - Mechanism
+// - Profiles
+#[derive(Clone, Default, Eq, PartialEq, Debug)]
+pub struct DataAttributes {
+    // pub application: String<?>,
+    // pub object_id: Bytes<?>,
+    pub value: Bytes<MAX_DATA_LENGTH>,
 }
-
-type KeyId = [u8; 16];
 
 // TODO: In PKCS#11v3, this is a map (AttributeType: ulong -> (*void, len)).
 // "An array of CK_ATTRIBUTEs is called a “template” and is used for creating, manipulating and searching for objects."
@@ -48,7 +70,14 @@ type KeyId = [u8; 16];
 //
 // Lookup seems a bit painful, on the other hand a struct of options is wasteful.
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub struct KeyParameters {
+pub struct KeyAttributes {
+    // key_type: KeyType,
+    // key_id: Bytes,
+    // derive: bool, // can other keys be derived
+    // local: bool, // generated on token, or copied from such
+    // key_gen_mechanism: Mechanism, // only for local, how was key generated
+    // allowed_mechanisms: Vec<Mechanism>,
+
     // never return naked private key
     sensitive: bool,
     // always_sensitive: bool,
@@ -61,21 +90,88 @@ pub struct KeyParameters {
     persistent: bool,
 }
 
-impl Default for KeyParameters {
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct PublicKeyAttributes {
+    // never return naked private key
+    sensitive: bool,
+    // always_sensitive: bool,
+
+    // do not even return wrapped private key
+    extractable: bool,
+    // never_extractable: bool,
+
+    // do not save to disk
+    persistent: bool,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct PrivateKeyAttributes {
+    // never return naked private key
+    sensitive: bool,
+    // always_sensitive: bool,
+
+    // do not even return wrapped private key
+    extractable: bool,
+    // never_extractable: bool,
+
+    // do not save to disk
+    persistent: bool,
+}
+
+impl Default for KeyAttributes {
     fn default() -> Self {
         Self {
             sensitive: true,
+            // always_sensitive: true,
             extractable: false,
+            // never_extractable: true,
+            // cryptoki: token (vs session) object
+            // cryptoki: default false
             persistent: false,
         }
     }
 }
 
-impl KeyParameters {
+impl KeyAttributes {
     pub fn new() -> Self {
         Default::default()
     }
 }
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct StorageAttributes {
+    // each object must have a unique ID
+    unique_id: UniqueId,
+
+    // description of object
+    label: Bytes<MAX_LABEL_LENGTH>,
+
+    // cryptoki: token (vs session) object
+    persistent: bool,
+
+    // cryptoki: user must be logged in
+    // private: bool,
+
+    modifiable: bool,
+    copyable: bool,
+    destroyable: bool,
+
+}
+
+impl StorageAttributes {
+    pub fn new(unique_id: UniqueId) -> Self {
+        Self {
+            unique_id,
+            label: Bytes::new(),
+            persistent: false,
+
+            modifiable: true,
+            copyable: true,
+            destroyable: true,
+        }
+    }
+}
+
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Mechanism {
@@ -87,4 +183,25 @@ pub enum Mechanism {
 pub type Message = Bytes<MAX_MESSAGE_LENGTH>;
 
 pub type Signature = Bytes<MAX_SIGNATURE_LENGTH>;
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct UniqueId(pub(crate) [u8; 16]);
+
+impl UniqueId {
+    pub fn hex(&self) -> [u8; 32] {
+        let mut hex = [0u8; 32];
+        format_hex(&self.0, &mut hex);
+        hex
+    }
+}
+
+// PANICS
+const HEX_CHARS: &[u8] = b"0123456789abcdef";
+fn format_hex(data: &[u8], mut buffer: &mut [u8]) {
+    for byte in data.iter() {
+        buffer[0] = HEX_CHARS[(byte >> 4) as usize];
+        buffer[1] = HEX_CHARS[(byte & 0xf) as usize];
+        buffer = &mut buffer[2..];
+    }
+}
 

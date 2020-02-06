@@ -81,8 +81,11 @@ fn dummy() {
     //     pipe::new_endpoints(&mut request_pipe, &mut reply_pipe);
 
     // static setup
-    let (service_endpoint, client_endpoint) =
-        pipe::new_endpoints(unsafe { &mut REQUEST_PIPE }, unsafe { &mut REPLY_PIPE });
+    let (service_endpoint, client_endpoint) = pipe::new_endpoints(
+        unsafe { &mut REQUEST_PIPE },
+        unsafe { &mut REPLY_PIPE },
+        "fido2",
+    );
 
     let rng = MockRng::new();
 
@@ -124,8 +127,11 @@ fn dummy() {
 
 #[test]
 fn sign_ed25519() {
-    let (service_endpoint, client_endpoint) =
-        pipe::new_endpoints(unsafe { &mut REQUEST_PIPE }, unsafe { &mut REPLY_PIPE });
+    let (service_endpoint, client_endpoint) = pipe::new_endpoints(
+        unsafe { &mut REQUEST_PIPE },
+        unsafe { &mut REPLY_PIPE },
+        "fido2",
+    );
 
     let rng = MockRng::new();
 
@@ -151,7 +157,7 @@ fn sign_ed25519() {
     // may perform crypto request at any time
     let request = api::request::GenerateKeypair {
         mechanism: Mechanism::Ed25519,
-        key_parameters: types::KeyParameters::default(),
+        key_attributes: types::KeyAttributes::default(),
     };
     // let mut future = client.request(request);
     use crate::client::SubmitRequest;
