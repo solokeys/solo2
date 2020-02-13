@@ -34,17 +34,6 @@ pub type AeadNonce = [u8; 12];
 pub type AeadTag = [u8; 16];
 
 
-/// Opaque key handle
-///
-/// Ideally, this would be authenticated encryption
-/// around the information that allows locating the key.
-///
-/// So e.g. users can't get at keys they don't own
-///
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub struct KeyHandle{
-    pub key_id: UniqueId,
-}
 
 // Object Hierarchy according to Cryptoki
 // - Storage
@@ -55,9 +44,35 @@ pub struct KeyHandle{
 // - Hardware feature
 // - Mechanism
 // - Profiles
+
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum CertificateType {
+    // "identity", issued by certificate authority
+    // --> authentication
+    PublicKey,
+    // issued by attribute authority
+    // --> authorization
+    Attribute,
+}
+
+// pub enum CertificateCategory {
+//     Authority,
+//     Token,
+//     Other,
+// }
+
+// #[derive(Clone, Default, Eq, PartialEq, Debug)]
+// pub struct CertificateAttributes {
+//     pub certificate_type CertificateType,
+// }
+
+
 #[derive(Clone, Default, Eq, PartialEq, Debug)]
 pub struct DataAttributes {
-    // pub application: String<?>,
+    // application that manages the object
+    // pub application: String<MAX_APPLICATION_NAME_LENGTH>,
+    // DER-encoding of *type* of data object
     // pub object_id: Bytes<?>,
     pub value: Bytes<MAX_DATA_LENGTH>,
 }
@@ -72,40 +87,12 @@ pub struct DataAttributes {
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct KeyAttributes {
     // key_type: KeyType,
-    // key_id: Bytes,
+    // object_id: Bytes,
     // derive: bool, // can other keys be derived
     // local: bool, // generated on token, or copied from such
     // key_gen_mechanism: Mechanism, // only for local, how was key generated
     // allowed_mechanisms: Vec<Mechanism>,
 
-    // never return naked private key
-    sensitive: bool,
-    // always_sensitive: bool,
-
-    // do not even return wrapped private key
-    extractable: bool,
-    // never_extractable: bool,
-
-    // do not save to disk
-    persistent: bool,
-}
-
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub struct PublicKeyAttributes {
-    // never return naked private key
-    sensitive: bool,
-    // always_sensitive: bool,
-
-    // do not even return wrapped private key
-    extractable: bool,
-    // never_extractable: bool,
-
-    // do not save to disk
-    persistent: bool,
-}
-
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub struct PrivateKeyAttributes {
     // never return naked private key
     sensitive: bool,
     // always_sensitive: bool,
@@ -138,13 +125,54 @@ impl KeyAttributes {
     }
 }
 
+
+/// Opaque key handle
+///
+/// Ideally, this would be authenticated encryption
+/// around the information that allows locating the key.
+///
+/// So e.g. users can't get at keys they don't own
+///
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct ObjectHandle{
+    pub object_id: UniqueId,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct PublicKeyAttributes {
+    // never return naked private key
+    sensitive: bool,
+    // always_sensitive: bool,
+
+    // do not even return wrapped private key
+    extractable: bool,
+    // never_extractable: bool,
+
+    // do not save to disk
+    persistent: bool,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct PrivateKeyAttributes {
+    // never return naked private key
+    sensitive: bool,
+    // always_sensitive: bool,
+
+    // do not even return wrapped private key
+    extractable: bool,
+    // never_extractable: bool,
+
+    // do not save to disk
+    persistent: bool,
+}
+
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct StorageAttributes {
     // each object must have a unique ID
     unique_id: UniqueId,
 
     // description of object
-    label: Bytes<MAX_LABEL_LENGTH>,
+    label: String<MAX_LABEL_LENGTH>,
 
     // cryptoki: token (vs session) object
     persistent: bool,
@@ -162,7 +190,7 @@ impl StorageAttributes {
     pub fn new(unique_id: UniqueId) -> Self {
         Self {
             unique_id,
-            label: Bytes::new(),
+            label: String::new(),
             persistent: false,
 
             modifiable: true,

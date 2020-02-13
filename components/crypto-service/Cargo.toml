@@ -12,6 +12,7 @@ chacha20 = { version = "0.3.3" }
 chacha20poly1305 = { version = "0.3.1", features = ["reduced-round"] }
 embedded-hal = { version = "0.2.3", features = ["unproven"] }
 generic-array = "0.12.3"  # "0.13.2"
+# generic-array = { version = "0.13.2", default-features = false }
 heapless = "0.5.3"
 
 [dependencies.heapless-bytes]
@@ -19,18 +20,21 @@ git = "https://github.com/ycrypto/heapless-bytes"
 branch = "main"
 
 [dependencies.littlefs2]
-git = "https://github.com/nickray/littlefs2"
-branch = "main"
+path = "../../../littlefs2"
+# git = "https://github.com/nickray/littlefs2"
+# branch = "main"
 
 [dependencies.nisty]
-git = "https://github.com/ycrypto/nisty"
-branch = "main"
-features = ["cose"]
+version = "0.1.0-alpha.2"
+features = ["asn1-der", "cose"]
+# path = "../../../nisty"
+# git = "https://github.com/ycrypto/nisty"
+# branch = "main"
 
 [dependencies.salty]
 git = "https://github.com/ycrypto/salty"
 branch = "main"
-features = ["cose", "tweetnacl"]
+features = ["cose"]
 
 [features]
 verbose-tests = []
@@ -40,3 +44,6 @@ verbose-tests = []
 
 # [patch."https://github.com/ycrypto/heapless-bytes".heapless-bytes]
 # path = "../../../heapless-bytes"
+
+# [patch.crates-io]
+# rustc-hash = { git = "https://github.com/nickray/rustc-hash", branch = "nickray-remove-byteorder" }

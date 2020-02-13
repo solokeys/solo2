@@ -21,9 +21,12 @@ pub enum Error {
     // our errors
     AeadError,
     EntropyMalfunction,
+    FilesystemReadFailure,
     FilesystemWriteFailure,
+    InternalError,
     MechanismNotAvailable,
     RequestNotAvailable,
+    SignDataTooLarge,
 }
 
 // pub struct FutureResult<'a, 'c> {

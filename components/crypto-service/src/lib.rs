@@ -1,5 +1,11 @@
 #![cfg_attr(not(test), no_std)]
 
+// prevent a spurious error message: https://github.com/rust-lang/rust/issues/54010
+// UNFORTUNATELY: with #![cfg(test)], no longer compiles for no_std,
+// with #[cfg(test)] error still shown
+// #[cfg(test)]
+// extern crate std;
+
 pub mod api;
 pub mod client;
 pub mod config;
@@ -10,7 +16,7 @@ pub mod types;
 
 pub use api::Reply;
 pub use error::Error;
-pub use client::RawClient;
+pub use client::{Client, RawClient};
 pub use service::Service;
 
 

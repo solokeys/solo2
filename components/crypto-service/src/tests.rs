@@ -112,7 +112,10 @@ fn dummy() {
 
     // client gets injected into "app"
     // may perform crypto request at any time
-    let mut future = client.request(crate::api::Request::DummyRequest);
+    let mut future = client
+        .request(crate::api::Request::DummyRequest)
+        .map_err(drop)
+        .unwrap();
 
     // service is assumed to be running in other thread
     // actually, the "request" method should pend an interrupt,
@@ -124,6 +127,77 @@ fn dummy() {
 
     assert_eq!(reply, Ok(Reply::DummyReply));
 }
+
+// #[test]
+// fn sign_ed25519_raw() {
+//     let (service_endpoint, client_endpoint) = pipe::new_endpoints(
+//         unsafe { &mut REQUEST_PIPE },
+//         unsafe { &mut REPLY_PIPE },
+//         "fido2",
+//     );
+
+//     let rng = MockRng::new();
+
+//     // need to figure out if/how to do this as `static mut`
+//     let mut persistent_ram = PersistentRam::default();
+//     let mut persistent_storage = PersistentStorage::new(&mut persistent_ram);
+//     Filesystem::format(&mut persistent_storage).expect("could not format persistent storage");
+//     let mut persistent_fs_alloc = Filesystem::allocate();
+//     let pfs = FilesystemWith::mount(&mut persistent_fs_alloc, &mut persistent_storage)
+//         .expect("could not mount persistent storage");
+//     let mut volatile_ram = VolatileRam::default();
+//     let mut volatile_storage = VolatileStorage::new(&mut volatile_ram);
+//     Filesystem::format(&mut volatile_storage).expect("could not format volatile storage");
+//     let mut volatile_fs_alloc = Filesystem::allocate();
+//     let vfs = FilesystemWith::mount(&mut volatile_fs_alloc, &mut volatile_storage)
+//         .expect("could not mount volatile storage");
+
+//     let mut service = Service::new(rng, pfs, vfs);
+//     service.add_endpoint(service_endpoint).ok();
+//     let mut client = RawClient::new(client_endpoint);
+
+//     // client gets injected into "app"
+//     // may perform crypto request at any time
+//     let request = api::request::GenerateKeypair {
+//         mechanism: Mechanism::Ed25519,
+//         key_attributes: types::KeyAttributes::default(),
+//     };
+//     // let mut future = client.request(request);
+//     use crate::client::SubmitRequest;
+//     let mut future = request
+//         .submit(&mut client)
+//         .map_err(drop)
+//         .unwrap();
+
+//     // service is assumed to be running in other thread
+//     // actually, the "request" method should pend an interrupt,
+//     // and said other thread should have higher priority.
+//     service.process();
+
+//     // this would likely be a no-op due to higher priority of crypto thread
+//     let reply = block!(future);
+
+//     let keypair_handle = if let Ok(Reply::GenerateKeypair(actual_reply)) = reply {
+//         actual_reply.keypair_handle
+//     } else {
+//         panic!("unexpected reply {:?}", reply);
+//     };
+
+//     // local = generated on device, or copy of such
+//     // (what about derived from local key via HKDF? pkcs#11 says no)
+
+//     let message = [1u8, 2u8, 3u8];
+//     // let signature = fido2_client.keypair.sign(&mut context, &message);
+//     let request = api::request::Sign {
+//         key_handle: keypair_handle,
+//         mechanism: Mechanism::Ed25519,
+//         message: Message::try_from_slice(&message).expect("all good"),
+//     };
+
+//     let mut future = request.submit(&mut client).map_err(drop).unwrap();
+//     service.process();
+//     let reply = block!(future);
+// }
 
 #[test]
 fn sign_ed25519() {
@@ -151,34 +225,23 @@ fn sign_ed25519() {
 
     let mut service = Service::new(rng, pfs, vfs);
     service.add_endpoint(service_endpoint).ok();
-    let mut client = RawClient::new(client_endpoint);
 
-    // client gets injected into "app"
-    // may perform crypto request at any time
-    let request = api::request::GenerateKeypair {
-        mechanism: Mechanism::Ed25519,
-        key_attributes: types::KeyAttributes::default(),
-    };
-    // let mut future = client.request(request);
-    use crate::client::SubmitRequest;
-    let mut future = request.submit(&mut client);
+    // Client needs a "Syscall" trait impl, to trigger crypto processing
+    // For testing, we use "self service",
+    // meaning `&mut service` itself with the trivial implementation
+    let syscaller = &mut service;
+    let mut client = Client::new(client_endpoint, syscaller);
 
-    // service is assumed to be running in other thread
-    // actually, the "request" method should pend an interrupt,
-    // and said other thread should have higher priority.
-    service.process();
-
-    // this would likely be a no-op due to higher priority of crypto thread
+    let mut future = client.generate_ed25519_keypair().expect("no client error");
+    println!("submitted gen ed25519");
     let reply = block!(future);
+    let keypair_handle = reply.expect("no errors, never").keypair_handle;
+    println!("got a handle: {:?}", &keypair_handle);
 
-    if let Ok(Reply::GenerateKey(_)) = reply {} else {
-        panic!("unexpected reply");
-    }
-
-    // local = generated on device, or copy of such
-    // (what about derived from local key via HKDF? pkcs#11 says no)
-
-    // let message = [1u8, 2u8, 3u8];
-    // let signature = fido2_client.keypair.sign(&mut context, &message);
+    let message = [1u8, 2u8, 3u8];
+    let mut future = client.sign_ed25519(&keypair_handle, &message).expect("no client error");
+    let reply: Result<api::reply::Sign, _> = block!(future);
+    let signature = reply.expect("good signature").signature;
+    println!("got a signature: {:?}", &signature);
 
 }

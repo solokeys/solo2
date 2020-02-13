@@ -113,6 +113,19 @@ impl<'s, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'s, R, P, V>
                 }
             },
 
+            Request::Sign(request) => {
+                match request.mechanism {
+                    Mechanism::Ed25519 => {
+                        self.sign_ed25519(request)
+                    },
+
+                    #[allow(unreachable_patterns)]
+                    _ => {
+                        Err(Error::MechanismNotAvailable)
+                    }
+                }
+            },
+
             _ => {
                 #[cfg(test)]
                 println!("todo: {:?} request!", &request);
@@ -152,9 +165,41 @@ impl<'s, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'s, R, P, V>
         self.store_serialized_key(&path, &seed)?;
 
         // return key handle
-        Ok(Reply::GenerateKey(reply::GenerateKey {
-            key_handle: KeyHandle { key_id: unique_id }
+        Ok(Reply::GenerateKeypair(reply::GenerateKeypair {
+            keypair_handle: ObjectHandle { object_id: unique_id }
         }))
+    }
+
+    pub fn sign_ed25519(&mut self, request: request::Sign) -> Result<Reply, Error> {
+        // pub key_handle: ObjectHandle,
+        // pub mechanism: Mechanism,
+        // pub message: Message,
+
+        let unique_id = request.key_handle.object_id;
+
+        let mut path = [0u8; 33];
+        path[..1].copy_from_slice(b"/");
+        path[1..].copy_from_slice(&unique_id.hex());
+
+        let mut seed = [0u8; 32];
+
+        self.load_serialized_key(&path, &mut seed)?;
+
+        // // generate key
+        // let mut seed = [0u8; 32];
+        // self.rng.read(&mut seed)
+        //     .map_err(|_| Error::EntropyMalfunction)?;
+
+        // // not needed now.  do we want to cache its public key?
+        let keypair = salty::Keypair::from(&seed);
+        #[cfg(all(test, feature = "verbose-tests"))]
+        println!("ed25519 keypair with public key = {:?}", &keypair.public);
+
+        let native_signature = keypair.sign(&request.message);
+        let our_signature = Signature::try_from_slice(&native_signature.to_bytes()).unwrap();
+
+        // // return key handle
+        Ok(Reply::Sign(reply::Sign { signature: our_signature }))
     }
 
     pub fn generate_unique_id(&mut self) -> Result<UniqueId, Error> {
@@ -166,6 +211,23 @@ impl<'s, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'s, R, P, V>
         #[cfg(all(test, feature = "verbose-tests"))]
         println!("unique id {:?}", &unique_id);
         Ok(UniqueId(unique_id))
+    }
+
+    pub fn load_serialized_key(&mut self, path: &[u8], serialized_key: &mut [u8]) -> Result<(), Error> {
+        #[cfg(test)]
+        // actually safe, as path is ASCII by construction
+        println!("loading from file {:?}", unsafe { core::str::from_utf8_unchecked(&path[..]) });
+
+        use littlefs2::fs::{File, FileWith};
+        let mut alloc = File::allocate();
+        let mut file = FileWith::open(&path[..], &mut alloc, &mut self.vfs)
+            .map_err(|_| Error::FilesystemReadFailure)?;
+
+        use littlefs2::io::ReadWith;
+        file.read(serialized_key)
+            .map_err(|_| Error::FilesystemReadFailure)?;
+
+        Ok(())
     }
 
     pub fn store_serialized_key(&mut self, path: &[u8], serialized_key: &[u8]) -> Result<(), Error> {
@@ -230,3 +292,33 @@ impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> Service<'a, 's, R, P, V> 
     }
 }
 
+// pub struct MockSyscall<'a, 's, Rng, PersistentStorage, VolatileStorage>
+// where
+//     Rng: RngRead,
+//     PersistentStorage: LfsStorage,
+//     VolatileStorage: LfsStorage,
+// {
+//     service: Service<'a, 's, Rng, PersistentStorage, VolatileStorage>
+// }
+
+// impl<'a, 's, R, P, V> MockSyscall<'a, 's, R, P, V>
+// where
+//     R: RngRead,
+//     P: LfsStorage,
+//     V: LfsStorage,
+// {
+//     pub fn new(service: Service<'a, 's, R, P, V>) -> Self {
+//         Self { service }
+//     }
+// }
+
+impl<'a, 's, R, P, V> crate::pipe::Syscall for &mut Service<'a, 's, R, P, V>
+where
+    R: RngRead,
+    P: LfsStorage,
+    V: LfsStorage,
+{
+    fn syscall(&mut self) {
+        self.process();
+    }
+}
