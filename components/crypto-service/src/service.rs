@@ -91,10 +91,6 @@ impl<'s, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'s, R, P, V>
                 Ok(Reply::DummyReply)
             },
 
-            // NOT TODO: use the `?` operator <-- THIS DOES NOT WORK BY "TYPE THEORY"
-            // (reason: resources could (pathologically at least) have same error types,
-            // compiler could not know which From to apply)
-            //
             // TODO: how to handle queue failure?
             // TODO: decouple this in such a way that we can easily extend the
             //       cryptographic capabilities on two axes:
@@ -102,27 +98,25 @@ impl<'s, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'s, R, P, V>
             //        - backends
             Request::GenerateKeypair(request) => {
                 match request.mechanism {
-                    Mechanism::Ed25519 => {
-                        self.generate_ed25519_keypair(request)
-                    },
-
-                    #[allow(unreachable_patterns)]
-                    _ => {
-                        Err(Error::MechanismNotAvailable)
-                    }
+                    Mechanism::Ed25519 => self.generate_ed25519_keypair(request),
+                    Mechanism::P256 => self.generate_p256_keypair(request),
+                    _ => Err(Error::MechanismNotAvailable),
                 }
             },
 
             Request::Sign(request) => {
                 match request.mechanism {
-                    Mechanism::Ed25519 => {
-                        self.sign_ed25519(request)
-                    },
+                    Mechanism::Ed25519 => self.sign_ed25519(request),
+                    Mechanism::P256 => self.sign_p256(request),
+                    _ => Err(Error::MechanismNotAvailable),
+                }
+            },
 
-                    #[allow(unreachable_patterns)]
-                    _ => {
-                        Err(Error::MechanismNotAvailable)
-                    }
+            Request::Verify(request) => {
+                match request.mechanism {
+                    Mechanism::Ed25519 => self.verify_ed25519(request),
+                    Mechanism::P256 => self.verify_p256(request),
+                    _ => Err(Error::MechanismNotAvailable),
                 }
             },
 
@@ -148,10 +142,46 @@ impl<'s, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'s, R, P, V>
         // generate unique id
         let unique_id = self.generate_unique_id()?;
 
-        let mut u = unique_id.clone().0;
-        let (nonce, tag)= self.aead_in_place(&[], &mut u)?;
-        #[cfg(all(test, feature = "verbose-tests"))]
-        println!("aead: encrypted unique id = {:?}, nonce = {:?}, tag = {:?}", &u, &nonce, &tag);
+        // let mut u = unique_id.clone().0;
+        // let (nonce, tag)= self.aead_in_place(&[], &mut u)?;
+        // #[cfg(all(test, feature = "verbose-tests"))]
+        // println!("aead: encrypted unique id = {:?}, nonce = {:?}, tag = {:?}", &u, &nonce, &tag);
+
+        // store key
+        // TODO: add "app" namespacing, and AEAD this ID
+        // let mut path = [0u8; 38];
+        // path[..6].copy_from_slice(b"/test/");
+        // format_hex(&unique_id, &mut path[6..]);
+        let mut path = [0u8; 33];
+        path[..1].copy_from_slice(b"/");
+        path[1..].copy_from_slice(&unique_id.hex());
+
+        self.store_serialized_key(&path, &seed)?;
+
+        // return key handle
+        Ok(Reply::GenerateKeypair(reply::GenerateKeypair {
+            keypair_handle: ObjectHandle { object_id: unique_id }
+        }))
+    }
+
+    pub fn generate_p256_keypair(&mut self, request: request::GenerateKeypair) -> Result<Reply, Error> {
+        // generate key
+        let mut seed = [0u8; 32];
+        self.rng.read(&mut seed)
+            .map_err(|_| Error::EntropyMalfunction)?;
+
+        // not needed now.  do we want to cache its public key?
+        // let keypair = salty::Keypair::from(&seed);
+        // #[cfg(all(test, feature = "verbose-tests"))]
+        // println!("ed25519 keypair with public key = {:?}", &keypair.public);
+
+        // generate unique id
+        let unique_id = self.generate_unique_id()?;
+
+        // let mut u = unique_id.clone().0;
+        // let (nonce, tag)= self.aead_in_place(&[], &mut u)?;
+        // #[cfg(all(test, feature = "verbose-tests"))]
+        // println!("aead: encrypted unique id = {:?}, nonce = {:?}, tag = {:?}", &u, &nonce, &tag);
 
         // store key
         // TODO: add "app" namespacing, and AEAD this ID
@@ -200,6 +230,86 @@ impl<'s, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'s, R, P, V>
 
         // // return key handle
         Ok(Reply::Sign(reply::Sign { signature: our_signature }))
+    }
+
+    pub fn sign_p256(&mut self, request: request::Sign) -> Result<Reply, Error> {
+        let unique_id = request.key_handle.object_id;
+
+        let mut path = [0u8; 33];
+        path[..1].copy_from_slice(b"/");
+        path[1..].copy_from_slice(&unique_id.hex());
+
+        let mut seed = [0u8; 32];
+        self.load_serialized_key(&path, &mut seed)?;
+
+        let keypair = nisty::Keypair::generate_patiently(&seed);
+        #[cfg(all(test, feature = "verbose-tests"))]
+        println!("p256 keypair with public key = {:?}", &keypair.public);
+
+        let native_signature = keypair.sign(&request.message);
+        let our_signature = Signature::try_from_slice(&native_signature.to_bytes()).unwrap();
+
+        // // return key handle
+        Ok(Reply::Sign(reply::Sign { signature: our_signature }))
+    }
+
+    pub fn verify_ed25519(&mut self, request: request::Verify) -> Result<Reply, Error> {
+        // pub key_handle: ObjectHandle,
+        // pub mechanism: Mechanism,
+        // pub message: Message,
+        // pub signature: Signature,
+
+        let unique_id = request.key_handle.object_id;
+
+        let mut path = [0u8; 33];
+        path[..1].copy_from_slice(b"/");
+        path[1..].copy_from_slice(&unique_id.hex());
+
+        let mut seed = [0u8; 32];
+
+        self.load_serialized_key(&path, &mut seed)?;
+
+        let keypair = salty::Keypair::from(&seed);
+        #[cfg(all(test, feature = "verbose-tests"))]
+        println!("ed25519 keypair with public key = {:?}", &keypair.public);
+
+        if request.signature.len() != salty::constants::SIGNATURE_SERIALIZED_LENGTH {
+            return Err(Error::WrongSignatureLength);
+        }
+
+        let mut signature_array = [0u8; salty::constants::SIGNATURE_SERIALIZED_LENGTH];
+        signature_array.copy_from_slice(request.signature.as_ref());
+        let salty_signature = salty::Signature::from(&signature_array);
+
+        match keypair.public.verify(&request.message, &salty_signature) {
+            Ok(_) => Ok(Reply::Verify(reply::Verify { valid: true } )),
+            Err(_) => Ok(Reply::Verify(reply::Verify { valid: false } )),
+        }
+    }
+
+    pub fn verify_p256(&mut self, request: request::Verify) -> Result<Reply, Error> {
+        let unique_id = request.key_handle.object_id;
+
+        let mut path = [0u8; 33];
+        path[..1].copy_from_slice(b"/");
+        path[1..].copy_from_slice(&unique_id.hex());
+
+        let mut seed = [0u8; 32];
+
+        self.load_serialized_key(&path, &mut seed)?;
+
+        let keypair = nisty::Keypair::generate_patiently(&seed);
+        #[cfg(all(test, feature = "verbose-tests"))]
+        println!("p256 keypair with public key = {:?}", &keypair.public);
+
+        if request.signature.len() != nisty::SIGNATURE_LENGTH {
+            return Err(Error::WrongSignatureLength);
+        }
+
+        let mut signature_array = [0u8; nisty::SIGNATURE_LENGTH];
+
+        let valid = keypair.public.verify(&request.message, &signature_array);
+        Ok(Reply::Verify(reply::Verify { valid: true } ))
     }
 
     pub fn generate_unique_id(&mut self) -> Result<UniqueId, Error> {

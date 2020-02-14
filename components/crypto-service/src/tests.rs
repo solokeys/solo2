@@ -244,4 +244,65 @@ fn sign_ed25519() {
     let signature = reply.expect("good signature").signature;
     println!("got a signature: {:?}", &signature);
 
+    let mut future = client.verify_ed25519(&keypair_handle, &message, &signature).expect("no client error");
+    let reply = block!(future);
+    let valid = reply.expect("good signature").valid;
+    // assert!(valid);
+
+    let mut future = client.verify_ed25519(&keypair_handle, &message, &[1u8,2,3]).expect("no client error");
+    let reply = block!(future);
+    assert_eq!(Err(Error::WrongSignatureLength), reply);
 }
+
+#[test]
+fn sign_p256() {
+    let (service_endpoint, client_endpoint) = pipe::new_endpoints(
+        unsafe { &mut REQUEST_PIPE },
+        unsafe { &mut REPLY_PIPE },
+        "fido2",
+    );
+
+    let rng = MockRng::new();
+
+    // need to figure out if/how to do this as `static mut`
+    let mut persistent_ram = PersistentRam::default();
+    let mut persistent_storage = PersistentStorage::new(&mut persistent_ram);
+    Filesystem::format(&mut persistent_storage).expect("could not format persistent storage");
+    let mut persistent_fs_alloc = Filesystem::allocate();
+    let pfs = FilesystemWith::mount(&mut persistent_fs_alloc, &mut persistent_storage)
+        .expect("could not mount persistent storage");
+    let mut volatile_ram = VolatileRam::default();
+    let mut volatile_storage = VolatileStorage::new(&mut volatile_ram);
+    Filesystem::format(&mut volatile_storage).expect("could not format volatile storage");
+    let mut volatile_fs_alloc = Filesystem::allocate();
+    let vfs = FilesystemWith::mount(&mut volatile_fs_alloc, &mut volatile_storage)
+        .expect("could not mount volatile storage");
+
+    let mut service = Service::new(rng, pfs, vfs);
+    service.add_endpoint(service_endpoint).ok();
+
+    // Client needs a "Syscall" trait impl, to trigger crypto processing
+    // For testing, we use "self service",
+    // meaning `&mut service` itself with the trivial implementation
+    let syscaller = &mut service;
+    let mut client = Client::new(client_endpoint, syscaller);
+
+
+
+    let keypair = block!(client.generate_p256_keypair().expect("no client error"))
+        .expect("no errors")
+        .keypair_handle;
+
+    let message = [1u8, 2u8, 3u8];
+    let signature = block!( client.sign_ed25519(&keypair, &message).expect("no client error"))
+        .expect("good signature")
+        .signature;
+
+    let valid = block!(client.verify_ed25519(&keypair, &message, &signature).expect("no client error"))
+        .expect("valid signature")
+        .valid;
+
+    assert!(valid);
+
+}
+

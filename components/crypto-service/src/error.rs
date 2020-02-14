@@ -27,6 +27,7 @@ pub enum Error {
     MechanismNotAvailable,
     RequestNotAvailable,
     SignDataTooLarge,
+    WrongSignatureLength,
 }
 
 // pub struct FutureResult<'a, 'c> {

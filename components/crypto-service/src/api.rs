@@ -5,8 +5,12 @@
 //! [pkcs11-v3]: https://docs.oasis-open.org/pkcs11/pkcs11-base/v3.0/pkcs11-base-v3.0.html
 //! [pkcs11-headers]: https://docs.oasis-open.org/pkcs11/pkcs11-base/v3.0/cs01/include/pkcs11-v3.0/
 
+use core::hint::unreachable_unchecked;
 use crate::config;
 use crate::types::*;
+
+#[macro_use]
+mod macros;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum Request {
@@ -17,7 +21,12 @@ pub enum Request {
     GenerateKeypair(request::GenerateKeypair),
     ReadCounter(request::ReadCounter),
     Sign(request::Sign),
+    Verify(request::Verify),
 }
+
+// TODO: Ideally, we would not need to assign random numbers here
+// The only use for them is to check that the reply type corresponds
+// to the request type in the client.
 
 impl From<&Request> for u8 {
     fn from(request: &Request) -> u8 {
@@ -29,6 +38,7 @@ impl From<&Request> for u8 {
             Request::GenerateKeypair(_) => 4,
             Request::ReadCounter(_) => 5,
             Request::Sign(_) => 6,
+            Request::Verify(_) => 7,
         }
     }
 }
@@ -43,6 +53,7 @@ impl From<&Reply> for u8 {
             Reply::GenerateKeypair(_) => 4,
             Reply::ReadCounter(_) => 5,
             Reply::Sign(_) => 6,
+            Reply::Verify(_) => 7,
         }
     }
 }
@@ -56,154 +67,78 @@ pub enum Reply {
     GenerateKeypair(reply::GenerateKeypair),
     ReadCounter(reply::ReadCounter),
     Sign(reply::Sign),
+    Verify(reply::Verify),
 }
-
-impl From<Reply> for reply::CreateCounter {
-    fn from(reply: Reply) -> reply::CreateCounter {
-        match reply {
-            Reply::CreateCounter(reply) => reply,
-            _ => { unsafe { unreachable!() } }
-        }
-    }
-}
-
-impl From<Reply> for reply::ReadCounter {
-    fn from(reply: Reply) -> reply::ReadCounter {
-        match reply {
-            Reply::ReadCounter(reply) => reply,
-            _ => { unsafe { unreachable!() } }
-        }
-    }
-}
-
-impl From<Reply> for reply::GenerateKeypair {
-    fn from(reply: Reply) -> reply::GenerateKeypair {
-        match reply {
-            Reply::GenerateKeypair(reply) => reply,
-            _ => { unsafe { unreachable!() } }
-        }
-    }
-}
-
-impl From<Reply> for reply::Sign {
-    fn from(reply: Reply) -> reply::Sign {
-        match reply {
-            Reply::Sign(reply) => reply,
-            _ => { unsafe { unreachable!() } }
-        }
-    }
-}
-
-// macro_rules! impl_ {
-// }
-
-// impl_! {
-//     CreateCounter:
-//         (
-//             attributes: Attributes,
-//         ) -> (
-//             object_handles: Vec<ObjectHandle, config::MAX_OBJECT_HANDLES>,
-//         )
-
-// }
 
 pub mod request {
     use super::*;
 
-    // monotonically increasing counter
-    // no reset - if you need that, delete
-    // the counter and create a new one
-    #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-    pub struct CreateCounter {
-        // pub attributes: Attributes,
-    }
+    impl_request! {
+        CreateCounter:
+            // - attributes: Attributes,
 
-    #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-    pub struct FindObjects {
-        // pub attributes: Attributes,
-    }
+        FindObjects:
+            // - attributes: Attributes,
 
-    #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-    pub struct GenerateKey {
-        pub mechanism: Mechanism,
-        pub key_attributes: KeyAttributes,
-    }
+        GenerateKey:
+            - mechanism: Mechanism
+            - key_attributes: KeyAttributes
 
-    #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-    pub struct GenerateKeypair {
-        pub mechanism: Mechanism,
-        pub key_attributes: KeyAttributes,
-        // private_key_template: PrivateKeyTemplate,
-        // public_key_template: PublicKeyTemplate,
-    }
+        GenerateKeypair:
+            - mechanism: Mechanism
+            - key_attributes: KeyAttributes
+            // private_key_template: PrivateKeyTemplate
+            // public_key_template: PublicKeyTemplate
 
-    #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-    pub struct ReadCounter {
-        pub counter_handle: ObjectHandle,
-    }
+        ReadCounter:
+            - counter_handle: ObjectHandle
 
-    #[derive(Clone, Eq, PartialEq, Debug)]
-    pub struct Sign {
-        pub key_handle: ObjectHandle,
-        pub mechanism: Mechanism,
-        pub message: Message,
-    }
+        Sign:
+          - key_handle: ObjectHandle
+          - mechanism: Mechanism
+          - message: Message
 
-    impl From<request::GenerateKey> for Request {
-        fn from(request: request::GenerateKey) -> Self {
-            Self::GenerateKey(request)
-        }
+        Verify:
+          - key_handle: ObjectHandle
+          - mechanism: Mechanism
+          - message: Message
+          - signature: Signature
     }
-
-    impl From<request::GenerateKeypair> for Request {
-        fn from(request: request::GenerateKeypair) -> Self {
-            Self::GenerateKeypair(request)
-        }
-    }
-
-    impl From<request::Sign> for Request {
-        fn from(request: request::Sign) -> Self {
-            Self::Sign(request)
-        }
-    }
-
 }
 
 pub mod reply {
     use super::*;
 
-    #[derive(Clone, Eq, PartialEq, Debug)]
-    pub struct CreateCounter {
-        pub key_handle: ObjectHandle,
-    }
+    // type ObjectHandles = Vec<ObjectHandle, config::MAX_OBJECT_HANDLES>;
 
-    #[derive(Clone, Eq, PartialEq, Debug)]
-    pub struct FindObjects {
-        pub object_handles: Vec<ObjectHandle, config::MAX_OBJECT_HANDLES>,
-        // can be higher than capacity of vector
-        pub num_objects: usize,
-    }
+    impl_reply! {
+        CreateCounter:
+            - key_handle: ObjectHandle
 
-    #[derive(Clone, Eq, PartialEq, Debug)]
-    pub struct GenerateKey {
-        pub key_handle: ObjectHandle,
-    }
+        FindObjects:
+            - object_handles: Vec<ObjectHandle, config::MAX_OBJECT_HANDLES>
+            // - object_handles: ObjectHandles
+            // can be higher than capacity of vector
+            - num_objects: usize
 
-    #[derive(Clone, Eq, PartialEq, Debug)]
-    pub struct GenerateKeypair {
-        pub keypair_handle: ObjectHandle,
-        // pub public_key_handle: ObjectHandle,
-        // pub private_key_handle: ObjectHandle,
-    }
+        GenerateKey:
+            - key_handle: ObjectHandle
 
-    #[derive(Clone, Eq, PartialEq, Debug)]
-    pub struct ReadCounter {
-        pub counter: u32,
-    }
+        GenerateKeypair:
+            - keypair_handle: ObjectHandle
+            // - pub public_key_handle: ObjectHandle,
+            // - pub private_key_handle: ObjectHandle,
 
-    #[derive(Clone, Eq, PartialEq, Debug)]
-    pub struct Sign {
-        pub signature: Signature,
+        ReadCounter:
+            - counter: u32
+
+        Sign:
+            - signature: Signature
+
+        Verify:
+            - valid: bool
+
     }
 
 }
+

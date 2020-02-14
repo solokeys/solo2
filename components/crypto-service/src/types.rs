@@ -204,7 +204,7 @@ impl StorageAttributes {
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Mechanism {
     Ed25519,
-    // P256,
+    P256,
     // X25519,
 }
 
