@@ -47,6 +47,14 @@ pub type AeadTag = [u8; 16];
 
 
 #[derive(Clone, Eq, PartialEq, Debug)]
+pub enum Attributes {
+    Certificate,
+    Counter,
+    Data(DataAttributes),
+    Key(KeyAttributes),
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CertificateType {
     // "identity", issued by certificate authority
     // --> authentication
@@ -74,7 +82,8 @@ pub struct DataAttributes {
     // pub application: String<MAX_APPLICATION_NAME_LENGTH>,
     // DER-encoding of *type* of data object
     // pub object_id: Bytes<?>,
-    pub value: Bytes<MAX_DATA_LENGTH>,
+    pub kind: ShortData,
+    pub value: LongData,
 }
 
 // TODO: In PKCS#11v3, this is a map (AttributeType: ulong -> (*void, len)).
@@ -127,7 +136,7 @@ impl KeyAttributes {
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum KeyType {
-    Private,
+    // Private,
     Public,
     Secret,
 }
@@ -142,6 +151,16 @@ pub enum KeyType {
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct ObjectHandle{
     pub object_id: UniqueId,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum ObjectType {
+    Certificate(CertificateType),
+    // TODO: maybe group under Feature(FeautureType), with FeatureType = Counter, ...
+    // But what else??
+    Counter,
+    Data,
+    Key(KeyType),
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -213,6 +232,9 @@ pub enum Mechanism {
     P256,
     // X25519,
 }
+
+pub type LongData = Bytes<MAX_LONG_DATA_LENGTH>;
+pub type ShortData = Bytes<MAX_SHORT_DATA_LENGTH>;
 
 pub type Message = Bytes<MAX_MESSAGE_LENGTH>;
 

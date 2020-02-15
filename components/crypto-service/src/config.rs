@@ -6,12 +6,13 @@ use heapless::consts;
 // Should we use the "config crate that can have a replacement patched in" idea?
 
 pub type MAX_APPLICATION_NAME_LENGTH = consts::U256;
-pub type MAX_DATA_LENGTH = consts::U1024;
+pub type MAX_LONG_DATA_LENGTH = consts::U1024;
 pub type MAX_MESSAGE_LENGTH = consts::U1024;
 pub type MAX_OBJECT_HANDLES = consts::U16;
 pub type MAX_LABEL_LENGTH = consts::U256;
 pub type MAX_PATH_LENGTH = consts::U256;
 pub type MAX_SERVICE_CLIENTS = consts::U5;
+pub type MAX_SHORT_DATA_LENGTH = consts::U128;
 pub type MAX_SIGNATURE_LENGTH = consts::U72;
 
 

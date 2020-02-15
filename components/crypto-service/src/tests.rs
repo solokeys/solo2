@@ -108,7 +108,7 @@ fn dummy() {
     let mut service = Service::new(rng, pfs, vfs).expect("service init worked");
     assert!(service.add_endpoint(service_endpoint).is_ok());
 
-    let mut client = RawClient::new(client_endpoint);
+    let mut client = client::RawClient::new(client_endpoint);
 
     // client gets injected into "app"
     // may perform crypto request at any time
@@ -232,13 +232,15 @@ fn sign_ed25519() {
     let syscaller = &mut service;
     let mut client = Client::new(client_endpoint, syscaller);
 
-    let mut future = client.generate_ed25519_keypair().expect("no client error");
+    let mut future = client.generate_ed25519_key().expect("no client error");
     println!("submitted gen ed25519");
     let reply = block!(future);
-    let handles = reply.expect("no errors, never");
-    let private_key = handles.private_key;
-    let public_key = handles.public_key;
-    println!("got a private {:?}, public {:?}", &private_key, &public_key);
+    let private_key = reply.expect("no errors, never").key;
+    println!("got a private key {:?}", &private_key);
+
+    let public_key = block!(client.derive_ed25519_key(&private_key).expect("no client error"))
+        .expect("no issues").key;
+    println!("got a public key {:?}", &public_key);
 
     let message = [1u8, 2u8, 3u8];
     let mut future = client.sign_ed25519(&private_key, &message).expect("no client error");
@@ -291,15 +293,21 @@ fn sign_p256() {
 
 
 
-    let keys = block!(client.generate_p256_keypair().expect("no client error"))
-        .expect("no errors");
+    let private_key = block!(client.generate_p256_key().expect("no client error"))
+        .expect("no errors").key;
+    println!("got a public key {:?}", &private_key);
+    let public_key = block!(client.derive_p256_key(&private_key).expect("no client error"))
+        .expect("no errors").key;
+    println!("got a public key {:?}", &public_key);
 
     let message = [1u8, 2u8, 3u8];
-    let signature = block!( client.sign_p256_prehashed(&keys.private_key, &message).expect("no client error"))
+    let mut signature = block!(client.sign_p256_prehashed(&private_key, &message).expect("no client error"))
         .expect("good signature")
         .signature;
 
-    let future = client.verify_p256_prehashed(&keys.public_key, &message, &signature);
+    // use core::convert::AsMut;
+    // let sig = signature.0.as_mut()[0] = 0;
+    let future = client.verify_p256_prehashed(&public_key, &message, &signature);
     let mut future = future.expect("no client error");
     let result = block!(future);
     if result.is_err() {

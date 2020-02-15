@@ -12,97 +12,99 @@ use crate::types::*;
 #[macro_use]
 mod macros;
 
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub enum Request {
-    DummyRequest, // for testing
-    CreateCounter(request::CreateCounter),
-    FindObjects(request::FindObjects),
-    GenerateKey(request::GenerateKey),
-    GenerateKeypair(request::GenerateKeypair),
-    ReadCounter(request::ReadCounter),
-    Sign(request::Sign),
-    Verify(request::Verify),
-}
-
 // TODO: Ideally, we would not need to assign random numbers here
 // The only use for them is to check that the reply type corresponds
 // to the request type in the client.
+//
+// At minimum, we don't want to list the indices (may need proc-macro)
 
-impl From<&Request> for u8 {
-    fn from(request: &Request) -> u8 {
-        match request {
-            Request::DummyRequest => 0,
-            Request::CreateCounter(_) => 1,
-            Request::FindObjects(_) => 2,
-            Request::GenerateKey(_) => 3,
-            Request::GenerateKeypair(_) => 4,
-            Request::ReadCounter(_) => 5,
-            Request::Sign(_) => 6,
-            Request::Verify(_) => 7,
-        }
-    }
-}
-
-impl From<&Reply> for u8 {
-    fn from(reply: &Reply) -> u8 {
-        match reply {
-            Reply::DummyReply => 0,
-            Reply::CreateCounter(_) => 1,
-            Reply::FindObjects(_) => 2,
-            Reply::GenerateKey(_) => 3,
-            Reply::GenerateKeypair(_) => 4,
-            Reply::ReadCounter(_) => 5,
-            Reply::Sign(_) => 6,
-            Reply::Verify(_) => 7,
-        }
-    }
-}
-
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub enum Reply {
-    DummyReply, // for testing
-    CreateCounter(reply::CreateCounter),
-    FindObjects(reply::FindObjects),
-    GenerateKey(reply::GenerateKey),
-    GenerateKeypair(reply::GenerateKeypair),
-    ReadCounter(reply::ReadCounter),
-    Sign(reply::Sign),
-    Verify(reply::Verify),
+generate_enums! {
+    CreateObject: 1
+    DeriveKey: 2
+    // DeriveKeypair: 3
+    FindObjects: 4
+    GenerateKey: 5
+    // GenerateKeypair: 6
+    // ReadCounter: 7
+    Sign: 8
+    UnwrapKey: 9
+    Verify: 10
+    WrapKey: 11
 }
 
 pub mod request {
     use super::*;
 
     impl_request! {
-        CreateCounter:
-            // - attributes: Attributes,
+        // examples:
+        // - store public keys from external source
+        // - store certificates
+        CreateObject:
+            - attributes: Attributes
+
+        // examples:
+        // - public key from private key
+        // - Diffie-Hellman
+        // - hierarchical deterministic wallet stuff
+        DeriveKey:
+            - mechanism: Mechanism
+            - base_key: ObjectHandle
+            // - auxiliary_key: Option<ObjectHandle>
+            // - additional_data: LongData
+            // - attributes: KeyAttributes
+
+        // DeriveKeypair:
+        //     - mechanism: Mechanism
+        //     - base_key: ObjectHandle
+        //     // - additional_data: Message
+        //     // - attributes: KeyAttributes
 
         FindObjects:
             // - attributes: Attributes,
 
         GenerateKey:
-            - mechanism: Mechanism
+            - mechanism: Mechanism        // -> implies key type
             - attributes: KeyAttributes
 
-        GenerateKeypair:
-            - mechanism: Mechanism
-            - attributes: KeyAttributes
-            // private_key_template: PrivateKeyTemplate
-            // public_key_template: PublicKeyTemplate
+        // use GenerateKey + DeriveKey(public-from-private) instead
+        // GenerateKeypair:
+        //     - mechanism: Mechanism
+        //     - attributes: KeyAttributes
+        //     // private_key_template: PrivateKeyTemplate
+        //     // public_key_template: PublicKeyTemplate
 
-        ReadCounter:
-            - counter: ObjectHandle
+        // GetAttributes:
+        //     - object: ObjectHandle
+        //     - attributes: Attributes
+
+        // use GetAttribute(value) on counter instead
+        // ReadCounter:
+        //     - counter: ObjectHandle
 
         Sign:
           - mechanism: Mechanism
-          - private_key: ObjectHandle
+          - key: ObjectHandle
           - message: Message
+
+        UnwrapKey:
+          - mechanism: Mechanism
+          - wrapping_key: ObjectHandle
+          - wrapped_key: Message
+          - associated_data: Message
 
         Verify:
           - mechanism: Mechanism
-          - public_key: ObjectHandle
+          - key: ObjectHandle
           - message: Message
           - signature: Signature
+
+        // this should always be an AEAD algorithm
+        WrapKey:
+          - mechanism: Mechanism
+          - wrapping_key: ObjectHandle
+          - key: ObjectHandle
+          - associated_data: Message
+
     }
 }
 
@@ -112,23 +114,30 @@ pub mod reply {
     // type ObjectHandles = Vec<ObjectHandle, config::MAX_OBJECT_HANDLES>;
 
     impl_reply! {
-        CreateCounter:
-            - counter: ObjectHandle
+        CreateObject:
+            - object: ObjectHandle
 
         FindObjects:
-            - object_handles: Vec<ObjectHandle, config::MAX_OBJECT_HANDLES>
+            - objects: Vec<ObjectHandle, config::MAX_OBJECT_HANDLES>
             // can be higher than capacity of vector
             - num_objects: usize
 
+        DeriveKey:
+            - key: ObjectHandle
+
+        // DeriveKeypair:
+        //     - private_key: ObjectHandle
+        //     - public_key: ObjectHandle
+
         GenerateKey:
-            - secret_key: ObjectHandle
+            - key: ObjectHandle
 
-        GenerateKeypair:
-            - private_key: ObjectHandle
-            - public_key: ObjectHandle
+        // GenerateKeypair:
+        //     - private_key: ObjectHandle
+        //     - public_key: ObjectHandle
 
-        ReadCounter:
-            - counter: u32
+        // ReadCounter:
+        //     - counter: u32
 
         Sign:
             - signature: Signature
@@ -136,6 +145,33 @@ pub mod reply {
         Verify:
             - valid: bool
 
+        UnwrapKey:
+            - key: Option<ObjectHandle>
+
+        WrapKey:
+            - wrapped_key: Message
+
+    }
+
+}
+
+// TODO: can we find a nicer syntax for this?
+generate_api! {
+    CreateObject: 1
+    in: {
+        attributes: Attributes
+    }
+    out: {
+        object: ObjectHandle
+    }
+
+    DeriveKey: 2
+    in: {
+        mechanism: Mechanism
+        base_key: ObjectHandle
+    }
+    out: {
+        derived_key: ObjectHandle
     }
 
 }

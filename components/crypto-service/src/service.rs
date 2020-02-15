@@ -107,10 +107,18 @@ impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'a, 's, 
             //       cryptographic capabilities on two axes:
             //        - mechanisms
             //        - backends
-            Request::GenerateKeypair(request) => {
+            Request::DeriveKey(request) => {
                 match request.mechanism {
-                    Mechanism::Ed25519 => self.generate_ed25519_keypair(request),
-                    Mechanism::P256 => self.generate_p256_keypair(request),
+                    Mechanism::Ed25519 => self.derive_ed25519_public_key(request),
+                    Mechanism::P256 => self.derive_p256_public_key(request),
+                    _ => Err(Error::MechanismNotAvailable),
+                }
+            },
+
+            Request::GenerateKey(request) => {
+                match request.mechanism {
+                    Mechanism::Ed25519 => self.generate_ed25519_key(request),
+                    Mechanism::P256 => self.generate_p256_key(request),
                     _ => Err(Error::MechanismNotAvailable),
                 }
             },
@@ -149,7 +157,7 @@ impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'a, 's, 
         // println!("creating dir {:?}", &path);
         // self.pfs.create_dir(path.as_ref()).map_err(|_| Error::FilesystemWriteFailure)?;
         path.extend_from_slice(match key_type {
-            KeyType::Private => b"-private",
+            // KeyType::Private => b"-private",
             KeyType::Public => b"-public",
             KeyType::Secret => b"-secret",
         }).map_err(|_| Error::InternalError)?;
@@ -161,65 +169,47 @@ impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'a, 's, 
         Ok(path)
     }
 
-    pub fn generate_ed25519_keypair(&mut self, request: request::GenerateKeypair) -> Result<Reply, Error> {
-        // generate keypair
+    pub fn generate_ed25519_key(&mut self, request: request::GenerateKey) -> Result<Reply, Error> {
         let mut seed = [0u8; 32];
-        self.rng.read(&mut seed)
-            .map_err(|_| Error::EntropyMalfunction)?;
+        self.rng.read(&mut seed).map_err(|_| Error::EntropyMalfunction)?;
 
         let keypair = salty::Keypair::from(&seed);
         #[cfg(all(test, feature = "verbose-tests"))]
         println!("ed25519 keypair with public key = {:?}", &keypair.public);
 
         // generate unique ids
-        let private_id = self.generate_unique_id()?;
-        let public_id = self.generate_unique_id()?;
+        let key_id = self.generate_unique_id()?;
 
         // store keys
-        let private_path = self.prepare_path_for_key(KeyType::Private, &private_id)?;
-        self.store_serialized_key(&private_path, &seed)?;
-        let public_path = self.prepare_path_for_key(KeyType::Public, &public_id)?;
-        self.store_serialized_key(&public_path, keypair.public.as_bytes())?;
+        let path = self.prepare_path_for_key(KeyType::Secret, &key_id)?;
+        self.store_serialized_key(&path, &seed)?;
 
         // return handle
-        Ok(Reply::GenerateKeypair(reply::GenerateKeypair {
-            private_key: ObjectHandle { object_id: private_id },
-            public_key: ObjectHandle { object_id: public_id },
+        Ok(Reply::GenerateKey(reply::GenerateKey {
+            key: ObjectHandle { object_id: key_id },
         }))
     }
 
-    pub fn generate_p256_keypair(&mut self, request: request::GenerateKeypair) -> Result<Reply, Error> {
-        // generate keypair
+
+    pub fn derive_ed25519_public_key(&mut self, request: request::DeriveKey) -> Result<Reply, Error> {
+        let base_id = request.base_key.object_id;
         let mut seed = [0u8; 32];
-        self.rng.read(&mut seed)
-            .map_err(|_| Error::EntropyMalfunction)?;
-
-        let keypair = nisty::Keypair::generate_patiently(&seed);
-        #[cfg(all(test, feature = "verbose-tests"))]
-        println!("p256 keypair with public key = {:?}", &keypair.public);
-
-        // generate unique ids
-        let private_id = self.generate_unique_id()?;
+        let path = self.prepare_path_for_key(KeyType::Secret, &base_id)?;
+        self.load_serialized_key(&path, &mut seed)?;
+        let keypair = salty::Keypair::from(&seed);
         let public_id = self.generate_unique_id()?;
-
-        // store keys
-        let private_path = self.prepare_path_for_key(KeyType::Private, &private_id)?;
-        self.store_serialized_key(&private_path, &seed)?;
         let public_path = self.prepare_path_for_key(KeyType::Public, &public_id)?;
         self.store_serialized_key(&public_path, keypair.public.as_bytes())?;
-
-        // return handle
-        Ok(Reply::GenerateKeypair(reply::GenerateKeypair {
-            private_key: ObjectHandle { object_id: private_id },
-            public_key: ObjectHandle { object_id: public_id },
+        Ok(Reply::DeriveKey(reply::DeriveKey {
+            key: ObjectHandle { object_id: public_id },
         }))
     }
 
     pub fn sign_ed25519(&mut self, request: request::Sign) -> Result<Reply, Error> {
-        let key_id = request.private_key.object_id;
+        let key_id = request.key.object_id;
 
         let mut seed = [0u8; 32];
-        let path = self.prepare_path_for_key(KeyType::Private, &key_id)?;
+        let path = self.prepare_path_for_key(KeyType::Secret, &key_id)?;
         self.load_serialized_key(&path, &mut seed)?;
 
         let keypair = salty::Keypair::from(&seed);
@@ -233,11 +223,49 @@ impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'a, 's, 
         Ok(Reply::Sign(reply::Sign { signature: our_signature }))
     }
 
+    pub fn generate_p256_key(&mut self, request: request::GenerateKey) -> Result<Reply, Error> {
+        // generate keypair
+        let mut seed = [0u8; 32];
+        self.rng.read(&mut seed)
+            .map_err(|_| Error::EntropyMalfunction)?;
+
+        let keypair = nisty::Keypair::generate_patiently(&seed);
+        #[cfg(all(test, feature = "verbose-tests"))]
+        println!("p256 keypair with public key = {:?}", &keypair.public);
+
+        // generate unique ids
+        let key_id = self.generate_unique_id()?;
+
+        // store keys
+        let path = self.prepare_path_for_key(KeyType::Secret, &key_id)?;
+        self.store_serialized_key(&path, &seed)?;
+
+        // return handle
+        Ok(Reply::GenerateKey(reply::GenerateKey {
+            key: ObjectHandle { object_id: key_id },
+        }))
+    }
+
+    pub fn derive_p256_public_key(&mut self, request: request::DeriveKey) -> Result<Reply, Error> {
+        let base_id = request.base_key.object_id;
+        let mut seed = [0u8; 32];
+        let path = self.prepare_path_for_key(KeyType::Secret, &base_id)?;
+        self.load_serialized_key(&path, &mut seed)?;
+        let keypair = nisty::Keypair::generate_patiently(&seed);
+        let public_id = self.generate_unique_id()?;
+        let public_path = self.prepare_path_for_key(KeyType::Public, &public_id)?;
+        self.store_serialized_key(&public_path, keypair.public.as_bytes())?;
+        Ok(Reply::DeriveKey(reply::DeriveKey {
+            key: ObjectHandle { object_id: public_id },
+        }))
+    }
+
+
     pub fn sign_p256(&mut self, request: request::Sign) -> Result<Reply, Error> {
-        let key_id = request.private_key.object_id;
+        let key_id = request.key.object_id;
 
         let mut seed = [0u8; 32];
-        let path = self.prepare_path_for_key(KeyType::Private, &key_id)?;
+        let path = self.prepare_path_for_key(KeyType::Secret, &key_id)?;
         self.load_serialized_key(&path, &mut seed)?;
 
         let keypair = nisty::Keypair::generate_patiently(&seed);
@@ -252,7 +280,7 @@ impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'a, 's, 
     }
 
     pub fn verify_ed25519(&mut self, request: request::Verify) -> Result<Reply, Error> {
-        let key_id = request.public_key.object_id;
+        let key_id = request.key.object_id;
 
         let mut serialized_key = [0u8; 32];
         let path = self.prepare_path_for_key(KeyType::Public, &key_id)?;
@@ -277,7 +305,7 @@ impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'a, 's, 
     }
 
     pub fn verify_p256(&mut self, request: request::Verify) -> Result<Reply, Error> {
-        let key_id = request.public_key.object_id;
+        let key_id = request.key.object_id;
 
         let mut serialized_key = [0u8; 64];
         #[cfg(all(test, feature = "verbose-tests"))]

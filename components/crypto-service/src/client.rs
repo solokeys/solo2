@@ -18,6 +18,7 @@ pub enum ClientError {
 
 pub struct RawClient<'a> {
     pub(crate) ep: ClientEndpoint<'a>,
+    // pending: Option<Discriminant<Request>>,
     pending: Option<u8>,
 }
 
@@ -28,7 +29,7 @@ impl<'a> RawClient<'a> {
 
     // call with any of `crate::api::request::*`
     pub fn request<'c>(&'c mut self, req: impl Into<Request>)
-        -> core::result::Result<FutureResult<'a, 'c>, ClientError>
+        -> core::result::Result<RawFutureResult<'a, 'c>, ClientError>
     {
         // TODO: handle failure
         // TODO: fail on pending (non-canceled) request)
@@ -43,15 +44,15 @@ impl<'a> RawClient<'a> {
         let request = req.into();
         self.pending = Some(u8::from(&request));
         self.ep.send.enqueue(request).map_err(drop).unwrap();
-        Ok(FutureResult::new(self))
+        Ok(RawFutureResult::new(self))
     }
 }
 
-pub struct FutureResult<'a, 'c> {
+pub struct RawFutureResult<'a, 'c> {
     c: &'c mut RawClient<'a>,
 }
 
-impl<'a, 'c> FutureResult<'a, 'c> {
+impl<'a, 'c> RawFutureResult<'a, 'c> {
 
     pub fn new(client: &'c mut RawClient<'a>) -> Self {
         Self { c: client }
@@ -88,28 +89,28 @@ impl<'a, 'c> FutureResult<'a, 'c> {
 // allows: `let mut future = request.submit(&mut client)`
 pub trait SubmitRequest: Into<Request> {
     fn submit<'a, 'c>(self, client: &'c mut RawClient<'a>)
-        -> Result<FutureResult<'a, 'c>, ClientError>
+        -> Result<RawFutureResult<'a, 'c>, ClientError>
     {
         client.request(self)
     }
 }
 
 impl SubmitRequest for request::GenerateKey {}
-impl SubmitRequest for request::GenerateKeypair {}
+// impl SubmitRequest for request::GenerateKeypair {}
 impl SubmitRequest for request::Sign {}
 impl SubmitRequest for request::Verify {}
 
-pub struct NoFuture<'a, 'c, T> {
-    f: FutureResult<'a, 'c>,
+pub struct FutureResult<'a, 'c, T> {
+    f: RawFutureResult<'a, 'c>,
     __: PhantomData<T>,
 }
 
-impl<'a, 'c, T> NoFuture<'a, 'c, T>
+impl<'a, 'c, T> FutureResult<'a, 'c, T>
 where
     T: From<crate::api::Reply>
 {
     pub fn new<S: crate::pipe::Syscall>(client: &'c mut Client<'a, S>) -> Self {
-        Self { f: FutureResult::new(&mut client.raw), __: PhantomData }
+        Self { f: RawFutureResult::new(&mut client.raw), __: PhantomData }
     }
 
     pub fn poll(&mut self)
@@ -139,65 +140,88 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
     }
 
 
-    pub fn generate_keypair<'c>(&'c mut self, mechanism: Mechanism)
-        -> core::result::Result<NoFuture<'a, 'c, reply::GenerateKeypair>, ClientError>
+    pub fn derive_key<'c>(&'c mut self, mechanism: Mechanism, base_key: ObjectHandle)
+        -> core::result::Result<FutureResult<'a, 'c, reply::DeriveKey>, ClientError>
     {
-        self.raw.request(request::GenerateKeypair {
+        self.raw.request(request::DeriveKey {
+            mechanism,
+            base_key,
+        })?;
+        self.syscall.syscall();
+        Ok(FutureResult::new(self))
+    }
+
+    pub fn generate_key<'c>(&'c mut self, mechanism: Mechanism)
+        -> core::result::Result<FutureResult<'a, 'c, reply::GenerateKey>, ClientError>
+    {
+        self.raw.request(request::GenerateKey {
             mechanism,
             attributes: KeyAttributes::default(),
         })?;
         self.syscall.syscall();
-        Ok(NoFuture::new(self))
+        Ok(FutureResult::new(self))
     }
 
-    pub fn sign<'c>(&'c mut self, private_key: ObjectHandle, mechanism: Mechanism, data: &[u8])
-        -> core::result::Result<NoFuture<'a, 'c, reply::Sign>, ClientError>
+    pub fn sign<'c>(&'c mut self, mechanism: Mechanism, key: ObjectHandle, data: &[u8])
+        -> core::result::Result<FutureResult<'a, 'c, reply::Sign>, ClientError>
     {
         self.raw.request(request::Sign {
-            private_key,
+            key,
             mechanism,
             message: Bytes::try_from_slice(data).map_err(|_| ClientError::SignDataTooLarge)?,
         })?;
         self.syscall.syscall();
-        Ok(NoFuture::new(self))
+        Ok(FutureResult::new(self))
     }
 
     pub fn verify<'c>(
         &'c mut self,
-        keypair_handle: ObjectHandle,
         mechanism: Mechanism,
+        key: ObjectHandle,
         message: &[u8],
         signature: &[u8]
     )
-        -> core::result::Result<NoFuture<'a, 'c, reply::Verify>, ClientError>
+        -> core::result::Result<FutureResult<'a, 'c, reply::Verify>, ClientError>
     {
         self.raw.request(request::Verify {
-            public_key: keypair_handle,
             mechanism,
+            key,
             message: Message::try_from_slice(&message).expect("all good"),
             signature: Signature::try_from_slice(&signature).expect("all good"),
         })?;
         self.syscall.syscall();
-        Ok(NoFuture::new(self))
+        Ok(FutureResult::new(self))
     }
 
 
-    pub fn generate_ed25519_keypair<'c>(&'c mut self)
-        -> core::result::Result<NoFuture<'a, 'c, reply::GenerateKeypair>, ClientError>
+    pub fn generate_ed25519_key<'c>(&'c mut self)
+        -> core::result::Result<FutureResult<'a, 'c, reply::GenerateKey>, ClientError>
     {
-        self.generate_keypair(Mechanism::Ed25519)
+        self.generate_key(Mechanism::Ed25519)
     }
 
-    pub fn generate_p256_keypair<'c>(&'c mut self)
-        -> core::result::Result<NoFuture<'a, 'c, reply::GenerateKeypair>, ClientError>
+    pub fn derive_ed25519_key<'c>(&'c mut self, private_key: &ObjectHandle)
+        -> core::result::Result<FutureResult<'a, 'c, reply::DeriveKey>, ClientError>
     {
-        self.generate_keypair(Mechanism::P256)
+        self.derive_key(Mechanism::Ed25519, private_key.clone())
     }
 
-    pub fn sign_ed25519<'c>(&'c mut self, keypair_handle: &ObjectHandle, message: &[u8])
-        -> core::result::Result<NoFuture<'a, 'c, reply::Sign>, ClientError>
+    pub fn generate_p256_key<'c>(&'c mut self)
+        -> core::result::Result<FutureResult<'a, 'c, reply::GenerateKey>, ClientError>
     {
-        self.sign(*keypair_handle, Mechanism::Ed25519, message)
+        self.generate_key(Mechanism::P256)
+    }
+
+    pub fn derive_p256_key<'c>(&'c mut self, private_key: &ObjectHandle)
+        -> core::result::Result<FutureResult<'a, 'c, reply::DeriveKey>, ClientError>
+    {
+        self.derive_key(Mechanism::P256, private_key.clone())
+    }
+
+    pub fn sign_ed25519<'c>(&'c mut self, key: &ObjectHandle, message: &[u8])
+        -> core::result::Result<FutureResult<'a, 'c, reply::Sign>, ClientError>
+    {
+        self.sign(Mechanism::Ed25519, *key, message)
     }
 
     // generally, don't offer multiple versions of a mechanism, if possible.
@@ -206,23 +230,23 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
     //
     // on the other hand: if users need sha256, then if the service runs in secure trustzone
     // domain, we'll maybe need two copies of the sha2 code
-    pub fn sign_p256_prehashed<'c>(&'c mut self, keypair_handle: &ObjectHandle, message: &[u8])
-        -> core::result::Result<NoFuture<'a, 'c, reply::Sign>, ClientError>
+    pub fn sign_p256_prehashed<'c>(&'c mut self, key: &ObjectHandle, message: &[u8])
+        -> core::result::Result<FutureResult<'a, 'c, reply::Sign>, ClientError>
     {
-        self.sign(*keypair_handle, Mechanism::P256, message)
+        self.sign(Mechanism::P256, *key, message)
     }
 
 
-    pub fn verify_ed25519<'c>(&'c mut self, keypair_handle: &ObjectHandle, message: &[u8], signature: &[u8])
-        -> core::result::Result<NoFuture<'a, 'c, reply::Verify>, ClientError>
+    pub fn verify_ed25519<'c>(&'c mut self, key: &ObjectHandle, message: &[u8], signature: &[u8])
+        -> core::result::Result<FutureResult<'a, 'c, reply::Verify>, ClientError>
     {
-        self.verify(*keypair_handle, Mechanism::Ed25519, message, signature)
+        self.verify(Mechanism::Ed25519, *key, message, signature)
     }
 
-    pub fn verify_p256_prehashed<'c>(&'c mut self, keypair_handle: &ObjectHandle, message: &[u8], signature: &[u8])
-        -> core::result::Result<NoFuture<'a, 'c, reply::Verify>, ClientError>
+    pub fn verify_p256_prehashed<'c>(&'c mut self, key: &ObjectHandle, message: &[u8], signature: &[u8])
+        -> core::result::Result<FutureResult<'a, 'c, reply::Verify>, ClientError>
     {
-        self.verify(*keypair_handle, Mechanism::P256, message, signature)
+        self.verify(Mechanism::P256, *key, message, signature)
     }
 
 }

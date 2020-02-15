@@ -16,7 +16,7 @@ pub mod types;
 
 pub use api::Reply;
 pub use error::Error;
-pub use client::{Client, RawClient};
+pub use client::Client;
 pub use service::Service;
 
 
