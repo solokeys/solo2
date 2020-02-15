@@ -1,4 +1,5 @@
 use core::convert::TryInto;
+use core::convert::TryFrom;
 
 use crate::api::*;
 use crate::config::*;
@@ -15,7 +16,7 @@ pub use embedded_hal::blocking::rng::Read as RngRead;
 // let (mut fido_endpoint, mut fido2_client) = Client::new("fido2");
 // let (mut piv_endpoint, mut piv_client) = Client::new("piv");
 
-pub struct ServiceResources<'s, Rng, PersistentStorage, VolatileStorage>
+pub struct ServiceResources<'a, 's, Rng, PersistentStorage, VolatileStorage>
 where
     Rng: RngRead,
     PersistentStorage: LfsStorage,
@@ -27,6 +28,7 @@ where
     pfs: FilesystemWith<'s, 's, PersistentStorage>,
     // cryptoki: "session objects"
     vfs: FilesystemWith<'s, 's, VolatileStorage>,
+    currently_serving: &'a str,
 }
 
 pub struct Service<'a, 's, Rng, PersistentStorage, VolatileStorage>
@@ -36,10 +38,19 @@ where
     VolatileStorage: LfsStorage,
 {
     eps: Vec<ServiceEndpoint<'a>, MAX_SERVICE_CLIENTS>,
-    resources: ServiceResources<'s, Rng, PersistentStorage, VolatileStorage>,
+    resources: ServiceResources<'a, 's, Rng, PersistentStorage, VolatileStorage>,
 }
 
-impl<'s, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'s, R, P, V> {
+impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'a, 's, R, P, V> {
+
+    pub fn try_new(
+        rng: R,
+        mut pfs: FilesystemWith<'s, 's, P>,
+        mut vfs: FilesystemWith<'s, 's, V>,
+    ) -> Result<Self, Error> {
+
+        Ok(Self { rng, pfs, vfs, currently_serving: &"" })
+    }
 
     // TODO: key a `/root/aead-key`
     pub fn get_aead_key(&self) -> Result<AeadKey, Error> {
@@ -128,99 +139,89 @@ impl<'s, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'s, R, P, V>
         }
     }
 
+    fn prepare_path_for_key(&mut self, key_type: KeyType, id: &UniqueId)
+        -> Result<Bytes<MAX_PATH_LENGTH>, Error> {
+        let mut path = Bytes::<MAX_PATH_LENGTH>::new();
+        path.extend_from_slice(b"/").map_err(|_| Error::InternalError)?;
+        path.extend_from_slice(self.currently_serving.as_bytes()).map_err(|_| Error::InternalError)?;
+        // #[cfg(all(test, feature = "verbose-tests"))]
+        // #[cfg(test)]
+        // println!("creating dir {:?}", &path);
+        // self.pfs.create_dir(path.as_ref()).map_err(|_| Error::FilesystemWriteFailure)?;
+        path.extend_from_slice(match key_type {
+            KeyType::Private => b"-private",
+            KeyType::Public => b"-public",
+            KeyType::Secret => b"-secret",
+        }).map_err(|_| Error::InternalError)?;
+        // // #[cfg(all(test, feature = "verbose-tests"))]
+        // // println!("creating dir {:?}", &path);
+        // // self.pfs.create_dir(path.as_ref()).map_err(|_| Error::FilesystemWriteFailure)?;
+        path.extend_from_slice(b"-").map_err(|_| Error::InternalError)?;
+        path.extend_from_slice(&id.hex()).map_err(|_| Error::InternalError)?;
+        Ok(path)
+    }
+
     pub fn generate_ed25519_keypair(&mut self, request: request::GenerateKeypair) -> Result<Reply, Error> {
-        // generate key
+        // generate keypair
         let mut seed = [0u8; 32];
         self.rng.read(&mut seed)
             .map_err(|_| Error::EntropyMalfunction)?;
 
-        // not needed now.  do we want to cache its public key?
-        // let keypair = salty::Keypair::from(&seed);
-        // #[cfg(all(test, feature = "verbose-tests"))]
-        // println!("ed25519 keypair with public key = {:?}", &keypair.public);
+        let keypair = salty::Keypair::from(&seed);
+        #[cfg(all(test, feature = "verbose-tests"))]
+        println!("ed25519 keypair with public key = {:?}", &keypair.public);
 
-        // generate unique id
-        let unique_id = self.generate_unique_id()?;
+        // generate unique ids
+        let private_id = self.generate_unique_id()?;
+        let public_id = self.generate_unique_id()?;
 
-        // let mut u = unique_id.clone().0;
-        // let (nonce, tag)= self.aead_in_place(&[], &mut u)?;
-        // #[cfg(all(test, feature = "verbose-tests"))]
-        // println!("aead: encrypted unique id = {:?}, nonce = {:?}, tag = {:?}", &u, &nonce, &tag);
+        // store keys
+        let private_path = self.prepare_path_for_key(KeyType::Private, &private_id)?;
+        self.store_serialized_key(&private_path, &seed)?;
+        let public_path = self.prepare_path_for_key(KeyType::Public, &public_id)?;
+        self.store_serialized_key(&public_path, keypair.public.as_bytes())?;
 
-        // store key
-        // TODO: add "app" namespacing, and AEAD this ID
-        // let mut path = [0u8; 38];
-        // path[..6].copy_from_slice(b"/test/");
-        // format_hex(&unique_id, &mut path[6..]);
-        let mut path = [0u8; 33];
-        path[..1].copy_from_slice(b"/");
-        path[1..].copy_from_slice(&unique_id.hex());
-
-        self.store_serialized_key(&path, &seed)?;
-
-        // return key handle
+        // return handle
         Ok(Reply::GenerateKeypair(reply::GenerateKeypair {
-            keypair_handle: ObjectHandle { object_id: unique_id }
+            private_key: ObjectHandle { object_id: private_id },
+            public_key: ObjectHandle { object_id: public_id },
         }))
     }
 
     pub fn generate_p256_keypair(&mut self, request: request::GenerateKeypair) -> Result<Reply, Error> {
-        // generate key
+        // generate keypair
         let mut seed = [0u8; 32];
         self.rng.read(&mut seed)
             .map_err(|_| Error::EntropyMalfunction)?;
 
-        // not needed now.  do we want to cache its public key?
-        // let keypair = salty::Keypair::from(&seed);
-        // #[cfg(all(test, feature = "verbose-tests"))]
-        // println!("ed25519 keypair with public key = {:?}", &keypair.public);
+        let keypair = nisty::Keypair::generate_patiently(&seed);
+        #[cfg(all(test, feature = "verbose-tests"))]
+        println!("p256 keypair with public key = {:?}", &keypair.public);
 
-        // generate unique id
-        let unique_id = self.generate_unique_id()?;
+        // generate unique ids
+        let private_id = self.generate_unique_id()?;
+        let public_id = self.generate_unique_id()?;
 
-        // let mut u = unique_id.clone().0;
-        // let (nonce, tag)= self.aead_in_place(&[], &mut u)?;
-        // #[cfg(all(test, feature = "verbose-tests"))]
-        // println!("aead: encrypted unique id = {:?}, nonce = {:?}, tag = {:?}", &u, &nonce, &tag);
+        // store keys
+        let private_path = self.prepare_path_for_key(KeyType::Private, &private_id)?;
+        self.store_serialized_key(&private_path, &seed)?;
+        let public_path = self.prepare_path_for_key(KeyType::Public, &public_id)?;
+        self.store_serialized_key(&public_path, keypair.public.as_bytes())?;
 
-        // store key
-        // TODO: add "app" namespacing, and AEAD this ID
-        // let mut path = [0u8; 38];
-        // path[..6].copy_from_slice(b"/test/");
-        // format_hex(&unique_id, &mut path[6..]);
-        let mut path = [0u8; 33];
-        path[..1].copy_from_slice(b"/");
-        path[1..].copy_from_slice(&unique_id.hex());
-
-        self.store_serialized_key(&path, &seed)?;
-
-        // return key handle
+        // return handle
         Ok(Reply::GenerateKeypair(reply::GenerateKeypair {
-            keypair_handle: ObjectHandle { object_id: unique_id }
+            private_key: ObjectHandle { object_id: private_id },
+            public_key: ObjectHandle { object_id: public_id },
         }))
     }
 
     pub fn sign_ed25519(&mut self, request: request::Sign) -> Result<Reply, Error> {
-        // pub key_handle: ObjectHandle,
-        // pub mechanism: Mechanism,
-        // pub message: Message,
-
-        let unique_id = request.key_handle.object_id;
-
-        let mut path = [0u8; 33];
-        path[..1].copy_from_slice(b"/");
-        path[1..].copy_from_slice(&unique_id.hex());
+        let key_id = request.private_key.object_id;
 
         let mut seed = [0u8; 32];
-
+        let path = self.prepare_path_for_key(KeyType::Private, &key_id)?;
         self.load_serialized_key(&path, &mut seed)?;
 
-        // // generate key
-        // let mut seed = [0u8; 32];
-        // self.rng.read(&mut seed)
-        //     .map_err(|_| Error::EntropyMalfunction)?;
-
-        // // not needed now.  do we want to cache its public key?
         let keypair = salty::Keypair::from(&seed);
         #[cfg(all(test, feature = "verbose-tests"))]
         println!("ed25519 keypair with public key = {:?}", &keypair.public);
@@ -228,18 +229,15 @@ impl<'s, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'s, R, P, V>
         let native_signature = keypair.sign(&request.message);
         let our_signature = Signature::try_from_slice(&native_signature.to_bytes()).unwrap();
 
-        // // return key handle
+        // return signature
         Ok(Reply::Sign(reply::Sign { signature: our_signature }))
     }
 
     pub fn sign_p256(&mut self, request: request::Sign) -> Result<Reply, Error> {
-        let unique_id = request.key_handle.object_id;
-
-        let mut path = [0u8; 33];
-        path[..1].copy_from_slice(b"/");
-        path[1..].copy_from_slice(&unique_id.hex());
+        let key_id = request.private_key.object_id;
 
         let mut seed = [0u8; 32];
+        let path = self.prepare_path_for_key(KeyType::Private, &key_id)?;
         self.load_serialized_key(&path, &mut seed)?;
 
         let keypair = nisty::Keypair::generate_patiently(&seed);
@@ -249,29 +247,20 @@ impl<'s, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'s, R, P, V>
         let native_signature = keypair.sign(&request.message);
         let our_signature = Signature::try_from_slice(&native_signature.to_bytes()).unwrap();
 
-        // // return key handle
+        // return signature
         Ok(Reply::Sign(reply::Sign { signature: our_signature }))
     }
 
     pub fn verify_ed25519(&mut self, request: request::Verify) -> Result<Reply, Error> {
-        // pub key_handle: ObjectHandle,
-        // pub mechanism: Mechanism,
-        // pub message: Message,
-        // pub signature: Signature,
+        let key_id = request.public_key.object_id;
 
-        let unique_id = request.key_handle.object_id;
+        let mut serialized_key = [0u8; 32];
+        let path = self.prepare_path_for_key(KeyType::Public, &key_id)?;
+        self.load_serialized_key(&path, &mut serialized_key)?;
 
-        let mut path = [0u8; 33];
-        path[..1].copy_from_slice(b"/");
-        path[1..].copy_from_slice(&unique_id.hex());
-
-        let mut seed = [0u8; 32];
-
-        self.load_serialized_key(&path, &mut seed)?;
-
-        let keypair = salty::Keypair::from(&seed);
+        let public_key = salty::PublicKey::try_from(&serialized_key).map_err(|_| Error::InternalError)?;
         #[cfg(all(test, feature = "verbose-tests"))]
-        println!("ed25519 keypair with public key = {:?}", &keypair.public);
+        println!("ed25519 public key = {:?}", &public_key);
 
         if request.signature.len() != salty::constants::SIGNATURE_SERIALIZED_LENGTH {
             return Err(Error::WrongSignatureLength);
@@ -281,26 +270,27 @@ impl<'s, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'s, R, P, V>
         signature_array.copy_from_slice(request.signature.as_ref());
         let salty_signature = salty::Signature::from(&signature_array);
 
-        match keypair.public.verify(&request.message, &salty_signature) {
+        match public_key.verify(&request.message, &salty_signature) {
             Ok(_) => Ok(Reply::Verify(reply::Verify { valid: true } )),
             Err(_) => Ok(Reply::Verify(reply::Verify { valid: false } )),
         }
     }
 
     pub fn verify_p256(&mut self, request: request::Verify) -> Result<Reply, Error> {
-        let unique_id = request.key_handle.object_id;
+        let key_id = request.public_key.object_id;
 
-        let mut path = [0u8; 33];
-        path[..1].copy_from_slice(b"/");
-        path[1..].copy_from_slice(&unique_id.hex());
-
-        let mut seed = [0u8; 32];
-
-        self.load_serialized_key(&path, &mut seed)?;
-
-        let keypair = nisty::Keypair::generate_patiently(&seed);
+        let mut serialized_key = [0u8; 64];
         #[cfg(all(test, feature = "verbose-tests"))]
-        println!("p256 keypair with public key = {:?}", &keypair.public);
+        println!("attempting path from {:?}", &key_id);
+        let path = self.prepare_path_for_key(KeyType::Public, &key_id)?;
+        #[cfg(all(test, feature = "verbose-tests"))]
+        println!("attempting load from {:?}", &path);
+        self.load_serialized_key(&path, &mut serialized_key)?;
+
+        // println!("p256 serialized public key = {:?}", &serialized_key[..]);
+        let public_key = nisty::PublicKey::try_from(&serialized_key).map_err(|_| Error::InternalError)?;
+        #[cfg(all(test, feature = "verbose-tests"))]
+        println!("p256 public key = {:?}", &public_key);
 
         if request.signature.len() != nisty::SIGNATURE_LENGTH {
             return Err(Error::WrongSignatureLength);
@@ -308,7 +298,7 @@ impl<'s, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'s, R, P, V>
 
         let mut signature_array = [0u8; nisty::SIGNATURE_LENGTH];
 
-        let valid = keypair.public.verify(&request.message, &signature_array);
+        let valid = public_key.verify(&request.message, &signature_array);
         Ok(Reply::Verify(reply::Verify { valid: true } ))
     }
 
@@ -340,20 +330,43 @@ impl<'s, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'s, R, P, V>
         Ok(())
     }
 
+    // TODO: in the case of desktop/ram storage:
+    // - using file.sync (without file.close) leads to an endless loop
+    // - this loop happens inside `lfs_dir_commit`, namely inside its first for loop
+    //   https://github.com/ARMmbed/littlefs/blob/v2.1.4/lfs.c#L1680-L1694
+    // - the `if` condition is never fulfilled, it seems f->next continues "forever"
+    //   through whatever lfs->mlist is.
+    //
+    // see also https://github.com/ARMmbed/littlefs/issues/145
+    //
+    // OUTCOME: either ensure calling `.close()`, or patch the call in a `drop` for FileWith.
+    //
     pub fn store_serialized_key(&mut self, path: &[u8], serialized_key: &[u8]) -> Result<(), Error> {
-        #[cfg(test)]
         // actually safe, as path is ASCII by construction
+        #[cfg(test)]
         println!("storing in file {:?}", unsafe { core::str::from_utf8_unchecked(&path[..]) });
 
         use littlefs2::fs::{File, FileWith};
         let mut alloc = File::allocate();
+        // #[cfg(test)]
+        // println!("allocated FileAllocation");
         let mut file = FileWith::create(&path[..], &mut alloc, &mut self.vfs)
             .map_err(|_| Error::FilesystemWriteFailure)?;
+        // #[cfg(test)]
+        // println!("created file");
         use littlefs2::io::WriteWith;
         file.write(&serialized_key)
             .map_err(|_| Error::FilesystemWriteFailure)?;
+        // #[cfg(test)]
+        // println!("wrote file");
         file.sync()
             .map_err(|_| Error::FilesystemWriteFailure)?;
+        // #[cfg(test)]
+        // println!("sync'd file");
+        // file.close()
+        //     .map_err(|_| Error::FilesystemWriteFailure)?;
+        // #[cfg(test)]
+        // println!("closed file");
 
         Ok(())
     }
@@ -363,19 +376,13 @@ impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> Service<'a, 's, R, P, V> 
 
     pub fn new(
         rng: R,
-        persistent_storage: FilesystemWith<'s, 's, P>,
-        volatile_storage: FilesystemWith<'s, 's, V>,
+        mut persistent_storage: FilesystemWith<'s, 's, P>,
+        mut volatile_storage: FilesystemWith<'s, 's, V>,
     )
-        -> Self
+        -> Result<Self, Error>
     {
-        Self {
-            eps: Vec::new(),
-            resources: ServiceResources {
-                rng,
-                pfs: persistent_storage,
-                vfs: volatile_storage,
-            },
-        }
+        let resources = ServiceResources::try_new(rng, persistent_storage, volatile_storage)?;
+        Ok(Self { eps: Vec::new(), resources, })
     }
 
     pub fn add_endpoint(&mut self, ep: ServiceEndpoint<'a>) -> Result<(), ServiceEndpoint> {
@@ -395,32 +402,13 @@ impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> Service<'a, 's, R, P, V> 
             if let Some(request) = ep.recv.dequeue() {
                 #[cfg(test)]
                 println!("service got request: {:?}", &request);
+                resources.currently_serving = &ep.client_id;
                 let reply_result = resources.reply_to(request);
                 ep.send.enqueue(reply_result).ok();
             }
         }
     }
 }
-
-// pub struct MockSyscall<'a, 's, Rng, PersistentStorage, VolatileStorage>
-// where
-//     Rng: RngRead,
-//     PersistentStorage: LfsStorage,
-//     VolatileStorage: LfsStorage,
-// {
-//     service: Service<'a, 's, Rng, PersistentStorage, VolatileStorage>
-// }
-
-// impl<'a, 's, R, P, V> MockSyscall<'a, 's, R, P, V>
-// where
-//     R: RngRead,
-//     P: LfsStorage,
-//     V: LfsStorage,
-// {
-//     pub fn new(service: Service<'a, 's, R, P, V>) -> Self {
-//         Self { service }
-//     }
-// }
 
 impl<'a, 's, R, P, V> crate::pipe::Syscall for &mut Service<'a, 's, R, P, V>
 where

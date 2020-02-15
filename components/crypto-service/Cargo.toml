@@ -37,7 +37,8 @@ branch = "main"
 features = ["cose"]
 
 [features]
-verbose-tests = []
+verbose-tests = ["littlefs2/ll-assertions"]
+verbose-lfs = ["littlefs2/ll-assertions", "littlefs2/ll-trace"]
 
 # [patch."https://github.com/nickray/littlefs2".littlefs2]
 # path = "../../../littlefs2"

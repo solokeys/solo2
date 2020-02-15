@@ -144,17 +144,17 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
     {
         self.raw.request(request::GenerateKeypair {
             mechanism,
-            key_attributes: KeyAttributes::default(),
+            attributes: KeyAttributes::default(),
         })?;
         self.syscall.syscall();
         Ok(NoFuture::new(self))
     }
 
-    pub fn sign<'c>(&'c mut self, key_handle: ObjectHandle, mechanism: Mechanism, data: &[u8])
+    pub fn sign<'c>(&'c mut self, private_key: ObjectHandle, mechanism: Mechanism, data: &[u8])
         -> core::result::Result<NoFuture<'a, 'c, reply::Sign>, ClientError>
     {
         self.raw.request(request::Sign {
-            key_handle,
+            private_key,
             mechanism,
             message: Bytes::try_from_slice(data).map_err(|_| ClientError::SignDataTooLarge)?,
         })?;
@@ -172,7 +172,7 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
         -> core::result::Result<NoFuture<'a, 'c, reply::Verify>, ClientError>
     {
         self.raw.request(request::Verify {
-            key_handle: keypair_handle,
+            public_key: keypair_handle,
             mechanism,
             message: Message::try_from_slice(&message).expect("all good"),
             signature: Signature::try_from_slice(&signature).expect("all good"),

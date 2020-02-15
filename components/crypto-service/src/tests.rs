@@ -105,7 +105,7 @@ fn dummy() {
     let vfs = FilesystemWith::mount(&mut volatile_fs_alloc, &mut volatile_storage)
         .expect("could not mount volatile storage");
 
-    let mut service = Service::new(rng, pfs, vfs);
+    let mut service = Service::new(rng, pfs, vfs).expect("service init worked");
     assert!(service.add_endpoint(service_endpoint).is_ok());
 
     let mut client = RawClient::new(client_endpoint);
@@ -223,7 +223,7 @@ fn sign_ed25519() {
     let vfs = FilesystemWith::mount(&mut volatile_fs_alloc, &mut volatile_storage)
         .expect("could not mount volatile storage");
 
-    let mut service = Service::new(rng, pfs, vfs);
+    let mut service = Service::new(rng, pfs, vfs).expect("service init worked");
     service.add_endpoint(service_endpoint).ok();
 
     // Client needs a "Syscall" trait impl, to trigger crypto processing
@@ -235,21 +235,23 @@ fn sign_ed25519() {
     let mut future = client.generate_ed25519_keypair().expect("no client error");
     println!("submitted gen ed25519");
     let reply = block!(future);
-    let keypair_handle = reply.expect("no errors, never").keypair_handle;
-    println!("got a handle: {:?}", &keypair_handle);
+    let handles = reply.expect("no errors, never");
+    let private_key = handles.private_key;
+    let public_key = handles.public_key;
+    println!("got a private {:?}, public {:?}", &private_key, &public_key);
 
     let message = [1u8, 2u8, 3u8];
-    let mut future = client.sign_ed25519(&keypair_handle, &message).expect("no client error");
+    let mut future = client.sign_ed25519(&private_key, &message).expect("no client error");
     let reply: Result<api::reply::Sign, _> = block!(future);
     let signature = reply.expect("good signature").signature;
     println!("got a signature: {:?}", &signature);
 
-    let mut future = client.verify_ed25519(&keypair_handle, &message, &signature).expect("no client error");
+    let mut future = client.verify_ed25519(&public_key, &message, &signature).expect("no client error");
     let reply = block!(future);
     let valid = reply.expect("good signature").valid;
     // assert!(valid);
 
-    let mut future = client.verify_ed25519(&keypair_handle, &message, &[1u8,2,3]).expect("no client error");
+    let mut future = client.verify_ed25519(&public_key, &message, &[1u8,2,3]).expect("no client error");
     let reply = block!(future);
     assert_eq!(Err(Error::WrongSignatureLength), reply);
 }
@@ -278,7 +280,7 @@ fn sign_p256() {
     let vfs = FilesystemWith::mount(&mut volatile_fs_alloc, &mut volatile_storage)
         .expect("could not mount volatile storage");
 
-    let mut service = Service::new(rng, pfs, vfs);
+    let mut service = Service::new(rng, pfs, vfs).expect("service init worked");
     service.add_endpoint(service_endpoint).ok();
 
     // Client needs a "Syscall" trait impl, to trigger crypto processing
@@ -289,19 +291,22 @@ fn sign_p256() {
 
 
 
-    let keypair = block!(client.generate_p256_keypair().expect("no client error"))
-        .expect("no errors")
-        .keypair_handle;
+    let keys = block!(client.generate_p256_keypair().expect("no client error"))
+        .expect("no errors");
 
     let message = [1u8, 2u8, 3u8];
-    let signature = block!( client.sign_ed25519(&keypair, &message).expect("no client error"))
+    let signature = block!( client.sign_p256_prehashed(&keys.private_key, &message).expect("no client error"))
         .expect("good signature")
         .signature;
 
-    let valid = block!(client.verify_ed25519(&keypair, &message, &signature).expect("no client error"))
-        .expect("valid signature")
-        .valid;
-
+    let future = client.verify_p256_prehashed(&keys.public_key, &message, &signature);
+    let mut future = future.expect("no client error");
+    let result = block!(future);
+    if result.is_err() {
+        println!("error: {:?}", result);
+    }
+    let reply = result.expect("valid signature");
+    let valid = reply.valid;
     assert!(valid);
 
 }

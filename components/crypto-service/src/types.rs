@@ -125,6 +125,12 @@ impl KeyAttributes {
     }
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum KeyType {
+    Private,
+    Public,
+    Secret,
+}
 
 /// Opaque key handle
 ///

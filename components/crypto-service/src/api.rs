@@ -82,25 +82,25 @@ pub mod request {
 
         GenerateKey:
             - mechanism: Mechanism
-            - key_attributes: KeyAttributes
+            - attributes: KeyAttributes
 
         GenerateKeypair:
             - mechanism: Mechanism
-            - key_attributes: KeyAttributes
+            - attributes: KeyAttributes
             // private_key_template: PrivateKeyTemplate
             // public_key_template: PublicKeyTemplate
 
         ReadCounter:
-            - counter_handle: ObjectHandle
+            - counter: ObjectHandle
 
         Sign:
-          - key_handle: ObjectHandle
           - mechanism: Mechanism
+          - private_key: ObjectHandle
           - message: Message
 
         Verify:
-          - key_handle: ObjectHandle
           - mechanism: Mechanism
+          - public_key: ObjectHandle
           - message: Message
           - signature: Signature
     }
@@ -113,21 +113,19 @@ pub mod reply {
 
     impl_reply! {
         CreateCounter:
-            - key_handle: ObjectHandle
+            - counter: ObjectHandle
 
         FindObjects:
             - object_handles: Vec<ObjectHandle, config::MAX_OBJECT_HANDLES>
-            // - object_handles: ObjectHandles
             // can be higher than capacity of vector
             - num_objects: usize
 
         GenerateKey:
-            - key_handle: ObjectHandle
+            - secret_key: ObjectHandle
 
         GenerateKeypair:
-            - keypair_handle: ObjectHandle
-            // - pub public_key_handle: ObjectHandle,
-            // - pub private_key_handle: ObjectHandle,
+            - private_key: ObjectHandle
+            - public_key: ObjectHandle
 
         ReadCounter:
             - counter: u32
