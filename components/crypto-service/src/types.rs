@@ -34,7 +34,6 @@ pub type AeadNonce = [u8; 12];
 pub type AeadTag = [u8; 16];
 
 
-
 // Object Hierarchy according to Cryptoki
 // - Storage
 //   - Domain parameters
@@ -225,12 +224,11 @@ impl StorageAttributes {
     }
 }
 
-
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Mechanism {
     Ed25519,
     P256,
-    // X25519,
+    X25519,
 }
 
 pub type LongData = Bytes<MAX_LONG_DATA_LENGTH>;

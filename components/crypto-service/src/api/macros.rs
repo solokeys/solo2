@@ -77,6 +77,16 @@ macro_rules! impl_reply {
         )*
     }
 
+    // impl core::convert::TryFrom<Reply> for $reply {
+    //     type Error = ();
+    //     fn try_from(reply: Reply) -> Result<reply::$reply, Self::Error> {
+    //         match reply {
+    //             Reply::$reply(reply) => Ok(reply),
+    //             _ => Err(()),
+    //         }
+    //     }
+    // }
+
     impl From<Reply> for $reply {
         fn from(reply: Reply) -> reply::$reply {
             match reply {

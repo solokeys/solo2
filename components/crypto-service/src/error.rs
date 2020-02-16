@@ -23,6 +23,7 @@ pub enum Error {
     EntropyMalfunction,
     FilesystemReadFailure,
     FilesystemWriteFailure,
+    ImplementationError,
     InternalError,
     MechanismNotAvailable,
     RequestNotAvailable,

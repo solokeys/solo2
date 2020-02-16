@@ -1,7 +1,7 @@
 use core::marker::PhantomData;
 
 use crate::api::*;
-use crate::config::*;
+// use crate::config::*;
 use crate::error::*;
 use crate::types::*;
 
@@ -117,9 +117,14 @@ where
         -> core::task::Poll<core::result::Result<T, Error>>
     {
         use core::task::Poll::{Pending, Ready};
+        use core::convert::TryFrom;
         match self.f.poll() {
             Ready(Ok(reply)) => {
-                Ready(Ok(reply.into()))
+                match T::try_from(reply) {
+                    Ok(reply2) => Ready(Ok(reply2)),
+                    Err(_) => Ready(Err(Error::ImplementationError)),
+                }
+                // Ready(Ok(reply.into()))
             }
             Ready(Err(error)) => {
                 Ready(Err(error))

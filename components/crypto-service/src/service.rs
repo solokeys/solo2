@@ -4,12 +4,16 @@ use core::convert::TryFrom;
 use crate::api::*;
 use crate::config::*;
 use crate::error::Error;
+use crate::mechanisms;
 use crate::types::*;
 
 pub use crate::pipe::ServiceEndpoint;
 
 use chacha20poly1305::ChaCha8Poly1305;
 pub use embedded_hal::blocking::rng::Read as RngRead;
+
+// #[macro_use]
+// mod macros;
 
 // associated keys end up namespaced under "/fido2"
 // example: "/fido2/keys/2347234"
@@ -25,6 +29,7 @@ where
     rng: Rng,
     // maybe make this more flexible later, but not right now
     // cryptoki: "token objects"
+    #[allow(dead_code)]
     pfs: FilesystemWith<'s, 's, PersistentStorage>,
     // cryptoki: "session objects"
     vfs: FilesystemWith<'s, 's, VolatileStorage>,
@@ -45,8 +50,8 @@ impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'a, 's, 
 
     pub fn try_new(
         rng: R,
-        mut pfs: FilesystemWith<'s, 's, P>,
-        mut vfs: FilesystemWith<'s, 's, V>,
+        pfs: FilesystemWith<'s, 's, P>,
+        vfs: FilesystemWith<'s, 's, V>,
     ) -> Result<Self, Error> {
 
         Ok(Self { rng, pfs, vfs, currently_serving: &"" })
@@ -91,7 +96,7 @@ impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'a, 's, 
             ad,
             buf,
             &GenericArray::clone_from_slice(tag)
-        ).map_err(|e| Error::AeadError)
+        ).map_err(|_| Error::AeadError)
     }
 
     pub fn reply_to(&mut self, request: Request) -> Result<Reply, Error> {
@@ -109,8 +114,16 @@ impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'a, 's, 
             //        - backends
             Request::DeriveKey(request) => {
                 match request.mechanism {
-                    Mechanism::Ed25519 => self.derive_ed25519_public_key(request),
-                    Mechanism::P256 => self.derive_p256_public_key(request),
+
+                    // derive_key!(Ed25519, P256)
+                    // #[cfg(feature = "ed25519")]
+                    Mechanism::Ed25519 => mechanisms::Ed25519::derive_key(self, request)
+                        .map(|reply| Reply::DeriveKey(reply)),
+
+                    // #[cfg(feature = "p256")]
+                    Mechanism::P256 => mechanisms::P256::derive_key(self, request)
+                        .map(|reply| Reply::DeriveKey(reply)),
+
                     _ => Err(Error::MechanismNotAvailable),
                 }
             },
@@ -147,7 +160,7 @@ impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'a, 's, 
         }
     }
 
-    fn prepare_path_for_key(&mut self, key_type: KeyType, id: &UniqueId)
+    pub fn prepare_path_for_key(&mut self, key_type: KeyType, id: &UniqueId)
         -> Result<Bytes<MAX_PATH_LENGTH>, Error> {
         let mut path = Bytes::<MAX_PATH_LENGTH>::new();
         path.extend_from_slice(b"/").map_err(|_| Error::InternalError)?;
@@ -169,13 +182,13 @@ impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'a, 's, 
         Ok(path)
     }
 
-    pub fn generate_ed25519_key(&mut self, request: request::GenerateKey) -> Result<Reply, Error> {
+    pub fn generate_ed25519_key(&mut self, _request: request::GenerateKey) -> Result<Reply, Error> {
         let mut seed = [0u8; 32];
         self.rng.read(&mut seed).map_err(|_| Error::EntropyMalfunction)?;
 
-        let keypair = salty::Keypair::from(&seed);
-        #[cfg(all(test, feature = "verbose-tests"))]
-        println!("ed25519 keypair with public key = {:?}", &keypair.public);
+        // let keypair = salty::Keypair::from(&seed);
+        // #[cfg(all(test, feature = "verbose-tests"))]
+        // println!("ed25519 keypair with public key = {:?}", &keypair.public);
 
         // generate unique ids
         let key_id = self.generate_unique_id()?;
@@ -191,19 +204,19 @@ impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'a, 's, 
     }
 
 
-    pub fn derive_ed25519_public_key(&mut self, request: request::DeriveKey) -> Result<Reply, Error> {
-        let base_id = request.base_key.object_id;
-        let mut seed = [0u8; 32];
-        let path = self.prepare_path_for_key(KeyType::Secret, &base_id)?;
-        self.load_serialized_key(&path, &mut seed)?;
-        let keypair = salty::Keypair::from(&seed);
-        let public_id = self.generate_unique_id()?;
-        let public_path = self.prepare_path_for_key(KeyType::Public, &public_id)?;
-        self.store_serialized_key(&public_path, keypair.public.as_bytes())?;
-        Ok(Reply::DeriveKey(reply::DeriveKey {
-            key: ObjectHandle { object_id: public_id },
-        }))
-    }
+    // pub fn derive_ed25519_public_key(&mut self, request: request::DeriveKey) -> Result<Reply, Error> {
+    //     let base_id = request.base_key.object_id;
+    //     let mut seed = [0u8; 32];
+    //     let path = self.prepare_path_for_key(KeyType::Secret, &base_id)?;
+    //     self.load_serialized_key(&path, &mut seed)?;
+    //     let keypair = salty::Keypair::from(&seed);
+    //     let public_id = self.generate_unique_id()?;
+    //     let public_path = self.prepare_path_for_key(KeyType::Public, &public_id)?;
+    //     self.store_serialized_key(&public_path, keypair.public.as_bytes())?;
+    //     Ok(Reply::DeriveKey(reply::DeriveKey {
+    //         key: ObjectHandle { object_id: public_id },
+    //     }))
+    // }
 
     pub fn sign_ed25519(&mut self, request: request::Sign) -> Result<Reply, Error> {
         let key_id = request.key.object_id;
@@ -223,15 +236,15 @@ impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'a, 's, 
         Ok(Reply::Sign(reply::Sign { signature: our_signature }))
     }
 
-    pub fn generate_p256_key(&mut self, request: request::GenerateKey) -> Result<Reply, Error> {
+    pub fn generate_p256_key(&mut self, _request: request::GenerateKey) -> Result<Reply, Error> {
         // generate keypair
         let mut seed = [0u8; 32];
         self.rng.read(&mut seed)
             .map_err(|_| Error::EntropyMalfunction)?;
 
-        let keypair = nisty::Keypair::generate_patiently(&seed);
-        #[cfg(all(test, feature = "verbose-tests"))]
-        println!("p256 keypair with public key = {:?}", &keypair.public);
+        // let keypair = nisty::Keypair::generate_patiently(&seed);
+        // #[cfg(all(test, feature = "verbose-tests"))]
+        // println!("p256 keypair with public key = {:?}", &keypair.public);
 
         // generate unique ids
         let key_id = self.generate_unique_id()?;
@@ -246,19 +259,19 @@ impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'a, 's, 
         }))
     }
 
-    pub fn derive_p256_public_key(&mut self, request: request::DeriveKey) -> Result<Reply, Error> {
-        let base_id = request.base_key.object_id;
-        let mut seed = [0u8; 32];
-        let path = self.prepare_path_for_key(KeyType::Secret, &base_id)?;
-        self.load_serialized_key(&path, &mut seed)?;
-        let keypair = nisty::Keypair::generate_patiently(&seed);
-        let public_id = self.generate_unique_id()?;
-        let public_path = self.prepare_path_for_key(KeyType::Public, &public_id)?;
-        self.store_serialized_key(&public_path, keypair.public.as_bytes())?;
-        Ok(Reply::DeriveKey(reply::DeriveKey {
-            key: ObjectHandle { object_id: public_id },
-        }))
-    }
+    // pub fn derive_p256_public_key(&mut self, request: request::DeriveKey) -> Result<Reply, Error> {
+    //     let base_id = request.base_key.object_id;
+    //     let mut seed = [0u8; 32];
+    //     let path = self.prepare_path_for_key(KeyType::Secret, &base_id)?;
+    //     self.load_serialized_key(&path, &mut seed)?;
+    //     let keypair = nisty::Keypair::generate_patiently(&seed);
+    //     let public_id = self.generate_unique_id()?;
+    //     let public_path = self.prepare_path_for_key(KeyType::Public, &public_id)?;
+    //     self.store_serialized_key(&public_path, keypair.public.as_bytes())?;
+    //     Ok(Reply::DeriveKey(reply::DeriveKey {
+    //         key: ObjectHandle { object_id: public_id },
+    //     }))
+    // }
 
 
     pub fn sign_p256(&mut self, request: request::Sign) -> Result<Reply, Error> {
@@ -324,10 +337,10 @@ impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'a, 's, 
             return Err(Error::WrongSignatureLength);
         }
 
-        let mut signature_array = [0u8; nisty::SIGNATURE_LENGTH];
+        let signature_array = [0u8; nisty::SIGNATURE_LENGTH];
 
         let valid = public_key.verify(&request.message, &signature_array);
-        Ok(Reply::Verify(reply::Verify { valid: true } ))
+        Ok(Reply::Verify(reply::Verify { valid } ))
     }
 
     pub fn generate_unique_id(&mut self) -> Result<UniqueId, Error> {
@@ -400,12 +413,39 @@ impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'a, 's, 
     }
 }
 
+pub trait DeriveKey<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> {
+    fn derive_key(_resources: &mut ServiceResources<'a, 's, R, P, V>, _request: request::DeriveKey)
+    -> Result<reply::DeriveKey, Error> {
+        Err(Error::MechanismNotAvailable)
+    }
+}
+
+// impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage>
+// DeriveKey<'a, 's, R, P, V> for mechanisms::P256
+// {
+//     fn derive_key(resources: &mut ServiceResources<'a, 's, R, P, V>, request: request::DeriveKey)
+//         -> Result<reply::DeriveKey, Error>
+//     {
+//         let base_id = request.base_key.object_id;
+//         let mut seed = [0u8; 32];
+//         let path = resources.prepare_path_for_key(KeyType::Secret, &base_id)?;
+//         resources.load_serialized_key(&path, &mut seed)?;
+//         let keypair = nisty::Keypair::generate_patiently(&seed);
+//         let public_id = resources.generate_unique_id()?;
+//         let public_path = resources.prepare_path_for_key(KeyType::Public, &public_id)?;
+//         resources.store_serialized_key(&public_path, keypair.public.as_bytes())?;
+//         Ok(reply::DeriveKey {
+//             key: ObjectHandle { object_id: public_id },
+//         })
+//     }
+// }
+
 impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> Service<'a, 's, R, P, V> {
 
     pub fn new(
         rng: R,
-        mut persistent_storage: FilesystemWith<'s, 's, P>,
-        mut volatile_storage: FilesystemWith<'s, 's, V>,
+        persistent_storage: FilesystemWith<'s, 's, P>,
+        volatile_storage: FilesystemWith<'s, 's, V>,
     )
         -> Result<Self, Error>
     {
@@ -420,7 +460,7 @@ impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> Service<'a, 's, R, P, V> 
     // process one request per client which has any
     pub fn process(&mut self) {
         // split self since we iter-mut over eps and need &mut of the other resources
-        let mut eps = &mut self.eps;
+        let eps = &mut self.eps;
         let mut resources = &mut self.resources;
 
         for ep in eps.iter_mut() {
