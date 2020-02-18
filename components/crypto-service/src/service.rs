@@ -15,6 +15,26 @@ pub use embedded_hal::blocking::rng::Read as RngRead;
 // #[macro_use]
 // mod macros;
 
+pub trait GenerateKey<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> {
+    fn generate_key(_resources: &mut ServiceResources<'a, 's, R, P, V>, _request: request::GenerateKey)
+    -> Result<reply::GenerateKey, Error> { Err(Error::MechanismNotAvailable) }
+}
+
+pub trait DeriveKey<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> {
+    fn derive_key(_resources: &mut ServiceResources<'a, 's, R, P, V>, _request: request::DeriveKey)
+    -> Result<reply::DeriveKey, Error> { Err(Error::MechanismNotAvailable) }
+}
+
+pub trait Sign<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> {
+    fn sign(_resources: &mut ServiceResources<'a, 's, R, P, V>, _request: request::Sign)
+    -> Result<reply::Sign, Error> { Err(Error::MechanismNotAvailable) }
+}
+
+pub trait Verify<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> {
+    fn verify(_resources: &mut ServiceResources<'a, 's, R, P, V>, _request: request::Verify)
+    -> Result<reply::Verify, Error> { Err(Error::MechanismNotAvailable) }
+}
+
 // associated keys end up namespaced under "/fido2"
 // example: "/fido2/keys/2347234"
 // let (mut fido_endpoint, mut fido2_client) = Client::new("fido2");
@@ -26,7 +46,7 @@ where
     PersistentStorage: LfsStorage,
     VolatileStorage: LfsStorage,
 {
-    rng: Rng,
+    pub(crate) rng: Rng,
     // maybe make this more flexible later, but not right now
     // cryptoki: "token objects"
     #[allow(dead_code)]
@@ -100,6 +120,8 @@ impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'a, 's, 
     }
 
     pub fn reply_to(&mut self, request: Request) -> Result<Reply, Error> {
+        // TODO: what we want to do here is map an enum to a generic type
+        // Is there a nicer way to do this?
         match request {
             Request::DummyRequest => {
                 #[cfg(test)]
@@ -107,49 +129,42 @@ impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'a, 's, 
                 Ok(Reply::DummyReply)
             },
 
-            // TODO: how to handle queue failure?
-            // TODO: decouple this in such a way that we can easily extend the
-            //       cryptographic capabilities on two axes:
-            //        - mechanisms
-            //        - backends
             Request::DeriveKey(request) => {
                 match request.mechanism {
 
-                    // derive_key!(Ed25519, P256)
-                    // #[cfg(feature = "ed25519")]
-                    Mechanism::Ed25519 => mechanisms::Ed25519::derive_key(self, request)
-                        .map(|reply| Reply::DeriveKey(reply)),
+                    Mechanism::Ed25519 => mechanisms::Ed25519::derive_key(self, request),
+                    Mechanism::P256 => mechanisms::P256::derive_key(self, request),
+                    _ => return Err(Error::MechanismNotAvailable),
 
-                    // #[cfg(feature = "p256")]
-                    Mechanism::P256 => mechanisms::P256::derive_key(self, request)
-                        .map(|reply| Reply::DeriveKey(reply)),
-
-                    _ => Err(Error::MechanismNotAvailable),
-                }
+                }.map(|reply| Reply::DeriveKey(reply))
             },
 
             Request::GenerateKey(request) => {
                 match request.mechanism {
-                    Mechanism::Ed25519 => self.generate_ed25519_key(request),
-                    Mechanism::P256 => self.generate_p256_key(request),
+                    Mechanism::Ed25519 => mechanisms::Ed25519::generate_key(self, request),
+                    Mechanism::P256 => mechanisms::P256::generate_key(self, request),
                     _ => Err(Error::MechanismNotAvailable),
-                }
+                }.map(|reply| Reply::GenerateKey(reply))
             },
 
             Request::Sign(request) => {
                 match request.mechanism {
-                    Mechanism::Ed25519 => self.sign_ed25519(request),
-                    Mechanism::P256 => self.sign_p256(request),
-                    _ => Err(Error::MechanismNotAvailable),
-                }
+
+                    Mechanism::Ed25519 => mechanisms::Ed25519::sign(self, request),
+                    Mechanism::P256 => mechanisms::P256::sign(self, request),
+                    _ => return Err(Error::MechanismNotAvailable),
+
+                }.map(|reply| Reply::Sign(reply))
             },
 
             Request::Verify(request) => {
                 match request.mechanism {
-                    Mechanism::Ed25519 => self.verify_ed25519(request),
-                    Mechanism::P256 => self.verify_p256(request),
-                    _ => Err(Error::MechanismNotAvailable),
-                }
+
+                    Mechanism::Ed25519 => mechanisms::Ed25519::verify(self, request),
+                    Mechanism::P256 => mechanisms::P256::verify(self, request),
+                    _ => return Err(Error::MechanismNotAvailable),
+
+                }.map(|reply| Reply::Verify(reply))
             },
 
             _ => {
@@ -169,178 +184,19 @@ impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'a, 's, 
         // #[cfg(test)]
         // println!("creating dir {:?}", &path);
         // self.pfs.create_dir(path.as_ref()).map_err(|_| Error::FilesystemWriteFailure)?;
+
         path.extend_from_slice(match key_type {
-            // KeyType::Private => b"-private",
+            KeyType::Private => b"-private",
             KeyType::Public => b"-public",
             KeyType::Secret => b"-secret",
         }).map_err(|_| Error::InternalError)?;
-        // // #[cfg(all(test, feature = "verbose-tests"))]
-        // // println!("creating dir {:?}", &path);
-        // // self.pfs.create_dir(path.as_ref()).map_err(|_| Error::FilesystemWriteFailure)?;
+
+        // #[cfg(all(test, feature = "verbose-tests"))]
+        // println!("creating dir {:?}", &path);
+        // self.pfs.create_dir(path.as_ref()).map_err(|_| Error::FilesystemWriteFailure)?;
         path.extend_from_slice(b"-").map_err(|_| Error::InternalError)?;
         path.extend_from_slice(&id.hex()).map_err(|_| Error::InternalError)?;
         Ok(path)
-    }
-
-    pub fn generate_ed25519_key(&mut self, _request: request::GenerateKey) -> Result<Reply, Error> {
-        let mut seed = [0u8; 32];
-        self.rng.read(&mut seed).map_err(|_| Error::EntropyMalfunction)?;
-
-        // let keypair = salty::Keypair::from(&seed);
-        // #[cfg(all(test, feature = "verbose-tests"))]
-        // println!("ed25519 keypair with public key = {:?}", &keypair.public);
-
-        // generate unique ids
-        let key_id = self.generate_unique_id()?;
-
-        // store keys
-        let path = self.prepare_path_for_key(KeyType::Secret, &key_id)?;
-        self.store_serialized_key(&path, &seed)?;
-
-        // return handle
-        Ok(Reply::GenerateKey(reply::GenerateKey {
-            key: ObjectHandle { object_id: key_id },
-        }))
-    }
-
-
-    // pub fn derive_ed25519_public_key(&mut self, request: request::DeriveKey) -> Result<Reply, Error> {
-    //     let base_id = request.base_key.object_id;
-    //     let mut seed = [0u8; 32];
-    //     let path = self.prepare_path_for_key(KeyType::Secret, &base_id)?;
-    //     self.load_serialized_key(&path, &mut seed)?;
-    //     let keypair = salty::Keypair::from(&seed);
-    //     let public_id = self.generate_unique_id()?;
-    //     let public_path = self.prepare_path_for_key(KeyType::Public, &public_id)?;
-    //     self.store_serialized_key(&public_path, keypair.public.as_bytes())?;
-    //     Ok(Reply::DeriveKey(reply::DeriveKey {
-    //         key: ObjectHandle { object_id: public_id },
-    //     }))
-    // }
-
-    pub fn sign_ed25519(&mut self, request: request::Sign) -> Result<Reply, Error> {
-        let key_id = request.key.object_id;
-
-        let mut seed = [0u8; 32];
-        let path = self.prepare_path_for_key(KeyType::Secret, &key_id)?;
-        self.load_serialized_key(&path, &mut seed)?;
-
-        let keypair = salty::Keypair::from(&seed);
-        #[cfg(all(test, feature = "verbose-tests"))]
-        println!("ed25519 keypair with public key = {:?}", &keypair.public);
-
-        let native_signature = keypair.sign(&request.message);
-        let our_signature = Signature::try_from_slice(&native_signature.to_bytes()).unwrap();
-
-        // return signature
-        Ok(Reply::Sign(reply::Sign { signature: our_signature }))
-    }
-
-    pub fn generate_p256_key(&mut self, _request: request::GenerateKey) -> Result<Reply, Error> {
-        // generate keypair
-        let mut seed = [0u8; 32];
-        self.rng.read(&mut seed)
-            .map_err(|_| Error::EntropyMalfunction)?;
-
-        // let keypair = nisty::Keypair::generate_patiently(&seed);
-        // #[cfg(all(test, feature = "verbose-tests"))]
-        // println!("p256 keypair with public key = {:?}", &keypair.public);
-
-        // generate unique ids
-        let key_id = self.generate_unique_id()?;
-
-        // store keys
-        let path = self.prepare_path_for_key(KeyType::Secret, &key_id)?;
-        self.store_serialized_key(&path, &seed)?;
-
-        // return handle
-        Ok(Reply::GenerateKey(reply::GenerateKey {
-            key: ObjectHandle { object_id: key_id },
-        }))
-    }
-
-    // pub fn derive_p256_public_key(&mut self, request: request::DeriveKey) -> Result<Reply, Error> {
-    //     let base_id = request.base_key.object_id;
-    //     let mut seed = [0u8; 32];
-    //     let path = self.prepare_path_for_key(KeyType::Secret, &base_id)?;
-    //     self.load_serialized_key(&path, &mut seed)?;
-    //     let keypair = nisty::Keypair::generate_patiently(&seed);
-    //     let public_id = self.generate_unique_id()?;
-    //     let public_path = self.prepare_path_for_key(KeyType::Public, &public_id)?;
-    //     self.store_serialized_key(&public_path, keypair.public.as_bytes())?;
-    //     Ok(Reply::DeriveKey(reply::DeriveKey {
-    //         key: ObjectHandle { object_id: public_id },
-    //     }))
-    // }
-
-
-    pub fn sign_p256(&mut self, request: request::Sign) -> Result<Reply, Error> {
-        let key_id = request.key.object_id;
-
-        let mut seed = [0u8; 32];
-        let path = self.prepare_path_for_key(KeyType::Secret, &key_id)?;
-        self.load_serialized_key(&path, &mut seed)?;
-
-        let keypair = nisty::Keypair::generate_patiently(&seed);
-        #[cfg(all(test, feature = "verbose-tests"))]
-        println!("p256 keypair with public key = {:?}", &keypair.public);
-
-        let native_signature = keypair.sign(&request.message);
-        let our_signature = Signature::try_from_slice(&native_signature.to_bytes()).unwrap();
-
-        // return signature
-        Ok(Reply::Sign(reply::Sign { signature: our_signature }))
-    }
-
-    pub fn verify_ed25519(&mut self, request: request::Verify) -> Result<Reply, Error> {
-        let key_id = request.key.object_id;
-
-        let mut serialized_key = [0u8; 32];
-        let path = self.prepare_path_for_key(KeyType::Public, &key_id)?;
-        self.load_serialized_key(&path, &mut serialized_key)?;
-
-        let public_key = salty::PublicKey::try_from(&serialized_key).map_err(|_| Error::InternalError)?;
-        #[cfg(all(test, feature = "verbose-tests"))]
-        println!("ed25519 public key = {:?}", &public_key);
-
-        if request.signature.len() != salty::constants::SIGNATURE_SERIALIZED_LENGTH {
-            return Err(Error::WrongSignatureLength);
-        }
-
-        let mut signature_array = [0u8; salty::constants::SIGNATURE_SERIALIZED_LENGTH];
-        signature_array.copy_from_slice(request.signature.as_ref());
-        let salty_signature = salty::Signature::from(&signature_array);
-
-        match public_key.verify(&request.message, &salty_signature) {
-            Ok(_) => Ok(Reply::Verify(reply::Verify { valid: true } )),
-            Err(_) => Ok(Reply::Verify(reply::Verify { valid: false } )),
-        }
-    }
-
-    pub fn verify_p256(&mut self, request: request::Verify) -> Result<Reply, Error> {
-        let key_id = request.key.object_id;
-
-        let mut serialized_key = [0u8; 64];
-        #[cfg(all(test, feature = "verbose-tests"))]
-        println!("attempting path from {:?}", &key_id);
-        let path = self.prepare_path_for_key(KeyType::Public, &key_id)?;
-        #[cfg(all(test, feature = "verbose-tests"))]
-        println!("attempting load from {:?}", &path);
-        self.load_serialized_key(&path, &mut serialized_key)?;
-
-        // println!("p256 serialized public key = {:?}", &serialized_key[..]);
-        let public_key = nisty::PublicKey::try_from(&serialized_key).map_err(|_| Error::InternalError)?;
-        #[cfg(all(test, feature = "verbose-tests"))]
-        println!("p256 public key = {:?}", &public_key);
-
-        if request.signature.len() != nisty::SIGNATURE_LENGTH {
-            return Err(Error::WrongSignatureLength);
-        }
-
-        let signature_array = [0u8; nisty::SIGNATURE_LENGTH];
-
-        let valid = public_key.verify(&request.message, &signature_array);
-        Ok(Reply::Verify(reply::Verify { valid } ))
     }
 
     pub fn generate_unique_id(&mut self) -> Result<UniqueId, Error> {
@@ -412,33 +268,6 @@ impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'a, 's, 
         Ok(())
     }
 }
-
-pub trait DeriveKey<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> {
-    fn derive_key(_resources: &mut ServiceResources<'a, 's, R, P, V>, _request: request::DeriveKey)
-    -> Result<reply::DeriveKey, Error> {
-        Err(Error::MechanismNotAvailable)
-    }
-}
-
-// impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage>
-// DeriveKey<'a, 's, R, P, V> for mechanisms::P256
-// {
-//     fn derive_key(resources: &mut ServiceResources<'a, 's, R, P, V>, request: request::DeriveKey)
-//         -> Result<reply::DeriveKey, Error>
-//     {
-//         let base_id = request.base_key.object_id;
-//         let mut seed = [0u8; 32];
-//         let path = resources.prepare_path_for_key(KeyType::Secret, &base_id)?;
-//         resources.load_serialized_key(&path, &mut seed)?;
-//         let keypair = nisty::Keypair::generate_patiently(&seed);
-//         let public_id = resources.generate_unique_id()?;
-//         let public_path = resources.prepare_path_for_key(KeyType::Public, &public_id)?;
-//         resources.store_serialized_key(&public_path, keypair.public.as_bytes())?;
-//         Ok(reply::DeriveKey {
-//             key: ObjectHandle { object_id: public_id },
-//         })
-//     }
-// }
 
 impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> Service<'a, 's, R, P, V> {
 

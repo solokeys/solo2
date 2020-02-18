@@ -135,7 +135,7 @@ impl KeyAttributes {
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum KeyType {
-    // Private,
+    Private,
     Public,
     Secret,
 }
@@ -225,9 +225,21 @@ impl StorageAttributes {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub enum Mechanism {
+pub enum KeyKind {
     Ed25519,
+    SixteenEntropicBytes,
     P256,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum Mechanism {
+    Aes256Cbc,
+    Ed25519,
+    HmacSha256,
+    P256Sha256,
+    P256,
+    // clients can also do hashing by themselves
+    Sha256,
     X25519,
 }
 
@@ -238,7 +250,7 @@ pub type Message = Bytes<MAX_MESSAGE_LENGTH>;
 
 pub type Signature = Bytes<MAX_SIGNATURE_LENGTH>;
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub struct UniqueId(pub(crate) [u8; 16]);
 
 impl UniqueId {
@@ -246,6 +258,16 @@ impl UniqueId {
         let mut hex = [0u8; 32];
         format_hex(&self.0, &mut hex);
         hex
+    }
+}
+
+impl core::fmt::Debug for UniqueId {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "UniqueId(")?;
+        for ch in &self.hex() {
+            write!(f, "{}", &(*ch as char))?;
+        }
+        write!(f, ")")
     }
 }
 

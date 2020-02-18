@@ -199,25 +199,25 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
     }
 
 
-    pub fn generate_ed25519_key<'c>(&'c mut self)
+    pub fn generate_ed25519_private_key<'c>(&'c mut self)
         -> core::result::Result<FutureResult<'a, 'c, reply::GenerateKey>, ClientError>
     {
         self.generate_key(Mechanism::Ed25519)
     }
 
-    pub fn derive_ed25519_key<'c>(&'c mut self, private_key: &ObjectHandle)
+    pub fn derive_ed25519_public_key<'c>(&'c mut self, private_key: &ObjectHandle)
         -> core::result::Result<FutureResult<'a, 'c, reply::DeriveKey>, ClientError>
     {
         self.derive_key(Mechanism::Ed25519, private_key.clone())
     }
 
-    pub fn generate_p256_key<'c>(&'c mut self)
+    pub fn generate_p256_private_key<'c>(&'c mut self)
         -> core::result::Result<FutureResult<'a, 'c, reply::GenerateKey>, ClientError>
     {
         self.generate_key(Mechanism::P256)
     }
 
-    pub fn derive_p256_key<'c>(&'c mut self, private_key: &ObjectHandle)
+    pub fn derive_p256_public_key<'c>(&'c mut self, private_key: &ObjectHandle)
         -> core::result::Result<FutureResult<'a, 'c, reply::DeriveKey>, ClientError>
     {
         self.derive_key(Mechanism::P256, private_key.clone())
@@ -235,7 +235,7 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
     //
     // on the other hand: if users need sha256, then if the service runs in secure trustzone
     // domain, we'll maybe need two copies of the sha2 code
-    pub fn sign_p256_prehashed<'c>(&'c mut self, key: &ObjectHandle, message: &[u8])
+    pub fn sign_p256<'c>(&'c mut self, key: &ObjectHandle, message: &[u8])
         -> core::result::Result<FutureResult<'a, 'c, reply::Sign>, ClientError>
     {
         self.sign(Mechanism::P256, *key, message)
@@ -248,7 +248,7 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
         self.verify(Mechanism::Ed25519, *key, message, signature)
     }
 
-    pub fn verify_p256_prehashed<'c>(&'c mut self, key: &ObjectHandle, message: &[u8], signature: &[u8])
+    pub fn verify_p256<'c>(&'c mut self, key: &ObjectHandle, message: &[u8], signature: &[u8])
         -> core::result::Result<FutureResult<'a, 'c, reply::Verify>, ClientError>
     {
         self.verify(Mechanism::P256, *key, message, signature)

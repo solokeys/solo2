@@ -2,9 +2,11 @@
 pub trait MechanismTrait {}
 
 pub struct Ed25519 {}
+#[cfg(feature = "ed25519")]
 mod ed25519;
 
 pub struct P256 {}
+#[cfg(feature = "p256")]
 mod p256;
 
 // pub enum MechanismEnum {
