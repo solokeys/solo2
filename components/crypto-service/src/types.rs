@@ -224,11 +224,16 @@ impl StorageAttributes {
     }
 }
 
+// TODO: How to store/check?
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum KeyKind {
+    Aes256,
     Ed25519,
-    SixteenEntropicBytes,
+    Entropy32, // output of TRNG
     P256,
+    SharedSecret32,  // or 256 (in bits)?
+    SymmetricKey32, // or directly: SharedSecret32 —DeriveKey(HmacSha256)-> SymmetricKey32 —Encrypt(Aes256)-> ...
+    ThirtytwoBytes,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -236,7 +241,7 @@ pub enum Mechanism {
     Aes256Cbc,
     Ed25519,
     HmacSha256,
-    P256Sha256,
+    // P256XSha256,
     P256,
     // clients can also do hashing by themselves
     Sha256,

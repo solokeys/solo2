@@ -8,12 +8,15 @@ edition = "2018"
 
 [dependencies]
 aes = "0.3.2"
+block-modes = { version = "0.3.3", default-features = false }
 chacha20 = { version = "0.3.3" }
 chacha20poly1305 = { version = "0.3.1", features = ["reduced-round"] }
 embedded-hal = { version = "0.2.3", features = ["unproven"] }
 generic-array = "0.12.3"  # "0.13.2"
 # generic-array = { version = "0.13.2", default-features = false }
 heapless = "0.5.3"
+hmac = "0.7.1"
+sha2 = { version = "0.8.0", default-features = false }
 
 [dependencies.heapless-bytes]
 git = "https://github.com/ycrypto/heapless-bytes"
@@ -42,9 +45,12 @@ verbose-tests = ["littlefs2/ll-assertions"]
 verbose-lfs = ["littlefs2/ll-assertions", "littlefs2/ll-trace"]
 
 # mechanisms
-default-mechanisms = ["ed25519", "p256"]
+default-mechanisms = ["aes256-cbc", "ed25519", "hmac-sha256", "p256", "sha256"]
+aes256-cbc = []
 ed25519 = []
+hmac-sha256 = []
 p256 = []
+sha256 = []
 
 # [patch."https://github.com/nickray/littlefs2".littlefs2]
 # path = "../../../littlefs2"

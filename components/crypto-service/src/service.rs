@@ -15,14 +15,29 @@ pub use embedded_hal::blocking::rng::Read as RngRead;
 // #[macro_use]
 // mod macros;
 
-pub trait GenerateKey<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> {
-    fn generate_key(_resources: &mut ServiceResources<'a, 's, R, P, V>, _request: request::GenerateKey)
-    -> Result<reply::GenerateKey, Error> { Err(Error::MechanismNotAvailable) }
+pub trait Agree<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> {
+    fn agree(_resources: &mut ServiceResources<'a, 's, R, P, V>, _request: request::Agree)
+    -> Result<reply::Agree, Error> { Err(Error::MechanismNotAvailable) }
+}
+
+pub trait Decrypt<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> {
+    fn decrypt(_resources: &mut ServiceResources<'a, 's, R, P, V>, _request: request::Decrypt)
+    -> Result<reply::Decrypt, Error> { Err(Error::MechanismNotAvailable) }
 }
 
 pub trait DeriveKey<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> {
     fn derive_key(_resources: &mut ServiceResources<'a, 's, R, P, V>, _request: request::DeriveKey)
     -> Result<reply::DeriveKey, Error> { Err(Error::MechanismNotAvailable) }
+}
+
+pub trait Encrypt<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> {
+    fn encrypt(_resources: &mut ServiceResources<'a, 's, R, P, V>, _request: request::Encrypt)
+    -> Result<reply::Encrypt, Error> { Err(Error::MechanismNotAvailable) }
+}
+
+pub trait GenerateKey<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> {
+    fn generate_key(_resources: &mut ServiceResources<'a, 's, R, P, V>, _request: request::GenerateKey)
+    -> Result<reply::GenerateKey, Error> { Err(Error::MechanismNotAvailable) }
 }
 
 pub trait Sign<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> {
@@ -129,14 +144,42 @@ impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'a, 's, 
                 Ok(Reply::DummyReply)
             },
 
+            Request::Agree(request) => {
+                match request.mechanism {
+
+                    Mechanism::P256 => mechanisms::P256::agree(self, request),
+                    _ => return Err(Error::MechanismNotAvailable),
+
+                }.map(|reply| Reply::Agree(reply))
+            },
+
+            Request::Decrypt(request) => {
+                match request.mechanism {
+
+                    Mechanism::Aes256Cbc => mechanisms::Aes256Cbc::decrypt(self, request),
+                    _ => return Err(Error::MechanismNotAvailable),
+
+                }.map(|reply| Reply::Decrypt(reply))
+            },
+
             Request::DeriveKey(request) => {
                 match request.mechanism {
 
                     Mechanism::Ed25519 => mechanisms::Ed25519::derive_key(self, request),
                     Mechanism::P256 => mechanisms::P256::derive_key(self, request),
+                    Mechanism::Sha256 => mechanisms::Sha256::derive_key(self, request),
                     _ => return Err(Error::MechanismNotAvailable),
 
                 }.map(|reply| Reply::DeriveKey(reply))
+            },
+
+            Request::Encrypt(request) => {
+                match request.mechanism {
+
+                    Mechanism::Aes256Cbc => mechanisms::Aes256Cbc::encrypt(self, request),
+                    _ => return Err(Error::MechanismNotAvailable),
+
+                }.map(|reply| Reply::Encrypt(reply))
             },
 
             Request::GenerateKey(request) => {
@@ -151,6 +194,7 @@ impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'a, 's, 
                 match request.mechanism {
 
                     Mechanism::Ed25519 => mechanisms::Ed25519::sign(self, request),
+                    Mechanism::HmacSha256 => mechanisms::HmacSha256::sign(self, request),
                     Mechanism::P256 => mechanisms::P256::sign(self, request),
                     _ => return Err(Error::MechanismNotAvailable),
 

@@ -145,6 +145,18 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
     }
 
 
+    pub fn agree<'c>(&'c mut self, mechanism: Mechanism, private_key: ObjectHandle, public_key: ObjectHandle)
+        -> core::result::Result<FutureResult<'a, 'c, reply::Agree>, ClientError>
+    {
+        self.raw.request(request::Agree {
+            mechanism,
+            private_key,
+            public_key,
+        })?;
+        self.syscall.syscall();
+        Ok(FutureResult::new(self))
+    }
+
     pub fn derive_key<'c>(&'c mut self, mechanism: Mechanism, base_key: ObjectHandle)
         -> core::result::Result<FutureResult<'a, 'c, reply::DeriveKey>, ClientError>
     {

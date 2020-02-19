@@ -19,8 +19,11 @@ mod macros;
 // At minimum, we don't want to list the indices (may need proc-macro)
 
 generate_enums! {
+    Agree: 12
     CreateObject: 1
+    Decrypt: 13
     DeriveKey: 2
+    Encrypt: 14
     // DeriveKeypair: 3
     FindObjects: 4
     GenerateKey: 5
@@ -36,11 +39,21 @@ pub mod request {
     use super::*;
 
     impl_request! {
+        Agree:
+            - mechanism: Mechanism
+            - private_key: ObjectHandle
+            - public_key: ObjectHandle
+
         // examples:
         // - store public keys from external source
         // - store certificates
         CreateObject:
             - attributes: Attributes
+
+        Decrypt:
+          - mechanism: Mechanism
+          - key: ObjectHandle
+          - message: Message
 
         // examples:
         // - public key from private key
@@ -58,6 +71,11 @@ pub mod request {
         //     - base_key: ObjectHandle
         //     // - additional_data: Message
         //     // - attributes: KeyAttributes
+
+        Encrypt:
+          - mechanism: Mechanism
+          - key: ObjectHandle
+          - message: Message
 
         FindObjects:
             // - attributes: Attributes,
@@ -114,6 +132,13 @@ pub mod reply {
     // type ObjectHandles = Vec<ObjectHandle, config::MAX_OBJECT_HANDLES>;
 
     impl_reply! {
+        // could return either a SharedSecretXY or a SymmetricKeyXY,
+        // depending on mechanism
+        // e.g.: P256Raw -> SharedSecret32
+        //       P256Sha256 -> SymmetricKey32
+        Agree:
+            - shared_secret: ObjectHandle
+
         CreateObject:
             - object: ObjectHandle
 
@@ -122,8 +147,14 @@ pub mod reply {
             // can be higher than capacity of vector
             - num_objects: usize
 
+		Decrypt:
+            - plaintext: Result<Message, ()>
+
         DeriveKey:
             - key: ObjectHandle
+
+		Encrypt:
+            - ciphertext: Message
 
         // DeriveKeypair:
         //     - private_key: ObjectHandle

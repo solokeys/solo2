@@ -1,13 +1,25 @@
 // do we really need this
 pub trait MechanismTrait {}
 
+pub struct Aes256Cbc {}
+// #[cfg(feature = "ed25519")]
+mod aes256cbc;
+
 pub struct Ed25519 {}
-#[cfg(feature = "ed25519")]
+// #[cfg(feature = "ed25519")]
 mod ed25519;
 
+pub struct HmacSha256 {}
+// #[cfg(feature = "hmac-sha256")]
+mod hmacsha256;
+
 pub struct P256 {}
-#[cfg(feature = "p256")]
+// #[cfg(feature = "p256")]
 mod p256;
+
+pub struct Sha256 {}
+// #[cfg(feature = "sha256")]
+mod sha256;
 
 // pub enum MechanismEnum {
 //     NotImplemented,

@@ -8,6 +8,38 @@ use crate::types::*;
 
 #[cfg(feature = "p256")]
 impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage>
+Agree<'a, 's, R, P, V> for super::P256
+{
+    fn agree(resources: &mut ServiceResources<'a, 's, R, P, V>, request: request::Agree)
+        -> Result<reply::Agree, Error>
+    {
+        let private_id = request.private_key.object_id;
+        let public_id = request.public_key.object_id;
+
+        let mut seed = [0u8; 32];
+        let path = resources.prepare_path_for_key(KeyType::Private, &private_id)?;
+        resources.load_serialized_key(&path, &mut seed)?;
+        let keypair = nisty::Keypair::generate_patiently(&seed);
+
+        let mut public_bytes = [0u8; 64];
+        let path = resources.prepare_path_for_key(KeyType::Public, &public_id)?;
+        resources.load_serialized_key(&path, &mut public_bytes)?;
+        let public_key = nisty::PublicKey::try_from(&public_bytes).map_err(|_| Error::InternalError)?;
+
+        // THIS IS THE CORE
+        let shared_secret = keypair.secret.agree(&public_key).map_err(|_| Error::InternalError)?.to_bytes();
+
+        let key_id = resources.generate_unique_id()?;
+        let path = resources.prepare_path_for_key(KeyType::Secret, &key_id)?;
+        resources.store_serialized_key(&path, &shared_secret)?;
+
+        // return handle
+        Ok(reply::Agree { shared_secret: ObjectHandle { object_id: key_id } })
+    }
+}
+
+#[cfg(feature = "p256")]
+impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage>
 DeriveKey<'a, 's, R, P, V> for super::P256
 {
     fn derive_key(resources: &mut ServiceResources<'a, 's, R, P, V>, request: request::DeriveKey)
@@ -116,6 +148,9 @@ Verify<'a, 's, R, P, V> for super::P256
     }
 }
 
+#[cfg(not(feature = "p256"))]
+impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage>
+Agree<'a, 's, R, P, V> for super::P256 {}
 #[cfg(not(feature = "p256"))]
 impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage>
 DeriveKey<'a, 's, R, P, V> for super::P256 {}

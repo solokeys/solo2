@@ -301,7 +301,7 @@ fn sign_p256() {
     println!("got a public key {:?}", &public_key);
 
     let message = [1u8, 2u8, 3u8];
-    let mut signature = block!(client.sign_p256(&private_key, &message).expect("no client error"))
+    let signature = block!(client.sign_p256(&private_key, &message).expect("no client error"))
         .expect("good signature")
         .signature;
 
@@ -316,6 +316,81 @@ fn sign_p256() {
     let reply = result.expect("valid signature");
     let valid = reply.valid;
     assert!(valid);
+
+}
+
+#[test]
+fn agree_p256() {
+    let (service_endpoint, client_endpoint) = pipe::new_endpoints(
+        unsafe { &mut REQUEST_PIPE },
+        unsafe { &mut REPLY_PIPE },
+        "fido2",
+    );
+
+    let rng = MockRng::new();
+
+    // need to figure out if/how to do this as `static mut`
+    let mut persistent_ram = PersistentRam::default();
+    let mut persistent_storage = PersistentStorage::new(&mut persistent_ram);
+    Filesystem::format(&mut persistent_storage).expect("could not format persistent storage");
+    let mut persistent_fs_alloc = Filesystem::allocate();
+    let pfs = FilesystemWith::mount(&mut persistent_fs_alloc, &mut persistent_storage)
+        .expect("could not mount persistent storage");
+    let mut volatile_ram = VolatileRam::default();
+    let mut volatile_storage = VolatileStorage::new(&mut volatile_ram);
+    Filesystem::format(&mut volatile_storage).expect("could not format volatile storage");
+    let mut volatile_fs_alloc = Filesystem::allocate();
+    let vfs = FilesystemWith::mount(&mut volatile_fs_alloc, &mut volatile_storage)
+        .expect("could not mount volatile storage");
+
+    let mut service = Service::new(rng, pfs, vfs).expect("service init worked");
+    service.add_endpoint(service_endpoint).ok();
+
+    // Client needs a "Syscall" trait impl, to trigger crypto processing
+    // For testing, we use "self service",
+    // meaning `&mut service` itself with the trivial implementation
+    let syscaller = &mut service;
+    let mut client = Client::new(client_endpoint, syscaller);
+
+
+    let plat_private_key = block!(client.generate_p256_private_key().expect("no client error"))
+        .expect("no errors").key;
+    println!("got a public key {:?}", &plat_private_key);
+    let plat_public_key = block!(client.derive_p256_public_key(&plat_private_key).expect("no client error"))
+        .expect("no errors").key;
+    println!("got a public key {:?}", &plat_public_key);
+
+    let auth_private_key = block!(client.generate_p256_private_key().expect("no client error"))
+        .expect("no errors").key;
+    println!("got a public key {:?}", &auth_private_key);
+    let auth_public_key = block!(client.derive_p256_public_key(&auth_private_key).expect("no client error"))
+        .expect("no errors").key;
+    println!("got a public key {:?}", &auth_public_key);
+
+    let shared_secret = block!(
+        client.agree(Mechanism::P256, auth_private_key.clone(), plat_public_key.clone())
+            .expect("no client error"))
+        .expect("no errors").shared_secret;
+
+    let alt_shared_secret = block!(
+        client.agree(Mechanism::P256, plat_private_key.clone(), auth_public_key.clone())
+            .expect("no client error"))
+        .expect("no errors").shared_secret;
+
+    // NB: we have no idea about the value of keys, these are just *different* handles
+    assert_ne!(&shared_secret, &alt_shared_secret);
+
+    let symmetric_key = block!(
+        client.derive_key(Mechanism::Sha256, shared_secret.clone())
+            .expect("no client error"))
+        .expect("no errors").key;
+
+    let new_pin_enc = [1u8, 2, 3];
+
+    let tag = block!(
+        client.sign(Mechanism::HmacSha256, symmetric_key.clone(), &new_pin_enc)
+            .expect("no client error"))
+        .expect("no errors").signature;
 
 }
 
