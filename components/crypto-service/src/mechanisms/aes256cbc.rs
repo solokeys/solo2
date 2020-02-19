@@ -25,7 +25,7 @@ Decrypt<'a, 's, R, P, V> for super::Aes256Cbc
         let key_id = request.key.object_id;
         let mut symmetric_key = [0u8; 32];
         let path = resources.prepare_path_for_key(KeyType::Secret, &key_id)?;
-        resources.load_serialized_key(&path, &mut symmetric_key)?;
+        resources.load_serialized_key(&path, KeyKind::SymmetricKey32, &mut symmetric_key)?;
 
         let zero_iv = [0u8; 32];
 		let cipher = Aes256Cbc::new_var(&symmetric_key, &zero_iv).unwrap();
@@ -64,7 +64,7 @@ Encrypt<'a, 's, R, P, V> for super::Aes256Cbc
         let key_id = request.key.object_id;
         let mut symmetric_key = [0u8; 32];
         let path = resources.prepare_path_for_key(KeyType::Secret, &key_id)?;
-        resources.load_serialized_key(&path, &mut symmetric_key)?;
+        resources.load_serialized_key(&path, KeyKind::SymmetricKey32, &mut symmetric_key)?;
 
         let zero_iv = [0u8; 32];
 		let cipher = Aes256Cbc::new_var(&symmetric_key, &zero_iv).unwrap();

@@ -21,7 +21,8 @@ Sign<'a, 's, R, P, V> for super::HmacSha256
         let key_id = request.key.object_id;
         let mut shared_secret = [0u8; 32];
         let path = resources.prepare_path_for_key(KeyType::Secret, &key_id)?;
-        resources.load_serialized_key(&path, &mut shared_secret)?;
+        // resources.load_serialized_key(&path, KeyKind::SharedSecret32, &mut shared_secret)?;
+        resources.load_serialized_key(&path, KeyKind::SymmetricKey32, &mut shared_secret)?;
 
         let mut mac = HmacSha256::new_varkey(&shared_secret)
             .expect("HMAC can take key of any size");

@@ -20,6 +20,7 @@ pub enum Error {
 
     // our errors
     AeadError,
+    CborError,
     EntropyMalfunction,
     FilesystemReadFailure,
     FilesystemWriteFailure,
@@ -28,6 +29,7 @@ pub enum Error {
     MechanismNotAvailable,
     RequestNotAvailable,
     SignDataTooLarge,
+    WrongKeyKind,
     WrongSignatureLength,
 }
 

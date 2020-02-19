@@ -242,8 +242,15 @@ fn sign_ed25519() {
         .expect("no issues").key;
     println!("got a public key {:?}", &public_key);
 
+    assert!(block!(
+            client.derive_ed25519_public_key(&private_key).expect("no client error wot")
+    ).is_ok());
+    assert!(block!(
+            client.derive_p256_public_key(&private_key).expect("no client error wot")
+    ).is_err());
+
     let message = [1u8, 2u8, 3u8];
-    let mut future = client.sign_ed25519(&private_key, &message).expect("no client error");
+    let mut future = client.sign_ed25519(&private_key, &message).expect("no client error post err");
     let reply: Result<api::reply::Sign, _> = block!(future);
     let signature = reply.expect("good signature").signature;
     println!("got a signature: {:?}", &signature);

@@ -14,6 +14,8 @@ pub use littlefs2::{
     io::Result as LfsResult,
 };
 
+use serde::{Deserialize, Serialize};
+
 use crate::config::*;
 
 pub use crate::client::FutureResult;
@@ -133,7 +135,35 @@ impl KeyAttributes {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+// TODO: How to store/check?
+// TODO: Fix variant indices to keep storage stable!!
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[repr(u8)]
+pub enum KeyKind {
+    // Aes256,
+    Ed25519 = 1,
+    Entropy32 = 2, // output of TRNG
+    P256 = 3,
+    SharedSecret32 = 4,  // or 256 (in bits)?
+    SymmetricKey32 = 5, // or directly: SharedSecret32 —DeriveKey(HmacSha256)-> SymmetricKey32 —Encrypt(Aes256)-> ...
+    // ThirtytwoBytes,
+}
+
+impl core::convert::TryFrom<u8> for KeyKind {
+    type Error = crate::error::Error;
+    fn try_from(num: u8) -> Result<Self, Self::Error> {
+        Ok(match num {
+            1 => KeyKind::Ed25519,
+            2 => KeyKind::Entropy32,
+            3 => KeyKind::P256,
+            4 => KeyKind::SharedSecret32,
+            5 => KeyKind::SymmetricKey32,
+            _ => { return Err(crate::error::Error::CborError); }
+        })
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum KeyType {
     Private,
     Public,
@@ -222,18 +252,6 @@ impl StorageAttributes {
             destroyable: true,
         }
     }
-}
-
-// TODO: How to store/check?
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub enum KeyKind {
-    Aes256,
-    Ed25519,
-    Entropy32, // output of TRNG
-    P256,
-    SharedSecret32,  // or 256 (in bits)?
-    SymmetricKey32, // or directly: SharedSecret32 —DeriveKey(HmacSha256)-> SymmetricKey32 —Encrypt(Aes256)-> ...
-    ThirtytwoBytes,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]

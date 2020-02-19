@@ -76,7 +76,10 @@ impl<'a, 'c> RawFutureResult<'a, 'c> {
                             core::task::Poll::Ready(Err(Error::InternalError))
                         }
                     }
-                    Err(error) => core::task::Poll::Ready(Err(error)),
+                    Err(error) => {
+                        self.c.pending = None;
+                        core::task::Poll::Ready(Err(error))
+                    }
                 }
 
             },

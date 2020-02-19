@@ -16,11 +16,11 @@ DeriveKey<'a, 's, R, P, V> for super::Ed25519
         let base_id = request.base_key.object_id;
         let mut seed = [0u8; 32];
         let path = resources.prepare_path_for_key(KeyType::Private, &base_id)?;
-        resources.load_serialized_key(&path, &mut seed)?;
+        resources.load_serialized_key(&path, KeyKind::Ed25519, &mut seed)?;
         let keypair = salty::Keypair::from(&seed);
         let public_id = resources.generate_unique_id()?;
         let public_path = resources.prepare_path_for_key(KeyType::Public, &public_id)?;
-        resources.store_serialized_key(&public_path, keypair.public.as_bytes())?;
+        resources.store_serialized_key(&public_path, KeyKind::Ed25519, keypair.public.as_bytes())?;
         Ok(reply::DeriveKey {
             key: ObjectHandle { object_id: public_id },
         })
@@ -46,7 +46,7 @@ GenerateKey<'a, 's, R, P, V> for super::Ed25519
 
         // store keys
         let path = resources.prepare_path_for_key(KeyType::Private, &key_id)?;
-        resources.store_serialized_key(&path, &seed)?;
+        resources.store_serialized_key(&path, KeyKind::Ed25519, &seed)?;
 
         // return handle
         Ok(reply::GenerateKey { key: ObjectHandle { object_id: key_id } })
@@ -64,7 +64,7 @@ Sign<'a, 's, R, P, V> for super::Ed25519
 
         let mut seed = [0u8; 32];
         let path = resources.prepare_path_for_key(KeyType::Private, &key_id)?;
-        resources.load_serialized_key(&path, &mut seed)?;
+        resources.load_serialized_key(&path, KeyKind::Ed25519, &mut seed)?;
 
         let keypair = salty::Keypair::from(&seed);
         #[cfg(all(test, feature = "verbose-tests"))]
@@ -89,7 +89,7 @@ Verify<'a, 's, R, P, V> for super::Ed25519
 
         let mut serialized_key = [0u8; 32];
         let path = resources.prepare_path_for_key(KeyType::Public, &key_id)?;
-        resources.load_serialized_key(&path, &mut serialized_key)?;
+        resources.load_serialized_key(&path, KeyKind::Ed25519, &mut serialized_key)?;
 
         let public_key = salty::PublicKey::try_from(&serialized_key).map_err(|_| Error::InternalError)?;
         #[cfg(all(test, feature = "verbose-tests"))]

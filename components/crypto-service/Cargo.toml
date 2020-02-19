@@ -11,11 +11,15 @@ aes = "0.3.2"
 block-modes = { version = "0.3.3", default-features = false }
 chacha20 = { version = "0.3.3" }
 chacha20poly1305 = { version = "0.3.1", features = ["reduced-round"] }
+ctapcbor = { git = "https://github.com/nickray/ctapcbor", branch = "main" }
 embedded-hal = { version = "0.2.3", features = ["unproven"] }
 generic-array = "0.12.3"  # "0.13.2"
 # generic-array = { version = "0.13.2", default-features = false }
 heapless = "0.5.3"
 hmac = "0.7.1"
+serde = { version = "1.0", default-features = false }
+serde_cbor = { version = "0.11.0", default-features = false }
+serde-indexed = { git = "https://github.com/ycrypto/serde-indexed", branch = "main" }
 sha2 = { version = "0.8.0", default-features = false }
 
 [dependencies.heapless-bytes]

@@ -1,6 +1,10 @@
 use core::convert::TryInto;
 use core::convert::TryFrom;
 
+use heapless_bytes::Bytes;
+use serde::{Deserialize, Serialize};
+use serde_indexed::{DeserializeIndexed, SerializeIndexed};
+
 use crate::api::*;
 use crate::config::*;
 use crate::error::Error;
@@ -48,6 +52,47 @@ pub trait Sign<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> {
 pub trait Verify<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> {
     fn verify(_resources: &mut ServiceResources<'a, 's, R, P, V>, _request: request::Verify)
     -> Result<reply::Verify, Error> { Err(Error::MechanismNotAvailable) }
+}
+
+#[derive(Clone,Debug,Eq,PartialEq,SerializeIndexed,DeserializeIndexed)]
+// #[derive(Clone,Debug,Eq,PartialEq,Serialize,Deserialize)]
+// #[serde(rename_all = "camelCase")]
+// #[serde_indexed(offset = 1)]
+struct SerializedKey {
+   // r#type: KeyType,
+   kind: u8,//KeyKind,
+   value: Bytes<MAX_SERIALIZED_KEY_LENGTH>,
+}
+
+impl<'a> TryFrom<(KeyKind, &'a [u8])> for SerializedKey {
+    type Error = Error;
+    fn try_from(from: (KeyKind, &'a [u8])) -> Result<Self, Error> {
+        Ok(SerializedKey {
+            kind: from.0 as u8,
+            value: Bytes::try_from_slice(from.1).map_err(|_| Error::InternalError)?,
+        })
+    }
+}
+
+pub fn cbor_serialize<T: serde::Serialize>(
+    object: &T,
+    buffer: &mut [u8],
+) -> core::result::Result<usize, serde_cbor::Error> {
+    let writer = serde_cbor::ser::SliceWrite::new(buffer);
+    let mut ser = serde_cbor::Serializer::new(writer);
+
+    object.serialize(&mut ser)?;
+
+    let writer = ser.into_inner();
+    let size = writer.bytes_written();
+
+    Ok(size)
+}
+
+pub fn cbor_deserialize<'de, T: serde::Deserialize<'de>>(
+    buffer: &'de [u8],
+) -> core::result::Result<T, ctapcbor::error::Error> {
+    ctapcbor::de::from_bytes(buffer)
 }
 
 // associated keys end up namespaced under "/fido2"
@@ -254,10 +299,12 @@ impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'a, 's, 
         Ok(UniqueId(unique_id))
     }
 
-    pub fn load_serialized_key(&mut self, path: &[u8], serialized_key: &mut [u8]) -> Result<(), Error> {
+    pub fn load_serialized_key(&mut self, path: &[u8], kind: KeyKind, key_bytes: &mut [u8]) -> Result<(), Error> {
         #[cfg(test)]
         // actually safe, as path is ASCII by construction
         println!("loading from file {:?}", unsafe { core::str::from_utf8_unchecked(&path[..]) });
+
+        let mut buf = [0u8; 128];
 
         use littlefs2::fs::{File, FileWith};
         let mut alloc = File::allocate();
@@ -265,8 +312,14 @@ impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'a, 's, 
             .map_err(|_| Error::FilesystemReadFailure)?;
 
         use littlefs2::io::ReadWith;
-        file.read(serialized_key)
+        file.read(&mut buf)
             .map_err(|_| Error::FilesystemReadFailure)?;
+
+        let serialized_key: SerializedKey = cbor_deserialize(&buf).map_err(|_| Error::CborError)?;
+        if serialized_key.kind != kind as u8 {
+            return Err(Error::WrongKeyKind);
+        }
+        key_bytes.copy_from_slice(&serialized_key.value);
 
         Ok(())
     }
@@ -282,10 +335,14 @@ impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'a, 's, 
     //
     // OUTCOME: either ensure calling `.close()`, or patch the call in a `drop` for FileWith.
     //
-    pub fn store_serialized_key(&mut self, path: &[u8], serialized_key: &[u8]) -> Result<(), Error> {
+    pub fn store_serialized_key(&mut self, path: &[u8], kind: KeyKind, key_bytes: &[u8]) -> Result<(), Error> {
         // actually safe, as path is ASCII by construction
         #[cfg(test)]
         println!("storing in file {:?}", unsafe { core::str::from_utf8_unchecked(&path[..]) });
+
+        let serialized_key = SerializedKey::try_from((kind, key_bytes))?;
+        let mut buf = [0u8; 128];
+        cbor_serialize(&serialized_key, &mut buf).map_err(|e| Error::CborError)?;
 
         use littlefs2::fs::{File, FileWith};
         let mut alloc = File::allocate();
@@ -296,7 +353,7 @@ impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage> ServiceResources<'a, 's, 
         // #[cfg(test)]
         // println!("created file");
         use littlefs2::io::WriteWith;
-        file.write(&serialized_key)
+        file.write(&buf)
             .map_err(|_| Error::FilesystemWriteFailure)?;
         // #[cfg(test)]
         // println!("wrote file");
