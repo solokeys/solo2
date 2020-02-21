@@ -221,35 +221,53 @@ pub struct PrivateKeyAttributes {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
+pub enum StorageLocation {
+    Volatile,
+    Internal,
+    External,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct StorageAttributes {
     // each object must have a unique ID
-    unique_id: UniqueId,
+    // unique_id: UniqueId,
 
     // description of object
-    label: String<MAX_LABEL_LENGTH>,
+    // label: String<MAX_LABEL_LENGTH>,
 
-    // cryptoki: token (vs session) object
-    persistent: bool,
+    // // cryptoki: token (vs session) object
+    // persistent: bool,
+    pub persistence: StorageLocation,
 
     // cryptoki: user must be logged in
     // private: bool,
 
-    modifiable: bool,
-    copyable: bool,
-    destroyable: bool,
+    // modifiable: bool,
+    // copyable: bool,
+    // destroyable: bool,
 
 }
 
 impl StorageAttributes {
-    pub fn new(unique_id: UniqueId) -> Self {
-        Self {
-            unique_id,
-            label: String::new(),
-            persistent: false,
+    pub fn set_persistence(mut self, persistence: StorageLocation) -> Self {
+        self.persistence = persistence;
+        self
+    }
+}
 
-            modifiable: true,
-            copyable: true,
-            destroyable: true,
+impl StorageAttributes {
+    // pub fn new(unique_id: UniqueId) -> Self {
+    pub fn new() -> Self {
+        Self {
+            // unique_id,
+            // label: String::new(),
+            // persistent: false,
+
+            persistence: StorageLocation::Volatile,
+
+            // modifiable: true,
+            // copyable: true,
+            // destroyable: true,
         }
     }
 }

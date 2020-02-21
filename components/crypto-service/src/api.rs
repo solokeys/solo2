@@ -43,6 +43,7 @@ pub mod request {
             - mechanism: Mechanism
             - private_key: ObjectHandle
             - public_key: ObjectHandle
+            - attributes: StorageAttributes
 
         // examples:
         // - store public keys from external source
@@ -65,6 +66,7 @@ pub mod request {
             // - auxiliary_key: Option<ObjectHandle>
             // - additional_data: LongData
             // - attributes: KeyAttributes
+            - attributes: StorageAttributes
 
         // DeriveKeypair:
         //     - mechanism: Mechanism
@@ -82,7 +84,8 @@ pub mod request {
 
         GenerateKey:
             - mechanism: Mechanism        // -> implies key type
-            - attributes: KeyAttributes
+            // - attributes: KeyAttributes
+            - attributes: StorageAttributes
 
         // use GenerateKey + DeriveKey(public-from-private) instead
         // GenerateKeypair:

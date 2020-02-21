@@ -148,35 +148,41 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
     }
 
 
-    pub fn agree<'c>(&'c mut self, mechanism: Mechanism, private_key: ObjectHandle, public_key: ObjectHandle)
+    pub fn agree<'c>(
+        &'c mut self, mechanism: Mechanism,
+        private_key: ObjectHandle, public_key: ObjectHandle,
+        attributes: StorageAttributes,
+        )
         -> core::result::Result<FutureResult<'a, 'c, reply::Agree>, ClientError>
     {
         self.raw.request(request::Agree {
             mechanism,
             private_key,
             public_key,
+            attributes,
         })?;
         self.syscall.syscall();
         Ok(FutureResult::new(self))
     }
 
-    pub fn derive_key<'c>(&'c mut self, mechanism: Mechanism, base_key: ObjectHandle)
+    pub fn derive_key<'c>(&'c mut self, mechanism: Mechanism, base_key: ObjectHandle, attributes: StorageAttributes)
         -> core::result::Result<FutureResult<'a, 'c, reply::DeriveKey>, ClientError>
     {
         self.raw.request(request::DeriveKey {
             mechanism,
             base_key,
+            attributes,
         })?;
         self.syscall.syscall();
         Ok(FutureResult::new(self))
     }
 
-    pub fn generate_key<'c>(&'c mut self, mechanism: Mechanism)
+    pub fn generate_key<'c>(&'c mut self, mechanism: Mechanism, attributes: StorageAttributes)
         -> core::result::Result<FutureResult<'a, 'c, reply::GenerateKey>, ClientError>
     {
         self.raw.request(request::GenerateKey {
             mechanism,
-            attributes: KeyAttributes::default(),
+            attributes,
         })?;
         self.syscall.syscall();
         Ok(FutureResult::new(self))
@@ -214,28 +220,28 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
     }
 
 
-    pub fn generate_ed25519_private_key<'c>(&'c mut self)
+    pub fn generate_ed25519_private_key<'c>(&'c mut self, persistence: StorageLocation)
         -> core::result::Result<FutureResult<'a, 'c, reply::GenerateKey>, ClientError>
     {
-        self.generate_key(Mechanism::Ed25519)
+        self.generate_key(Mechanism::Ed25519, StorageAttributes::new().set_persistence(persistence))
     }
 
-    pub fn derive_ed25519_public_key<'c>(&'c mut self, private_key: &ObjectHandle)
+    pub fn derive_ed25519_public_key<'c>(&'c mut self, private_key: &ObjectHandle, persistence: StorageLocation)
         -> core::result::Result<FutureResult<'a, 'c, reply::DeriveKey>, ClientError>
     {
-        self.derive_key(Mechanism::Ed25519, private_key.clone())
+        self.derive_key(Mechanism::Ed25519, private_key.clone(), StorageAttributes::new().set_persistence(persistence))
     }
 
-    pub fn generate_p256_private_key<'c>(&'c mut self)
+    pub fn generate_p256_private_key<'c>(&'c mut self, persistence: StorageLocation)
         -> core::result::Result<FutureResult<'a, 'c, reply::GenerateKey>, ClientError>
     {
-        self.generate_key(Mechanism::P256)
+        self.generate_key(Mechanism::P256, StorageAttributes::new().set_persistence(persistence))
     }
 
-    pub fn derive_p256_public_key<'c>(&'c mut self, private_key: &ObjectHandle)
+    pub fn derive_p256_public_key<'c>(&'c mut self, private_key: &ObjectHandle, persistence: StorageLocation)
         -> core::result::Result<FutureResult<'a, 'c, reply::DeriveKey>, ClientError>
     {
-        self.derive_key(Mechanism::P256, private_key.clone())
+        self.derive_key(Mechanism::P256, private_key.clone(), StorageAttributes::new().set_persistence(persistence))
     }
 
     pub fn sign_ed25519<'c>(&'c mut self, key: &ObjectHandle, message: &[u8])

@@ -8,10 +8,10 @@ use crate::service::*;
 use crate::types::*;
 
 #[cfg(feature = "aes256-cbc")]
-impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage>
-Decrypt<'a, 's, R, P, V> for super::Aes256Cbc
+impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
+Decrypt<'a, 's, R, I, E, V> for super::Aes256Cbc
 {
-    fn decrypt(resources: &mut ServiceResources<'a, 's, R, P, V>, request: request::Decrypt)
+    fn decrypt(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::Decrypt)
         -> Result<reply::Decrypt, Error>
     {
 		use block_modes::{BlockMode, Cbc};
@@ -25,7 +25,7 @@ Decrypt<'a, 's, R, P, V> for super::Aes256Cbc
         let key_id = request.key.object_id;
         let mut symmetric_key = [0u8; 32];
         let path = resources.prepare_path_for_key(KeyType::Secret, &key_id)?;
-        resources.load_serialized_key(&path, KeyKind::SymmetricKey32, &mut symmetric_key)?;
+        resources.load_key(&path, KeyKind::SymmetricKey32, &mut symmetric_key)?;
 
         let zero_iv = [0u8; 32];
 		let cipher = Aes256Cbc::new_var(&symmetric_key, &zero_iv).unwrap();
@@ -47,10 +47,10 @@ Decrypt<'a, 's, R, P, V> for super::Aes256Cbc
     }
 }
 
-impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage>
-Encrypt<'a, 's, R, P, V> for super::Aes256Cbc
+impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
+Encrypt<'a, 's, R, I, E, V> for super::Aes256Cbc
 {
-    fn encrypt(resources: &mut ServiceResources<'a, 's, R, P, V>, request: request::Encrypt)
+    fn encrypt(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::Encrypt)
         -> Result<reply::Encrypt, Error>
     {
 		use block_modes::{BlockMode, Cbc};
@@ -64,7 +64,7 @@ Encrypt<'a, 's, R, P, V> for super::Aes256Cbc
         let key_id = request.key.object_id;
         let mut symmetric_key = [0u8; 32];
         let path = resources.prepare_path_for_key(KeyType::Secret, &key_id)?;
-        resources.load_serialized_key(&path, KeyKind::SymmetricKey32, &mut symmetric_key)?;
+        resources.load_key(&path, KeyKind::SymmetricKey32, &mut symmetric_key)?;
 
         let zero_iv = [0u8; 32];
 		let cipher = Aes256Cbc::new_var(&symmetric_key, &zero_iv).unwrap();
@@ -87,8 +87,8 @@ Encrypt<'a, 's, R, P, V> for super::Aes256Cbc
 }
 
 #[cfg(not(feature = "aes256-cbc"))]
-impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage>
-Decrypt<'a, 's, R, P, V> for super::Aes256Cbc {}
+impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
+Decrypt<'a, 's, R, I, E, V> for super::Aes256Cbc {}
 #[cfg(not(feature = "aes256-cbc"))]
-impl<'a, 's, R: RngRead, P: LfsStorage, V: LfsStorage>
-Encrypt<'a, 's, R, P, V> for super::Aes256Cbc {}
+impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
+Encrypt<'a, 's, R, I, E, V> for super::Aes256Cbc {}

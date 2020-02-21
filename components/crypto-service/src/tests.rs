@@ -47,7 +47,8 @@ impl crate::service::RngRead for MockRng {
     }
 }
 
-ram_storage!(PersistentStorage, PersistentRam, 4096);
+ram_storage!(InternalStorage, InternalRam, 4096);
+ram_storage!(ExternalStorage, ExternalRam, 4096);
 ram_storage!(VolatileStorage, VolatileRam, 4096);
 
 // hmm how to export variable?
@@ -91,12 +92,19 @@ fn dummy() {
 
     // setup_storage!();
     // need to figure out if/how to do this as `static mut`
-    let mut persistent_ram = PersistentRam::default();
-    let mut persistent_storage = PersistentStorage::new(&mut persistent_ram);
-    Filesystem::format(&mut persistent_storage).expect("could not format persistent storage");
-    let mut persistent_fs_alloc = Filesystem::allocate();
-    let pfs = FilesystemWith::mount(&mut persistent_fs_alloc, &mut persistent_storage)
-        .expect("could not mount persistent storage");
+    let mut internal_ram = InternalRam::default();
+    let mut internal_storage = InternalStorage::new(&mut internal_ram);
+    Filesystem::format(&mut internal_storage).expect("could not format internal storage");
+    let mut internal_fs_alloc = Filesystem::allocate();
+    let ifs = FilesystemWith::mount(&mut internal_fs_alloc, &mut internal_storage)
+        .expect("could not mount internal storage");
+
+    let mut external_ram = ExternalRam::default();
+    let mut external_storage = ExternalStorage::new(&mut external_ram);
+    Filesystem::format(&mut external_storage).expect("could not format external storage");
+    let mut external_fs_alloc = Filesystem::allocate();
+    let efs = FilesystemWith::mount(&mut external_fs_alloc, &mut external_storage)
+        .expect("could not mount external storage");
 
     let mut volatile_ram = VolatileRam::default();
     let mut volatile_storage = VolatileStorage::new(&mut volatile_ram);
@@ -105,7 +113,7 @@ fn dummy() {
     let vfs = FilesystemWith::mount(&mut volatile_fs_alloc, &mut volatile_storage)
         .expect("could not mount volatile storage");
 
-    let mut service = Service::new(rng, pfs, vfs).expect("service init worked");
+    let mut service = Service::new(rng, ifs, efs, vfs).expect("service init worked");
     assert!(service.add_endpoint(service_endpoint).is_ok());
 
     let mut client = client::RawClient::new(client_endpoint);
@@ -152,7 +160,7 @@ fn dummy() {
 //     let vfs = FilesystemWith::mount(&mut volatile_fs_alloc, &mut volatile_storage)
 //         .expect("could not mount volatile storage");
 
-//     let mut service = Service::new(rng, pfs, vfs);
+//     let mut service = Service::new(rng, ifs, efs, vfs);
 //     service.add_endpoint(service_endpoint).ok();
 //     let mut client = RawClient::new(client_endpoint);
 
@@ -210,12 +218,20 @@ fn sign_ed25519() {
     let rng = MockRng::new();
 
     // need to figure out if/how to do this as `static mut`
-    let mut persistent_ram = PersistentRam::default();
-    let mut persistent_storage = PersistentStorage::new(&mut persistent_ram);
-    Filesystem::format(&mut persistent_storage).expect("could not format persistent storage");
-    let mut persistent_fs_alloc = Filesystem::allocate();
-    let pfs = FilesystemWith::mount(&mut persistent_fs_alloc, &mut persistent_storage)
-        .expect("could not mount persistent storage");
+    let mut internal_ram = InternalRam::default();
+    let mut internal_storage = InternalStorage::new(&mut internal_ram);
+    Filesystem::format(&mut internal_storage).expect("could not format internal storage");
+    let mut internal_fs_alloc = Filesystem::allocate();
+    let ifs = FilesystemWith::mount(&mut internal_fs_alloc, &mut internal_storage)
+        .expect("could not mount internal storage");
+
+    let mut external_ram = ExternalRam::default();
+    let mut external_storage = ExternalStorage::new(&mut external_ram);
+    Filesystem::format(&mut external_storage).expect("could not format external storage");
+    let mut external_fs_alloc = Filesystem::allocate();
+    let efs = FilesystemWith::mount(&mut external_fs_alloc, &mut external_storage)
+        .expect("could not mount external storage");
+
     let mut volatile_ram = VolatileRam::default();
     let mut volatile_storage = VolatileStorage::new(&mut volatile_ram);
     Filesystem::format(&mut volatile_storage).expect("could not format volatile storage");
@@ -223,7 +239,7 @@ fn sign_ed25519() {
     let vfs = FilesystemWith::mount(&mut volatile_fs_alloc, &mut volatile_storage)
         .expect("could not mount volatile storage");
 
-    let mut service = Service::new(rng, pfs, vfs).expect("service init worked");
+    let mut service = Service::new(rng, ifs, efs, vfs).expect("service init worked");
     service.add_endpoint(service_endpoint).ok();
 
     // Client needs a "Syscall" trait impl, to trigger crypto processing
@@ -232,21 +248,21 @@ fn sign_ed25519() {
     let syscaller = &mut service;
     let mut client = Client::new(client_endpoint, syscaller);
 
-    let mut future = client.generate_ed25519_private_key().expect("no client error");
+    let mut future = client.generate_ed25519_private_key(StorageLocation::Internal).expect("no client error");
     println!("submitted gen ed25519");
     let reply = block!(future);
     let private_key = reply.expect("no errors, never").key;
     println!("got a private key {:?}", &private_key);
 
-    let public_key = block!(client.derive_ed25519_public_key(&private_key).expect("no client error"))
+    let public_key = block!(client.derive_ed25519_public_key(&private_key, StorageLocation::Volatile).expect("no client error"))
         .expect("no issues").key;
     println!("got a public key {:?}", &public_key);
 
     assert!(block!(
-            client.derive_ed25519_public_key(&private_key).expect("no client error wot")
+            client.derive_ed25519_public_key(&private_key, StorageLocation::Volatile).expect("no client error wot")
     ).is_ok());
     assert!(block!(
-            client.derive_p256_public_key(&private_key).expect("no client error wot")
+            client.derive_p256_public_key(&private_key, StorageLocation::Volatile).expect("no client error wot")
     ).is_err());
 
     let message = [1u8, 2u8, 3u8];
@@ -276,12 +292,20 @@ fn sign_p256() {
     let rng = MockRng::new();
 
     // need to figure out if/how to do this as `static mut`
-    let mut persistent_ram = PersistentRam::default();
-    let mut persistent_storage = PersistentStorage::new(&mut persistent_ram);
-    Filesystem::format(&mut persistent_storage).expect("could not format persistent storage");
-    let mut persistent_fs_alloc = Filesystem::allocate();
-    let pfs = FilesystemWith::mount(&mut persistent_fs_alloc, &mut persistent_storage)
-        .expect("could not mount persistent storage");
+    let mut internal_ram = InternalRam::default();
+    let mut internal_storage = InternalStorage::new(&mut internal_ram);
+    Filesystem::format(&mut internal_storage).expect("could not format internal storage");
+    let mut internal_fs_alloc = Filesystem::allocate();
+    let ifs = FilesystemWith::mount(&mut internal_fs_alloc, &mut internal_storage)
+        .expect("could not mount internal storage");
+
+    let mut external_ram = ExternalRam::default();
+    let mut external_storage = ExternalStorage::new(&mut external_ram);
+    Filesystem::format(&mut external_storage).expect("could not format external storage");
+    let mut external_fs_alloc = Filesystem::allocate();
+    let efs = FilesystemWith::mount(&mut external_fs_alloc, &mut external_storage)
+        .expect("could not mount external storage");
+
     let mut volatile_ram = VolatileRam::default();
     let mut volatile_storage = VolatileStorage::new(&mut volatile_ram);
     Filesystem::format(&mut volatile_storage).expect("could not format volatile storage");
@@ -289,7 +313,7 @@ fn sign_p256() {
     let vfs = FilesystemWith::mount(&mut volatile_fs_alloc, &mut volatile_storage)
         .expect("could not mount volatile storage");
 
-    let mut service = Service::new(rng, pfs, vfs).expect("service init worked");
+    let mut service = Service::new(rng, ifs, efs, vfs).expect("service init worked");
     service.add_endpoint(service_endpoint).ok();
 
     // Client needs a "Syscall" trait impl, to trigger crypto processing
@@ -300,10 +324,10 @@ fn sign_p256() {
 
 
 
-    let private_key = block!(client.generate_p256_private_key().expect("no client error"))
+    let private_key = block!(client.generate_p256_private_key(StorageLocation::External).expect("no client error"))
         .expect("no errors").key;
     println!("got a public key {:?}", &private_key);
-    let public_key = block!(client.derive_p256_public_key(&private_key).expect("no client error"))
+    let public_key = block!(client.derive_p256_public_key(&private_key, StorageLocation::Volatile).expect("no client error"))
         .expect("no errors").key;
     println!("got a public key {:?}", &public_key);
 
@@ -337,12 +361,20 @@ fn agree_p256() {
     let rng = MockRng::new();
 
     // need to figure out if/how to do this as `static mut`
-    let mut persistent_ram = PersistentRam::default();
-    let mut persistent_storage = PersistentStorage::new(&mut persistent_ram);
-    Filesystem::format(&mut persistent_storage).expect("could not format persistent storage");
-    let mut persistent_fs_alloc = Filesystem::allocate();
-    let pfs = FilesystemWith::mount(&mut persistent_fs_alloc, &mut persistent_storage)
-        .expect("could not mount persistent storage");
+    let mut internal_ram = InternalRam::default();
+    let mut internal_storage = InternalStorage::new(&mut internal_ram);
+    Filesystem::format(&mut internal_storage).expect("could not format internal storage");
+    let mut internal_fs_alloc = Filesystem::allocate();
+    let ifs = FilesystemWith::mount(&mut internal_fs_alloc, &mut internal_storage)
+        .expect("could not mount internal storage");
+
+    let mut external_ram = ExternalRam::default();
+    let mut external_storage = ExternalStorage::new(&mut external_ram);
+    Filesystem::format(&mut external_storage).expect("could not format external storage");
+    let mut external_fs_alloc = Filesystem::allocate();
+    let efs = FilesystemWith::mount(&mut external_fs_alloc, &mut external_storage)
+        .expect("could not mount external storage");
+
     let mut volatile_ram = VolatileRam::default();
     let mut volatile_storage = VolatileStorage::new(&mut volatile_ram);
     Filesystem::format(&mut volatile_storage).expect("could not format volatile storage");
@@ -350,7 +382,7 @@ fn agree_p256() {
     let vfs = FilesystemWith::mount(&mut volatile_fs_alloc, &mut volatile_storage)
         .expect("could not mount volatile storage");
 
-    let mut service = Service::new(rng, pfs, vfs).expect("service init worked");
+    let mut service = Service::new(rng, ifs, efs, vfs).expect("service init worked");
     service.add_endpoint(service_endpoint).ok();
 
     // Client needs a "Syscall" trait impl, to trigger crypto processing
@@ -360,27 +392,29 @@ fn agree_p256() {
     let mut client = Client::new(client_endpoint, syscaller);
 
 
-    let plat_private_key = block!(client.generate_p256_private_key().expect("no client error"))
+    let plat_private_key = block!(client.generate_p256_private_key(StorageLocation::Volatile).expect("no client error"))
         .expect("no errors").key;
     println!("got a public key {:?}", &plat_private_key);
-    let plat_public_key = block!(client.derive_p256_public_key(&plat_private_key).expect("no client error"))
+    let plat_public_key = block!(client.derive_p256_public_key(&plat_private_key, StorageLocation::Volatile).expect("no client error"))
         .expect("no errors").key;
     println!("got a public key {:?}", &plat_public_key);
 
-    let auth_private_key = block!(client.generate_p256_private_key().expect("no client error"))
+    let auth_private_key = block!(client.generate_p256_private_key(StorageLocation::Volatile).expect("no client error"))
         .expect("no errors").key;
     println!("got a public key {:?}", &auth_private_key);
-    let auth_public_key = block!(client.derive_p256_public_key(&auth_private_key).expect("no client error"))
+    let auth_public_key = block!(client.derive_p256_public_key(&auth_private_key, StorageLocation::Volatile).expect("no client error"))
         .expect("no errors").key;
     println!("got a public key {:?}", &auth_public_key);
 
     let shared_secret = block!(
-        client.agree(Mechanism::P256, auth_private_key.clone(), plat_public_key.clone())
+        client.agree(Mechanism::P256, auth_private_key.clone(), plat_public_key.clone(),
+                     StorageAttributes::new().set_persistence(StorageLocation::Volatile))
             .expect("no client error"))
         .expect("no errors").shared_secret;
 
     let alt_shared_secret = block!(
-        client.agree(Mechanism::P256, plat_private_key.clone(), auth_public_key.clone())
+        client.agree(Mechanism::P256, plat_private_key.clone(), auth_public_key.clone(),
+                     StorageAttributes::new().set_persistence(StorageLocation::Volatile))
             .expect("no client error"))
         .expect("no errors").shared_secret;
 
@@ -388,7 +422,8 @@ fn agree_p256() {
     assert_ne!(&shared_secret, &alt_shared_secret);
 
     let symmetric_key = block!(
-        client.derive_key(Mechanism::Sha256, shared_secret.clone())
+        client.derive_key(Mechanism::Sha256, shared_secret.clone(),
+                          StorageAttributes::new().set_persistence(StorageLocation::Volatile))
             .expect("no client error"))
         .expect("no errors").key;
 

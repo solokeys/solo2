@@ -27,6 +27,7 @@ pub enum Error {
     ImplementationError,
     InternalError,
     MechanismNotAvailable,
+    NoSuchKey,
     RequestNotAvailable,
     SignDataTooLarge,
     WrongKeyKind,
