@@ -13,7 +13,7 @@ pub use crate::pipe::ClientEndpoint;
 pub enum ClientError {
     Full,
     Pending,
-    SignDataTooLarge,
+    DataTooLarge,
 }
 
 pub struct RawClient<'a> {
@@ -120,18 +120,22 @@ where
         -> core::task::Poll<core::result::Result<T, Error>>
     {
         use core::task::Poll::{Pending, Ready};
-        use core::convert::TryFrom;
         match self.f.poll() {
-            Ready(Ok(reply)) => {
-                match T::try_from(reply) {
-                    Ok(reply2) => Ready(Ok(reply2)),
-                    Err(_) => Ready(Err(Error::ImplementationError)),
-                }
-                // Ready(Ok(reply.into()))
-            }
-            Ready(Err(error)) => {
-                Ready(Err(error))
-            }
+            // Ready(Ok(reply)) => {
+            //     println!("my first match arm");
+            //     match T::try_from(reply) {
+            //         Ok(reply2) => {
+            //             println!("my second match arm");
+            //             Ready(Ok(reply2))
+            //         },
+            //         Err(_) => {
+            //             println!("not my second match arm");
+            //             Ready(Err(Error::ImplementationError))
+            //         }
+            //     }
+            // }
+            Ready(Ok(reply)) => Ready(Ok(T::from(reply))),
+            Ready(Err(error)) => Ready(Err(error)),
             Pending => Pending
         }
     }
@@ -177,6 +181,42 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
         Ok(FutureResult::new(self))
     }
 
+          // - mechanism: Mechanism
+          // - key: ObjectHandle
+          // - message: Message
+          // - associated_data: ShortData
+    pub fn encrypt<'c>(&'c mut self, mechanism: Mechanism, key: ObjectHandle,
+                       message: &[u8], associated_data: &[u8])
+        -> core::result::Result<FutureResult<'a, 'c, reply::Encrypt>, ClientError>
+    {
+        let message = Message::try_from_slice(message).map_err(|_| ClientError::DataTooLarge)?;
+        let associated_data = ShortData::try_from_slice(associated_data).map_err(|_| ClientError::DataTooLarge)?;
+        self.raw.request(request::Encrypt { mechanism, key, message, associated_data })?;
+        self.syscall.syscall();
+        Ok(FutureResult::new(self))
+    }
+
+          // - mechanism: Mechanism
+          // - key: ObjectHandle
+          // - message: Message
+          // - associated_data: ShortData
+          // - nonce: ShortData
+          // - tag: ShortData
+    pub fn decrypt<'c>(&'c mut self, mechanism: Mechanism, key: ObjectHandle,
+                       message: &[u8], associated_data: &[u8],
+                       nonce: &[u8], tag: &[u8],
+                       )
+        -> core::result::Result<FutureResult<'a, 'c, reply::Decrypt>, ClientError>
+    {
+        let message = Message::try_from_slice(message).map_err(|_| ClientError::DataTooLarge)?;
+        let associated_data = ShortData::try_from_slice(associated_data).map_err(|_| ClientError::DataTooLarge)?;
+        let nonce = ShortData::try_from_slice(nonce).map_err(|_| ClientError::DataTooLarge)?;
+        let tag = ShortData::try_from_slice(tag).map_err(|_| ClientError::DataTooLarge)?;
+        self.raw.request(request::Decrypt { mechanism, key, message, associated_data, nonce, tag })?;
+        self.syscall.syscall();
+        Ok(FutureResult::new(self))
+    }
+
     pub fn generate_key<'c>(&'c mut self, mechanism: Mechanism, attributes: StorageAttributes)
         -> core::result::Result<FutureResult<'a, 'c, reply::GenerateKey>, ClientError>
     {
@@ -194,7 +234,7 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
         self.raw.request(request::Sign {
             key,
             mechanism,
-            message: Bytes::try_from_slice(data).map_err(|_| ClientError::SignDataTooLarge)?,
+            message: Bytes::try_from_slice(data).map_err(|_| ClientError::DataTooLarge)?,
         })?;
         self.syscall.syscall();
         Ok(FutureResult::new(self))
@@ -219,6 +259,25 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
         Ok(FutureResult::new(self))
     }
 
+
+    pub fn decrypt_chacha8poly1305<'c>(&'c mut self, key: &ObjectHandle, message: &[u8], associated_data: &[u8],
+                                       nonce: &[u8], tag: &[u8])
+        -> core::result::Result<FutureResult<'a, 'c, reply::Decrypt>, ClientError>
+    {
+        self.decrypt(Mechanism::Chacha8Poly1305, key.clone(), message, associated_data, nonce, tag)
+    }
+
+    pub fn encrypt_chacha8poly1305<'c>(&'c mut self, key: &ObjectHandle, message: &[u8], associated_data: &[u8])
+        -> core::result::Result<FutureResult<'a, 'c, reply::Encrypt>, ClientError>
+    {
+        self.encrypt(Mechanism::Chacha8Poly1305, key.clone(), message, associated_data)
+    }
+
+    pub fn generate_chacha8poly1305_key<'c>(&'c mut self, persistence: StorageLocation)
+        -> core::result::Result<FutureResult<'a, 'c, reply::GenerateKey>, ClientError>
+    {
+        self.generate_key(Mechanism::Chacha8Poly1305, StorageAttributes::new().set_persistence(persistence))
+    }
 
     pub fn generate_ed25519_private_key<'c>(&'c mut self, persistence: StorageLocation)
         -> core::result::Result<FutureResult<'a, 'c, reply::GenerateKey>, ClientError>

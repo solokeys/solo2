@@ -49,12 +49,14 @@ verbose-tests = ["littlefs2/ll-assertions"]
 verbose-lfs = ["littlefs2/ll-assertions", "littlefs2/ll-trace"]
 
 # mechanisms
-default-mechanisms = ["aes256-cbc", "ed25519", "hmac-sha256", "p256", "sha256"]
+default-mechanisms = ["aes256-cbc", "chacha8-poly1305", "ed25519", "hmac-sha256", "p256", "sha256", "trng"]
 aes256-cbc = []
+chacha8-poly1305 = []
 ed25519 = []
 hmac-sha256 = []
 p256 = []
 sha256 = []
+trng = []
 
 # [patch."https://github.com/nickray/littlefs2".littlefs2]
 # path = "../../../littlefs2"

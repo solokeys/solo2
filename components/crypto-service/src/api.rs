@@ -55,6 +55,9 @@ pub mod request {
           - mechanism: Mechanism
           - key: ObjectHandle
           - message: Message
+          - associated_data: ShortData
+          - nonce: ShortData
+          - tag: ShortData
 
         // examples:
         // - public key from private key
@@ -78,6 +81,7 @@ pub mod request {
           - mechanism: Mechanism
           - key: ObjectHandle
           - message: Message
+          - associated_data: ShortData
 
         FindObjects:
             // - attributes: Attributes,
@@ -151,13 +155,15 @@ pub mod reply {
             - num_objects: usize
 
 		Decrypt:
-            - plaintext: Result<Message, ()>
+            - plaintext: Message
 
         DeriveKey:
             - key: ObjectHandle
 
 		Encrypt:
             - ciphertext: Message
+            - nonce: ShortData
+            - tag: ShortData
 
         // DeriveKeypair:
         //     - private_key: ObjectHandle

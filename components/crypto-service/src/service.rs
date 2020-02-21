@@ -1,8 +1,6 @@
-use core::convert::TryInto;
 use core::convert::TryFrom;
 
 use heapless_bytes::Bytes;
-use serde::{Deserialize, Serialize};
 use serde_indexed::{DeserializeIndexed, SerializeIndexed};
 
 use crate::api::*;
@@ -13,7 +11,6 @@ use crate::types::*;
 
 pub use crate::pipe::ServiceEndpoint;
 
-use chacha20poly1305::ChaCha8Poly1305;
 pub use embedded_hal::blocking::rng::Read as RngRead;
 
 // #[macro_use]
@@ -123,7 +120,7 @@ where
 
 impl<'s, I: LfsStorage, E: LfsStorage, V: LfsStorage> TriStorage<'s, I, E, V> {
 
-    pub(crate) fn load_serialized_key<S: LfsStorage>(fs: &mut FilesystemWith<'s, 's, S>, path: &[u8], kind: KeyKind, buf: &mut [u8]) -> Result<(), Error> {
+    pub(crate) fn load_serialized_key<S: LfsStorage>(fs: &mut FilesystemWith<'s, 's, S>, path: &[u8], buf: &mut [u8]) -> Result<(), Error> {
 
         use littlefs2::fs::{File, FileWith};
         use littlefs2::io::ReadWith;
@@ -138,7 +135,7 @@ impl<'s, I: LfsStorage, E: LfsStorage, V: LfsStorage> TriStorage<'s, I, E, V> {
         Ok(())
     }
 
-    pub fn load_key(&mut self, path: &[u8], kind: KeyKind, key_bytes: &mut [u8]) -> Result<(), Error> {
+    pub fn load_key(&mut self, path: &[u8], kind: KeyKind, key_bytes: &mut [u8]) -> Result<StorageLocation, Error> {
         #[cfg(test)]
         // actually safe, as path is ASCII by construction
         println!("loading from file {:?}", unsafe { core::str::from_utf8_unchecked(&path[..]) });
@@ -146,14 +143,14 @@ impl<'s, I: LfsStorage, E: LfsStorage, V: LfsStorage> TriStorage<'s, I, E, V> {
         let mut buf = [0u8; 128];
 
         // try each storage backend in turn, attempting to locate the key
-        match Self::load_serialized_key(&mut self.vfs, path, kind, &mut buf) {
-            Ok(_) => {}
+        let location = match Self::load_serialized_key(&mut self.vfs, path, &mut buf) {
+            Ok(_) => StorageLocation::Volatile,
             Err(_) => {
-                match Self::load_serialized_key(&mut self.ifs, path, kind, &mut buf) {
-                    Ok(_) => {}
+                match Self::load_serialized_key(&mut self.ifs, path, &mut buf) {
+                    Ok(_) => StorageLocation::Internal,
                     Err(_) => {
-                        match Self::load_serialized_key(&mut self.efs, path, kind, &mut buf) {
-                            Ok(_) => {}
+                        match Self::load_serialized_key(&mut self.efs, path, &mut buf) {
+                            Ok(_) => StorageLocation::External,
                             Err(_) => {
                                 return Err(Error::NoSuchKey);
                             }
@@ -161,7 +158,7 @@ impl<'s, I: LfsStorage, E: LfsStorage, V: LfsStorage> TriStorage<'s, I, E, V> {
                     }
                 }
             }
-        }
+        };
 
         let serialized_key: SerializedKey = cbor_deserialize(&buf).map_err(|_| Error::CborError)?;
         if serialized_key.kind != kind as u8 {
@@ -169,8 +166,8 @@ impl<'s, I: LfsStorage, E: LfsStorage, V: LfsStorage> TriStorage<'s, I, E, V> {
         }
 
         key_bytes.copy_from_slice(&serialized_key.value);
+        Ok(location)
 
-        Ok(())
     }
 
     // TODO: in the case of desktop/ram storage:
@@ -191,19 +188,19 @@ impl<'s, I: LfsStorage, E: LfsStorage, V: LfsStorage> TriStorage<'s, I, E, V> {
 
         let serialized_key = SerializedKey::try_from((kind, key_bytes))?;
         let mut buf = [0u8; 128];
-        cbor_serialize(&serialized_key, &mut buf).map_err(|e| Error::CborError)?;
+        cbor_serialize(&serialized_key, &mut buf).map_err(|_| Error::CborError)?;
 
         match persistence {
-            StorageLocation::Internal => Self::store_serialized_key(&mut self.ifs, path, kind, &buf),
-            StorageLocation::External => Self::store_serialized_key(&mut self.efs, path, kind, &buf),
-            StorageLocation::Volatile => Self::store_serialized_key(&mut self.vfs, path, kind, &buf),
+            StorageLocation::Internal => Self::store_serialized_key(&mut self.ifs, path, &buf),
+            StorageLocation::External => Self::store_serialized_key(&mut self.efs, path, &buf),
+            StorageLocation::Volatile => Self::store_serialized_key(&mut self.vfs, path, &buf),
         }
 
     }
 
     pub fn store_serialized_key<S: LfsStorage>(
         fs: &mut FilesystemWith<'s, 's, S>,
-        path: &[u8], kind: KeyKind, buf: &[u8]
+        path: &[u8], buf: &[u8]
     )
         -> Result<(), Error>
     {
@@ -256,13 +253,8 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
         Ok([37u8; 32])
     }
 
-    // TODO: key a `/root/aead-nonce` counter (or use entropy?)
-    pub fn get_aead_nonce(&self) -> Result<AeadNonce, Error> {
-        Ok([42u8; 12])
-    }
-
     pub fn load_key(&mut self, path: &[u8], kind: KeyKind, key_bytes: &mut [u8])
-        -> Result<(), Error>
+        -> Result<StorageLocation, Error>
     {
         self.tri.load_key(path, kind, key_bytes)
     }
@@ -271,38 +263,6 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
         -> Result<(), Error>
     {
         self.tri.store_key(to, path, kind, key_bytes)
-    }
-
-    // global choice of algorithm: we do Chacha8Poly1305 here
-    // TODO: oh how annoying these GenericArrays
-    pub fn aead_in_place(&mut self, ad: &[u8], buf: &mut [u8]) -> Result<(AeadNonce, AeadTag), Error> {
-        use chacha20poly1305::aead::{Aead, NewAead};
-
-        // keep in state?
-        let aead = ChaCha8Poly1305::new(GenericArray::clone_from_slice(&self.get_aead_key()?));
-        // auto-increments
-        let nonce = self.get_aead_nonce()?;
-
-        // aead.encrypt_in_place_detached(&nonce, ad, buf).map(|g| g.as_slice().try_into().unwrap())?;
-        // not sure what can go wrong with AEAD
-        let tag: AeadTag = aead.encrypt_in_place_detached(
-            &GenericArray::clone_from_slice(&nonce), ad, buf
-        ).unwrap().as_slice().try_into().unwrap();
-        Ok((nonce, tag))
-    }
-
-    pub fn adad_in_place(&mut self, nonce: &AeadNonce, ad: &[u8], buf: &mut [u8], tag: &AeadTag) -> Result<(), Error> {
-        use chacha20poly1305::aead::{Aead, NewAead};
-
-        // keep in state?
-        let aead = ChaCha8Poly1305::new(GenericArray::clone_from_slice(&self.get_aead_key()?));
-
-        aead.decrypt_in_place_detached(
-            &GenericArray::clone_from_slice(nonce),
-            ad,
-            buf,
-            &GenericArray::clone_from_slice(tag)
-        ).map_err(|_| Error::AeadError)
     }
 
     pub fn reply_to(&mut self, request: Request) -> Result<Reply, Error> {
@@ -328,6 +288,7 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
                 match request.mechanism {
 
                     Mechanism::Aes256Cbc => mechanisms::Aes256Cbc::decrypt(self, request),
+                    Mechanism::Chacha8Poly1305 => mechanisms::Chacha8Poly1305::decrypt(self, request),
                     _ => return Err(Error::MechanismNotAvailable),
 
                 }.map(|reply| Reply::Decrypt(reply))
@@ -348,6 +309,7 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
                 match request.mechanism {
 
                     Mechanism::Aes256Cbc => mechanisms::Aes256Cbc::encrypt(self, request),
+                    Mechanism::Chacha8Poly1305 => mechanisms::Chacha8Poly1305::encrypt(self, request),
                     _ => return Err(Error::MechanismNotAvailable),
 
                 }.map(|reply| Reply::Encrypt(reply))
@@ -355,6 +317,7 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
 
             Request::GenerateKey(request) => {
                 match request.mechanism {
+                    Mechanism::Chacha8Poly1305 => mechanisms::Chacha8Poly1305::generate_key(self, request),
                     Mechanism::Ed25519 => mechanisms::Ed25519::generate_key(self, request),
                     Mechanism::P256 => mechanisms::P256::generate_key(self, request),
                     _ => Err(Error::MechanismNotAvailable),
@@ -460,6 +423,8 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> Service<'a
                 println!("service got request: {:?}", &request);
                 resources.currently_serving = &ep.client_id;
                 let reply_result = resources.reply_to(request);
+                #[cfg(test)]
+                println!("service made reply: {:?}", &reply_result);
                 ep.send.enqueue(reply_result).ok();
             }
         }

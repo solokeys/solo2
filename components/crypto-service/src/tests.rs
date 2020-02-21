@@ -436,3 +436,65 @@ fn agree_p256() {
 
 }
 
+#[test]
+fn aead() {
+    let (service_endpoint, client_endpoint) = pipe::new_endpoints(
+        unsafe { &mut REQUEST_PIPE },
+        unsafe { &mut REPLY_PIPE },
+        "fido2",
+    );
+
+    let rng = MockRng::new();
+
+    // need to figure out if/how to do this as `static mut`
+    let mut internal_ram = InternalRam::default();
+    let mut internal_storage = InternalStorage::new(&mut internal_ram);
+    Filesystem::format(&mut internal_storage).expect("could not format internal storage");
+    let mut internal_fs_alloc = Filesystem::allocate();
+    let ifs = FilesystemWith::mount(&mut internal_fs_alloc, &mut internal_storage)
+        .expect("could not mount internal storage");
+
+    let mut external_ram = ExternalRam::default();
+    let mut external_storage = ExternalStorage::new(&mut external_ram);
+    Filesystem::format(&mut external_storage).expect("could not format external storage");
+    let mut external_fs_alloc = Filesystem::allocate();
+    let efs = FilesystemWith::mount(&mut external_fs_alloc, &mut external_storage)
+        .expect("could not mount external storage");
+
+    let mut volatile_ram = VolatileRam::default();
+    let mut volatile_storage = VolatileStorage::new(&mut volatile_ram);
+    Filesystem::format(&mut volatile_storage).expect("could not format volatile storage");
+    let mut volatile_fs_alloc = Filesystem::allocate();
+    let vfs = FilesystemWith::mount(&mut volatile_fs_alloc, &mut volatile_storage)
+        .expect("could not mount volatile storage");
+
+    let mut service = Service::new(rng, ifs, efs, vfs).expect("service init worked");
+    service.add_endpoint(service_endpoint).ok();
+
+    // Client needs a "Syscall" trait impl, to trigger crypto processing
+    // For testing, we use "self service",
+    // meaning `&mut service` itself with the trivial implementation
+    let syscaller = &mut service;
+    let mut client = Client::new(client_endpoint, syscaller);
+
+
+    let secret_key = block!(client.generate_chacha8poly1305_key(StorageLocation::Volatile).expect("no client error"))
+        .expect("no errors").key;
+    println!("got a key {:?}", &secret_key);
+
+    let message = b"test message";
+    let associated_data = b"solokeys.com";
+    let api::reply::Encrypt { ciphertext, nonce, tag } =
+        block!(client.encrypt_chacha8poly1305(&secret_key, message, associated_data).expect("no client error"))
+        .expect("no errors");
+
+    let plaintext =
+        block!(client.decrypt_chacha8poly1305(
+                &secret_key,
+                &ciphertext,
+                associated_data,
+                &nonce,
+                &tag,
+             ).map_err(drop).expect("no client error"))
+        .map_err(drop).expect("no errors");
+}

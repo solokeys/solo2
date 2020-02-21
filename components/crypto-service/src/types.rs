@@ -146,6 +146,7 @@ pub enum KeyKind {
     P256 = 3,
     SharedSecret32 = 4,  // or 256 (in bits)?
     SymmetricKey32 = 5, // or directly: SharedSecret32 —DeriveKey(HmacSha256)-> SymmetricKey32 —Encrypt(Aes256)-> ...
+    Symmetric32Nonce12 = 6,
     // ThirtytwoBytes,
 }
 
@@ -158,6 +159,7 @@ impl core::convert::TryFrom<u8> for KeyKind {
             3 => KeyKind::P256,
             4 => KeyKind::SharedSecret32,
             5 => KeyKind::SymmetricKey32,
+            6 => KeyKind::Symmetric32Nonce12,
             _ => { return Err(crate::error::Error::CborError); }
         })
     }
@@ -275,12 +277,14 @@ impl StorageAttributes {
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Mechanism {
     Aes256Cbc,
+    Chacha8Poly1305,
     Ed25519,
     HmacSha256,
     // P256XSha256,
     P256,
     // clients can also do hashing by themselves
     Sha256,
+    Trng,
     X25519,
 }
 
