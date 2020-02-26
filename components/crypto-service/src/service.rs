@@ -248,11 +248,6 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
         Ok(Self { rng, tri: TriStorage { ifs, efs, vfs }, currently_serving: &"" })
     }
 
-    // TODO: key a `/root/aead-key`
-    pub fn get_aead_key(&self) -> Result<AeadKey, Error> {
-        Ok([37u8; 32])
-    }
-
     pub fn load_key(&mut self, path: &[u8], kind: KeyKind, key_bytes: &mut [u8])
         -> Result<StorageLocation, Error>
     {
@@ -419,13 +414,14 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> Service<'a
                 continue;
             }
             if let Some(request) = ep.recv.dequeue() {
-                #[cfg(test)]
-                println!("service got request: {:?}", &request);
+                #[cfg(test)] println!("service got request: {:?}", &request);
+
                 resources.currently_serving = &ep.client_id;
                 let reply_result = resources.reply_to(request);
-                #[cfg(test)]
-                println!("service made reply: {:?}", &reply_result);
+                #[cfg(test)] println!("service made reply: {:?}", &reply_result);
+
                 ep.send.enqueue(reply_result).ok();
+
             }
         }
     }
