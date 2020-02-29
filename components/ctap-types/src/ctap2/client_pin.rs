@@ -20,7 +20,7 @@ pub enum PinV1Subcommand {
 
 #[derive(Clone,Debug,Eq,PartialEq,SerializeIndexed,DeserializeIndexed)]
 #[serde_indexed(offset = 1)]
-pub struct ClientPinParameters {
+pub struct Parameters {
     // 0x01
     // PIN protocol version chosen by the client.
     // For this version of the spec, this SHALL be the number 1.
@@ -57,7 +57,7 @@ pub struct ClientPinParameters {
 
 #[derive(Clone,Debug,Eq,PartialEq,SerializeIndexed,DeserializeIndexed)]
 #[serde_indexed(offset = 1)]
-pub struct ClientPinResponse {
+pub struct Response {
     // 0x01, like ClientPinParameters::key_agreement
     #[serde(skip_serializing_if = "Option::is_none")]
     pub key_agreement: Option<P256PublicKey>,

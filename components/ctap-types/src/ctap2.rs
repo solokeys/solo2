@@ -1,39 +1,13 @@
 use serde::{Deserialize, Serialize};
-use serde_indexed::{DeserializeIndexed, SerializeIndexed};
 
-use crate::{Bytes, consts, String, Vec};
+use crate::{Bytes, consts, Vec};
 use crate::sizes::*;
-pub use super::webauthn::*;
 
 pub mod client_pin;
 pub mod credential_management;
-
-#[derive(Copy,Clone,Debug,Eq,PartialEq,Serialize,Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CtapOptions {
-    pub rk: bool,
-    pub up: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub uv: Option<bool>,
-    pub plat: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub client_pin: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cred_protect: Option<bool>,
-}
-
-impl Default for CtapOptions {
-    fn default() -> Self {
-        Self {
-            rk: false,
-            up: true,
-            uv: None,
-            plat: false,
-            client_pin: None,
-            cred_protect: None,
-        }
-    }
-}
+pub mod get_assertion;
+pub mod get_info;
+pub mod make_credential;
 
 // TODO: this is a bit weird to model...
 // Need to be able to "skip unknown keys" in deserialization
@@ -50,43 +24,22 @@ pub struct AuthenticatorOptions {
     pub uv: Option<bool>,
 }
 
-#[derive(Clone,Debug,Eq,PartialEq,SerializeIndexed,DeserializeIndexed)]
-// #[serde(rename_all = "camelCase")]
-#[serde_indexed(offset = 1)]
-pub struct GetAssertionParameters {
-    pub rp_id: String<consts::U64>,
-    pub client_data_hash: Bytes<consts::U32>,
-    pub allow_list: Vec<PublicKeyCredentialDescriptor, consts::U8>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub extensions: Option<AuthenticatorExtensions>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub options: Option<AuthenticatorOptions>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub pin_auth: Option<Bytes<consts::U16>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub pin_protocol: Option<u32>,
-}
-
-#[derive(Clone,Debug,Eq,PartialEq,SerializeIndexed,DeserializeIndexed)]
-// #[serde(rename_all = "camelCase")]
-#[serde_indexed(offset = 1)]
-pub struct MakeCredentialParameters {
-    pub client_data_hash: Bytes<consts::U32>,
-    pub rp: PublicKeyCredentialRpEntity,
-    pub user: PublicKeyCredentialUserEntity,
-    // e.g. webauthn.io sends 10
-    pub pub_key_cred_params: Vec<PublicKeyCredentialParameters, consts::U12>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub exclude_list: Option<Vec<PublicKeyCredentialDescriptor, consts::U16>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub extensions: Option<AuthenticatorExtensions>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub options: Option<AuthenticatorOptions>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub pin_auth: Option<Bytes<consts::U16>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub pin_protocol: Option<u32>,
-}
+// #[derive(Clone,Debug,Eq,PartialEq,SerializeIndexed,DeserializeIndexed)]
+// // #[serde(rename_all = "camelCase")]
+// #[serde_indexed(offset = 1)]
+// pub struct GetAssertionParameters {
+//     pub rp_id: String<consts::U64>,
+//     pub client_data_hash: Bytes<consts::U32>,
+//     pub allow_list: Vec<PublicKeyCredentialDescriptor, consts::U8>,
+//     #[serde(skip_serializing_if = "Option::is_none")]
+//     pub extensions: Option<AuthenticatorExtensions>,
+//     #[serde(skip_serializing_if = "Option::is_none")]
+//     pub options: Option<AuthenticatorOptions>,
+//     #[serde(skip_serializing_if = "Option::is_none")]
+//     pub pin_auth: Option<Bytes<consts::U16>>,
+//     #[serde(skip_serializing_if = "Option::is_none")]
+//     pub pin_protocol: Option<u32>,
+// }
 
 //// This is some pretty weird stuff ^^
 //// Example serialization:
@@ -174,123 +127,6 @@ impl AuthenticatorData {
         }
 
         Bytes::from(bytes)
-    }
-}
-
-// NB: attn object definition / order at end of
-// https://fidoalliance.org/specs/fido-v2.0-ps-20190130/fido-client-to-authenticator-protocol-v2.0-ps-20190130.html#authenticatorMakeCredential
-// does not coincide with what python-fido2 expects in AttestationObject.__init__ *at all* :'-)
-#[derive(Clone,Debug,Eq,PartialEq,SerializeIndexed,DeserializeIndexed)]
-#[serde_indexed(offset = 1)]
-pub struct AssertionResponse {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub credential: Option<PublicKeyCredentialDescriptor>,
-    pub auth_data: Bytes<AUTHENTICATOR_DATA_LENGTH>,
-    pub signature: Bytes<ASN1_SIGNATURE_LENGTH>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub user: Option<PublicKeyCredentialUserEntity>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub number_of_credentials: Option<u32>,
-}
-
-#[derive(Clone,Debug,Eq,PartialEq,Serialize)]
-pub struct NoneAttestationStatement {}
-
-#[derive(Clone,Debug,Eq,PartialEq,Serialize)]
-pub struct PackedAttestationStatement {
-    pub alg: i32,
-    pub sig: Bytes<ASN1_SIGNATURE_LENGTH>,
-    pub x5c: Vec<Bytes<consts::U1024>, consts::U1>,
-}
-
-#[derive(Clone,Debug,Eq,PartialEq,Serialize)]
-#[serde(untagged)]
-pub enum AttestationStatement {
-    None(NoneAttestationStatement),
-    Packed(PackedAttestationStatement),
-}
-
-#[derive(Clone,Debug,Eq,PartialEq,SerializeIndexed)]
-#[serde_indexed(offset = 1)]
-pub struct AttestationObject {
-    pub fmt: String<consts::U32>,
-    pub auth_data: Bytes<AUTHENTICATOR_DATA_LENGTH>,
-    // pub att_stmt: Bytes<consts::U64>,
-    pub att_stmt: AttestationStatement,
-}
-
-pub type AssertionResponses = Vec<AssertionResponse, consts::U8>;
-
-#[derive(Clone,Debug,Eq,PartialEq,SerializeIndexed,DeserializeIndexed)]
-#[serde_indexed(offset = 1)]
-pub struct AuthenticatorInfo {
-
-    // 0x01
-    pub versions: Vec<String<consts::U12>, consts::U3>,
-
-    // 0x02
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub extensions: Option<Vec<String<consts::U11>, consts::U4>>,
-
-    // 0x03
-    // #[serde(with = "serde_bytes")]
-    // #[serde(serialize_with = "serde_bytes::serialize", deserialize_with = "serde_bytes::deserialize")]
-    // #[serde(serialize_with = "serde_bytes::serialize")]
-    // pub(crate) aaguid: Vec<u8, consts::U16>,
-    pub aaguid: Bytes<consts::U16>,
-
-    // 0x04
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub options: Option<CtapOptions>,
-
-    // 0x05
-    // TODO: this is actually the constant MESSAGE_SIZE
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_msg_size: Option<usize>,
-
-    // 0x06
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub pin_protocols: Option<Vec<u8, consts::U1>>,
-
-    // 0x07
-    // only in FIDO_2_1_PRE, see https://git.io/JeNxG
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_creds_in_list: Option<usize>,
-
-    // 0x08
-    // only in FIDO_2_1_PRE, see https://git.io/JeNxG
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_cred_id_length: Option<usize>,
-
-    // 0x09
-    // only in FIDO_2_1_PRE, see https://git.io/JeNxG
-    // can be: usb, nfc, ble, internal
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub transports: Option<Vec<Bytes<consts::U8>, consts::U4>>,
-
-    // #[serde(skip_serializing_if = "Option::is_none")]
-    // pub(crate) algorithms: Option<&'l[u8]>,
-}
-
-impl Default for AuthenticatorInfo {
-    fn default() -> Self {
-        let mut zero_aaguid = Vec::<u8, consts::U16>::new();
-        zero_aaguid.resize_default(16).unwrap();
-        let aaguid = Bytes::<consts::U16>::from(zero_aaguid);
-
-        Self {
-            versions: Vec::new(),
-            extensions: None,
-            aaguid: aaguid,
-            // options: None,
-            options: Some(CtapOptions::default()),
-            max_msg_size: None, //Some(MESSAGE_SIZE),
-            pin_protocols: None,
-            max_creds_in_list: None,
-            max_cred_id_length: None,
-            transports: None,
-            // algorithms: None,
-        }
     }
 }
 

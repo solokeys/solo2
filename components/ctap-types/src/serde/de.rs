@@ -802,7 +802,7 @@ mod tests {
 
     #[test]
     fn de_struct() {
-        use crate::ctap2::CtapOptions;
+        use crate::ctap2::get_info::CtapOptions;
         // rk: bool,
         // up: bool,
         // #[serde(skip_serializing_if = "Option::is_none")]

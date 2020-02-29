@@ -14,7 +14,7 @@ use crate::{
 
 #[derive(Clone,Debug,Eq,PartialEq,Serialize_repr,Deserialize_repr)]
 #[repr(u8)]
-pub enum CredentialManagementSubcommand  {
+pub enum Subcommand  {
     GetCredsMetadata = 0x01, // 1, 2
     EnumerateRpsBegin = 0x02, // 3, 4, 5
     EnumerateRpsGetNextRp = 0x03, //  3, 4
@@ -26,7 +26,7 @@ pub enum CredentialManagementSubcommand  {
 
 #[derive(Clone,Debug,Eq,PartialEq,SerializeIndexed,DeserializeIndexed)]
 #[serde_indexed(offset = 1)]
-pub struct CredentialManagementSubcommandParameters {
+pub struct SubcommandParameters {
     // 0x01
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rp_id_hash: Option<Bytes<consts::U32>>,
@@ -37,12 +37,12 @@ pub struct CredentialManagementSubcommandParameters {
 
 #[derive(Clone,Debug,Eq,PartialEq,SerializeIndexed,DeserializeIndexed)]
 #[serde_indexed(offset = 1)]
-pub struct CredentialManagementParameters {
+pub struct Parameters {
     // 0x01
     pub sub_command: PinV1Subcommand,
     // 0x02
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub sub_command_params: Option<CredentialManagementSubcommandParameters>,
+    pub sub_command_params: Option<SubcommandParameters>,
     // 0x03
     pub pin_protocol: u8,
     // 0x04
@@ -51,7 +51,7 @@ pub struct CredentialManagementParameters {
 
 #[derive(Clone,Debug,Eq,PartialEq,SerializeIndexed,DeserializeIndexed)]
 #[serde_indexed(offset = 1)]
-pub struct CredentialManagementResponse {
+pub struct Response {
 
     // Metadata
 
