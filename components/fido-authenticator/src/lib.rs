@@ -65,14 +65,29 @@ pub enum Error {
 }
 
 macro_rules! block {
-    ($future_result:expr) => {
+    ($future_result:expr) => {{
+        // evaluate the expression
+        let mut future_result = $future_result;
         loop {
-            match $future_result.poll() {
+            match future_result.poll() {
                 Poll::Ready(result) => { break result; },
                 Poll::Pending => {},
             }
         }
-    }
+    }}
+}
+
+macro_rules! syscall {
+    ($pre_future_result:expr) => {{
+        // evaluate the expression
+        let mut future_result = $pre_future_result.expect("no client error");
+        loop {
+            match future_result.poll() {
+                Poll::Ready(result) => { break result.expect("no errors"); },
+                Poll::Pending => {},
+            }
+        }
+    }}
 }
 
 impl<'a, S: CryptoSyscall> Authenticator<'a, S> {
@@ -232,15 +247,11 @@ impl<'a, S: CryptoSyscall> Authenticator<'a, S> {
                 false => StorageLocation::Volatile,
             };
 
-            private_key = block!(self.crypto
-                .generate_p256_private_key(location.clone()).expect("no client error"))
-                // huh?!                   ^^^^^^^^ value moved here, in previous iteration of loop
-                .expect("no errors").key;
+            private_key = syscall!(self.crypto.generate_p256_private_key(location)).key;
             hprintln!("priv {:?}", &private_key).ok();
 
-            public_key = block!(self.crypto
-                .derive_p256_public_key(&private_key, StorageLocation::Volatile).expect("no client error"))
-                .expect("no errors").key;
+            public_key = syscall!(self.crypto.derive_p256_public_key(&private_key, StorageLocation::Volatile))
+                .key;
             hprintln!("pub {:?}", &public_key).ok();
         }
 
