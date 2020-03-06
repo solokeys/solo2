@@ -16,3 +16,8 @@ pub type ASN1_SIGNATURE_LENGTH = consts::U72;
 // #[allow(non_camel_case_types)]
 // pub type COSE_KEY_LENGTH = consts::U256;
 // pub const COSE_KEY_LENGTH_BYTES: usize = 256;
+
+pub const PACKET_SIZE: usize = 64;
+
+// 7609 bytes
+pub const MESSAGE_SIZE: usize = PACKET_SIZE - 7 + 128 * (PACKET_SIZE - 5);

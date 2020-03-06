@@ -7,9 +7,9 @@ edition = "2018"
 [lib]
 name = "app"
 
-[[bin]]
-name = "rt"
-path = "src/app_rt.rs"
+# [[bin]]
+# name = "rt"
+# path = "src/app_rt.rs"
 
 [[bin]]
 name = "rtfm"
@@ -19,9 +19,10 @@ path = "src/app_rtfm.rs"
 cortex-m-funnel = { version = "0.1.0-alpha.1", features = ["release_max_level_info"] }
 cortex-m-rtfm = "0.5.1"
 cortex-m-semihosting = "0.3.5"
+heapless = "0.5.3"
 ufmt = "0.1.0"
 usb-device = "0.2.3"
-usbd-ctaphid = { git = "https://github.com/nickray/usbd-ctaphid", branch = "main", features = ["insecure-ram-authenticator", "logging"] }
+# usbd-ctaphid = { git = "https://github.com/nickray/usbd-ctaphid", branch = "main", features = ["logging"] }
 usbd-serial = "0.1.0"
 
 # board
@@ -29,7 +30,10 @@ lpcxpresso55 = { path = "../boards/lpcxpresso55", optional = true }
 prototype-bee = { path = "../boards/prototype-bee", optional = true }
 
 # components
+crypto-service = { path = "../components/crypto-service" }
+ctap-types = { path = "../components/ctap-types" }
 fido-authenticator = { path = "../components/fido-authenticator" }
+usbd-ctaphid = { path = "../components/usbd-ctaphid" }
 
 # panic
 panic-halt = "0.2.0"
@@ -47,12 +51,5 @@ board-prototype = ["prototype-bee"]
 
 [patch."https://github.com/nickray/lpc55-hal"]
 lpc55-hal = { path = "../../lpc55-hal" }
-# [patch."https://github.com/nickray/usbd-ctaphid"]
-# usbd-ctaphid = { path = "../../usbd-ctaphid" }
-# [patch."https://github.com/ycrypto/heapless-bytes"]
-# heapless-bytes = { path = "../../heapless-bytes" }
-[patch.crates-io]
-rustc-hash = { git = "https://github.com/nickray/rustc-hash", branch = "nickray-remove-byteorder" }
 [patch."https://github.com/nickray/littlefs2"]
 littlefs2 = { path = "../../littlefs2" }
-

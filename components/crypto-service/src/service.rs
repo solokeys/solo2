@@ -136,9 +136,9 @@ impl<'s, I: LfsStorage, E: LfsStorage, V: LfsStorage> TriStorage<'s, I, E, V> {
     }
 
     pub fn load_key(&mut self, path: &[u8], kind: KeyKind, key_bytes: &mut [u8]) -> Result<StorageLocation, Error> {
-        #[cfg(test)]
-        // actually safe, as path is ASCII by construction
-        println!("loading from file {:?}", unsafe { core::str::from_utf8_unchecked(&path[..]) });
+        // #[cfg(test)]
+        // // actually safe, as path is ASCII by construction
+        // println!("loading from file {:?}", unsafe { core::str::from_utf8_unchecked(&path[..]) });
 
         let mut buf = [0u8; 128];
 
@@ -183,8 +183,8 @@ impl<'s, I: LfsStorage, E: LfsStorage, V: LfsStorage> TriStorage<'s, I, E, V> {
     //
     pub fn store_key(&mut self, persistence: StorageLocation, path: &[u8], kind: KeyKind, key_bytes: &[u8]) -> Result<(), Error> {
         // actually safe, as path is ASCII by construction
-        #[cfg(test)]
-        println!("storing in file {:?}", unsafe { core::str::from_utf8_unchecked(&path[..]) });
+        // #[cfg(test)]
+        // println!("storing in file {:?}", unsafe { core::str::from_utf8_unchecked(&path[..]) });
 
         let serialized_key = SerializedKey::try_from((kind, key_bytes))?;
         let mut buf = [0u8; 128];
@@ -236,6 +236,9 @@ where
     resources: ServiceResources<'a, 's, R, I, E, V>,
 }
 
+// need to be able to send crypto service to an interrupt handler
+unsafe impl<R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> Send for Service<'_, '_, R, I, E, V> {}
+
 impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceResources<'a, 's, R, I, E, V> {
 
     pub fn try_new(
@@ -265,8 +268,8 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
         // Is there a nicer way to do this?
         match request {
             Request::DummyRequest => {
-                #[cfg(test)]
-                println!("got a dummy request!");
+                // #[cfg(test)]
+                // println!("got a dummy request!");
                 Ok(Reply::DummyReply)
             },
 
@@ -341,8 +344,8 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
             },
 
             _ => {
-                #[cfg(test)]
-                println!("todo: {:?} request!", &request);
+                // #[cfg(test)]
+                // println!("todo: {:?} request!", &request);
                 Err(Error::RequestNotAvailable)
             },
         }
@@ -378,8 +381,8 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
         self.rng.read(&mut unique_id)
             .map_err(|_| Error::EntropyMalfunction)?;
 
-        #[cfg(all(test, feature = "verbose-tests"))]
-        println!("unique id {:?}", &unique_id);
+        // #[cfg(all(test, feature = "verbose-tests"))]
+        // println!("unique id {:?}", &unique_id);
         Ok(UniqueId(unique_id))
     }
 
@@ -414,11 +417,11 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> Service<'a
                 continue;
             }
             if let Some(request) = ep.recv.dequeue() {
-                #[cfg(test)] println!("service got request: {:?}", &request);
+                // #[cfg(test)] println!("service got request: {:?}", &request);
 
                 resources.currently_serving = &ep.client_id;
                 let reply_result = resources.reply_to(request);
-                #[cfg(test)] println!("service made reply: {:?}", &reply_result);
+                // #[cfg(test)] println!("service made reply: {:?}", &reply_result);
 
                 ep.send.enqueue(reply_result).ok();
 

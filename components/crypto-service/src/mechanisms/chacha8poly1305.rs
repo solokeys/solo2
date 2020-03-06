@@ -50,6 +50,7 @@ fn increment_nonce(nonce: &mut [u8]) -> Result<(), Error> {
     }
 }
 
+#[cfg(feature = "chacha8-poly1305")]
 impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
 Decrypt<'a, 's, R, I, E, V> for super::Chacha8Poly1305
 {
@@ -80,6 +81,7 @@ Decrypt<'a, 's, R, I, E, V> for super::Chacha8Poly1305
     }
 }
 
+#[cfg(feature = "chacha8-poly1305")]
 impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
 Encrypt<'a, 's, R, I, E, V> for super::Chacha8Poly1305
 {
@@ -281,3 +283,6 @@ Decrypt<'a, 's, R, I, E, V> for super::Chacha8Poly1305 {}
 #[cfg(not(feature = "chacha8-poly1305"))]
 impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
 Encrypt<'a, 's, R, I, E, V> for super::Chacha8Poly1305 {}
+#[cfg(not(feature = "chacha8-poly1305"))]
+impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
+GenerateKey<'a, 's, R, I, E, V> for super::Chacha8Poly1305 {}

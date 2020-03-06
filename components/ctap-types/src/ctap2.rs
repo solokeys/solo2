@@ -12,7 +12,10 @@ pub mod make_credential;
 // TODO: this is a bit weird to model...
 // Need to be able to "skip unknown keys" in deserialization
 #[derive(Clone,Debug,Eq,PartialEq,Serialize,Deserialize)]
-pub struct AuthenticatorExtensions {}
+pub struct AuthenticatorExtensions {
+    // #[serde(skip_serializing_if = "Option::is_none")]
+    // pub cred_protect:
+}
 
 #[derive(Clone,Debug,Eq,PartialEq,Serialize,Deserialize)]
 pub struct AuthenticatorOptions {

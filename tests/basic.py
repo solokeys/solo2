@@ -4,6 +4,9 @@ import fido2.hid
 
 dev = fido2.ctap2.CTAP2(next(fido2.hid.CtapHidDevice.list_devices()))
 
+print(dev.get_info())
+# print(dev.reset())
+
 for alg in (-7, -8):
     att = dev.make_credential(
         b"1234567890ABCDEF1234567890ABCDEF",

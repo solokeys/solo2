@@ -7,9 +7,9 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cosey = { git = "https://github.com/ycrypto/cosey", branch = "main" }
+cosey = "0.1.0-alpha.0" # { git = "https://github.com/ycrypto/cosey", branch = "main" }
 heapless = { version = "0.5.1", default-features = false, features = ["serde"] }
-heapless-bytes = { git = "https://github.com/ycrypto/heapless-bytes", branch = "main" } #, features = ["cbor"] }
+heapless-bytes = "0.1.0" # { git = "https://github.com/ycrypto/heapless-bytes", branch = "main" } #, features = ["cbor"] }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 serde_cbor = { version = "0.11.0", default-features = false }
 serde-indexed = { git = "https://github.com/ycrypto/serde-indexed", branch = "main" }

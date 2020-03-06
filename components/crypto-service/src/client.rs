@@ -63,16 +63,16 @@ impl<'a, 'c> RawFutureResult<'a, 'c> {
     {
         match self.c.ep.recv.dequeue() {
             Some(reply) => {
-                #[cfg(all(test, feature = "verbose-tests"))]
-                println!("got a reply: {:?}", &reply);
+                // #[cfg(all(test, feature = "verbose-tests"))]
+                // println!("got a reply: {:?}", &reply);
                 match reply {
                     Ok(reply) => {
                         if Some(u8::from(&reply)) == self.c.pending {
                             self.c.pending = None;
                             core::task::Poll::Ready(Ok(reply))
                         } else  {
-                            #[cfg(all(test, feature = "verbose-tests"))]
-                            println!("got: {:?}, expected: {:?}", Some(u8::from(&reply)), self.c.pending);
+                            // #[cfg(all(test, feature = "verbose-tests"))]
+                            // println!("got: {:?}, expected: {:?}", Some(u8::from(&reply)), self.c.pending);
                             core::task::Poll::Ready(Err(Error::InternalError))
                         }
                     }
@@ -144,6 +144,12 @@ where
 pub struct Client<'a, Syscall: crate::pipe::Syscall> {
     raw: RawClient<'a>,
     syscall: Syscall,
+}
+
+impl<'a, Syscall: crate::pipe::Syscall> From<(RawClient<'a>, Syscall)> for Client<'a, Syscall> {
+    fn from(input: (RawClient<'a>, Syscall)) -> Self {
+        Self { raw: input.0, syscall: input.1 }
+    }
 }
 
 impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {

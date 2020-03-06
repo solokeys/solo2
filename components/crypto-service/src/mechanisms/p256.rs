@@ -101,12 +101,12 @@ Sign<'a, 's, R, I, E, V> for super::P256
         resources.load_key(&path, KeyKind::P256, &mut seed)?;
 
         let keypair = nisty::Keypair::generate_patiently(&seed);
-        #[cfg(all(test, feature = "verbose-tests"))]
-        println!("p256 keypair with public key = {:?}", &keypair.public);
+        // #[cfg(all(test, feature = "verbose-tests"))]
+        // println!("p256 keypair with public key = {:?}", &keypair.public);
 
         let native_signature = keypair.sign(&request.message);
-        #[cfg(all(test, feature = "verbose-tests"))]
-        println!("p256 sig = {:?}", &native_signature);
+        // #[cfg(all(test, feature = "verbose-tests"))]
+        // println!("p256 sig = {:?}", &native_signature);
         let our_signature = Signature::try_from_slice(&native_signature.to_bytes()).unwrap();
 
         // return signature
@@ -124,17 +124,17 @@ Verify<'a, 's, R, I, E, V> for super::P256
         let key_id = request.key.object_id;
 
         let mut serialized_key = [0u8; 64];
-        #[cfg(all(test, feature = "verbose-tests"))]
-        println!("attempting path from {:?}", &key_id);
+        // #[cfg(all(test, feature = "verbose-tests"))]
+        // println!("attempting path from {:?}", &key_id);
         let path = resources.prepare_path_for_key(KeyType::Public, &key_id)?;
-        #[cfg(all(test, feature = "verbose-tests"))]
-        println!("attempting load from {:?}", &path);
+        // #[cfg(all(test, feature = "verbose-tests"))]
+        // println!("attempting load from {:?}", &path);
         resources.load_key(&path, KeyKind::P256, &mut serialized_key)?;
 
         // println!("p256 serialized public key = {:?}", &serialized_key[..]);
         let public_key = nisty::PublicKey::try_from(&serialized_key).map_err(|_| Error::InternalError)?;
-        #[cfg(all(test, feature = "verbose-tests"))]
-        println!("p256 public key = {:?}", &public_key);
+        // #[cfg(all(test, feature = "verbose-tests"))]
+        // println!("p256 public key = {:?}", &public_key);
 
         if request.signature.len() != nisty::SIGNATURE_LENGTH {
             return Err(Error::WrongSignatureLength);

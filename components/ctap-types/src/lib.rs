@@ -1,4 +1,5 @@
-#![cfg_attr(not(test), no_std)]
+// #![cfg_attr(not(test), no_std)]
+#![no_std]
 
 //! `ctap-types` maps the various types involved in the FIDO CTAP protocol
 //! to Rust structures consisting of `heapless` data types.
@@ -15,14 +16,17 @@
 //! so the authenticator logic is decoupled from these details.
 
 pub use heapless::{consts, ArrayLength, String, Vec};
+pub use heapless::spsc::{Consumer, Producer, Queue};
 pub use heapless_bytes::Bytes;
 
 pub mod authenticator;
 pub mod cose;
 pub mod ctap1;
 pub mod ctap2;
+pub mod ctaphid;
+pub mod rpc;
 pub mod serde;
-pub(crate) mod sizes;
+pub mod sizes;
 pub mod webauthn;
 
 #[cfg(test)]

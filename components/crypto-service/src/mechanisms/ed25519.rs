@@ -67,8 +67,8 @@ Sign<'a, 's, R, I, E, V> for super::Ed25519
         resources.load_key(&path, KeyKind::Ed25519, &mut seed)?;
 
         let keypair = salty::Keypair::from(&seed);
-        #[cfg(all(test, feature = "verbose-tests"))]
-        println!("ed25519 keypair with public key = {:?}", &keypair.public);
+        // #[cfg(all(test, feature = "verbose-tests"))]
+        // println!("ed25519 keypair with public key = {:?}", &keypair.public);
 
         let native_signature = keypair.sign(&request.message);
         let our_signature = Signature::try_from_slice(&native_signature.to_bytes()).unwrap();
@@ -92,8 +92,8 @@ Verify<'a, 's, R, I, E, V> for super::Ed25519
         resources.load_key(&path, KeyKind::Ed25519, &mut serialized_key)?;
 
         let public_key = salty::PublicKey::try_from(&serialized_key).map_err(|_| Error::InternalError)?;
-        #[cfg(all(test, feature = "verbose-tests"))]
-        println!("ed25519 public key = {:?}", &public_key);
+        // #[cfg(all(test, feature = "verbose-tests"))]
+        // println!("ed25519 public key = {:?}", &public_key);
 
         if request.signature.len() != salty::constants::SIGNATURE_SERIALIZED_LENGTH {
             return Err(Error::WrongSignatureLength);

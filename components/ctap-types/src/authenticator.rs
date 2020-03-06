@@ -2,43 +2,72 @@
 //! Anytime there is some consistency in one place, another choice is made
 //! in another place. Sorry!
 
+// pub trait Authenticator {
+//     fn process(&mut self, request: &mut Request) -> Result<Response, Error>;
+// }
+
+#[derive(Debug)]
 pub enum Request {
     Ctap1(ctap1::Request),
     Ctap2(ctap2::Request),
 }
 
+#[derive(Debug)]
 pub enum Response {
     Ctap1(ctap1::Response),
     Ctap2(ctap2::Response),
 }
 
 pub mod ctap1 {
-    pub enum Request {}
-    pub enum Response {}
+    pub use crate::ctap1;
+
+    #[derive(Debug)]
+    pub enum Request {
+        Register(ctap1::Register),
+        Authenticate(ctap1::Register),
+        Version,
+    }
+
+    #[derive(Debug)]
+    pub enum Response {
+    }
 
 }
 pub mod ctap2 {
-    use crate::ctap2::*;
+    pub use crate::ctap2::*;
 
+    #[derive(Debug)]
     pub enum Request {
-        GetInfo,
+        // 0x1
         MakeCredential(make_credential::Parameters),
+        // 0x2
         GetAssertion(get_assertion::Parameters),
+        // 0x8
         GetNextAssertion,
+        // 0x4
+        GetInfo,
+        // 0x6
+        ClientPin(client_pin::Parameters),
+        // 0x7
         Reset,
+        // 0xA
+        CredentialManagement(credential_management::Parameters),
     }
 
+    #[derive(Debug)]
     pub enum Response {
-        GetInfo(get_info::Response),
         MakeCredential(make_credential::Response),
         GetAssertion(get_assertion::Response),
         GetNextAssertion(get_assertion::Response),
+        GetInfo(get_info::Response),
+        ClientPin(client_pin::Response),
         Reset,
+        CredentialManagement(credential_management::Response),
     }
 
 }
 
-pub type Result<T> = core::result::Result<T, Error>;
+// pub type Result<T> = core::result::Result<T, Error>;
 
 #[derive(Clone,Copy,Debug,Eq,PartialEq)]
 pub enum Error {
