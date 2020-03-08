@@ -236,6 +236,44 @@ impl<'a, 'b: 'a> serde::de::MapAccess<'b> for MapAccess<'a, 'b> {
     }
 }
 
+// impl<'de, 'a> serde::de::VariantAccess<'de> for &'a mut Deserializer<'de> {
+//     type Error = Error;
+
+//     fn unit_variant(self) -> Result<()> {
+//         Ok(())
+//     }
+
+//     fn newtype_variant_seed<V: DeserializeSeed<'de>>(self, seed: V) -> Result<V::Value> {
+//         DeserializeSeed::deserialize(seed, self)
+//     }
+
+//     fn tuple_variant<V: Visitor<'de>>(self, len: usize, visitor: V) -> Result<V::Value> {
+//         serde::de::Deserializer::deserialize_tuple(self, len, visitor)
+//     }
+
+//     fn struct_variant<V: Visitor<'de>>(
+//         self,
+//         fields: &'static [&'static str],
+//         visitor: V,
+//     ) -> Result<V::Value> {
+//         serde::de::Deserializer::deserialize_tuple(self, fields.len(), visitor)
+//     }
+// }
+
+// impl<'de, 'a> serde::de::EnumAccess<'de> for &'a mut Deserializer<'de> {
+//     type Error = Error;
+//     type Variant = Self;
+
+//     fn variant_seed<V: DeserializeSeed<'de>>(self, seed: V) -> Result<(V::Value, Self)> {
+//         let varint = self.try_take_n()?;
+//         if varint > 0xFFFF_FFFF {
+//             return Err(Error::DeserializeBadEnum);
+//         }
+//         let v = DeserializeSeed::deserialize(seed, (varint as u32).into_deserializer())?;
+//         Ok((v, self))
+//     }
+// }
+
 impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     type Error = Error;
 
@@ -392,7 +430,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: Visitor<'de>,
     {
         // not sure, can this be implemented?
-        todo!();
+        todo!("implement `deserialize_char`");
         // let mut buf = [0u8; 4];
         // let bytes = self.try_take_n(4)?;
         // buf.copy_from_slice(bytes);
@@ -454,7 +492,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: Visitor<'de>,
     {
         // Not sure if this is simple value null (22) or undefined (23) or what
-        todo!();
+        todo!("implement `deserialize_unit`");
         // visitor.visit_unit()
     }
 
@@ -464,7 +502,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: Visitor<'de>,
     {
         // Not sure if this is simple value null (22) or undefined (23) or what
-        todo!();
+        todo!("implement `deserialize_unit_struct`");
         // self.deserialize_unit(visitor)
     }
 
@@ -473,7 +511,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: Visitor<'de>,
     {
         // can we follow postcard's approach here?
-        todo!();
+        todo!("implement `deserialize_newtype_struct`");
         // visitor.visit_newtype_struct(self)
     }
 
@@ -541,14 +579,25 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         self,
         _name: &'static str,
         _variants: &'static [&'static str],
-        _visitor: V,
+        visitor: V,
     ) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        todo!();
-        // visitor.visit_enum(self)
+        todo!("implement `deserialize_enum`");
     }
+
+    // fn deserialize_enum<V>(
+    //     self,
+    //     _name: &'static str,
+    //     _variants: &'static [&'static str],
+    //     visitor: V,
+    // ) -> Result<V::Value>
+    // where
+    //     V: Visitor<'de>,
+    // {
+    //     visitor.visit_enum(self)
+    // }
 
     fn deserialize_identifier<V>(self, visitor: V) -> Result<V::Value>
     where

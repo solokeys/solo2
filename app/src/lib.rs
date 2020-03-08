@@ -237,7 +237,9 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     );
 
     let authnr = fido_authenticator::Authenticator::new(
-        crypto_client, authenticator_pipe);
+        crypto_client, authenticator_pipe,
+        fido_authenticator::SilentAuthenticator {},
+        );
 
     // our USB classes
     let ctaphid = CtapHid::new(usb_bus, transport_pipe);

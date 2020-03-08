@@ -145,8 +145,9 @@ pub enum KeyKind {
     Entropy32 = 2, // output of TRNG
     P256 = 3,
     SharedSecret32 = 4,  // or 256 (in bits)?
-    SymmetricKey32 = 5, // or directly: SharedSecret32 —DeriveKey(HmacSha256)-> SymmetricKey32 —Encrypt(Aes256)-> ...
-    Symmetric32Nonce12 = 6,
+    SymmetricKey16 = 5,
+    SymmetricKey32 = 6, // or directly: SharedSecret32 —DeriveKey(HmacSha256)-> SymmetricKey32 —Encrypt(Aes256)-> ...
+    Symmetric32Nonce12 = 7,
     // ThirtytwoBytes,
 }
 
@@ -179,7 +180,7 @@ pub enum KeyType {
 ///
 /// So e.g. users can't get at keys they don't own
 ///
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ObjectHandle{
     pub object_id: UniqueId,
 }
@@ -295,8 +296,9 @@ pub type Message = Bytes<MAX_MESSAGE_LENGTH>;
 
 pub type Signature = Bytes<MAX_SIGNATURE_LENGTH>;
 
-#[derive(Copy, Clone, Eq, PartialEq, Deserialize, Serialize)]
-pub struct UniqueId(pub(crate) [u8; 16]);
+#[derive(Clone, Eq, PartialEq, Deserialize, Serialize)]
+// pub struct UniqueId(pub(crate) [u8; 16]);
+pub struct UniqueId(pub(crate) Bytes<consts::U16>);
 
 impl UniqueId {
     pub fn hex(&self) -> [u8; 32] {

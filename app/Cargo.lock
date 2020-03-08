@@ -388,7 +388,7 @@ version = "0.1.0"
 dependencies = [
  "cosey 0.1.0-alpha.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "heapless 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "heapless-bytes 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "heapless-bytes 0.1.0",
  "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde-indexed 0.0.2 (git+https://github.com/ycrypto/serde-indexed?branch=main)",
  "serde_cbor 0.11.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -454,6 +454,8 @@ dependencies = [
  "crypto-service 0.1.0",
  "ctap-types 0.1.0",
  "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde-indexed 0.0.2 (git+https://github.com/ycrypto/serde-indexed?branch=main)",
+ "serde_cbor 0.11.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -498,6 +500,14 @@ dependencies = [
  "as-slice 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "generic-array 0.13.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "hash32 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "heapless-bytes"
+version = "0.1.0"
+dependencies = [
+ "heapless 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 

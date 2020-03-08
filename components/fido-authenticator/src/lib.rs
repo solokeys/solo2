@@ -1,15 +1,15 @@
- // #![cfg_attr(not(test), no_std)]
-#![no_std]
-
-use cortex_m_semihosting::hprintln;
+ #![cfg_attr(not(test), no_std)]
 
 use core::task::Poll;
 use core::convert::TryInto;
+
+use cortex_m_semihosting::hprintln;
 
 use crypto_service::{
     Client as CryptoClient,
     pipe::Syscall as CryptoSyscall,
     types::{
+        Mechanism,
         ObjectHandle,
         StorageLocation,
     },
@@ -17,17 +17,34 @@ use crypto_service::{
 use ctap_types::{
     Bytes, consts, String, Vec,
     rpc::AuthenticatorEndpoint,
-    authenticator::{ctap1, ctap2, Error as CtapError},
+    authenticator::{ctap1, ctap2, Error, Request, Response},
 };
 
-// use usbd_ctaphid::{
-//     authenticator::{
-//         self,
-//         Error,
-//         Result,
-//     },
-//     types::*,
-// };
+pub mod credential;
+pub use credential::*;
+
+type Result<T> = core::result::Result<T, Error>;
+
+#[repr(i32)]
+enum SupportedAlgorithm {
+    P256 = -7,
+    Ed25519 = -8,
+}
+
+/// Idea is to maybe send a request over a queue,
+/// and return upon button press.
+/// TODO: Do we need a timeout?
+pub trait UserPresence {
+    fn user_present(&mut self) -> bool;
+}
+
+pub struct SilentAuthenticator {}
+
+impl UserPresence for SilentAuthenticator {
+    fn user_present(&mut self) -> bool {
+        true
+    }
+}
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct Configuration {
@@ -38,31 +55,33 @@ pub struct Configuration {
 pub struct State {
     counter: Option<ObjectHandle>,
     key_agreement_key: Option<ObjectHandle>,
+    key_encryption_key: Option<ObjectHandle>,
     key_wrapping_key: Option<ObjectHandle>,
-    client_pin_set: bool,
-    // pin_hash: Option<>,
+    pin_token: Option<ObjectHandle>,
+    retries: Option<u8>,
+    pin_hash: Option<[u8; 16]>,
 }
 
 // impl State {
 //     pub fn key_agreement_key(crypto: &mut CryptoClient
 // }
 
-pub struct Authenticator<'a, S>
+pub struct Authenticator<'a, S, UP>
 where
     S: CryptoSyscall,
+    UP: UserPresence,
 {
     config: Configuration,
     crypto: CryptoClient<'a, S>,
     rpc: AuthenticatorEndpoint<'a>,
     state: State,
-
+    up: UP,
 }
 
-#[derive(Clone, Debug)]
-pub enum Error {
-    Catchall,
-    Initialisation,
-}
+// #[derive(Clone, Debug)]
+// pub enum Error {
+//     Catchall,
+// }
 
 macro_rules! block {
     ($future_result:expr) => {{
@@ -90,35 +109,83 @@ macro_rules! syscall {
     }}
 }
 
-impl<'a, S: CryptoSyscall> Authenticator<'a, S> {
+impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
-    pub fn new(mut crypto: CryptoClient<'a, S>, rpc: AuthenticatorEndpoint<'a>) -> Self {
+    pub fn new(mut crypto: CryptoClient<'a, S>, rpc: AuthenticatorEndpoint<'a>, up: UP) -> Self {
 
         let config = Configuration {
             aaguid: Bytes::try_from_slice(b"AAGUID0123456789").unwrap(),
         };
         let state = State::default();
-        let authenticator = Authenticator { config, crypto, rpc, state };
+        let authenticator = Authenticator { config, crypto, rpc, state, up };
 
         authenticator
     }
 
-    pub fn key_agreement_key(&mut self) -> Result<ObjectHandle, Error> {
-        match self.state.key_agreement_key {
+    pub fn key_agreement_key(&mut self) -> Result<ObjectHandle> {
+        match self.state.key_agreement_key.clone() {
             Some(key) => Ok(key),
+            None => self.rotate_key_agreement_key(),
+        }
+    }
+
+    pub fn rotate_key_encryption_key(&mut self) -> Result<ObjectHandle> {
+        let key = block!(self.crypto
+            .generate_chacha8poly1305_key(StorageLocation::Volatile).map_err(|_| Error::Other)?)
+            .map_err(|_| Error::Other)?.key;
+        self.state.key_encryption_key = Some(key.clone());
+        Ok(key)
+    }
+
+    pub fn key_encryption_key(&mut self) -> Result<ObjectHandle> {
+        match self.state.key_encryption_key.clone() {
+            Some(key) => Ok(key),
+            None => self.rotate_key_encryption_key(),
+        }
+    }
+
+    pub fn rotate_key_agreement_key(&mut self) -> Result<ObjectHandle> {
+        let key = block!(self.crypto
+            .generate_p256_private_key(StorageLocation::Volatile).map_err(|_| Error::Other)?)
+            .map_err(|_| Error::Other)?.key;
+        self.state.key_agreement_key = Some(key.clone());
+        Ok(key)
+    }
+
+    pub fn retries(&mut self) -> Result<u8> {
+        match self.state.retries {
+            Some(retries) => Ok(retries),
             None => {
-                let key = block!(self.crypto
-                    .generate_p256_private_key(StorageLocation::Volatile).map_err(|_| Error::Catchall)?)
-                    .map_err(|_| Error::Catchall)?.key;
-                self.state.key_agreement_key = Some(key);
-                Ok(key)
+                self.state.retries = Some(8);
+                Ok(8)
             }
         }
+    }
+
+    pub fn pin_token(&mut self) -> Result<ObjectHandle> {
+        match self.state.pin_token.clone() {
+            Some(key) => Ok(key),
+            None => self.rotate_pin_token(),
+        }
+    }
+
+    pub fn rotate_pin_token(&mut self) -> Result<ObjectHandle> {
+        let key = syscall!(self.crypto.generate_hmacsha256_key(StorageLocation::Volatile)).key;
+        self.state.pin_token = Some(key.clone());
+        Ok(key)
+    }
+
+    pub fn pin_is_set(&self) -> bool {
+        self.state.pin_hash.is_some()
     }
 
     // pub(crate) fn config(&mut self) -> Result<C
     //     Err(Error::Initialisation)
     // }
+
+    fn respond(&mut self, response: Result<Response>) {
+        self.rpc.send.enqueue(response).expect("internal error");
+    }
 
     pub fn poll(&mut self) {
         let kek = self.key_agreement_key().unwrap();
@@ -140,6 +207,7 @@ impl<'a, S: CryptoSyscall> Authenticator<'a, S> {
                                     Ok(Response::Ctap2(ctap2::Response::GetInfo(response))))
                                     .expect("internal error");
                             }
+                            // 0x1
                             ctap2::Request::MakeCredential(parameters) => {
                                 // hprintln!("MC: {:?}", &parameters).ok();
                                 let response = self.make_credential(&parameters);
@@ -151,6 +219,18 @@ impl<'a, S: CryptoSyscall> Authenticator<'a, S> {
                                     .expect("internal error");
                                 hprintln!("enqueued MC response").ok();
                             }
+
+                            // 0x6
+                            ctap2::Request::ClientPin(parameters) => {
+                                let response = self.client_pin(&parameters);
+                                self.rpc.send.enqueue(
+                                    match response {
+                                        Ok(response) => Ok(Response::Ctap2(ctap2::Response::ClientPin(response))),
+                                        Err(error) => Err(error)
+                                    })
+                                    .expect("internal error");
+                                hprintln!("enqueued CP response").ok();
+                            }
                             _ => {
                                 hprintln!("not implemented: {:?}", &request).ok();
                                 self.rpc.send.enqueue(Err(Error::InvalidCommand)).expect("internal error");
@@ -158,40 +238,183 @@ impl<'a, S: CryptoSyscall> Authenticator<'a, S> {
                         }
                     }
                     Request::Ctap1(request) => {
+                        hprintln!("ctap1 not implemented: {:?}", &request).ok();
+                        // self.rpc.send.enqueue(Err(Error::InvalidCommand)).expect("internal error");
+                        self.respond(Err(Error::InvalidCommand));
                     }
                 }
             }
         }
     }
 
-    fn make_credential(&mut self, parameters: &ctap2::make_credential::Parameters) -> Result<ctap2::make_credential::Response, CtapError> {
+    // fn verify_pin(&mut self, pin_auth: &Bytes<consts::U16>, client_data_hash: &Bytes<consts::U32>) -> bool {
+    fn verify_pin(&mut self, pin_auth: &[u8; 16], data: &[u8]) -> bool {
+        let key = self.pin_token().unwrap();
+        let tag = syscall!(self.crypto.sign_hmacsha256(&key, data)).signature;
+        pin_auth == &tag[..16]
+    }
 
-        // 1. excludeList present, contains credential ID on this authenticator bound to RP?
-        // --> wait for UP, error CredentialExcluded
+    fn client_pin(&mut self, parameters: &ctap2::client_pin::Parameters) -> Result<ctap2::client_pin::Response> {
+        use ctap2::client_pin::PinV1Subcommand as Subcommand;
+        hprintln!("processing CP").ok();
 
+        if parameters.pin_protocol != 1{
+            return Err(Error::InvalidParameter);
+        }
 
-        // 2. check pubKeyCredParams algorithm is valid + supported COSE identifier
+        Ok(match parameters.sub_command {
 
-        let mut supported_algorithm = false;
-        let mut eddsa = false;
-        for param in parameters.pub_key_cred_params.iter() {
-            match param.alg {
-                -7 => { supported_algorithm = true; },
-                -8 => { eddsa = true; supported_algorithm = true; },
-                _ => {},
+            Subcommand::GetRetries => {
+                hprintln!("processing CP.GR").ok();
+                ctap2::client_pin::Response {
+                    key_agreement: None,
+                    pin_token: None,
+                    retries: Some(self.retries().unwrap()),
+                }
+
+            }
+
+            Subcommand::GetKeyAgreement => {
+                let private_key = self.key_agreement_key().unwrap();
+                let public_key = syscall!(self.crypto.derive_p256_public_key(&private_key, StorageLocation::Volatile)).key;
+                hprintln!("processing CP.GKA").ok();
+
+                todo!();
+            }
+
+            Subcommand::SetPin => {
+                // check mandatory parameters
+                let platform_key_agreement_key = match parameters.key_agreement.as_ref() {
+                    Some(key) => key,
+                    None => { return Err(Error::MissingParameter); }
+                };
+                let new_pin_enc = match parameters.new_pin_enc.as_ref() {
+                    Some(pin) => pin,
+                    None => { return Err(Error::MissingParameter); }
+                };
+                let pin_auth = match parameters.pin_auth.as_ref() {
+                    Some(pin) => pin,
+                    None => { return Err(Error::MissingParameter); }
+                };
+
+                // is pin already set
+                if self.pin_is_set() {
+                    return Err(Error::PinAuthInvalid);
+                }
+
+                // generate shared secret
+                // // deserialize passed public key in crypto service
+                // let public_key = syscall!(self.crypto.create_p256_public_key(
+                //         &platform_key_agreement_key, StorageLocation::Volatile)).key;
+                // let agreement = syscall!(self.crypto.agree_p256(
+                //         &self.key_agreement_key().unwrap(), &public_key, StorageLocation::Volatile)).shared_secret;
+                // let shared_secret = syscall!(self.crypto.derive_key(
+                //         Mechanism::Sha256, agreement, StorageLocation::Volatile)).key;
+
+                // verify pinAuth (can we use self.verify_pin??)
+                // let verifies = {
+                //     let tag = syscall!(self.crypto.sign_hmacsha256(&shared_secret, new_pin_enc)).signature;
+                //     pin_auth == &tag[..16]
+                // };
+                // if !verifies {
+                //     return Err(Error::PinAuthInvalid);
+                // }
+
+                // decrypt newPin using shared secret, check minimum length of 4 bytes
+                // NB: platform pads pin with 0x0 bytes, find first...
+                return Err(Error::PinPolicyViolation);
+
+                // store LEFT(Sha256(newPin), 16) on device
+
+                todo!();
+            }
+
+            Subcommand::ChangePin => {
+                todo!();
+            }
+
+            Subcommand::GetPinToken => {
+                todo!();
+            }
+
+        })
+    }
+
+    fn make_credential(&mut self, parameters: &ctap2::make_credential::Parameters) -> Result<ctap2::make_credential::Response> {
+
+        // 1. pinAuth zero length -> wait for user touch, then
+        // return PinNotSet if not set, PinInvalid if set
+        //
+        // the idea is for multi-authnr scenario where platform
+        // wants to enforce PIN and needs to figure out which authnrs support PIN
+        if let Some(ref pin_auth) = &parameters.pin_auth {
+            if pin_auth.len() == 0 {
+                if !self.up.user_present() {
+                    return Err(Error::OperationDenied);
+                }
+                if !self.pin_is_set() {
+                    return Err(Error::PinNotSet);
+                } else {
+                    return Err(Error::PinAuthInvalid);
+                }
+
             }
         }
-        if !supported_algorithm {
-            return Err(CtapError::UnsupportedAlgorithm);
+
+        // 2. check PIN protocol is 1 if pinAuth was sent
+        if let Some(ref pin_auth) = &parameters.pin_auth {
+            if let Some(1) = parameters.pin_protocol {
+            } else {
+                return Err(Error::PinAuthInvalid);
+            }
         }
+
+        // 3. if no PIN is set (we have no other form of UV),
+        // and platform sent `uv` or `pinAuth`, return InvalidOption
+        if !self.pin_is_set() {
+            if let Some(ref options) = &parameters.options {
+                if Some(true) == options.uv {
+                    return Err(Error::InvalidOption);
+                }
+            }
+            if parameters.pin_auth.is_some() {
+                return Err(Error::InvalidOption);
+            }
+        }
+
+        // 4. TODO: move pinAuth up here
+        // Also clarify the confusion... I think we should fail if `uv` is passed?
+        // As we don't have our "own" gesture such as fingerprint or on-board PIN entry?
+
+
+        // 5. credProtect?
+
+        // 6. excludeList present, contains credential ID on this authenticator bound to RP?
+        // --> wait for UP, error CredentialExcluded
+
+        // 7. check pubKeyCredParams algorithm is valid + supported COSE identifier
+
+        let mut algorithm: Option<SupportedAlgorithm> = None;
+        for param in parameters.pub_key_cred_params.iter() {
+            match param.alg {
+                -7 => { if algorithm.is_none() { algorithm = Some(SupportedAlgorithm::P256); }}
+                -8 => { algorithm = Some(SupportedAlgorithm::Ed25519); }
+                _ => {}
+            }
+        }
+        let algorithm = match algorithm {
+            Some(algorithm) => algorithm,
+            None => { return Err(Error::UnsupportedAlgorithm); }
+        };
         // hprintln!("making credential, eddsa = {}", eddsa).ok();
 
 
-        // 3. process options; on known but unsupported error UnsupportedOption
+        // 8. process options; on known but unsupported error UnsupportedOption
 
         let mut rk_requested = false;
         let mut uv_requested = false;
         let mut up_requested = true; // can't be toggled
+
         if let Some(ref options) = &parameters.options {
             if Some(true) == options.rk {
                 rk_requested = true;
@@ -201,66 +424,107 @@ impl<'a, S: CryptoSyscall> Authenticator<'a, S> {
             }
         }
 
-        // 4. process extensions
+        // 9. process extensions
         // TODO: need to figure out how to type-ify these
 
 
-        // 5., 6., 7. pinAuth handling
+        // "old" (CTAP2, not CTAP2.1): 5., 6., 7. pinAuth handling
+        // TODO: move up
 
         let mut uv_performed = false;
         if let Some(ref pin_auth) = &parameters.pin_auth {
+            if pin_auth.len() != 16 {
+                return Err(Error::InvalidParameter);
+            }
             if let Some(1) = parameters.pin_protocol {
                 // 5. if pinAuth is present and pinProtocol = 1, verify
                 // success --> set uv = 1
                 // error --> PinAuthInvalid
                 uv_performed = self.verify_pin(
+                    // unwrap panic ruled out above
                     pin_auth.as_ref().try_into().unwrap(),
-                    &parameters.client_data_hash.as_ref().try_into().unwrap(),
+                    &parameters.client_data_hash.as_ref(),
                 );
                 if !uv_performed {
-                    return Err(CtapError::PinAuthInvalid);
+                    return Err(Error::PinAuthInvalid);
                 }
 
             } else {
                 // 7. pinAuth present + pinProtocol != 1 --> error PinAuthInvalid
-                return Err(CtapError::PinAuthInvalid);
+                return Err(Error::PinAuthInvalid);
             }
 
         } else {
             // 6. pinAuth not present + clientPin set --> error PinRequired
-            if self.state.client_pin_set {
-                return Err(CtapError::PinRequired);
+            if self.pin_is_set() {
+                return Err(Error::PinRequired);
             }
         }
 
-        // 8. get UP, if denied error OperationDenied
+        // 10. get UP, if denied error OperationDenied
+        if !self.up.user_present() {
+            return Err(Error::OperationDenied);
+        }
 
-        // 9. generated credential keypair
+        // 11. generated credential keypair
+
+        let location = match rk_requested {
+            true => StorageLocation::Internal,
+            false => StorageLocation::Volatile,
+        };
 
         let mut private_key: ObjectHandle;
         let mut public_key: ObjectHandle;
-        if eddsa {
-            todo!("eddsa MC not implemented");
-        } else {
-            let location = match rk_requested {
-                true => StorageLocation::Internal,
-                false => StorageLocation::Volatile,
-            };
-
-            private_key = syscall!(self.crypto.generate_p256_private_key(location)).key;
-            hprintln!("priv {:?}", &private_key).ok();
-
-            public_key = syscall!(self.crypto.derive_p256_public_key(&private_key, StorageLocation::Volatile))
-                .key;
-            hprintln!("pub {:?}", &public_key).ok();
+        match algorithm {
+            SupportedAlgorithm::P256 => {
+                private_key = syscall!(self.crypto.generate_p256_private_key(location)).key;
+                public_key = syscall!(self.crypto.derive_p256_public_key(&private_key, StorageLocation::Volatile)).key;
+            }
+            SupportedAlgorithm::Ed25519 => {
+                private_key = syscall!(self.crypto.generate_ed25519_private_key(location)).key;
+                public_key = syscall!(self.crypto.derive_ed25519_public_key(&private_key, StorageLocation::Volatile)).key;
+            }
         }
+        // hprintln!("priv {:?}", &private_key).ok();
+        // hprintln!("pub {:?}", &public_key).ok();
 
-        // 10. if `rk`, store or overwrite key pair, if full error KeyStoreFull
+        let key_parameter = match rk_requested {
+            true => Some(private_key.clone()),
+            false => None,
+        };
 
-        // 11. generate and return attestation statement using clientDataHash
+        let credential = Credential::new(
+            credential::CtapVersion::Fido21Pre,
+            parameters,
+            algorithm as i32,
+            key_parameter,
+            123, // todo: get counter
+            false, // todo: hmac-secret?
+            false, // todo: cred-protect?
+        );
+        // hprintln!("credential = {:?}", &credential).ok();
+
+        // 12. if `rk` is set, store or overwrite key pair, if full error KeyStoreFull
+        // e.g., 44B
+        let serialized_credential = credential.serialize()?;
+        hprintln!("serialized credential = {:?}", &serialized_credential).ok();
+        hprintln!("credential = {:?}", Credential::deserialize(&serialized_credential)?).ok();
+
+        let key = &self.key_encryption_key()?;
+        let message = &serialized_credential;
+        let associated_data = parameters.rp.id.as_bytes();
+        let encrypted_serialized_credential = EncryptedSerializedCredential(
+            syscall!(self.crypto.encrypt_chacha8poly1305(key, message, associated_data)));
+
+        hprintln!("esc = {:?}", &encrypted_serialized_credential).ok();
+        // e.g., 72B
+        let credential_id: CredentialId = encrypted_serialized_credential.try_into().unwrap();
+        hprintln!("cid = {:?}", &credential_id).ok();
+
+        // 13. generate and return attestation statement using clientDataHash
 
         hprintln!("MC NOT FINISHED YET").ok();
-        Err(CtapError::Other)
+        Err(Error::Other)
 
         // ctap2::make_credential::Response {
         //     versions,
@@ -270,14 +534,8 @@ impl<'a, S: CryptoSyscall> Authenticator<'a, S> {
         // }
     }
 
-    // fn verify_pin(&mut self, pin_auth: &Bytes<consts::U16>, client_data_hash: &Bytes<consts::U32>) -> bool {
-    fn verify_pin(&mut self, pin_auth: &[u8; 16], client_data_hash: &[u8; 32]) -> bool {
-        // let _tag = block!(
-        //     client.sign(Mechanism::HmacSha256, symmetric_key.clone(), &new_pin_enc)
-        //         .expect("no client error"))
-        //     .expect("no errors").signature;
-        false
-    }
+    // fn credential_id(credential: &Credential) -> CredentialId {
+    // }
 
     fn get_info(&mut self) -> ctap2::get_info::Response {
 
@@ -287,10 +545,28 @@ impl<'a, S: CryptoSyscall> Authenticator<'a, S> {
         versions.push(String::from_str("FIDO_2_0").unwrap()).unwrap();
         versions.push(String::from_str("U2F_V2").unwrap()).unwrap();
 
+        let mut extensions = Vec::<String<consts::U11>, consts::U4>::new();
+        extensions.push(String::from_str("hmac-secret").unwrap()).unwrap();
+        extensions.push(String::from_str("credProtect").unwrap()).unwrap();
+
+        let mut pin_protocols = Vec::<u8, consts::U1>::new();
+        pin_protocols.push(1).unwrap();
+
+        let mut options = ctap2::get_info::CtapOptions::default();
+        options.rk = true;
+        options.up = true;
+        options.uv = None; // "uv" here refers to "in itself", e.g. biometric
+        // options.plat = false;
+        options.client_pin = None; // not capable of PIN
+        // options.client_pin = Some(true/false); // capable, is set/is not set
+
         ctap2::get_info::Response {
             versions,
+            extensions: Some(extensions),
             aaguid: self.config.aaguid.clone(),
+            options: Some(options),
             max_msg_size: Some(ctap_types::sizes::MESSAGE_SIZE),
+            pin_protocols: Some(pin_protocols),
             ..ctap2::get_info::Response::default()
         }
     }

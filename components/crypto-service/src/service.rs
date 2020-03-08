@@ -317,6 +317,7 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
                 match request.mechanism {
                     Mechanism::Chacha8Poly1305 => mechanisms::Chacha8Poly1305::generate_key(self, request),
                     Mechanism::Ed25519 => mechanisms::Ed25519::generate_key(self, request),
+                    Mechanism::HmacSha256 => mechanisms::HmacSha256::generate_key(self, request),
                     Mechanism::P256 => mechanisms::P256::generate_key(self, request),
                     _ => Err(Error::MechanismNotAvailable),
                 }.map(|reply| Reply::GenerateKey(reply))
@@ -383,7 +384,7 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
 
         // #[cfg(all(test, feature = "verbose-tests"))]
         // println!("unique id {:?}", &unique_id);
-        Ok(UniqueId(unique_id))
+        Ok(UniqueId(Bytes::try_from_slice(&unique_id).unwrap()))
     }
 
 }

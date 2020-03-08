@@ -6,14 +6,14 @@ use littlefs2::{
 };
 use crypto_service::types::{LfsResult, LfsStorage};
 use ctap_types::consts;
-// use fido_authenticator::Authenticator;
+use fido_authenticator::SilentAuthenticator;
 // use usbd_ctaphid::insecure::InsecureRamAuthenticator;
 
 pub struct FlashStorage {
     pub driver: hal::drivers::FlashGordon,
 }
 
-pub type Authenticator = fido_authenticator::Authenticator<'static, CryptoSyscall>;
+pub type Authenticator = fido_authenticator::Authenticator<'static, CryptoSyscall, SilentAuthenticator>;
 
 #[derive(Default)]
 pub struct CryptoSyscall {}

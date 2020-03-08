@@ -3,7 +3,7 @@ use crate::{Bytes, consts, String};
 
 #[derive(Clone,Debug,Eq,PartialEq,Serialize,Deserialize)]
 pub struct PublicKeyCredentialRpEntity {
-    pub id: String<consts::U64>,
+    pub id: String<consts::U256>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String<consts::U64>>,
     #[serde(skip_serializing_if = "Option::is_none")]

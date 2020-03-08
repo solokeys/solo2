@@ -175,6 +175,17 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
         Ok(FutureResult::new(self))
     }
 
+    pub fn agree_p256<'c>(&'c mut self, private_key: &ObjectHandle, public_key: &ObjectHandle, persistence: StorageLocation)
+        -> core::result::Result<FutureResult<'a, 'c, reply::Agree>, ClientError>
+    {
+        self.agree(
+            Mechanism::P256,
+            private_key.clone(),
+            public_key.clone(),
+            StorageAttributes::new().set_persistence(persistence),
+        )
+    }
+
     pub fn derive_key<'c>(&'c mut self, mechanism: Mechanism, base_key: ObjectHandle, attributes: StorageAttributes)
         -> core::result::Result<FutureResult<'a, 'c, reply::DeriveKey>, ClientError>
     {
@@ -291,6 +302,12 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
         self.generate_key(Mechanism::Ed25519, StorageAttributes::new().set_persistence(persistence))
     }
 
+    pub fn generate_hmacsha256_key<'c>(&'c mut self, persistence: StorageLocation)
+        -> core::result::Result<FutureResult<'a, 'c, reply::GenerateKey>, ClientError>
+    {
+        self.generate_key(Mechanism::HmacSha256, StorageAttributes::new().set_persistence(persistence))
+    }
+
     pub fn derive_ed25519_public_key<'c>(&'c mut self, private_key: &ObjectHandle, persistence: StorageLocation)
         -> core::result::Result<FutureResult<'a, 'c, reply::DeriveKey>, ClientError>
     {
@@ -312,7 +329,13 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
     pub fn sign_ed25519<'c>(&'c mut self, key: &ObjectHandle, message: &[u8])
         -> core::result::Result<FutureResult<'a, 'c, reply::Sign>, ClientError>
     {
-        self.sign(Mechanism::Ed25519, *key, message)
+        self.sign(Mechanism::Ed25519, key.clone(), message)
+    }
+
+    pub fn sign_hmacsha256<'c>(&'c mut self, key: &ObjectHandle, message: &[u8])
+        -> core::result::Result<FutureResult<'a, 'c, reply::Sign>, ClientError>
+    {
+        self.sign(Mechanism::HmacSha256, key.clone(), message)
     }
 
     // generally, don't offer multiple versions of a mechanism, if possible.
@@ -324,20 +347,20 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
     pub fn sign_p256<'c>(&'c mut self, key: &ObjectHandle, message: &[u8])
         -> core::result::Result<FutureResult<'a, 'c, reply::Sign>, ClientError>
     {
-        self.sign(Mechanism::P256, *key, message)
+        self.sign(Mechanism::P256, key.clone(), message)
     }
 
 
     pub fn verify_ed25519<'c>(&'c mut self, key: &ObjectHandle, message: &[u8], signature: &[u8])
         -> core::result::Result<FutureResult<'a, 'c, reply::Verify>, ClientError>
     {
-        self.verify(Mechanism::Ed25519, *key, message, signature)
+        self.verify(Mechanism::Ed25519, key.clone(), message, signature)
     }
 
     pub fn verify_p256<'c>(&'c mut self, key: &ObjectHandle, message: &[u8], signature: &[u8])
         -> core::result::Result<FutureResult<'a, 'c, reply::Verify>, ClientError>
     {
-        self.verify(Mechanism::P256, *key, message, signature)
+        self.verify(Mechanism::P256, key.clone(), message, signature)
     }
 
 }

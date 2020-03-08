@@ -40,6 +40,33 @@ Sign<'a, 's, R, I, E, V> for super::HmacSha256
     }
 }
 
+#[cfg(feature = "hmac-sha256")]
+impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
+GenerateKey<'a, 's, R, I, E, V> for super::HmacSha256
+{
+    fn generate_key(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::GenerateKey)
+        -> Result<reply::GenerateKey, Error>
+    {
+        let mut seed = [0u8; 16];
+        resources.rng.read(&mut seed).map_err(|_| Error::EntropyMalfunction)?;
+
+        // let keypair = salty::Keypair::from(&seed);
+        // #[cfg(all(test, feature = "verbose-tests"))]
+        // println!("ed25519 keypair with public key = {:?}", &keypair.public);
+
+        // generate unique ids
+        let key_id = resources.generate_unique_id()?;
+
+        // store keys
+        let path = resources.prepare_path_for_key(KeyType::Private, &key_id)?;
+        resources.store_key(request.attributes.persistence, &path, KeyKind::SymmetricKey16, &seed)?;
+
+        // return handle
+        Ok(reply::GenerateKey { key: ObjectHandle { object_id: key_id } })
+    }
+}
+
+
 #[cfg(not(feature = "hmac-sha256"))]
 impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
 Sign<'a, 's, R, I, E, V> for super::HmacSha256 {}
