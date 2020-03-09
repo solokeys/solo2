@@ -11,6 +11,8 @@ use crypto_service::{
     types::{
         KeySerialization,
         Mechanism,
+        MediumData,
+        Message,
         ObjectHandle,
         StorageLocation,
         StorageAttributes,
@@ -18,6 +20,7 @@ use crypto_service::{
 };
 use ctap_types::{
     Bytes, consts, String, Vec,
+    cose::P256PublicKey as CoseP256PublicKey,
     rpc::AuthenticatorEndpoint,
     authenticator::{ctap1, ctap2, Error, Request, Response},
 };
@@ -48,6 +51,14 @@ impl UserPresence for SilentAuthenticator {
     }
 }
 
+fn cbor_serialize_message<T: serde::Serialize>(object: &T) -> core::result::Result<Message, serde_cbor::Error> {
+    let mut message = Message::new();
+    message.resize_to_capacity();
+    let size = crypto_service::service::cbor_serialize(object, &mut message)?;
+    message.resize_default(size).unwrap();// map_err(  ??
+    Ok(message)
+}
+
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct Configuration {
     aaguid: Bytes<consts::U16>,
@@ -61,6 +72,7 @@ pub struct State {
     key_wrapping_key: Option<ObjectHandle>,
     pin_token: Option<ObjectHandle>,
     retries: Option<u8>,
+    consecutive_pin_mismatches: u8,
     pin_hash: Option<[u8; 16]>,
 }
 
@@ -132,6 +144,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
     }
 
     pub fn rotate_key_encryption_key(&mut self) -> Result<ObjectHandle> {
+        // TODO: delete old one first
         let key = block!(self.crypto
             .generate_chacha8poly1305_key(StorageLocation::Volatile).map_err(|_| Error::Other)?)
             .map_err(|_| Error::Other)?.key;
@@ -154,6 +167,10 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         Ok(key)
     }
 
+    pub fn consecutive_pin_mismatches(&mut self) -> u8 {
+        self.state.consecutive_pin_mismatches
+    }
+
     pub fn retries(&mut self) -> Result<u8> {
         match self.state.retries {
             Some(retries) => Ok(retries),
@@ -162,6 +179,19 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 Ok(8)
             }
         }
+    }
+
+    pub fn reset_retries(&mut self) -> Result<()> {
+        self.state.retries = Some(8);
+        self.state.consecutive_pin_mismatches = 0;
+        Ok(())
+    }
+
+    pub fn decrement_retries(&mut self) -> Result<()> {
+        // error to call before initialization
+        self.state.retries = Some(self.state.retries.unwrap() - 1);
+        self.state.consecutive_pin_mismatches += 1;
+        Ok(())
     }
 
     pub fn pin_token(&mut self) -> Result<ObjectHandle> {
@@ -268,25 +298,35 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
             Subcommand::GetRetries => {
                 hprintln!("processing CP.GR").ok();
+
                 ctap2::client_pin::Response {
                     key_agreement: None,
                     pin_token: None,
                     retries: Some(self.retries().unwrap()),
                 }
-
             }
 
             Subcommand::GetKeyAgreement => {
-                let private_key = self.key_agreement_key().unwrap();
-                let public_key = syscall!(self.crypto.derive_p256_public_key(&private_key, StorageLocation::Volatile)).key;
                 hprintln!("processing CP.GKA").ok();
 
-                todo!();
+                let private_key = self.key_agreement_key().unwrap();
+                let public_key = syscall!(self.crypto.derive_p256_public_key(&private_key, StorageLocation::Volatile)).key;
+                let serialized_cose_key = syscall!(self.crypto.serialize_key(
+                    Mechanism::P256, public_key, KeySerialization::Cose)).serialized_key;
+                let cose_key = crypto_service::service::cbor_deserialize(&serialized_cose_key).unwrap();
+
+                // TODO: delete public key
+
+                ctap2::client_pin::Response {
+                    key_agreement: cose_key,
+                    pin_token: None,
+                    retries: None,
+                }
             }
 
             Subcommand::SetPin => {
-                // check mandatory parameters
-                let platform_key_agreement_key = match parameters.key_agreement.as_ref() {
+                // 1. check mandatory parameters
+                let platform_kek = match parameters.key_agreement.as_ref() {
                     Some(key) => key,
                     None => { return Err(Error::MissingParameter); }
                 };
@@ -295,51 +335,236 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                     None => { return Err(Error::MissingParameter); }
                 };
                 let pin_auth = match parameters.pin_auth.as_ref() {
-                    Some(pin) => pin,
+                    Some(auth) => auth,
                     None => { return Err(Error::MissingParameter); }
                 };
 
-                // is pin already set
+                // 2. is pin already set
                 if self.pin_is_set() {
                     return Err(Error::PinAuthInvalid);
                 }
 
-                // generate shared secret
-                // // deserialize passed public key in crypto service
-                // let public_key = syscall!(self.crypto.create_p256_public_key(
-                //         &platform_key_agreement_key, StorageLocation::Volatile)).key;
-                // let agreement = syscall!(self.crypto.agree_p256(
-                //         &self.key_agreement_key().unwrap(), &public_key, StorageLocation::Volatile)).shared_secret;
-                // let shared_secret = syscall!(self.crypto.derive_key(
-                //         Mechanism::Sha256, agreement, StorageLocation::Volatile)).key;
+                // 3. generate shared secret
+                let shared_secret = self.generate_shared_secret(platform_kek)?;
 
-                // verify pinAuth (can we use self.verify_pin??)
-                // let verifies = {
-                //     let tag = syscall!(self.crypto.sign_hmacsha256(&shared_secret, new_pin_enc)).signature;
-                //     pin_auth == &tag[..16]
-                // };
-                // if !verifies {
-                //     return Err(Error::PinAuthInvalid);
-                // }
+                // 4. verify pinAuth
+                self.verify_pin_auth(&shared_secret, new_pin_enc, pin_auth)?;
 
-                // decrypt newPin using shared secret, check minimum length of 4 bytes
-                // NB: platform pads pin with 0x0 bytes, find first...
-                return Err(Error::PinPolicyViolation);
+                // 5. decrypt and verify new PIN
+                let new_pin = self.decrypt_pin_check_length(&shared_secret, new_pin_enc)?;
 
-                // store LEFT(Sha256(newPin), 16) on device
+                // 6. store LEFT(SHA-256(newPin), 16), set retries to 8
+                self.hash_store_pin(&new_pin)?;
+                self.reset_retries();
 
-                todo!();
+                ctap2::client_pin::Response {
+                    key_agreement: None,
+                    pin_token: None,
+                    retries: None,
+                }
             }
 
             Subcommand::ChangePin => {
-                todo!();
+
+                // 1. check mandatory parameters
+                let platform_kek = match parameters.key_agreement.as_ref() {
+                    Some(key) => key,
+                    None => { return Err(Error::MissingParameter); }
+                };
+                let pin_hash_enc = match parameters.pin_hash_enc.as_ref() {
+                    Some(hash) => hash,
+                    None => { return Err(Error::MissingParameter); }
+                };
+                let new_pin_enc = match parameters.new_pin_enc.as_ref() {
+                    Some(pin) => pin,
+                    None => { return Err(Error::MissingParameter); }
+                };
+                let pin_auth = match parameters.pin_auth.as_ref() {
+                    Some(auth) => auth,
+                    None => { return Err(Error::MissingParameter); }
+                };
+
+                // 2. fail if no retries left
+                if self.retries().unwrap() == 0 {
+                    return Err(Error::PinBlocked);
+                }
+
+                // 3. generate shared secret
+                let shared_secret = self.generate_shared_secret(platform_kek)?;
+
+                // 4. verify pinAuth
+                let mut data = MediumData::new();
+                data.extend_from_slice(new_pin_enc).map_err(|_| Error::InvalidParameter)?;
+                data.extend_from_slice(pin_hash_enc).map_err(|_| Error::InvalidParameter)?;
+                self.verify_pin_auth(&shared_secret, &data, pin_auth)?;
+
+                // 5. decrement retries
+                self.decrement_retries().unwrap();
+
+                // 6. decrypt pinHashEnc, compare with stored
+                self.decrypt_pin_hash_and_maybe_escalate(&shared_secret, &pin_hash_enc)?;
+
+                // 7. reset retries
+                self.reset_retries()?;
+
+                // 8. decrypt and verify new PIN
+                let new_pin = self.decrypt_pin_check_length(&shared_secret, new_pin_enc)?;
+
+                // 9. store hashed PIN
+                self.hash_store_pin(&new_pin)?;
+
+                ctap2::client_pin::Response {
+                    key_agreement: None,
+                    pin_token: None,
+                    retries: None,
+                }
             }
 
             Subcommand::GetPinToken => {
-                todo!();
+                hprintln!("processing CP.GKA").ok();
+
+                // 1. check mandatory parameters
+                let platform_kek = match parameters.key_agreement.as_ref() {
+                    Some(key) => key,
+                    None => { return Err(Error::MissingParameter); }
+                };
+                let pin_hash_enc = match parameters.pin_hash_enc.as_ref() {
+                    Some(hash) => hash,
+                    None => { return Err(Error::MissingParameter); }
+                };
+
+                // 2. fail if no retries left
+                if self.retries().unwrap() == 0 {
+                    return Err(Error::PinBlocked);
+                }
+
+                // 3. generate shared secret
+                let shared_secret = self.generate_shared_secret(platform_kek)?;
+
+                // 4. decrement retires
+                self.decrement_retries().unwrap();
+
+                // 5. decrypt and verify pinHashEnc
+                self.decrypt_pin_hash_and_maybe_escalate(&shared_secret, &pin_hash_enc)?;
+
+                // 6. reset retries
+                self.reset_retries()?;
+
+                // 7. return encrypted pinToken
+                let pin_token = self.pin_token().unwrap();
+                let pin_token_enc = syscall!(self.crypto.wrap_key_aes256cbc(&shared_secret, &pin_token)).wrapped_key;
+
+                // ble...
+                if pin_token_enc.len() != 32 {
+                    return Err(Error::Other);
+                }
+                let pin_token_enc_32 = Bytes::<consts::U32>::try_from_slice(&pin_token_enc).unwrap();
+
+                ctap2::client_pin::Response {
+                    key_agreement: None,
+                    pin_token: Some(pin_token_enc_32),
+                    retries: None,
+                }
             }
 
         })
+    }
+
+    fn decrypt_pin_hash_and_maybe_escalate(&mut self, shared_secret: &ObjectHandle, pin_hash_enc: &Bytes<consts::U64>)
+        -> Result<()>
+    {
+        let pin_hash = syscall!(self.crypto.decrypt_aes256cbc(
+            &shared_secret, pin_hash_enc)).plaintext;
+
+        let stored_pin_hash = match self.state.pin_hash {
+            Some(hash) => hash,
+            None => { return Err(Error::InvalidCommand); }
+        };
+
+        if &pin_hash != &stored_pin_hash {
+            // I) generate new KEK
+            self.rotate_key_agreement_key()?;
+            if self.retries().unwrap() == 0 {
+                return Err(Error::PinBlocked);
+            }
+            if self.consecutive_pin_mismatches() >= 3 {
+                return Err(Error::PinAuthBlocked);
+            }
+            return Err(Error::PinInvalid);
+        }
+
+        Ok(())
+    }
+
+    fn hash_store_pin(&mut self, pin: &Message) -> Result<()> {
+        let pin_hash_32 = syscall!(self.crypto.hash_sha256(&pin)).hash;
+        let pin_hash: [u8; 16] = pin_hash_32[..16].try_into().unwrap();
+        self.state.pin_hash = Some(pin_hash);
+
+        Ok(())
+    }
+
+    fn decrypt_pin_check_length(&mut self, shared_secret: &ObjectHandle, pin_enc: &[u8]) -> Result<Message> {
+        let mut pin = syscall!(self.crypto.decrypt_aes256cbc(
+            &shared_secret, &pin_enc)).plaintext;
+
+        // it is expected to be filled with null bytes to length at least 64
+        if pin.len() < 64 {
+            // correct error?
+            return Err(Error::PinPolicyViolation);
+        }
+
+        // chop off null bytes
+        let pin_length = pin.iter().position(|&b| b == b'\0').unwrap_or(pin.len());
+        if pin_length < 4 {
+            return Err(Error::PinPolicyViolation);
+        }
+
+        pin.resize_default(pin_length).unwrap();
+
+        Ok(pin)
+    }
+
+
+    fn verify_pin_auth(&mut self, shared_secret: &ObjectHandle, data: &[u8], pin_auth: &Bytes<consts::U16>)
+        -> Result<()>
+    {
+        let expected_pin_auth = syscall!(self.crypto.sign_hmacsha256(shared_secret, data)).signature;
+
+        if &expected_pin_auth[..16] == &pin_auth[..] {
+            Ok(())
+        } else {
+            Err(Error::PinAuthInvalid)
+        }
+    }
+
+    fn generate_shared_secret(&mut self, platform_key_agreement_key: &CoseP256PublicKey) -> Result<ObjectHandle> {
+        let private_key = self.key_agreement_key().unwrap();
+        let public_key = syscall!(self.crypto.derive_p256_public_key(&private_key, StorageLocation::Volatile)).key;
+
+        // let platform_kek = match &platform_key_agreement_key {
+        //     Some(kek) => kek,
+        //     None => {
+        //         return Err(Error::MissingParameter);
+        //     }
+        // };
+        let mut serialized_kek = cbor_serialize_message(platform_key_agreement_key).map_err(|_| Error::InvalidParameter)?;
+        let platform_kek = syscall!(
+            self.crypto.deserialize_key(
+                Mechanism::P256, serialized_kek, KeySerialization::Cose,
+                StorageAttributes::new().set_persistence(StorageLocation::Volatile))
+            .map_err(|_| Error::InvalidParameter)).key;
+
+        let pre_shared_secret = syscall!(self.crypto.agree(
+            Mechanism::P256, private_key.clone(), platform_kek,
+            StorageAttributes::new().set_persistence(StorageLocation::Volatile),
+        )).shared_secret;
+
+        let shared_secret = syscall!(self.crypto.derive_key(
+            Mechanism::Sha256, pre_shared_secret, StorageAttributes::new().set_persistence(StorageLocation::Volatile)
+        )).key;
+
+        Ok(shared_secret)
     }
 
     fn make_credential(&mut self, parameters: &ctap2::make_credential::Parameters) -> Result<ctap2::make_credential::Response> {

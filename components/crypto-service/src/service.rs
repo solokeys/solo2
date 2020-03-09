@@ -48,6 +48,11 @@ pub trait GenerateKey<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsSt
     -> Result<reply::GenerateKey, Error> { Err(Error::MechanismNotAvailable) }
 }
 
+pub trait Hash<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> {
+    fn hash(_resources: &mut ServiceResources<'a, 's, R, I, E, V>, _request: request::Hash)
+    -> Result<reply::Hash, Error> { Err(Error::MechanismNotAvailable) }
+}
+
 pub trait SerializeKey<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> {
     fn serialize_key(_resources: &mut ServiceResources<'a, 's, R, I, E, V>, _request: request::SerializeKey)
     -> Result<reply::SerializeKey, Error> { Err(Error::MechanismNotAvailable) }
@@ -68,6 +73,7 @@ pub trait Verify<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage
     -> Result<reply::Verify, Error> { Err(Error::MechanismNotAvailable) }
 }
 
+// TODO: can the default implementation be implemented in terms of Encrypt?
 pub trait WrapKey<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> {
     fn wrap_key(_resources: &mut ServiceResources<'a, 's, R, I, E, V>, _request: request::WrapKey)
     -> Result<reply::WrapKey, Error> { Err(Error::MechanismNotAvailable) }
@@ -368,6 +374,16 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
                 }.map(|reply| Reply::GenerateKey(reply))
             },
 
+            Request::Hash(request) => {
+                match request.mechanism {
+
+                    Mechanism::Sha256 => mechanisms::Sha256::hash(self, request),
+                    _ => return Err(Error::MechanismNotAvailable),
+
+                }.map(|reply| Reply::Hash(reply))
+            },
+
+
             Request::LoadBlob(request) => {
                 let path = self.blob_path(&request.prefix, &request.id.object_id)?;
                 let mut data = Message::new();
@@ -437,6 +453,7 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
             Request::WrapKey(request) => {
                 match request.mechanism {
 
+                    Mechanism::Aes256Cbc => mechanisms::Aes256Cbc::wrap_key(self, request),
                     Mechanism::Chacha8Poly1305 => mechanisms::Chacha8Poly1305::wrap_key(self, request),
                     _ => return Err(Error::MechanismNotAvailable),
 

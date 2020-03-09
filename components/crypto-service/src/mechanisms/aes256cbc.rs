@@ -1,3 +1,5 @@
+use cortex_m_semihosting::hprintln;
+
 use crate::api::*;
 // use crate::config::*;
 use crate::error::Error;
@@ -42,6 +44,37 @@ Encrypt<'a, 's, R, I, E, V> for super::Aes256Cbc
 
         let ciphertext = Message::try_from_slice(&ciphertext).unwrap();
         Ok(reply::Encrypt { ciphertext, nonce: ShortData::new(), tag: ShortData::new()  })
+    }
+}
+
+#[cfg(feature = "aes256-cbc")]
+impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
+WrapKey<'a, 's, R, I, E, V> for super::Aes256Cbc
+{
+    fn wrap_key(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::WrapKey)
+        -> Result<reply::WrapKey, Error>
+    {
+        // TODO: need to check both secret and private keys
+        let path = resources.prepare_path_for_key(KeyType::Secret, &request.key.object_id)?;
+        hprintln!("loading key to be wrapped from: {:?}", &path).ok();
+        let (serialized_key, location) = resources.load_key_unchecked(&path)?;
+
+        let mut message = Message::new();
+        message.resize_to_capacity();
+        let size = crate::service::cbor_serialize(&serialized_key, &mut message).map_err(|_| Error::CborError)?;
+        message.resize_default(size).map_err(|_| Error::InternalError)?;
+
+        let encryption_request = request::Encrypt {
+            mechanism: Mechanism::Aes256Cbc,
+            key: request.wrapping_key.clone(),
+            message,
+            associated_data: ShortData::new(),
+        };
+        let encryption_reply = <super::Aes256Cbc>::encrypt(resources, encryption_request)?;
+
+        let wrapped_key = encryption_reply.ciphertext;
+
+        Ok(reply::WrapKey { wrapped_key })
     }
 }
 

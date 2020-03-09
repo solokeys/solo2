@@ -325,11 +325,33 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
     }
 
 
+    pub fn hash<'c>(&'c mut self, mechanism: Mechanism, message: Message)
+        -> core::result::Result<FutureResult<'a, 'c, reply::Hash>, ClientError>
+    {
+        self.raw.request(request::Hash { mechanism, message } )?;
+        self.syscall.syscall();
+        Ok(FutureResult::new(self))
+    }
+
+    pub fn hash_sha256<'c>(&'c mut self, message: &[u8])
+        -> core::result::Result<FutureResult<'a, 'c, reply::Hash>, ClientError>
+    {
+        self.hash(Mechanism::Sha256, Message::try_from_slice(message).map_err(|_| ClientError::DataTooLarge)?)
+    }
+
     pub fn decrypt_chacha8poly1305<'c>(&'c mut self, key: &ObjectHandle, message: &[u8], associated_data: &[u8],
                                        nonce: &[u8], tag: &[u8])
         -> core::result::Result<FutureResult<'a, 'c, reply::Decrypt>, ClientError>
     {
         self.decrypt(Mechanism::Chacha8Poly1305, key.clone(), message, associated_data, nonce, tag)
+    }
+
+    pub fn decrypt_aes256cbc<'c>(&'c mut self, key: &ObjectHandle, message: &[u8])
+        -> core::result::Result<FutureResult<'a, 'c, reply::Decrypt>, ClientError>
+    {
+        self.decrypt(
+            Mechanism::Aes256Cbc, key.clone(), message, &[], &[], &[],
+        )
     }
 
     pub fn encrypt_chacha8poly1305<'c>(&'c mut self, key: &ObjectHandle, message: &[u8], associated_data: &[u8])
@@ -452,6 +474,12 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
         -> core::result::Result<FutureResult<'a, 'c, reply::WrapKey>, ClientError>
     {
         self.wrap_key(Mechanism::Chacha8Poly1305, wrapping_key.clone(), key.clone(), associated_data)
+    }
+
+    pub fn wrap_key_aes256cbc<'c>(&'c mut self, wrapping_key: &ObjectHandle, key: &ObjectHandle)
+        -> core::result::Result<FutureResult<'a, 'c, reply::WrapKey>, ClientError>
+    {
+        self.wrap_key(Mechanism::Aes256Cbc, wrapping_key.clone(), key.clone(), &[])
     }
 
 

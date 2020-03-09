@@ -31,6 +31,24 @@ DeriveKey<'a, 's, R, I, E, V> for super::Sha256
     }
 }
 
+#[cfg(feature = "sha256")]
+impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
+Hash<'a, 's, R, I, E, V> for super::Sha256
+{
+    fn hash(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::Hash)
+        -> Result<reply::Hash, Error>
+    {
+        use sha2::digest::Digest;
+        let mut hash = sha2::Sha256::new();
+        hash.input(&request.message);
+
+        let mut hashed = ShortData::new();
+        hashed.extend_from_slice(&hash.result()).unwrap();
+
+        Ok(reply::Hash { hash: hashed } )
+    }
+}
+
 // impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
 // Agree<'a, 's, R, I, E, V> for super::P256 {}
 #[cfg(not(feature = "sha256"))]

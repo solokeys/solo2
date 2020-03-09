@@ -64,7 +64,7 @@ pub struct Response {
 
     // 0x02, encrypted `pinToken` using `sharedSecret`
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub pin_token: Option<Bytes<consts::U64>>,
+    pub pin_token: Option<Bytes<consts::U32>>,
 
     // 0x03, number of PIN attempts remaining before lockout
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -19,24 +19,25 @@ mod macros;
 // At minimum, we don't want to list the indices (may need proc-macro)
 
 generate_enums! {
-    Agree: 12
-    CreateObject: 1
-    Decrypt: 13
-    DeriveKey: 2
-    DeserializeKey: 17
-    Encrypt: 14
+    Agree: 1
+    CreateObject: 2
+    Decrypt: 3
+    DeriveKey: 3
+    DeserializeKey: 4
+    Encrypt: 5
     // DeriveKeypair: 3
-    FindObjects: 4
-    GenerateKey: 5
+    FindObjects: 6
+    GenerateKey: 7
     // GenerateKeypair: 6
-    LoadBlob: 15
+    Hash: 8
+    LoadBlob: 9
     // ReadCounter: 7
-    SerializeKey: 16
-    Sign: 8
-    StoreBlob: 16
-    UnwrapKey: 9
-    Verify: 10
-    WrapKey: 11
+    SerializeKey: 10
+    Sign: 11
+    StoreBlob: 12
+    UnwrapKey: 13
+    Verify: 14
+    WrapKey: 15
 }
 
 pub mod request {
@@ -115,6 +116,10 @@ pub mod request {
         // GetAttributes:
         //     - object: ObjectHandle
         //     - attributes: Attributes
+
+        Hash:
+          - mechanism: Mechanism
+          - message: Message
 
         LoadBlob:
           - prefix: Option<Letters>
@@ -210,6 +215,9 @@ pub mod reply {
         // GenerateKeypair:
         //     - private_key: ObjectHandle
         //     - public_key: ObjectHandle
+
+        Hash:
+          - hash: ShortData
 
         LoadBlob:
           - data: Message
