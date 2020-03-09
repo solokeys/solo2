@@ -494,11 +494,25 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         )).serialized_key;
         hprintln!("ser pk = {:?}", &ser_pk).ok();
 
+        let cose_ser_pk = syscall!(self.crypto.serialize_key(
+            Mechanism::P256, public_key.clone(), KeySerialization::Cose
+        )).serialized_key;
+        hprintln!("COSE ser pk = {:?}", &cose_ser_pk).ok();
+
         let deser_pk = syscall!(self.crypto.deserialize_key(
             Mechanism::P256, ser_pk.clone(), KeySerialization::Raw,
             StorageAttributes::new().set_persistence(StorageLocation::Volatile)
         )).key;
         hprintln!("deser pk = {:?}", &deser_pk).ok();
+
+        let cose_deser_pk = syscall!(self.crypto.deserialize_key(
+            Mechanism::P256, cose_ser_pk.clone(), KeySerialization::Cose,
+            StorageAttributes::new().set_persistence(StorageLocation::Volatile)
+        )).key;
+        hprintln!("COSE deser pk = {:?}", &cose_deser_pk).ok();
+        hprintln!("raw ser of COSE deser pk = {:?}",
+                  syscall!(self.crypto.serialize_key(Mechanism::P256, cose_deser_pk.clone(), KeySerialization::Raw)).
+                  serialized_key).ok();
 
         // hprintln!("priv {:?}", &private_key).ok();
         // hprintln!("pub {:?}", &public_key).ok();

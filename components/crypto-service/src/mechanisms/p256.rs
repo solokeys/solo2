@@ -71,6 +71,24 @@ DeserializeKey<'a, 's, R, I, E, V> for super::P256
           // - attributes: StorageAttributes
 
         let public_key = match request.format {
+            KeySerialization::Cose => {
+                // TODO: this should all be done upstream
+                let cose_public_key: ctap_types::cose::P256PublicKey = crate::service::cbor_deserialize(
+                    &request.serialized_key).map_err(|_| Error::CborError)?;
+                let mut serialized_key = [0u8; 64];
+                if cose_public_key.x.len() != 32 || cose_public_key.y.len() != 32 {
+                    return Err(Error::InvalidSerializedKey);
+                }
+
+                serialized_key[..32].copy_from_slice(&cose_public_key.x);
+                serialized_key[32..].copy_from_slice(&cose_public_key.y);
+
+                let public_key = nisty::PublicKey::try_from(&serialized_key)
+                    .map_err(|_| Error::InvalidSerializedKey)?;
+
+                public_key
+            }
+
             KeySerialization::Raw => {
                 if request.serialized_key.len() != 64 {
                     return Err(Error::InvalidSerializedKey);
@@ -89,7 +107,7 @@ DeserializeKey<'a, 's, R, I, E, V> for super::P256
 
         let public_id = resources.generate_unique_id()?;
         let public_path = resources.prepare_path_for_key(KeyType::Public, &public_id)?;
-        resources.store_key(request.attributes.persistence, &public_path, KeyKind::Ed25519, public_key.as_bytes())?;
+        resources.store_key(request.attributes.persistence, &public_path, KeyKind::P256, public_key.as_bytes())?;
 
         Ok(reply::DeserializeKey {
             key: ObjectHandle { object_id: public_id },
@@ -142,10 +160,19 @@ SerializeKey<'a, 's, R, I, E, V> for super::P256
 
         let mut serialized_key = Message::new();
         match request.format {
+            KeySerialization::Cose => {
+                let cose_pk = ctap_types::cose::P256PublicKey {
+                    x: Bytes::try_from_slice(&public_key.x_coordinate()).unwrap(),
+                    y: Bytes::try_from_slice(&public_key.y_coordinate()).unwrap(),
+                };
+                serialized_key.resize_to_capacity();
+                let size = crate::service::cbor_serialize(&cose_pk, &mut serialized_key).map_err(|_| Error::CborError)?;
+                serialized_key.resize_default(size).map_err(|_| Error::InternalError)?;
+            }
             KeySerialization::Raw => {
                 serialized_key.extend_from_slice(public_key.as_bytes()).map_err(|_| Error::InternalError)?;
             }
-            KeySerialization::Raw => {
+            KeySerialization::Sec1 => {
                 serialized_key.extend_from_slice(
                     &public_key.compress()
                 ).map_err(|_| Error::InternalError)?;

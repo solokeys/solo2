@@ -141,7 +141,6 @@ WrapKey<'a, 's, R, I, E, V> for super::Chacha8Poly1305
         let mut message = Message::new();
         message.resize_to_capacity();
         let size = crate::service::cbor_serialize(&serialized_key, &mut message).map_err(|_| Error::CborError)?;
-
         message.resize_default(size).map_err(|_| Error::InternalError)?;
 
         let encryption_request = request::Encrypt {

@@ -317,7 +317,7 @@ pub type Message = Bytes<MAX_MESSAGE_LENGTH>;
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub enum KeySerialization {
     // Asn1Der,
-    // Cose,
+    Cose,
     Raw,
     Sec1,
 }
