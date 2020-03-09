@@ -26,6 +26,7 @@ pub enum Error {
     FilesystemWriteFailure,
     ImplementationError,
     InternalError,
+    InvalidSerializedKey,
     MechanismNotAvailable,
     NonceOverflow,
     NoSuchKey,

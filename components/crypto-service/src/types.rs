@@ -316,9 +316,10 @@ pub type Message = Bytes<MAX_MESSAGE_LENGTH>;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub enum KeySerialization {
-    Asn1Der,
-    Cose,
+    // Asn1Der,
+    // Cose,
     Raw,
+    Sec1,
 }
 
 pub type Signature = Bytes<MAX_SIGNATURE_LENGTH>;

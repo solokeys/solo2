@@ -1,4 +1,4 @@
-use core::convert::TryFrom;
+use core::convert::{TryFrom, TryInto};
 
 use crate::api::*;
 // use crate::config::*;
@@ -61,6 +61,44 @@ DeriveKey<'a, 's, R, I, E, V> for super::P256
 
 #[cfg(feature = "p256")]
 impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
+DeserializeKey<'a, 's, R, I, E, V> for super::P256
+{
+    fn deserialize_key(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::DeserializeKey)
+        -> Result<reply::DeserializeKey, Error>
+    {
+          // - mechanism: Mechanism
+          // - serialized_key: Message
+          // - attributes: StorageAttributes
+
+        let public_key = match request.format {
+            KeySerialization::Raw => {
+                if request.serialized_key.len() != 64 {
+                    return Err(Error::InvalidSerializedKey);
+                }
+
+                let mut serialized_key = [0u8; 64];
+                serialized_key.copy_from_slice(&request.serialized_key[..64]);
+                let public_key = nisty::PublicKey::try_from(&serialized_key)
+                    .map_err(|_| Error::InvalidSerializedKey)?;
+
+                public_key
+            }
+
+            _ => { return Err(Error::InternalError); }
+        };
+
+        let public_id = resources.generate_unique_id()?;
+        let public_path = resources.prepare_path_for_key(KeyType::Public, &public_id)?;
+        resources.store_key(request.attributes.persistence, &public_path, KeyKind::Ed25519, public_key.as_bytes())?;
+
+        Ok(reply::DeserializeKey {
+            key: ObjectHandle { object_id: public_id },
+        })
+    }
+}
+
+#[cfg(feature = "p256")]
+impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
 GenerateKey<'a, 's, R, I, E, V> for super::P256
 {
     fn generate_key(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::GenerateKey)
@@ -84,6 +122,40 @@ GenerateKey<'a, 's, R, I, E, V> for super::P256
 
         // return handle
         Ok(reply::GenerateKey { key: ObjectHandle { object_id: key_id } })
+    }
+}
+
+#[cfg(feature = "p256")]
+impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
+SerializeKey<'a, 's, R, I, E, V> for super::P256
+{
+    fn serialize_key(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::SerializeKey)
+        -> Result<reply::SerializeKey, Error>
+    {
+
+        let key_id = request.key.object_id;
+        let path = resources.prepare_path_for_key(KeyType::Public, &key_id)?;
+        let mut buf = [0u8; 64];
+        resources.load_key(&path, KeyKind::P256, &mut buf)?;
+
+        let public_key = nisty::PublicKey::try_from(&buf).map_err(|_| Error::InternalError)?;
+
+        let mut serialized_key = Message::new();
+        match request.format {
+            KeySerialization::Raw => {
+                serialized_key.extend_from_slice(public_key.as_bytes()).map_err(|_| Error::InternalError)?;
+            }
+            KeySerialization::Raw => {
+                serialized_key.extend_from_slice(
+                    &public_key.compress()
+                ).map_err(|_| Error::InternalError)?;
+            }
+            _ => {
+                return Err(Error::InternalError);
+            }
+        };
+
+        Ok(reply::SerializeKey { serialized_key })
     }
 }
 

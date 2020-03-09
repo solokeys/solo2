@@ -1,4 +1,4 @@
-use core::convert::TryFrom;
+use core::convert::{TryFrom, TryInto};
 
 use crate::api::*;
 // use crate::config::*;
@@ -29,6 +29,39 @@ DeriveKey<'a, 's, R, I, E, V> for super::Ed25519
 
 #[cfg(feature = "ed25519")]
 impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
+DeserializeKey<'a, 's, R, I, E, V> for super::Ed25519
+{
+    fn deserialize_key(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::DeserializeKey)
+        -> Result<reply::DeserializeKey, Error>
+    {
+          // - mechanism: Mechanism
+          // - serialized_key: Message
+          // - attributes: StorageAttributes
+
+        if request.format != KeySerialization::Raw {
+            return Err(Error::InternalError);
+        }
+
+        if request.serialized_key.len() != 32 {
+            return Err(Error::InvalidSerializedKey);
+        }
+
+        let serialized_key: [u8; 32] = request.serialized_key[..32].try_into().unwrap();
+        let public_key = salty::PublicKey::try_from(&serialized_key)
+            .map_err(|_| Error::InvalidSerializedKey)?;
+
+        let public_id = resources.generate_unique_id()?;
+        let public_path = resources.prepare_path_for_key(KeyType::Public, &public_id)?;
+        resources.store_key(request.attributes.persistence, &public_path, KeyKind::Ed25519, public_key.as_bytes())?;
+
+        Ok(reply::DeserializeKey {
+            key: ObjectHandle { object_id: public_id },
+        })
+    }
+}
+
+#[cfg(feature = "ed25519")]
+impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
 GenerateKey<'a, 's, R, I, E, V> for super::Ed25519
 {
     fn generate_key(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::GenerateKey)
@@ -50,6 +83,27 @@ GenerateKey<'a, 's, R, I, E, V> for super::Ed25519
 
         // return handle
         Ok(reply::GenerateKey { key: ObjectHandle { object_id: key_id } })
+    }
+}
+
+#[cfg(feature = "ed25519")]
+impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
+SerializeKey<'a, 's, R, I, E, V> for super::Ed25519
+{
+    fn serialize_key(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::SerializeKey)
+        -> Result<reply::SerializeKey, Error>
+    {
+        if request.format != KeySerialization::Raw {
+            return Err(Error::InternalError);
+        }
+
+        let key_id = request.key.object_id;
+        let path = resources.prepare_path_for_key(KeyType::Public, &key_id)?;
+        let mut serialized_key = Message::new();
+        serialized_key.resize_default(32).map_err(|_| Error::InternalError)?;
+        resources.load_key(&path, KeyKind::Ed25519, &mut serialized_key)?;
+
+        Ok(reply::SerializeKey { serialized_key })
     }
 }
 

@@ -63,10 +63,6 @@ pub mod request {
           - nonce: ShortData
           - tag: ShortData
 
-        DeserializeKey:
-          - mechanism: Mechanism
-          - serialized_key: Message
-
         // DeleteBlob:
         //   - prefix: Option<Letters>
         //   - name: ShortData
@@ -88,6 +84,12 @@ pub mod request {
         //     - base_key: ObjectHandle
         //     // - additional_data: Message
         //     // - attributes: KeyAttributes
+
+        DeserializeKey:
+          - mechanism: Mechanism
+          - serialized_key: Message
+          - format: KeySerialization
+          - attributes: StorageAttributes
 
         Encrypt:
           - mechanism: Mechanism
@@ -216,7 +218,7 @@ pub mod reply {
         //     - counter: u32
 
         SerializeKey:
-            - wrapped_key: Message
+            - serialized_key: Message
 
         Sign:
             - signature: Signature

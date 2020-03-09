@@ -236,6 +236,21 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
         Ok(FutureResult::new(self))
     }
 
+          // - mechanism: Mechanism
+          // - serialized_key: Message
+          // - format: KeySerialization
+          // - attributes: StorageAttributes
+    pub fn deserialize_key<'c>(&'c mut self, mechanism: Mechanism, serialized_key: Message,
+                               format: KeySerialization, attributes: StorageAttributes)
+        -> core::result::Result<FutureResult<'a, 'c, reply::DeserializeKey>, ClientError>
+    {
+        self.raw.request(request::DeserializeKey {
+            mechanism, serialized_key, format, attributes
+        } )?;
+        self.syscall.syscall();
+        Ok(FutureResult::new(self))
+    }
+
     pub fn generate_key<'c>(&'c mut self, mechanism: Mechanism, attributes: StorageAttributes)
         -> core::result::Result<FutureResult<'a, 'c, reply::GenerateKey>, ClientError>
     {
@@ -259,6 +274,21 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
         -> core::result::Result<FutureResult<'a, 'c, reply::StoreBlob>, ClientError>
     {
         self.raw.request(request::StoreBlob { prefix, /*id,*/ data, attributes: StorageAttributes { persistence: location } } )?;
+        self.syscall.syscall();
+        Ok(FutureResult::new(self))
+    }
+          // - mechanism: Mechanism
+          // - key: ObjectHandle
+          // - format: KeySerialization
+
+    pub fn serialize_key<'c>(&'c mut self, mechanism: Mechanism, key: ObjectHandle, format: KeySerialization)
+        -> core::result::Result<FutureResult<'a, 'c, reply::SerializeKey>, ClientError>
+    {
+        self.raw.request(request::SerializeKey {
+            key,
+            mechanism,
+            format,
+        })?;
         self.syscall.syscall();
         Ok(FutureResult::new(self))
     }

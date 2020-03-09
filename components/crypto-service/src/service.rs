@@ -33,6 +33,11 @@ pub trait DeriveKey<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStor
     -> Result<reply::DeriveKey, Error> { Err(Error::MechanismNotAvailable) }
 }
 
+pub trait DeserializeKey<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> {
+    fn deserialize_key(_resources: &mut ServiceResources<'a, 's, R, I, E, V>, _request: request::DeserializeKey)
+    -> Result<reply::DeserializeKey, Error> { Err(Error::MechanismNotAvailable) }
+}
+
 pub trait Encrypt<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> {
     fn encrypt(_resources: &mut ServiceResources<'a, 's, R, I, E, V>, _request: request::Encrypt)
     -> Result<reply::Encrypt, Error> { Err(Error::MechanismNotAvailable) }
@@ -41,6 +46,11 @@ pub trait Encrypt<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorag
 pub trait GenerateKey<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> {
     fn generate_key(_resources: &mut ServiceResources<'a, 's, R, I, E, V>, _request: request::GenerateKey)
     -> Result<reply::GenerateKey, Error> { Err(Error::MechanismNotAvailable) }
+}
+
+pub trait SerializeKey<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> {
+    fn serialize_key(_resources: &mut ServiceResources<'a, 's, R, I, E, V>, _request: request::SerializeKey)
+    -> Result<reply::SerializeKey, Error> { Err(Error::MechanismNotAvailable) }
 }
 
 pub trait Sign<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> {
@@ -328,6 +338,16 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
                 }.map(|reply| Reply::DeriveKey(reply))
             },
 
+            Request::DeserializeKey(request) => {
+                match request.mechanism {
+
+                    Mechanism::Ed25519 => mechanisms::Ed25519::deserialize_key(self, request),
+                    Mechanism::P256 => mechanisms::P256::deserialize_key(self, request),
+                    _ => return Err(Error::MechanismNotAvailable),
+
+                }.map(|reply| Reply::DeserializeKey(reply))
+            }
+
             Request::Encrypt(request) => {
                 match request.mechanism {
 
@@ -361,17 +381,14 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
                 Ok(Reply::LoadBlob(reply::LoadBlob { data } ))
             }
 
-            Request::StoreBlob(request) => {
-                let blob_id = self.generate_unique_id()?;
-                let path = self.blob_path(&request.prefix, &blob_id)?;
-                hprintln!("saving blob to {:?}", &path).ok();
-                match request.attributes.persistence {
-                    StorageLocation::Internal => store_serialized_key(&mut self.tri.ifs,& path, &request.data),
-                    StorageLocation::External => store_serialized_key(&mut self.tri.efs, &path, &request.data),
-                    StorageLocation::Volatile => store_serialized_key(&mut self.tri.vfs, &path, &request.data),
-                }?;
-                hprintln!("saved blob").ok();
-                Ok(Reply::StoreBlob(reply::StoreBlob { blob: ObjectHandle { object_id: blob_id } }))
+            Request::SerializeKey(request) => {
+                match request.mechanism {
+
+                    Mechanism::Ed25519 => mechanisms::Ed25519::serialize_key(self, request),
+                    Mechanism::P256 => mechanisms::P256::serialize_key(self, request),
+                    _ => return Err(Error::MechanismNotAvailable),
+
+                }.map(|reply| Reply::SerializeKey(reply))
             }
 
             Request::Sign(request) => {
@@ -384,6 +401,19 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
 
                 }.map(|reply| Reply::Sign(reply))
             },
+
+            Request::StoreBlob(request) => {
+                let blob_id = self.generate_unique_id()?;
+                let path = self.blob_path(&request.prefix, &blob_id)?;
+                hprintln!("saving blob to {:?}", &path).ok();
+                match request.attributes.persistence {
+                    StorageLocation::Internal => store_serialized_key(&mut self.tri.ifs,& path, &request.data),
+                    StorageLocation::External => store_serialized_key(&mut self.tri.efs, &path, &request.data),
+                    StorageLocation::Volatile => store_serialized_key(&mut self.tri.vfs, &path, &request.data),
+                }?;
+                hprintln!("saved blob").ok();
+                Ok(Reply::StoreBlob(reply::StoreBlob { blob: ObjectHandle { object_id: blob_id } }))
+            }
 
             Request::UnwrapKey(request) => {
                 match request.mechanism {

@@ -9,9 +9,11 @@ use crypto_service::{
     Client as CryptoClient,
     pipe::Syscall as CryptoSyscall,
     types::{
+        KeySerialization,
         Mechanism,
         ObjectHandle,
         StorageLocation,
+        StorageAttributes,
     },
 };
 use ctap_types::{
@@ -485,6 +487,19 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 public_key = syscall!(self.crypto.derive_ed25519_public_key(&private_key, StorageLocation::Volatile)).key;
             }
         }
+
+        // test public key ser/de
+        let ser_pk = syscall!(self.crypto.serialize_key(
+            Mechanism::P256, public_key.clone(), KeySerialization::Raw
+        )).serialized_key;
+        hprintln!("ser pk = {:?}", &ser_pk).ok();
+
+        let deser_pk = syscall!(self.crypto.deserialize_key(
+            Mechanism::P256, ser_pk.clone(), KeySerialization::Raw,
+            StorageAttributes::new().set_persistence(StorageLocation::Volatile)
+        )).key;
+        hprintln!("deser pk = {:?}", &deser_pk).ok();
+
         // hprintln!("priv {:?}", &private_key).ok();
         // hprintln!("pub {:?}", &public_key).ok();
 
