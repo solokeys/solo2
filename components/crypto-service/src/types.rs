@@ -1,3 +1,6 @@
+use core::convert::TryFrom;
+use core::marker::PhantomData;
+
 pub use generic_array::GenericArray;
 
 pub use heapless::{
@@ -47,7 +50,7 @@ pub type AeadTag = [u8; 16];
 // - Profiles
 
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub enum Attributes {
     Certificate,
     Counter,
@@ -77,7 +80,7 @@ pub enum CertificateType {
 // }
 
 
-#[derive(Clone, Default, Eq, PartialEq, Debug)]
+#[derive(Clone, Default, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct DataAttributes {
     // application that manages the object
     // pub application: String<MAX_APPLICATION_NAME_LENGTH>,
@@ -94,7 +97,7 @@ pub struct DataAttributes {
 // How do we handle defaults?
 //
 // Lookup seems a bit painful, on the other hand a struct of options is wasteful.
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct KeyAttributes {
     // key_type: KeyType,
     // object_id: Bytes,
@@ -173,6 +176,22 @@ pub enum KeyType {
     Secret,
 }
 
+/// PhantomData to make it unconstructable
+/// NB: Better to check in service that nothing snuck through!
+#[derive(Clone, Default, Eq, PartialEq, Debug, Deserialize, Serialize)]
+pub struct Letters(pub ShortData, PhantomData<()>);
+
+impl TryFrom<ShortData> for Letters {
+    type Error = crate::error::Error;
+
+    fn try_from(bytes: ShortData) -> Result<Self, Self::Error> {
+        if !&bytes.iter().all(|b| *b >= b'a' && *b <= b'z') {
+            return Err(Self::Error::NotJustLetters);
+        }
+        Ok(Letters(bytes, PhantomData))
+    }
+}
+
 /// Opaque key handle
 ///
 /// Ideally, this would be authenticated encryption
@@ -223,14 +242,14 @@ pub struct PrivateKeyAttributes {
     persistent: bool,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub enum StorageLocation {
     Volatile,
     Internal,
     External,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct StorageAttributes {
     // each object must have a unique ID
     // unique_id: UniqueId,
@@ -275,7 +294,7 @@ impl StorageAttributes {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub enum Mechanism {
     Aes256Cbc,
     Chacha8Poly1305,
@@ -290,9 +309,17 @@ pub enum Mechanism {
 }
 
 pub type LongData = Bytes<MAX_LONG_DATA_LENGTH>;
+pub type MediumData = Bytes<MAX_MEDIUM_DATA_LENGTH>;
 pub type ShortData = Bytes<MAX_SHORT_DATA_LENGTH>;
 
 pub type Message = Bytes<MAX_MESSAGE_LENGTH>;
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
+pub enum KeySerialization {
+    Asn1Der,
+    Cose,
+    Raw,
+}
 
 pub type Signature = Bytes<MAX_SIGNATURE_LENGTH>;
 

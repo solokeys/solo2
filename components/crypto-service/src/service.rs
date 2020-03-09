@@ -1,3 +1,5 @@
+use cortex_m_semihosting::hprintln;
+
 use core::convert::TryFrom;
 
 use heapless_bytes::Bytes;
@@ -46,19 +48,29 @@ pub trait Sign<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> 
     -> Result<reply::Sign, Error> { Err(Error::MechanismNotAvailable) }
 }
 
+pub trait UnwrapKey<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> {
+    fn unwrap_key(_resources: &mut ServiceResources<'a, 's, R, I, E, V>, _request: request::UnwrapKey)
+    -> Result<reply::UnwrapKey, Error> { Err(Error::MechanismNotAvailable) }
+}
+
 pub trait Verify<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> {
     fn verify(_resources: &mut ServiceResources<'a, 's, R, I, E, V>, _request: request::Verify)
     -> Result<reply::Verify, Error> { Err(Error::MechanismNotAvailable) }
+}
+
+pub trait WrapKey<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> {
+    fn wrap_key(_resources: &mut ServiceResources<'a, 's, R, I, E, V>, _request: request::WrapKey)
+    -> Result<reply::WrapKey, Error> { Err(Error::MechanismNotAvailable) }
 }
 
 #[derive(Clone,Debug,Eq,PartialEq,SerializeIndexed,DeserializeIndexed)]
 // #[derive(Clone,Debug,Eq,PartialEq,Serialize,Deserialize)]
 // #[serde(rename_all = "camelCase")]
 // #[serde_indexed(offset = 1)]
-struct SerializedKey {
+pub struct SerializedKey {
    // r#type: KeyType,
-   kind: u8,//KeyKind,
-   value: Bytes<MAX_SERIALIZED_KEY_LENGTH>,
+   pub kind: u8,//KeyKind,
+   pub value: Bytes<MAX_SERIALIZED_KEY_LENGTH>,
 }
 
 impl<'a> TryFrom<(KeyKind, &'a [u8])> for SerializedKey {
@@ -118,24 +130,49 @@ where
     currently_serving: &'a str,
 }
 
+pub(crate) fn load_serialized_key<'s, S: LfsStorage>(fs: &mut FilesystemWith<'s, 's, S>, path: &[u8], buf: &mut [u8]) -> Result<usize, Error> {
+
+    use littlefs2::fs::{File, FileWith};
+    use littlefs2::io::ReadWith;
+
+    let mut alloc = File::allocate();
+    let mut file = FileWith::open(&path[..], &mut alloc, fs)
+        .map_err(|_| Error::FilesystemReadFailure)?;
+
+    let size = file.read(buf)
+        .map_err(|_| Error::FilesystemReadFailure)?;
+
+    Ok(size)
+}
+
+pub fn store_serialized_key<'s, S: LfsStorage>(
+    fs: &mut FilesystemWith<'s, 's, S>,
+    path: &[u8], buf: &[u8]
+)
+    -> Result<(), Error>
+{
+
+    use littlefs2::fs::{File, FileWith};
+    let mut alloc = File::allocate();
+    let mut file = FileWith::create(&path[..], &mut alloc, fs)
+        .map_err(|_| Error::FilesystemWriteFailure)?;
+    use littlefs2::io::WriteWith;
+    file.write(&buf)
+        .map_err(|_| Error::FilesystemWriteFailure)?;
+    file.sync()
+        .map_err(|_| Error::FilesystemWriteFailure)?;
+
+    // file.close()
+    //     .map_err(|_| Error::FilesystemWriteFailure)?;
+    // #[cfg(test)]
+    // println!("closed file");
+
+    Ok(())
+}
+
 impl<'s, I: LfsStorage, E: LfsStorage, V: LfsStorage> TriStorage<'s, I, E, V> {
 
-    pub(crate) fn load_serialized_key<S: LfsStorage>(fs: &mut FilesystemWith<'s, 's, S>, path: &[u8], buf: &mut [u8]) -> Result<(), Error> {
-
-        use littlefs2::fs::{File, FileWith};
-        use littlefs2::io::ReadWith;
-
-        let mut alloc = File::allocate();
-        let mut file = FileWith::open(&path[..], &mut alloc, fs)
-            .map_err(|_| Error::FilesystemReadFailure)?;
-
-        file.read(buf)
-            .map_err(|_| Error::FilesystemReadFailure)?;
-
-        Ok(())
-    }
-
-    pub fn load_key(&mut self, path: &[u8], kind: KeyKind, key_bytes: &mut [u8]) -> Result<StorageLocation, Error> {
+    pub fn load_key_unchecked(&mut self, path: &[u8]) -> Result<(SerializedKey, StorageLocation), Error> {
         // #[cfg(test)]
         // // actually safe, as path is ASCII by construction
         // println!("loading from file {:?}", unsafe { core::str::from_utf8_unchecked(&path[..]) });
@@ -143,13 +180,13 @@ impl<'s, I: LfsStorage, E: LfsStorage, V: LfsStorage> TriStorage<'s, I, E, V> {
         let mut buf = [0u8; 128];
 
         // try each storage backend in turn, attempting to locate the key
-        let location = match Self::load_serialized_key(&mut self.vfs, path, &mut buf) {
+        let location = match load_serialized_key(&mut self.vfs, path, &mut buf) {
             Ok(_) => StorageLocation::Volatile,
             Err(_) => {
-                match Self::load_serialized_key(&mut self.ifs, path, &mut buf) {
+                match load_serialized_key(&mut self.ifs, path, &mut buf) {
                     Ok(_) => StorageLocation::Internal,
                     Err(_) => {
-                        match Self::load_serialized_key(&mut self.efs, path, &mut buf) {
+                        match load_serialized_key(&mut self.efs, path, &mut buf) {
                             Ok(_) => StorageLocation::External,
                             Err(_) => {
                                 return Err(Error::NoSuchKey);
@@ -161,13 +198,22 @@ impl<'s, I: LfsStorage, E: LfsStorage, V: LfsStorage> TriStorage<'s, I, E, V> {
         };
 
         let serialized_key: SerializedKey = cbor_deserialize(&buf).map_err(|_| Error::CborError)?;
+        Ok((serialized_key, location))
+
+    }
+
+    pub fn load_key(&mut self, path: &[u8], kind: KeyKind, key_bytes: &mut [u8]) -> Result<StorageLocation, Error> {
+        // #[cfg(test)]
+        // // actually safe, as path is ASCII by construction
+        // println!("loading from file {:?}", unsafe { core::str::from_utf8_unchecked(&path[..]) });
+
+        let (serialized_key, location) = self.load_key_unchecked(path)?;
         if serialized_key.kind != kind as u8 {
             return Err(Error::WrongKeyKind);
         }
 
         key_bytes.copy_from_slice(&serialized_key.value);
         Ok(location)
-
     }
 
     // TODO: in the case of desktop/ram storage:
@@ -191,36 +237,11 @@ impl<'s, I: LfsStorage, E: LfsStorage, V: LfsStorage> TriStorage<'s, I, E, V> {
         cbor_serialize(&serialized_key, &mut buf).map_err(|_| Error::CborError)?;
 
         match persistence {
-            StorageLocation::Internal => Self::store_serialized_key(&mut self.ifs, path, &buf),
-            StorageLocation::External => Self::store_serialized_key(&mut self.efs, path, &buf),
-            StorageLocation::Volatile => Self::store_serialized_key(&mut self.vfs, path, &buf),
+            StorageLocation::Internal => store_serialized_key(&mut self.ifs, path, &buf),
+            StorageLocation::External => store_serialized_key(&mut self.efs, path, &buf),
+            StorageLocation::Volatile => store_serialized_key(&mut self.vfs, path, &buf),
         }
 
-    }
-
-    pub fn store_serialized_key<S: LfsStorage>(
-        fs: &mut FilesystemWith<'s, 's, S>,
-        path: &[u8], buf: &[u8]
-    )
-        -> Result<(), Error>
-    {
-
-        use littlefs2::fs::{File, FileWith};
-        let mut alloc = File::allocate();
-        let mut file = FileWith::create(&path[..], &mut alloc, fs)
-            .map_err(|_| Error::FilesystemWriteFailure)?;
-        use littlefs2::io::WriteWith;
-        file.write(&buf)
-            .map_err(|_| Error::FilesystemWriteFailure)?;
-        file.sync()
-            .map_err(|_| Error::FilesystemWriteFailure)?;
-
-        // file.close()
-        //     .map_err(|_| Error::FilesystemWriteFailure)?;
-        // #[cfg(test)]
-        // println!("closed file");
-
-        Ok(())
     }
 
 }
@@ -249,6 +270,10 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
     ) -> Result<Self, Error> {
 
         Ok(Self { rng, tri: TriStorage { ifs, efs, vfs }, currently_serving: &"" })
+    }
+
+    pub fn load_key_unchecked(&mut self, path: &[u8]) -> Result<(SerializedKey, StorageLocation), Error> {
+        self.tri.load_key_unchecked(path)
     }
 
     pub fn load_key(&mut self, path: &[u8], kind: KeyKind, key_bytes: &mut [u8])
@@ -323,6 +348,32 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
                 }.map(|reply| Reply::GenerateKey(reply))
             },
 
+            Request::LoadBlob(request) => {
+                let path = self.blob_path(&request.prefix, &request.id.object_id)?;
+                let mut data = Message::new();
+                data.resize_to_capacity();
+                let size = match request.location {
+                    StorageLocation::Internal => load_serialized_key(&mut self.tri.ifs, &path, &mut data),
+                    StorageLocation::External => load_serialized_key(&mut self.tri.efs, &path, &mut data),
+                    StorageLocation::Volatile => load_serialized_key(&mut self.tri.vfs, &path, &mut data),
+                }?;
+                data.resize_default(size);
+                Ok(Reply::LoadBlob(reply::LoadBlob { data } ))
+            }
+
+            Request::StoreBlob(request) => {
+                let blob_id = self.generate_unique_id()?;
+                let path = self.blob_path(&request.prefix, &blob_id)?;
+                hprintln!("saving blob to {:?}", &path).ok();
+                match request.attributes.persistence {
+                    StorageLocation::Internal => store_serialized_key(&mut self.tri.ifs,& path, &request.data),
+                    StorageLocation::External => store_serialized_key(&mut self.tri.efs, &path, &request.data),
+                    StorageLocation::Volatile => store_serialized_key(&mut self.tri.vfs, &path, &request.data),
+                }?;
+                hprintln!("saved blob").ok();
+                Ok(Reply::StoreBlob(reply::StoreBlob { blob: ObjectHandle { object_id: blob_id } }))
+            }
+
             Request::Sign(request) => {
                 match request.mechanism {
 
@@ -334,6 +385,15 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
                 }.map(|reply| Reply::Sign(reply))
             },
 
+            Request::UnwrapKey(request) => {
+                match request.mechanism {
+
+                    Mechanism::Chacha8Poly1305 => mechanisms::Chacha8Poly1305::unwrap_key(self, request),
+                    _ => return Err(Error::MechanismNotAvailable),
+
+                }.map(|reply| Reply::UnwrapKey(reply))
+            }
+
             Request::Verify(request) => {
                 match request.mechanism {
 
@@ -343,6 +403,16 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
 
                 }.map(|reply| Reply::Verify(reply))
             },
+
+            Request::WrapKey(request) => {
+                match request.mechanism {
+
+                    Mechanism::Chacha8Poly1305 => mechanisms::Chacha8Poly1305::wrap_key(self, request),
+                    _ => return Err(Error::MechanismNotAvailable),
+
+                }.map(|reply| Reply::WrapKey(reply))
+            },
+
 
             _ => {
                 // #[cfg(test)]
@@ -372,6 +442,32 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
         // println!("creating dir {:?}", &path);
         // self.pfs.create_dir(path.as_ref()).map_err(|_| Error::FilesystemWriteFailure)?;
         path.extend_from_slice(b"-").map_err(|_| Error::InternalError)?;
+        path.extend_from_slice(&id.hex()).map_err(|_| Error::InternalError)?;
+        Ok(path)
+    }
+
+    pub fn blob_path(&mut self, prefix: &Option<Letters>, id: &UniqueId)
+        -> Result<Bytes<MAX_PATH_LENGTH>, Error> {
+        let mut path = Bytes::<MAX_PATH_LENGTH>::new();
+
+        path.extend_from_slice(b"/").map_err(|_| Error::InternalError)?;
+        path.extend_from_slice(self.currently_serving.as_bytes()).map_err(|_| Error::InternalError)?;
+        path.extend_from_slice(b"-").map_err(|_| Error::InternalError)?;
+
+        if let Some(prefix) = &prefix {
+            if !prefix.0.iter().all(|b| *b >= b'a' && *b <= b'z') {
+                return Err(crate::error::Error::NotJustLetters);
+            }
+            path.extend_from_slice(&prefix.0).map_err(|_| Error::InternalError)?;
+            path.extend_from_slice(b"-").map_err(|_| Error::InternalError)?;
+        }
+
+        // const HEX_CHARS: &[u8] = b"0123456789abcdef";
+        // for byte in id.iter() {
+        //     hprintln!("{}", &byte).ok();
+        //     path.push(HEX_CHARS[(byte >> 4) as usize]).map_err(|_| Error::InternalError)?;
+        //     path.push(HEX_CHARS[(byte & 0xf) as usize]).map_err(|_| Error::InternalError)?;
+        // }
         path.extend_from_slice(&id.hex()).map_err(|_| Error::InternalError)?;
         Ok(path)
     }

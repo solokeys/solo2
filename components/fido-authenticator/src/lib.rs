@@ -1,7 +1,7 @@
  #![cfg_attr(not(test), no_std)]
 
 use core::task::Poll;
-use core::convert::TryInto;
+use core::convert::{TryFrom, TryInto};
 
 use cortex_m_semihosting::hprintln;
 
@@ -488,10 +488,12 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         // hprintln!("priv {:?}", &private_key).ok();
         // hprintln!("pub {:?}", &public_key).ok();
 
-        let key_parameter = match rk_requested {
-            true => Some(private_key.clone()),
-            false => None,
-        };
+        // TODO: add wrapped key
+        // let key_parameter = match rk_requested {
+        //     true => Some(private_key.clone()),
+        //     false => None,
+        // };
+        let key_parameter = credential::Key::ResidentKey(private_key.clone());
 
         let credential = Credential::new(
             credential::CtapVersion::Fido21Pre,
@@ -507,8 +509,26 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         // 12. if `rk` is set, store or overwrite key pair, if full error KeyStoreFull
         // e.g., 44B
         let serialized_credential = credential.serialize()?;
-        hprintln!("serialized credential = {:?}", &serialized_credential).ok();
-        hprintln!("credential = {:?}", Credential::deserialize(&serialized_credential)?).ok();
+        // hprintln!("serialized credential = {:?}", &serialized_credential).ok();
+
+        let mut prefix = crypto_service::types::ShortData::new();
+        prefix.extend_from_slice(b"rk").map_err(|_| Error::Other)?;
+        let prefix = Some(crypto_service::types::Letters::try_from(prefix).map_err(|_| Error::Other)?);
+        let blob_id = syscall!(self.crypto.store_blob(
+            prefix.clone(),
+            // credential_id.0.clone(),
+            serialized_credential.clone(),
+            StorageLocation::Volatile,
+        )).blob;
+
+        let loaded_credential = syscall!(self.crypto.load_blob(
+            prefix.clone(),
+            blob_id,
+            StorageLocation::Volatile,
+        )).data;
+        // hprintln!("loaded credential = {:?}", &loaded_credential).ok();
+
+        // hprintln!("credential = {:?}", &Credential::deserialize(&serialized_credential)?).ok();
 
         let key = &self.key_encryption_key()?;
         let message = &serialized_credential;
@@ -516,10 +536,32 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         let encrypted_serialized_credential = EncryptedSerializedCredential(
             syscall!(self.crypto.encrypt_chacha8poly1305(key, message, associated_data)));
 
-        hprintln!("esc = {:?}", &encrypted_serialized_credential).ok();
+        // hprintln!("esc = {:?}", &encrypted_serialized_credential).ok();
         // e.g., 72B
         let credential_id: CredentialId = encrypted_serialized_credential.try_into().unwrap();
-        hprintln!("cid = {:?}", &credential_id).ok();
+        // hprintln!("cid = {:?}", &credential_id).ok();
+        // hprintln!("credential_id.len() = {}", credential_id.0.len()).ok();
+
+        let esc: EncryptedSerializedCredential = credential_id.try_into().unwrap();
+        // hprintln!("esc = {:?}", &esc).ok();
+
+
+        // WrappedKey version
+        let wrapping_key = &self.key_encryption_key()?;
+        let wrapped_key = syscall!(self.crypto.wrap_key_chacha8poly1305(
+            &wrapping_key,
+            &private_key,
+            b"",
+        )).wrapped_key;
+        hprintln!("wrapped_key = {:?}", &wrapped_key).ok();
+
+        let unwrapped_key = syscall!(self.crypto.unwrap_key_chacha8poly1305(
+            &wrapping_key,
+            &wrapped_key,
+            b"",
+            StorageLocation::Volatile,
+        )).key;
+        hprintln!("unwrapped_key = {:?}", &unwrapped_key).ok();
 
         // 13. generate and return attestation statement using clientDataHash
 

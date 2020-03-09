@@ -1,4 +1,6 @@
-use core::convert::TryInto;
+use cortex_m_semihosting::hprintln;
+
+use core::convert::{TryFrom, TryInto};
 
 use crate::api::*;
 // use crate::config::*;
@@ -95,6 +97,7 @@ Encrypt<'a, 's, R, I, E, V> for super::Chacha8Poly1305
         let key_id = request.key.object_id;
         let path = resources.prepare_path_for_key(KeyType::Secret, &key_id)?;
         let mut serialized = [0u8; 44];
+        hprintln!("loading encryption key: {:?}", &path).ok();
         let location: StorageLocation = resources.load_key(&path, KeyKind::Symmetric32Nonce12, &mut serialized)?;
         {
             let nonce = &mut serialized[32..];
@@ -120,6 +123,79 @@ Encrypt<'a, 's, R, I, E, V> for super::Chacha8Poly1305
 
         // let ciphertext = Message::try_from_slice(&ciphertext).unwrap();
         Ok(reply::Encrypt { ciphertext, nonce, tag })
+    }
+}
+
+#[cfg(feature = "chacha8-poly1305")]
+impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
+WrapKey<'a, 's, R, I, E, V> for super::Chacha8Poly1305
+{
+    fn wrap_key(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::WrapKey)
+        -> Result<reply::WrapKey, Error>
+    {
+        // TODO: need to check both secret and private keys
+        let path = resources.prepare_path_for_key(KeyType::Private, &request.key.object_id)?;
+        hprintln!("loading key to be wrapped from: {:?}", &path).ok();
+        let (serialized_key, location) = resources.load_key_unchecked(&path)?;
+
+        let mut message = Message::new();
+        message.resize_to_capacity();
+        let size = crate::service::cbor_serialize(&serialized_key, &mut message).map_err(|_| Error::CborError)?;
+
+        message.resize_default(size).map_err(|_| Error::InternalError)?;
+
+        let encryption_request = request::Encrypt {
+            mechanism: Mechanism::Chacha8Poly1305,
+            key: request.wrapping_key.clone(),
+            message,
+            associated_data: ShortData::new(),
+        };
+        let encryption_reply = <super::Chacha8Poly1305>::encrypt(resources, encryption_request)?;
+
+        let mut wrapped_key = Message::new();
+        wrapped_key.resize_to_capacity();
+        let size = crate::service::cbor_serialize(&encryption_reply, &mut wrapped_key).map_err(|_| Error::CborError)?;
+        wrapped_key.resize_default(size).map_err(|_| Error::InternalError)?;
+
+        Ok(reply::WrapKey { wrapped_key })
+    }
+}
+
+#[cfg(feature = "chacha8-poly1305")]
+impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
+UnwrapKey<'a, 's, R, I, E, V> for super::Chacha8Poly1305
+{
+    fn unwrap_key(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::UnwrapKey)
+        -> Result<reply::UnwrapKey, Error>
+    {
+        let reply::Encrypt { ciphertext, nonce, tag } = crate::service::cbor_deserialize(
+            &request.wrapped_key).map_err(|_| Error::CborError)?;
+
+        let decryption_request = request::Decrypt {
+            mechanism: Mechanism::Chacha8Poly1305,
+            key: request.wrapping_key.clone(),
+            message: ciphertext,
+            associated_data: request.associated_data,
+            nonce,
+            tag,
+        };
+
+        let serialized_key = <super::Chacha8Poly1305>::decrypt(resources, decryption_request)?.plaintext;
+        let SerializedKey { kind, value } = crate::service::cbor_deserialize(&serialized_key).map_err(|_| Error::CborError)?;
+        let kind = KeyKind::try_from(kind).map_err(|_| Error::InternalError)?;
+
+        // TODO: need to check both secret and private keys
+        let key_id = resources.generate_unique_id()?;
+        let path = resources.prepare_path_for_key(KeyType::Private, &key_id)?;
+
+        resources.store_key(
+            request.attributes.persistence,
+            &path,
+            kind,
+            &value,
+        )?;
+
+        Ok(reply::UnwrapKey { key: ObjectHandle { object_id: key_id } } )
     }
 }
 

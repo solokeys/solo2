@@ -29,6 +29,7 @@ pub enum Error {
     MechanismNotAvailable,
     NonceOverflow,
     NoSuchKey,
+    NotJustLetters,
     RequestNotAvailable,
     SignDataTooLarge,
     WrongKeyKind,

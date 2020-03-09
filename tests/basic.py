@@ -1,3 +1,4 @@
+import cbor
 import fido2.attestation
 import fido2.ctap2
 import fido2.hid

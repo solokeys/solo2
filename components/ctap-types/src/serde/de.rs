@@ -1,5 +1,9 @@
 use serde::Deserialize;
 
+use serde::de::{
+    IntoDeserializer,
+};
+
 use super::error::{Error, Result};
 
 /// Deserialize a message of type `T` from a byte slice. The unused portion (if any)
@@ -575,18 +579,6 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         self.deserialize_map(visitor)
     }
 
-    fn deserialize_enum<V>(
-        self,
-        _name: &'static str,
-        _variants: &'static [&'static str],
-        visitor: V,
-    ) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
-        todo!("implement `deserialize_enum`");
-    }
-
     // fn deserialize_enum<V>(
     //     self,
     //     _name: &'static str,
@@ -596,8 +588,20 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     // where
     //     V: Visitor<'de>,
     // {
-    //     visitor.visit_enum(self)
+    //     todo!("implement `deserialize_enum`");
     // }
+
+    fn deserialize_enum<V>(
+        self,
+        _name: &'static str,
+        _variants: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value>
+    where
+        V: Visitor<'de>,
+    {
+        visitor.visit_enum(self)
+    }
 
     fn deserialize_identifier<V>(self, visitor: V) -> Result<V::Value>
     where
@@ -616,43 +620,44 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 }
 
-// impl<'de, 'a> serde::de::VariantAccess<'de> for &'a mut Deserializer<'de> {
-//     type Error = Error;
+impl<'de, 'a> serde::de::VariantAccess<'de> for &'a mut Deserializer<'de> {
+    type Error = Error;
 
-//     fn unit_variant(self) -> Result<()> {
-//         Ok(())
-//     }
+    fn unit_variant(self) -> Result<()> {
+        Ok(())
+    }
 
-//     fn newtype_variant_seed<V: DeserializeSeed<'de>>(self, seed: V) -> Result<V::Value> {
-//         DeserializeSeed::deserialize(seed, self)
-//     }
+    fn newtype_variant_seed<V: DeserializeSeed<'de>>(self, seed: V) -> Result<V::Value> {
+        DeserializeSeed::deserialize(seed, self)
+    }
 
-//     fn tuple_variant<V: Visitor<'de>>(self, len: usize, visitor: V) -> Result<V::Value> {
-//         serde::de::Deserializer::deserialize_tuple(self, len, visitor)
-//     }
+    fn tuple_variant<V: Visitor<'de>>(self, len: usize, visitor: V) -> Result<V::Value> {
+        serde::de::Deserializer::deserialize_tuple(self, len, visitor)
+    }
 
-//     fn struct_variant<V: Visitor<'de>>(
-//         self,
-//         fields: &'static [&'static str],
-//         visitor: V,
-//     ) -> Result<V::Value> {
-//         serde::de::Deserializer::deserialize_tuple(self, fields.len(), visitor)
-//     }
-// }
+    fn struct_variant<V: Visitor<'de>>(
+        self,
+        fields: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value> {
+        serde::de::Deserializer::deserialize_tuple(self, fields.len(), visitor)
+    }
+}
 
-// impl<'de, 'a> serde::de::EnumAccess<'de> for &'a mut Deserializer<'de> {
-//     type Error = Error;
-//     type Variant = Self;
+impl<'de, 'a> serde::de::EnumAccess<'de> for &'a mut Deserializer<'de> {
+    type Error = Error;
+    type Variant = Self;
 
-//     fn variant_seed<V: DeserializeSeed<'de>>(self, seed: V) -> Result<(V::Value, Self)> {
-//         let varint = self.try_take_varint()?;
-//         if varint > 0xFFFF_FFFF {
-//             return Err(Error::DeserializeBadEnum);
-//         }
-//         let v = DeserializeSeed::deserialize(seed, (varint as u32).into_deserializer())?;
-//         Ok((v, self))
-//     }
-// }
+    fn variant_seed<V: DeserializeSeed<'de>>(self, seed: V) -> Result<(V::Value, Self)> {
+        // let varint = self.try_take_varint()?;
+        // if varint > 0xFFFF_FFFF {
+        //     return Err(Error::DeserializeBadEnum);
+        // }
+        let varint = self.raw_deserialize_u32(0)?;
+        let v = DeserializeSeed::deserialize(seed, (varint as u32).into_deserializer())?;
+        Ok((v, self))
+    }
+}
 
 // // // `MapAccess` is provided to the `Visitor` to give it the ability to iterate
 // // // through entries of the map.

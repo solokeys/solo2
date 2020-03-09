@@ -17,29 +17,43 @@ use ctap_types::{
 use super::{Error, Result};
 
 #[derive(Copy, Clone, Debug, serde::Deserialize, serde::Serialize)]
+// #[derive(Copy, Clone, Debug, serde_indexed::DeserializeIndexed, serde_indexed::SerializeIndexed)]
 pub enum CtapVersion {
     U2fV2,
     Fido20,
     Fido21Pre,
 }
 
-#[derive(Clone, Debug)]
-pub struct CredentialId(pub crypto_service::types::Message);
+#[derive(Clone, Debug, Default)]
+pub struct CredentialId(pub crypto_service::types::MediumData);
 
 // TODO: how to determine necessary size?
-pub type SerializedCredential = Bytes<consts::U512>;
+// pub type SerializedCredential = Bytes<consts::U512>;
+// pub type SerializedCredential = Bytes<consts::U256>;
+pub type SerializedCredential = crypto_service::types::Message;
 
 #[derive(Clone, Debug)]
 pub struct EncryptedSerializedCredential(pub crypto_service::api::reply::Encrypt);
 
 impl TryFrom<EncryptedSerializedCredential> for CredentialId {
     type Error = Error;
+
+    // fn try_from(esc: EncryptedSerializedCredential) -> Result<CredentialId> {
+    //     let mut credential_id = crypto_service::types::Message::new();
+    //     credential_id.extend_from_slice(&esc.0.tag).map_err(|_| Error::Other)?;
+    //     credential_id.extend_from_slice(&esc.0.nonce).map_err(|_| Error::Other)?;
+    //     credential_id.extend_from_slice(&esc.0.ciphertext).map_err(|_| Error::Other)?;
+    //     Ok(CredentialId(credential_id))
+    // }
+
     fn try_from(esc: EncryptedSerializedCredential) -> Result<CredentialId> {
-        let mut credential_id = crypto_service::types::Message::new();
-        credential_id.extend_from_slice(&esc.0.tag).map_err(|_| Error::Other)?;
-        credential_id.extend_from_slice(&esc.0.nonce).map_err(|_| Error::Other)?;
-        credential_id.extend_from_slice(&esc.0.ciphertext).map_err(|_| Error::Other)?;
-        Ok(CredentialId(credential_id))
+        let mut credential_id = CredentialId::default();
+        credential_id.0.resize_to_capacity();
+        let buffer = &mut credential_id.0;
+        // let size = ctap_types::serde::cbor_serialize(&esc.0, buffer).map_err(|_| Error::Other)?;
+        let size = ctap_types::serde::cbor_serialize(&esc.0, buffer).unwrap();
+        credential_id.0.resize_default(size);
+        Ok(credential_id)
     }
 }
 
@@ -47,34 +61,43 @@ impl TryFrom<CredentialId> for EncryptedSerializedCredential {
     // tag = 16B
     // nonce = 12B
     type Error = Error;
+
     fn try_from(cid: CredentialId) -> Result<EncryptedSerializedCredential> {
-        if cid.0.len() < 28 {
-            return Err(Error::InvalidCredential);
-        }
-        let tag = &cid.0[..16];
-        let nonce = &cid.0[16..][..12];
-        let cipher = &cid.0[28..];
-        Ok(EncryptedSerializedCredential(crypto_service::api::reply::Encrypt {
-            ciphertext: {
-                let mut c = crypto_service::types::Message::new();
-                c.extend_from_slice(cipher).map_err(|_| Error::Other)?;
-                c
-            },
-            nonce: {
-                let mut c = crypto_service::types::ShortData::new();
-                c.extend_from_slice(nonce).map_err(|_| Error::Other)?;
-                c
-            },
-            tag: {
-                let mut c = crypto_service::types::ShortData::new();
-                c.extend_from_slice(tag).map_err(|_| Error::Other)?;
-                c
-            },
-        }))
+        let encrypted_serialized_credential = EncryptedSerializedCredential(
+            ctap_types::serde::cbor_deserialize(&cid.0).map_err(|_| Error::Other)?
+        );
+        Ok(encrypted_serialized_credential)
     }
+
+    // fn try_from(cid: CredentialId) -> Result<EncryptedSerializedCredential> {
+    //     if cid.0.len() < 28 {
+    //         return Err(Error::InvalidCredential);
+    //     }
+    //     let tag = &cid.0[..16];
+    //     let nonce = &cid.0[16..][..12];
+    //     let cipher = &cid.0[28..];
+    //     Ok(EncryptedSerializedCredential(crypto_service::api::reply::Encrypt {
+    //         ciphertext: {
+    //             let mut c = crypto_service::types::Message::new();
+    //             c.extend_from_slice(cipher).map_err(|_| Error::Other)?;
+    //             c
+    //         },
+    //         nonce: {
+    //             let mut c = crypto_service::types::ShortData::new();
+    //             c.extend_from_slice(nonce).map_err(|_| Error::Other)?;
+    //             c
+    //         },
+    //         tag: {
+    //             let mut c = crypto_service::types::ShortData::new();
+    //             c.extend_from_slice(tag).map_err(|_| Error::Other)?;
+    //             c
+    //         },
+    //     }))
+    // }
 }
 
-enum Key {
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+pub enum Key {
     ResidentKey(ObjectHandle),
     WrappedKey(Bytes<consts::U32>),
 }
@@ -86,19 +109,23 @@ enum Key {
 pub struct Credential {
     ctap: i32, //CtapVersion,
 
-    rp_id: String<consts::U256>,
-    // #[serde(skip_serializing_if = "Option::is_none")] rp_name: Option<String<consts::U64>>,
+    // id, name, url
+    rp: ctap_types::webauthn::PublicKeyCredentialRpEntity,
+    // id, name, display_name
+    user: ctap_types::webauthn::PublicKeyCredentialUserEntity,
 
-    user_id: Bytes<consts::U64>,
-    // #[serde(skip_serializing_if = "Option::is_none")] user_name: Option<String<consts::U64>>,
-    // #[serde(skip_serializing_if = "Option::is_none")] user_display_name: Option<String<consts::U64>>,
-
+    // can be just a counter, need to be able to determine "latest"
     creation_time: u32,
+    // for deterministic keys, it seems CTAP2 (but not CTAP1) makes signature counters optional
     use_counter: bool,
+    // P256 or Ed25519
     algorithm: i32,
     // for RK in non-deterministic mode: refers to actual key
-    #[serde(skip_serializing_if = "Option::is_none")]
-    key_id: Option<ObjectHandle>,
+    // TODO(implement enums in cbor-deser): for all others, is a wrapped key
+    // --> use above Key enum
+    // #[serde(skip_serializing_if = "Option::is_none")]
+    // key_id: Option<ObjectHandle>,
+    the_key: Key,
 
     // extensions
     hmac_secret: bool,
@@ -110,7 +137,7 @@ impl Credential {
         ctap: CtapVersion,
         parameters: &ctap2::make_credential::Parameters,
         algorithm: i32,
-        key: Option<ObjectHandle>,
+        key: Key,
         timestamp: u32,
         hmac_secret: bool,
         cred_protect: bool,
@@ -121,18 +148,13 @@ impl Credential {
             // ctap,
             ctap: ctap as i32,
 
-            rp_id: parameters.rp.id.clone(),
-            // rp_name: parameters.rp.name.clone(),
-            // skip parameters.rp.url, we can't display it anyway
-
-            user_id: parameters.user.id.clone(),
-            // user_name: parameters.user.name.clone(),
-            // user_display_name: parameters.user.display_name.clone(),
+            rp: parameters.rp.clone(),
+            user: parameters.user.clone(),
 
             creation_time: timestamp,
             use_counter: true,
             algorithm: algorithm,
-            key_id: key,
+            the_key: key,
 
             hmac_secret,
             cred_protect,
@@ -149,6 +171,7 @@ impl Credential {
     }
 
     pub fn deserialize(bytes: &SerializedCredential) -> Result<Self> {
-        ctap_types::serde::cbor_deserialize(bytes).map_err(|_| Error::Other)
+        // ctap_types::serde::cbor_deserialize(bytes).map_err(|_| Error::Other)
+        Ok(ctap_types::serde::cbor_deserialize(bytes).unwrap())
     }
 }

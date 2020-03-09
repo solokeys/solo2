@@ -23,13 +23,17 @@ generate_enums! {
     CreateObject: 1
     Decrypt: 13
     DeriveKey: 2
+    DeserializeKey: 17
     Encrypt: 14
     // DeriveKeypair: 3
     FindObjects: 4
     GenerateKey: 5
     // GenerateKeypair: 6
+    LoadBlob: 15
     // ReadCounter: 7
+    SerializeKey: 16
     Sign: 8
+    StoreBlob: 16
     UnwrapKey: 9
     Verify: 10
     WrapKey: 11
@@ -55,9 +59,17 @@ pub mod request {
           - mechanism: Mechanism
           - key: ObjectHandle
           - message: Message
-          - associated_data: ShortData
+          - associated_data: Message
           - nonce: ShortData
           - tag: ShortData
+
+        DeserializeKey:
+          - mechanism: Mechanism
+          - serialized_key: Message
+
+        // DeleteBlob:
+        //   - prefix: Option<Letters>
+        //   - name: ShortData
 
         // examples:
         // - public key from private key
@@ -102,20 +114,38 @@ pub mod request {
         //     - object: ObjectHandle
         //     - attributes: Attributes
 
+        LoadBlob:
+          - prefix: Option<Letters>
+          - id: ObjectHandle
+          // - id: MediumData
+          - location: StorageLocation
+
         // use GetAttribute(value) on counter instead
         // ReadCounter:
         //     - counter: ObjectHandle
+
+        SerializeKey:
+          - mechanism: Mechanism
+          - key: ObjectHandle
+          - format: KeySerialization
 
         Sign:
           - mechanism: Mechanism
           - key: ObjectHandle
           - message: Message
 
+        StoreBlob:
+          - prefix: Option<Letters>
+          // - id: MediumData
+          - data: Message
+          - attributes: StorageAttributes
+
         UnwrapKey:
           - mechanism: Mechanism
           - wrapping_key: ObjectHandle
           - wrapped_key: Message
           - associated_data: Message
+          - attributes: StorageAttributes
 
         Verify:
           - mechanism: Mechanism
@@ -160,6 +190,9 @@ pub mod reply {
         DeriveKey:
             - key: ObjectHandle
 
+        DeserializeKey:
+            - key: ObjectHandle
+
 		Encrypt:
             - ciphertext: Message
             - nonce: ShortData
@@ -176,17 +209,26 @@ pub mod reply {
         //     - private_key: ObjectHandle
         //     - public_key: ObjectHandle
 
+        LoadBlob:
+          - data: Message
+
         // ReadCounter:
         //     - counter: u32
 
+        SerializeKey:
+            - wrapped_key: Message
+
         Sign:
             - signature: Signature
+
+        StoreBlob:
+            - blob: ObjectHandle
 
         Verify:
             - valid: bool
 
         UnwrapKey:
-            - key: Option<ObjectHandle>
+            - key: ObjectHandle
 
         WrapKey:
             - wrapped_key: Message

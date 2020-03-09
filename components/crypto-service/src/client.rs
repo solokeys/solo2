@@ -1,5 +1,7 @@
 use core::marker::PhantomData;
 
+use cortex_m_semihosting::hprintln;
+
 use crate::api::*;
 // use crate::config::*;
 use crate::error::*;
@@ -72,7 +74,7 @@ impl<'a, 'c> RawFutureResult<'a, 'c> {
                             core::task::Poll::Ready(Ok(reply))
                         } else  {
                             // #[cfg(all(test, feature = "verbose-tests"))]
-                            // println!("got: {:?}, expected: {:?}", Some(u8::from(&reply)), self.c.pending);
+                            hprintln!("got: {:?}, expected: {:?}", Some(u8::from(&reply)), self.c.pending);
                             core::task::Poll::Ready(Err(Error::InternalError))
                         }
                     }
@@ -226,7 +228,7 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
         -> core::result::Result<FutureResult<'a, 'c, reply::Decrypt>, ClientError>
     {
         let message = Message::try_from_slice(message).map_err(|_| ClientError::DataTooLarge)?;
-        let associated_data = ShortData::try_from_slice(associated_data).map_err(|_| ClientError::DataTooLarge)?;
+        let associated_data = Message::try_from_slice(associated_data).map_err(|_| ClientError::DataTooLarge)?;
         let nonce = ShortData::try_from_slice(nonce).map_err(|_| ClientError::DataTooLarge)?;
         let tag = ShortData::try_from_slice(tag).map_err(|_| ClientError::DataTooLarge)?;
         self.raw.request(request::Decrypt { mechanism, key, message, associated_data, nonce, tag })?;
@@ -241,6 +243,22 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
             mechanism,
             attributes,
         })?;
+        self.syscall.syscall();
+        Ok(FutureResult::new(self))
+    }
+
+    pub fn load_blob<'c>(&'c mut self, prefix: Option<Letters>, id: ObjectHandle, location: StorageLocation)
+        -> core::result::Result<FutureResult<'a, 'c, reply::LoadBlob>, ClientError>
+    {
+        self.raw.request(request::LoadBlob { prefix, id, location } )?;
+        self.syscall.syscall();
+        Ok(FutureResult::new(self))
+    }
+
+    pub fn store_blob<'c>(&'c mut self, prefix: Option<Letters>, /*id: MediumData,*/ data: Message, location: StorageLocation)
+        -> core::result::Result<FutureResult<'a, 'c, reply::StoreBlob>, ClientError>
+    {
+        self.raw.request(request::StoreBlob { prefix, /*id,*/ data, attributes: StorageAttributes { persistence: location } } )?;
         self.syscall.syscall();
         Ok(FutureResult::new(self))
     }
@@ -351,6 +369,28 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
     }
 
 
+          // - mechanism: Mechanism
+          // - wrapping_key: ObjectHandle
+          // - wrapped_key: Message
+          // - associated_data: Message
+    pub fn unwrap_key<'c>(&'c mut self, mechanism: Mechanism, wrapping_key: ObjectHandle, wrapped_key: Message,
+                       associated_data: &[u8], attributes: StorageAttributes)
+        -> core::result::Result<FutureResult<'a, 'c, reply::UnwrapKey>, ClientError>
+    {
+        let associated_data = Message::try_from_slice(associated_data).map_err(|_| ClientError::DataTooLarge)?;
+        self.raw.request(request::UnwrapKey { mechanism, wrapping_key, wrapped_key, associated_data, attributes })?;
+        self.syscall.syscall();
+        Ok(FutureResult::new(self))
+    }
+
+    pub fn unwrap_key_chacha8poly1305<'c>(&'c mut self, wrapping_key: &ObjectHandle, wrapped_key: &Message,
+                       associated_data: &[u8], location: StorageLocation)
+        -> core::result::Result<FutureResult<'a, 'c, reply::UnwrapKey>, ClientError>
+    {
+        self.unwrap_key(Mechanism::Chacha8Poly1305, wrapping_key.clone(), wrapped_key.clone(), associated_data,
+                         StorageAttributes::new().set_persistence(location))
+    }
+
     pub fn verify_ed25519<'c>(&'c mut self, key: &ObjectHandle, message: &[u8], signature: &[u8])
         -> core::result::Result<FutureResult<'a, 'c, reply::Verify>, ClientError>
     {
@@ -362,5 +402,27 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
     {
         self.verify(Mechanism::P256, key.clone(), message, signature)
     }
+
+          // - mechanism: Mechanism
+          // - wrapping_key: ObjectHandle
+          // - key: ObjectHandle
+          // - associated_data: Message
+    pub fn wrap_key<'c>(&'c mut self, mechanism: Mechanism, wrapping_key: ObjectHandle, key: ObjectHandle,
+                       associated_data: &[u8])
+        -> core::result::Result<FutureResult<'a, 'c, reply::WrapKey>, ClientError>
+    {
+        let associated_data = Message::try_from_slice(associated_data).map_err(|_| ClientError::DataTooLarge)?;
+        self.raw.request(request::WrapKey { mechanism, wrapping_key, key, associated_data })?;
+        self.syscall.syscall();
+        Ok(FutureResult::new(self))
+    }
+
+    pub fn wrap_key_chacha8poly1305<'c>(&'c mut self, wrapping_key: &ObjectHandle, key: &ObjectHandle,
+                       associated_data: &[u8])
+        -> core::result::Result<FutureResult<'a, 'c, reply::WrapKey>, ClientError>
+    {
+        self.wrap_key(Mechanism::Chacha8Poly1305, wrapping_key.clone(), key.clone(), associated_data)
+    }
+
 
 }
