@@ -74,7 +74,7 @@ impl<'a, 'c> RawFutureResult<'a, 'c> {
                             core::task::Poll::Ready(Ok(reply))
                         } else  {
                             // #[cfg(all(test, feature = "verbose-tests"))]
-                            hprintln!("got: {:?}, expected: {:?}", Some(u8::from(&reply)), self.c.pending);
+                            hprintln!("got: {:?}, expected: {:?}", Some(u8::from(&reply)), self.c.pending).ok();
                             core::task::Poll::Ready(Err(Error::InternalError))
                         }
                     }
@@ -293,13 +293,20 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
         Ok(FutureResult::new(self))
     }
 
-    pub fn sign<'c>(&'c mut self, mechanism: Mechanism, key: ObjectHandle, data: &[u8])
+    pub fn sign<'c>(
+        &'c mut self,
+        mechanism: Mechanism,
+        key: ObjectHandle,
+        data: &[u8],
+        format: SignatureSerialization,
+    )
         -> core::result::Result<FutureResult<'a, 'c, reply::Sign>, ClientError>
     {
         self.raw.request(request::Sign {
             key,
             mechanism,
             message: Bytes::try_from_slice(data).map_err(|_| ClientError::DataTooLarge)?,
+            format,
         })?;
         self.syscall.syscall();
         Ok(FutureResult::new(self))
@@ -310,7 +317,8 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
         mechanism: Mechanism,
         key: ObjectHandle,
         message: &[u8],
-        signature: &[u8]
+        signature: &[u8],
+        format: SignatureSerialization,
     )
         -> core::result::Result<FutureResult<'a, 'c, reply::Verify>, ClientError>
     {
@@ -319,6 +327,7 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
             key,
             message: Message::try_from_slice(&message).expect("all good"),
             signature: Signature::try_from_slice(&signature).expect("all good"),
+            format,
         })?;
         self.syscall.syscall();
         Ok(FutureResult::new(self))
@@ -399,13 +408,13 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
     pub fn sign_ed25519<'c>(&'c mut self, key: &ObjectHandle, message: &[u8])
         -> core::result::Result<FutureResult<'a, 'c, reply::Sign>, ClientError>
     {
-        self.sign(Mechanism::Ed25519, key.clone(), message)
+        self.sign(Mechanism::Ed25519, key.clone(), message, SignatureSerialization::Raw)
     }
 
     pub fn sign_hmacsha256<'c>(&'c mut self, key: &ObjectHandle, message: &[u8])
         -> core::result::Result<FutureResult<'a, 'c, reply::Sign>, ClientError>
     {
-        self.sign(Mechanism::HmacSha256, key.clone(), message)
+        self.sign(Mechanism::HmacSha256, key.clone(), message, SignatureSerialization::Raw)
     }
 
     // generally, don't offer multiple versions of a mechanism, if possible.
@@ -414,10 +423,10 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
     //
     // on the other hand: if users need sha256, then if the service runs in secure trustzone
     // domain, we'll maybe need two copies of the sha2 code
-    pub fn sign_p256<'c>(&'c mut self, key: &ObjectHandle, message: &[u8])
+    pub fn sign_p256<'c>(&'c mut self, key: &ObjectHandle, message: &[u8], format: SignatureSerialization)
         -> core::result::Result<FutureResult<'a, 'c, reply::Sign>, ClientError>
     {
-        self.sign(Mechanism::P256, key.clone(), message)
+        self.sign(Mechanism::P256, key.clone(), message, format)
     }
 
 
@@ -446,13 +455,13 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
     pub fn verify_ed25519<'c>(&'c mut self, key: &ObjectHandle, message: &[u8], signature: &[u8])
         -> core::result::Result<FutureResult<'a, 'c, reply::Verify>, ClientError>
     {
-        self.verify(Mechanism::Ed25519, key.clone(), message, signature)
+        self.verify(Mechanism::Ed25519, key.clone(), message, signature, SignatureSerialization::Raw)
     }
 
     pub fn verify_p256<'c>(&'c mut self, key: &ObjectHandle, message: &[u8], signature: &[u8])
         -> core::result::Result<FutureResult<'a, 'c, reply::Verify>, ClientError>
     {
-        self.verify(Mechanism::P256, key.clone(), message, signature)
+        self.verify(Mechanism::P256, key.clone(), message, signature, SignatureSerialization::Raw)
     }
 
           // - mechanism: Mechanism

@@ -11,11 +11,19 @@ pub mod make_credential;
 
 // TODO: this is a bit weird to model...
 // Need to be able to "skip unknown keys" in deserialization
-#[derive(Clone,Debug,Eq,PartialEq,Serialize,Deserialize)]
-pub struct AuthenticatorExtensions {
-    // #[serde(skip_serializing_if = "Option::is_none")]
-    // pub cred_protect:
-}
+//
+// I think we want to model this is a "set of enums",
+// and allow skipping unknown enum entries during deserialization
+//
+// NB: This depends on the command
+//
+// We need two things:
+// - skip unknown fields
+// #[derive(Clone,Debug,Eq,PartialEq,Serialize,Deserialize)]
+// pub struct AuthenticatorExtensions {
+//     // #[serde(skip_serializing_if = "Option::is_none")]
+//     // pub cred_protect:
+// }
 
 #[derive(Clone,Debug,Eq,PartialEq,Serialize,Deserialize)]
 pub struct AuthenticatorOptions {
@@ -76,8 +84,9 @@ pub struct AttestedCredentialData {
 	pub aaguid: Bytes<consts::U16>,
     // this is where "unlimited non-resident keys" get stored
     // TODO: Model as actual credential ID, with ser/de to bytes (format is up to authenticator)
-    pub credential_id: Bytes<consts::U128>,
-    pub credential_public_key: crate::cose::PublicKey,//Bytes<COSE_KEY_LENGTH>,
+    pub credential_id: Bytes<CREDENTIAL_ID_LENGTH>,
+    // pub credential_public_key: crate::cose::PublicKey,//Bytes<COSE_KEY_LENGTH>,
+    pub credential_public_key: Bytes<COSE_KEY_LENGTH>,
 }
 
 impl AttestedCredentialData {
@@ -93,8 +102,10 @@ impl AttestedCredentialData {
 
         // use existing `bytes` buffer
         let mut cbor_key = [0u8; 128];
-        let l = crate::serde::cbor_serialize(&self.credential_public_key, &mut cbor_key).unwrap();
-        bytes.extend_from_slice(&cbor_key[..l]).unwrap();
+        // CHANGE this back if credential_public_key is not serialized again
+        // let l = crate::serde::cbor_serialize(&self.credential_public_key, &mut cbor_key).unwrap();
+        // bytes.extend_from_slice(&cbor_key[..l]).unwrap();
+        bytes.extend_from_slice(&self.credential_public_key).unwrap();
 
         Bytes::from(bytes)
     }

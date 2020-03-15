@@ -2,10 +2,16 @@ import cbor
 import fido2.attestation
 import fido2.ctap2
 import fido2.hid
+import IPython
 
 dev = fido2.ctap2.CTAP2(next(fido2.hid.CtapHidDevice.list_devices()))
 
 print(dev.get_info())
+
+# IPython.embed()
+
+# quit()
+# xxx
 
 if True:
     # print(dev.reset())
@@ -16,6 +22,8 @@ if True:
             {"id": "https://yamnord.com"},
             {"id": b"nickray"},
             [{"type": "public-key", "alg": alg}],
+            extensions={"hmac-secret": True},
+            # options={"rk": True},
         )
 
         # basic sanity check - would raise

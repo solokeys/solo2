@@ -27,6 +27,7 @@ pub enum Error {
     ImplementationError,
     InternalError,
     InvalidSerializedKey,
+    InvalidSerializationFormat,
     MechanismNotAvailable,
     NonceOverflow,
     NoSuchKey,

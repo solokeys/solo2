@@ -35,7 +35,7 @@ DeriveKey<'a, 's, R, I, E, V> for super::Sha256
 impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
 Hash<'a, 's, R, I, E, V> for super::Sha256
 {
-    fn hash(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::Hash)
+    fn hash(_resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::Hash)
         -> Result<reply::Hash, Error>
     {
         use sha2::digest::Digest;

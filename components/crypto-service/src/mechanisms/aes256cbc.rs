@@ -56,8 +56,8 @@ WrapKey<'a, 's, R, I, E, V> for super::Aes256Cbc
     {
         // TODO: need to check both secret and private keys
         let path = resources.prepare_path_for_key(KeyType::Secret, &request.key.object_id)?;
-        hprintln!("loading key to be wrapped from: {:?}", &path).ok();
-        let (serialized_key, location) = resources.load_key_unchecked(&path)?;
+        // hprintln!("loading key to be wrapped from: {:?}", &path).ok();
+        let (serialized_key, _location) = resources.load_key_unchecked(&path)?;
 
         let mut message = Message::new();
         message.resize_to_capacity();

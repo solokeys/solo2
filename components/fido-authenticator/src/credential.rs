@@ -1,4 +1,4 @@
-use cortex_m_semihosting::hprintln;
+
 
 use core::convert::TryFrom;
 
@@ -9,9 +9,10 @@ use crypto_service::{
 };
 
 use ctap_types::{
-    Bytes, consts, String, Vec,
+    Bytes, consts,
     // authenticator::{ctap1, ctap2, Error, Request, Response},
     authenticator::ctap2,
+    ctap2::make_credential::CredentialProtectionPolicy,
 };
 
 use super::{Error, Result};
@@ -25,7 +26,7 @@ pub enum CtapVersion {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct CredentialId(pub crypto_service::types::MediumData);
+pub struct CredentialId(pub Bytes<consts::U384>);
 
 // TODO: how to determine necessary size?
 // pub type SerializedCredential = Bytes<consts::U512>;
@@ -99,7 +100,13 @@ impl TryFrom<CredentialId> for EncryptedSerializedCredential {
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub enum Key {
     ResidentKey(ObjectHandle),
-    WrappedKey(Bytes<consts::U32>),
+    WrappedKey(Bytes<consts::U92>),
+}
+
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+pub enum CredRandom {
+    Resident(ObjectHandle),
+    Wrapped(Bytes<consts::U92>),
 }
 
 // TODO: figure out sizes
@@ -128,8 +135,8 @@ pub struct Credential {
     the_key: Key,
 
     // extensions
-    hmac_secret: bool,
-    cred_protect: bool,
+    hmac_secret: Option<CredRandom>,
+    cred_protect: CredentialProtectionPolicy,
 }
 
 impl Credential {
@@ -139,8 +146,8 @@ impl Credential {
         algorithm: i32,
         key: Key,
         timestamp: u32,
-        hmac_secret: bool,
-        cred_protect: bool,
+        hmac_secret: Option<CredRandom>,
+        cred_protect: CredentialProtectionPolicy,
     )
         -> Self
     {

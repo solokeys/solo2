@@ -1,4 +1,4 @@
-use core::convert::{TryFrom, TryInto};
+use core::convert::{TryFrom};
 
 use crate::api::*;
 // use crate::config::*;
@@ -177,9 +177,9 @@ SerializeKey<'a, 's, R, I, E, V> for super::P256
                     &public_key.compress()
                 ).map_err(|_| Error::InternalError)?;
             }
-            _ => {
-                return Err(Error::InternalError);
-            }
+            // _ => {
+            //     return Err(Error::InternalError);
+            // }
         };
 
         Ok(reply::SerializeKey { serialized_key })
@@ -204,9 +204,18 @@ Sign<'a, 's, R, I, E, V> for super::P256
         // println!("p256 keypair with public key = {:?}", &keypair.public);
 
         let native_signature = keypair.sign(&request.message);
+
+        let our_signature = match request.format {
+            SignatureSerialization::Asn1Der => {
+                Signature::try_from_slice(&native_signature.to_asn1_der()).unwrap()
+            }
+            SignatureSerialization::Raw => {
+                Signature::try_from_slice(&native_signature.to_bytes()).unwrap()
+            }
+        };
         // #[cfg(all(test, feature = "verbose-tests"))]
         // println!("p256 sig = {:?}", &native_signature);
-        let our_signature = Signature::try_from_slice(&native_signature.to_bytes()).unwrap();
+        // cortex_m_semihosting::hprintln!("p256 sig = {:?}", &our_signature).ok();
 
         // return signature
         Ok(reply::Sign { signature: our_signature })
@@ -241,6 +250,12 @@ Verify<'a, 's, R, I, E, V> for super::P256
 
         let mut signature_array = [0u8; nisty::SIGNATURE_LENGTH];
         signature_array.copy_from_slice(&request.signature);
+
+        if let SignatureSerialization::Raw = request.format {
+        } else {
+            // well more TODO
+            return Err(Error::InvalidSerializationFormat);
+        }
 
         let valid = public_key.verify(&request.message, &signature_array);
         Ok(reply::Verify { valid } )

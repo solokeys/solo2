@@ -7,6 +7,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+bitflags = "1.2.1"
 cosey = "0.1.0-alpha.0" # { git = "https://github.com/ycrypto/cosey", branch = "main" }
 heapless = { version = "0.5.1", default-features = false, features = ["serde"] }
 # heapless-bytes = "0.1.0" # { git = "https://github.com/ycrypto/heapless-bytes", branch = "main" } #, features = ["cbor"] }

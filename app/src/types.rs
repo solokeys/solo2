@@ -2,7 +2,6 @@ use crate::hal;
 use hal::drivers::UsbBus;
 use littlefs2::{
     const_ram_storage,
-    ram_storage,
 };
 use crypto_service::types::{LfsResult, LfsStorage};
 use ctap_types::consts;

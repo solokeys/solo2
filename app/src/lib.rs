@@ -21,7 +21,7 @@ pub use prototype_bee as board;
 pub use board::hal;
 pub use board::rt::entry;
 
-use cortex_m_semihosting::hprintln;
+
 // use fido_authenticator::{
 //     Authenticator,
 //     // OsToAuthnrMessages,
@@ -30,26 +30,15 @@ use cortex_m_semihosting::hprintln;
 //     // OsChannels,
 // };
 
-use littlefs2::{
-    consts,
-    io::{
-        Error as FsError,
-        Result as FsResult,
-    },
-};
 
-use heapless::{
-    consts::U16,
-    i::Queue as ConstQueue,
-    spsc::{Consumer, Producer, Queue},
-};
+
+
 
 pub mod types;
 use types::{
     InternalStorage,
     ExternalStorage,
     VolatileStorage,
-    FlashStorage,
 };
 
 //
@@ -183,7 +172,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     //     }
     // };
 
-    let mut rng = hal.rng.enabled(&mut syscon);
+    let rng = hal.rng.enabled(&mut syscon);
 
     static mut CRYPTO_REQUESTS: crypto_service::pipe::RequestPipe = heapless::spsc::Queue(heapless::i::Queue::u8());
     static mut CRYPTO_REPLIES: crypto_service::pipe::ReplyPipe = heapless::spsc::Queue(heapless::i::Queue::u8());
@@ -227,7 +216,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     assert!(crypto_service.add_endpoint(service_endpoint).is_ok());
 
     let syscaller = types::CryptoSyscall::default();
-    let mut crypto_client = crypto_service::client::Client::new(client_endpoint, syscaller);
+    let crypto_client = crypto_service::client::Client::new(client_endpoint, syscaller);
 
     static mut AUTHNR_REQUESTS: ctap_types::rpc::RequestPipe = heapless::spsc::Queue(heapless::i::Queue::u8());
     static mut AUTHNR_RESPONSES: ctap_types::rpc::ResponsePipe = heapless::spsc::Queue(heapless::i::Queue::u8());

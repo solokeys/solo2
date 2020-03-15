@@ -97,7 +97,7 @@ Encrypt<'a, 's, R, I, E, V> for super::Chacha8Poly1305
         let key_id = request.key.object_id;
         let path = resources.prepare_path_for_key(KeyType::Secret, &key_id)?;
         let mut serialized = [0u8; 44];
-        hprintln!("loading encryption key: {:?}", &path).ok();
+        // hprintln!("loading encryption key: {:?}", &path).ok();
         let location: StorageLocation = resources.load_key(&path, KeyKind::Symmetric32Nonce12, &mut serialized)?;
         {
             let nonce = &mut serialized[32..];
@@ -135,8 +135,8 @@ WrapKey<'a, 's, R, I, E, V> for super::Chacha8Poly1305
     {
         // TODO: need to check both secret and private keys
         let path = resources.prepare_path_for_key(KeyType::Private, &request.key.object_id)?;
-        hprintln!("loading key to be wrapped from: {:?}", &path).ok();
-        let (serialized_key, location) = resources.load_key_unchecked(&path)?;
+        // hprintln!("loading key to be wrapped from: {:?}", &path).ok();
+        let (serialized_key, _location) = resources.load_key_unchecked(&path)?;
 
         let mut message = Message::new();
         message.resize_to_capacity();

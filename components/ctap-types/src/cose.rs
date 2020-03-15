@@ -80,7 +80,7 @@ enum Alg {
     // ChaCha20Poly1305 = 24,
 
     // Key Agreement
-    EcdhEsHkdf256 = -25, // ES = ephemerial-static
+    EcdhEsHkdf256 = -25, // ES = ephemeral-static
 }
 
 #[repr(i8)]

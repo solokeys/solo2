@@ -93,15 +93,33 @@ SerializeKey<'a, 's, R, I, E, V> for super::Ed25519
     fn serialize_key(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::SerializeKey)
         -> Result<reply::SerializeKey, Error>
     {
-        if request.format != KeySerialization::Raw {
-            return Err(Error::InternalError);
-        }
-
         let key_id = request.key.object_id;
         let path = resources.prepare_path_for_key(KeyType::Public, &key_id)?;
+        let mut buf = [0u8; 32];
+        resources.load_key(&path, KeyKind::Ed25519, &mut buf)?;
+
+        // just a test that it's valid
+        let public_key = salty::PublicKey::try_from(&buf).map_err(|_| Error::InternalError)?;
+
         let mut serialized_key = Message::new();
-        serialized_key.resize_default(32).map_err(|_| Error::InternalError)?;
-        resources.load_key(&path, KeyKind::Ed25519, &mut serialized_key)?;
+        match request.format {
+            KeySerialization::Cose => {
+                let cose_pk = ctap_types::cose::Ed25519PublicKey {
+                    // x: Bytes::try_from_slice(public_key.x_coordinate()).unwrap(),
+                    x: Bytes::try_from_slice(&buf).unwrap(),
+                };
+                serialized_key.resize_to_capacity();
+                let size = crate::service::cbor_serialize(&cose_pk, &mut serialized_key).map_err(|_| Error::CborError)?;
+                serialized_key.resize_default(size).map_err(|_| Error::InternalError)?;
+            }
+
+            KeySerialization::Raw => {
+                serialized_key.extend_from_slice(public_key.as_bytes()).map_err(|_| Error::InternalError)?;
+                serialized_key.extend_from_slice(&buf).map_err(|_| Error::InternalError)?;
+            }
+
+            _ => { return Err(Error::InternalError); }
+        }
 
         Ok(reply::SerializeKey { serialized_key })
     }
@@ -114,6 +132,11 @@ Sign<'a, 's, R, I, E, V> for super::Ed25519
     fn sign(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::Sign)
         -> Result<reply::Sign, Error>
     {
+        if let SignatureSerialization::Raw = request.format {
+        } else {
+            return Err(Error::InvalidSerializationFormat);
+        }
+
         let key_id = request.key.object_id;
 
         let mut seed = [0u8; 32];
@@ -139,6 +162,11 @@ Verify<'a, 's, R, I, E, V> for super::Ed25519
     fn verify(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::Verify)
         -> Result<reply::Verify, Error>
     {
+        if let SignatureSerialization::Raw = request.format {
+        } else {
+            return Err(Error::InvalidSerializationFormat);
+        }
+
         let key_id = request.key.object_id;
 
         let mut serialized_key = [0u8; 32];

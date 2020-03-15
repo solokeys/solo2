@@ -1,9 +1,36 @@
 use crate::{Bytes, consts, String, Vec};
+use serde::{Deserialize, Serialize};
 use serde_indexed::{DeserializeIndexed, SerializeIndexed};
 
-use super::{AuthenticatorExtensions, AuthenticatorOptions};
+use super::AuthenticatorOptions;
+use crate::cose::P256PublicKey;
 use crate::sizes::*;
 use crate::webauthn::*;
+
+// #[derive(Clone,Debug,Eq,PartialEq,Serialize,Deserialize)]
+// pub struct AuthenticatorExtensions {
+//     #[serde(rename = "hmac-secret")]
+//     #[serde(skip_serializing_if = "Option::is_none")]
+//     pub hmac_secret: Option<bool>,
+// }
+
+#[derive(Clone,Debug,Eq,PartialEq,SerializeIndexed,DeserializeIndexed)]
+#[serde_indexed(offset = 1)]
+pub struct HmacSecretInput {
+    pub key_agreement: P256PublicKey,
+    // *either* enc(salt1) *or* enc(salt1 || salt2)
+    pub salt_enc: Bytes<consts::U64>,
+    pub salt_auth: Bytes<consts::U16>,
+
+}
+
+#[derive(Clone,Debug,Eq,PartialEq,Serialize,Deserialize)]
+pub struct Extensions {
+    #[serde(rename = "hmac-secret")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hmac_secret: Option<HmacSecretInput>,
+}
+
 
 #[derive(Clone,Debug,Eq,PartialEq,SerializeIndexed,DeserializeIndexed)]
 // #[serde(rename_all = "camelCase")]
@@ -13,7 +40,7 @@ pub struct Parameters {
     pub client_data_hash: Bytes<consts::U32>,
     pub allow_list: Vec<PublicKeyCredentialDescriptor, consts::U8>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub extensions: Option<AuthenticatorExtensions>,
+    pub extensions: Option<Extensions>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub options: Option<AuthenticatorOptions>,
     #[serde(skip_serializing_if = "Option::is_none")]

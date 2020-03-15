@@ -324,6 +324,14 @@ pub enum KeySerialization {
 
 pub type Signature = Bytes<MAX_SIGNATURE_LENGTH>;
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
+pub enum SignatureSerialization {
+    Asn1Der,
+    // Cose,
+    Raw,
+    // Sec1,
+}
+
 #[derive(Clone, Eq, PartialEq, Deserialize, Serialize)]
 // pub struct UniqueId(pub(crate) [u8; 16]);
 pub struct UniqueId(pub(crate) Bytes<consts::U16>);

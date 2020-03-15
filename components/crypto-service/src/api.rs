@@ -140,6 +140,7 @@ pub mod request {
           - mechanism: Mechanism
           - key: ObjectHandle
           - message: Message
+          - format: SignatureSerialization
 
         StoreBlob:
           - prefix: Option<Letters>
@@ -159,6 +160,7 @@ pub mod request {
           - key: ObjectHandle
           - message: Message
           - signature: Signature
+          - format: SignatureSerialization
 
         // this should always be an AEAD algorithm
         WrapKey:

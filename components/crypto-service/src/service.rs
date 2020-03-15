@@ -393,7 +393,7 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
                     StorageLocation::External => load_serialized_key(&mut self.tri.efs, &path, &mut data),
                     StorageLocation::Volatile => load_serialized_key(&mut self.tri.vfs, &path, &mut data),
                 }?;
-                data.resize_default(size);
+                data.resize_default(size).map_err(|_| Error::InternalError)?;
                 Ok(Reply::LoadBlob(reply::LoadBlob { data } ))
             }
 
@@ -421,13 +421,12 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
             Request::StoreBlob(request) => {
                 let blob_id = self.generate_unique_id()?;
                 let path = self.blob_path(&request.prefix, &blob_id)?;
-                hprintln!("saving blob to {:?}", &path).ok();
+                // hprintln!("saving blob to {:?}", &path).ok();
                 match request.attributes.persistence {
                     StorageLocation::Internal => store_serialized_key(&mut self.tri.ifs,& path, &request.data),
                     StorageLocation::External => store_serialized_key(&mut self.tri.efs, &path, &request.data),
                     StorageLocation::Volatile => store_serialized_key(&mut self.tri.vfs, &path, &request.data),
                 }?;
-                hprintln!("saved blob").ok();
                 Ok(Reply::StoreBlob(reply::StoreBlob { blob: ObjectHandle { object_id: blob_id } }))
             }
 
