@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_indexed::{DeserializeIndexed, SerializeIndexed};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
-use super::{AttestedCredentialData, AuthenticatorOptions};
+use super::AuthenticatorOptions;
 use crate::sizes::*;
 use crate::webauthn::*;
 
@@ -175,6 +175,40 @@ impl AuthenticatorData {
     }
 }
 
+// NOTE: This is not CBOR, it has a custom encoding...
+// https://www.w3.org/TR/webauthn/#sec-attested-credential-data
+#[derive(Clone,Debug,Eq,PartialEq)]
+pub struct AttestedCredentialData {
+	pub aaguid: Bytes<consts::U16>,
+    // this is where "unlimited non-resident keys" get stored
+    // TODO: Model as actual credential ID, with ser/de to bytes (format is up to authenticator)
+    pub credential_id: Bytes<CREDENTIAL_ID_LENGTH>,
+    // pub credential_public_key: crate::cose::PublicKey,//Bytes<COSE_KEY_LENGTH>,
+    pub credential_public_key: Bytes<COSE_KEY_LENGTH>,
+}
+
+impl AttestedCredentialData {
+    pub fn serialize(&self) -> Bytes<ATTESTED_CREDENTIAL_DATA_LENGTH> {
+        let mut bytes = Vec::<u8, ATTESTED_CREDENTIAL_DATA_LENGTH>::new();
+        // 16 bytes, the aaguid
+        bytes.extend_from_slice(&self.aaguid).unwrap();
+
+        // byte length of credential ID as 16-bit unsigned big-endian integer.
+        bytes.extend_from_slice(&(self.credential_id.len() as u16).to_be_bytes()).unwrap();
+        // raw bytes of credential ID
+        bytes.extend_from_slice(&self.credential_id[..self.credential_id.len()]).unwrap();
+
+        // use existing `bytes` buffer
+        let mut cbor_key = [0u8; 128];
+        // CHANGE this back if credential_public_key is not serialized again
+        // let l = crate::serde::cbor_serialize(&self.credential_public_key, &mut cbor_key).unwrap();
+        // bytes.extend_from_slice(&cbor_key[..l]).unwrap();
+        bytes.extend_from_slice(&self.credential_public_key).unwrap();
+
+        Bytes::from(bytes)
+    }
+}
+
 #[derive(Clone,Debug,Eq,PartialEq,SerializeIndexed)]
 #[serde_indexed(offset = 1)]
 pub struct Response {
@@ -209,5 +243,6 @@ pub struct NoneAttestationStatement {}
 pub struct PackedAttestationStatement {
     pub alg: i32,
     pub sig: Bytes<ASN1_SIGNATURE_LENGTH>,
-    pub x5c: Vec<Bytes<consts::U1024>, consts::U1>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub x5c: Option<Vec<Bytes<consts::U1024>, consts::U1>>,
 }

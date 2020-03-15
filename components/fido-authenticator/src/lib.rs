@@ -896,7 +896,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
             attested_credential_data: {
                 // hprintln!("acd in, cid len {}, pk len {}", credential_id.0.len(), cose_public_key.len()).ok();
-                let attested_credential_data = ctap2::AttestedCredentialData {
+                let attested_credential_data = ctap2::make_credential::AttestedCredentialData {
                     aaguid: self.config.aaguid.clone(),
                     // credential_id: credential_id.0.try_convert_into().map_err(|_| Error::Other)?,
                     // credential_public_key: cose_public_key.try_convert_into().map_err(|_| Error::Other)?,
@@ -921,42 +921,52 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         // hprintln!("seeking commitment, {} + {}", serialized_auth_data.len(), parameters.client_data_hash.len()).ok();
         let mut commitment = Bytes::<consts::U1024>::new();
         commitment.extend_from_slice(&serialized_auth_data).map_err(|_| Error::Other)?;
+        // hprintln!("serialized_auth_data ={:?}", &serialized_auth_data).ok();
         commitment.extend_from_slice(&parameters.client_data_hash).map_err(|_| Error::Other)?;
+        // hprintln!("client_data_hash = {:?}", &parameters.client_data_hash).ok();
+        // hprintln!("commitment = {:?}", &commitment).ok();
 
-        // let signature = match algorithm {
-        //     SupportedAlgorithm::Ed25519 => {
-        //         let signature = syscall!(self.crypto.sign_ed25519(&commitment)).signature;
-        //         // Bytes::try_from_slice(&hash)
-        //         signature.try_convert_into().map_err(|_| Error::Other)?
-        //     }
+        const SELF_SIGNED: bool  = true;
 
-        //     SupportedAlgorithm::P256 => {
-        //         let hash = syscall!(self.crypto.hash_sha256(&commitment.as_ref())).hash;
-        //         let signature = syscall!(self.crypto.sign_p256(&hash, SignatureSerialization::Asn1Der)).signature;
-        //         // Bytes::try_from_slice(&hash)
-        //         signature.try_convert_into().map_err(|_| Error::Other)?
-        //     }
-        // };
+        let (signature, attestation_algorithm) = {
+            if SELF_SIGNED {
+                match algorithm {
+                    SupportedAlgorithm::Ed25519 => {
+                        let signature = syscall!(self.crypto.sign_ed25519(&private_key, &commitment)).signature;
+                        (signature.try_convert_into().map_err(|_| Error::Other)?, -8)
+                    }
 
-        let signature = {
-            let hash = syscall!(self.crypto.hash_sha256(&commitment.as_ref())).hash;
-            let attestation_key = self.attestation_key()?;
-            let signature = syscall!(self.crypto.sign_p256(
-                &attestation_key,
-                &hash,
-                SignatureSerialization::Asn1Der,
-            )).signature;
-            // Bytes::try_from_slice(&hash)
-            signature.try_convert_into().map_err(|_| Error::Other)?
+                    SupportedAlgorithm::P256 => {
+                        // DO NOT prehash here, `crypto-service` does that
+                        let der_signature = syscall!(self.crypto.sign_p256(&private_key, &commitment, SignatureSerialization::Asn1Der)).signature;
+                        (der_signature.try_convert_into().map_err(|_| Error::Other)?, -7)
+                    }
+                }
+            } else {
+                let hash = syscall!(self.crypto.hash_sha256(&commitment.as_ref())).hash;
+                let attestation_key = self.attestation_key()?;
+                let signature = syscall!(self.crypto.sign_p256(
+                    &attestation_key,
+                    &hash,
+                    SignatureSerialization::Asn1Der,
+                )).signature;
+                (signature.try_convert_into().map_err(|_| Error::Other)?, -7)
+            }
         };
         // hprintln!("SIG = {:?}", &signature).ok();
 
         let mut packed_attn_stmt = ctap2::make_credential::PackedAttestationStatement {
-            alg: -7,
+            alg: attestation_algorithm,
             sig: signature,
-            x5c: Vec::new(),
+            x5c: match SELF_SIGNED {
+                true => None,
+                false => {
+                    // let mut x5c = Vec::new();
+                    // x5c.push(Bytes::try_from_slice(&SOLO_HACKER_ATTN_CERT).unwrap()).unwrap();
+                    todo!("solve the cert conundrum");
+                }
+            },
         };
-        // packed_attn_stmt.x5c.push(Bytes::try_from_slice(&SOLO_HACKER_ATTN_CERT).unwrap()).unwrap();
 
         let fmt = String::<consts::U32>::from("packed");
         let att_stmt = ctap2::make_credential::AttestationStatement::Packed(packed_attn_stmt);

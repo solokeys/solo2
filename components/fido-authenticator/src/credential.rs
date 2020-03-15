@@ -137,6 +137,9 @@ pub struct Credential {
     // extensions
     hmac_secret: Option<CredRandom>,
     cred_protect: CredentialProtectionPolicy,
+
+    // TODO: add `sig_counter: Option<ObjectHandle>`,
+    // and grant RKs a per-credential sig-counter.
 }
 
 impl Credential {
