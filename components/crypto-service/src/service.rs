@@ -1,4 +1,4 @@
-use cortex_m_semihosting::hprintln;
+// use cortex_m_semihosting::hprintln;
 
 use core::convert::TryFrom;
 
@@ -90,7 +90,7 @@ pub trait WrapKey<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorag
 // #[serde_indexed(offset = 1)]
 pub struct SerializedKey {
    // r#type: KeyType,
-   pub kind: u8,//KeyKind,
+   pub kind: KeyKind,
    pub value: Bytes<MAX_SERIALIZED_KEY_LENGTH>,
 }
 
@@ -98,32 +98,32 @@ impl<'a> TryFrom<(KeyKind, &'a [u8])> for SerializedKey {
     type Error = Error;
     fn try_from(from: (KeyKind, &'a [u8])) -> Result<Self, Error> {
         Ok(SerializedKey {
-            kind: from.0 as u8,
+            kind: from.0,
             value: Bytes::try_from_slice(from.1).map_err(|_| Error::InternalError)?,
         })
     }
 }
 
-pub fn cbor_serialize<T: serde::Serialize>(
-    object: &T,
-    buffer: &mut [u8],
-) -> core::result::Result<usize, serde_cbor::Error> {
-    let writer = serde_cbor::ser::SliceWrite::new(buffer);
-    let mut ser = serde_cbor::Serializer::new(writer);
+// pub fn cbor_serialize<T: serde::Serialize>(
+//     object: &T,
+//     buffer: &mut [u8],
+// ) -> core::result::Result<usize, serde_cbor::Error> {
+//     let writer = serde_cbor::ser::SliceWrite::new(buffer);
+//     let mut ser = serde_cbor::Serializer::new(writer);
 
-    object.serialize(&mut ser)?;
+//     object.serialize(&mut ser)?;
 
-    let writer = ser.into_inner();
-    let size = writer.bytes_written();
+//     let writer = ser.into_inner();
+//     let size = writer.bytes_written();
 
-    Ok(size)
-}
+//     Ok(size)
+// }
 
-pub fn cbor_deserialize<'de, T: serde::Deserialize<'de>>(
-    buffer: &'de [u8],
-) -> core::result::Result<T, ctapcbor::error::Error> {
-    ctapcbor::de::from_bytes(buffer)
-}
+// pub fn cbor_deserialize<'de, T: serde::Deserialize<'de>>(
+//     buffer: &'de [u8],
+// ) -> core::result::Result<T, ctapcbor::error::Error> {
+//     ctapcbor::de::from_bytes(buffer)
+// }
 
 // associated keys end up namespaced under "/fido2"
 // example: "/fido2/keys/2347234"
@@ -218,7 +218,7 @@ impl<'s, I: LfsStorage, E: LfsStorage, V: LfsStorage> TriStorage<'s, I, E, V> {
             }
         };
 
-        let serialized_key: SerializedKey = cbor_deserialize(&buf).map_err(|_| Error::CborError)?;
+        let serialized_key: SerializedKey = crate::cbor_deserialize(&buf).map_err(|_| Error::CborError)?;
         Ok((serialized_key, location))
 
     }
@@ -229,7 +229,7 @@ impl<'s, I: LfsStorage, E: LfsStorage, V: LfsStorage> TriStorage<'s, I, E, V> {
         // println!("loading from file {:?}", unsafe { core::str::from_utf8_unchecked(&path[..]) });
 
         let (serialized_key, location) = self.load_key_unchecked(path)?;
-        if serialized_key.kind != kind as u8 {
+        if serialized_key.kind != kind {
             return Err(Error::WrongKeyKind);
         }
 
@@ -255,7 +255,7 @@ impl<'s, I: LfsStorage, E: LfsStorage, V: LfsStorage> TriStorage<'s, I, E, V> {
 
         let serialized_key = SerializedKey::try_from((kind, key_bytes))?;
         let mut buf = [0u8; 128];
-        cbor_serialize(&serialized_key, &mut buf).map_err(|_| Error::CborError)?;
+        crate::cbor_serialize(&serialized_key, &mut buf).map_err(|_| Error::CborError)?;
 
         match persistence {
             StorageLocation::Internal => store_serialized_key(&mut self.ifs, path, &buf),

@@ -55,6 +55,18 @@ impl<'a> Writer for SliceWriter<'a> {
     }
 }
 
+impl<'a, N> Writer for &'a mut heapless_bytes::Bytes<N>
+where
+    N: heapless_bytes::ArrayLength<u8>,
+{
+    type Error = Error;
+
+    fn write_all(&mut self, buf: &[u8]) -> Result<()> {
+        self.extend_from_slice(buf).map_err(
+            |_| Error::SerializeBufferFull(buf.len()))
+    }
+}
+
 pub struct Serializer<W>
 // where
 //     W: Writer,
@@ -170,9 +182,7 @@ where
     type SerializeTupleStruct = &'a mut Serializer<W>;
     type SerializeTupleVariant = &'a mut Serializer<W>;
     type SerializeMap = CollectionSerializer<'a, W>;
-    // type SerializeStruct = StructSerializer<'a, W>;
     type SerializeStruct = &'a mut Serializer<W>;
-    // type SerializeStructVariant = StructSerializer<'a, W>;
     type SerializeStructVariant= &'a mut Serializer<W>;
 
 

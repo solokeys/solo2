@@ -108,9 +108,7 @@ SerializeKey<'a, 's, R, I, E, V> for super::Ed25519
                     // x: Bytes::try_from_slice(public_key.x_coordinate()).unwrap(),
                     x: Bytes::try_from_slice(&buf).unwrap(),
                 };
-                serialized_key.resize_to_capacity();
-                let size = crate::service::cbor_serialize(&cose_pk, &mut serialized_key).map_err(|_| Error::CborError)?;
-                serialized_key.resize_default(size).map_err(|_| Error::InternalError)?;
+                crate::cbor_serialize_bytes(&cose_pk, &mut serialized_key).map_err(|_| Error::CborError)?;
             }
 
             KeySerialization::Raw => {

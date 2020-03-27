@@ -1,4 +1,4 @@
-use cortex_m_semihosting::hprintln;
+// use cortex_m_semihosting::hprintln;
 
 use core::convert::{TryFrom, TryInto};
 
@@ -145,9 +145,7 @@ WrapKey<'a, 's, R, I, E, V> for super::Chacha8Poly1305
         let (serialized_key, _location) = resources.load_key_unchecked(&path)?;
 
         let mut message = Message::new();
-        message.resize_to_capacity();
-        let size = crate::service::cbor_serialize(&serialized_key, &mut message).map_err(|_| Error::CborError)?;
-        message.resize_default(size).map_err(|_| Error::InternalError)?;
+        crate::cbor_serialize_bytes(&serialized_key, &mut message).map_err(|_| Error::CborError)?;
 
         let encryption_request = request::Encrypt {
             mechanism: Mechanism::Chacha8Poly1305,
@@ -158,9 +156,7 @@ WrapKey<'a, 's, R, I, E, V> for super::Chacha8Poly1305
         let encryption_reply = <super::Chacha8Poly1305>::encrypt(resources, encryption_request)?;
 
         let mut wrapped_key = Message::new();
-        wrapped_key.resize_to_capacity();
-        let size = crate::service::cbor_serialize(&encryption_reply, &mut wrapped_key).map_err(|_| Error::CborError)?;
-        wrapped_key.resize_default(size).map_err(|_| Error::InternalError)?;
+        crate::cbor_serialize_bytes(&encryption_reply, &mut wrapped_key).map_err(|_| Error::CborError)?;
 
         Ok(reply::WrapKey { wrapped_key })
     }
@@ -173,7 +169,7 @@ UnwrapKey<'a, 's, R, I, E, V> for super::Chacha8Poly1305
     fn unwrap_key(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::UnwrapKey)
         -> Result<reply::UnwrapKey, Error>
     {
-        let reply::Encrypt { ciphertext, nonce, tag } = crate::service::cbor_deserialize(
+        let reply::Encrypt { ciphertext, nonce, tag } = crate::cbor_deserialize(
             &request.wrapped_key).map_err(|_| Error::CborError)?;
 
         let decryption_request = request::Decrypt {
@@ -192,7 +188,7 @@ UnwrapKey<'a, 's, R, I, E, V> for super::Chacha8Poly1305
         };
 
         // TODO: probably change this to returning Option<key> too
-        let SerializedKey { kind, value } = crate::service::cbor_deserialize(&serialized_key).map_err(|_| Error::CborError)?;
+        let SerializedKey { kind, value } = crate::cbor_deserialize(&serialized_key).map_err(|_| Error::CborError)?;
         let kind = KeyKind::try_from(kind).map_err(|_| Error::InternalError)?;
 
         // TODO: need to check both secret and private keys

@@ -24,6 +24,19 @@ pub fn cbor_serialize<'a, 'b, T: serde::Serialize>(
 }
 
 
+pub fn cbor_serialize_bytes<'a, 'b, N: heapless_bytes::ArrayLength<u8>, T: serde::Serialize>(
+    object: &'a T,
+    bytes: &'b mut heapless_bytes::Bytes<N>,
+) -> Result<usize> {
+    let len_before = bytes.len();
+    let mut ser = ser::Serializer::new(bytes);
+
+    object.serialize(&mut ser)?;
+
+    Ok(ser.into_inner().len() - len_before)
+}
+
+
 pub fn cbor_deserialize<'de, T: serde::Deserialize<'de>>(
     buffer: &'de [u8],
 ) -> Result<T> {

@@ -13,5 +13,5 @@ crypto-service = { path = "../crypto-service" } # , default-features = false }
 # embedded-hal = { version = "0.2", features = ["unproven"] }
 serde = { version = "1.0", default-features = false }
 serde_cbor = { version = "0.11.0", default-features = false }
-serde-indexed = { git = "https://github.com/ycrypto/serde-indexed", branch = "main" }
+serde-indexed = "0.0.3"
 # usbd-ctaphid = { git = "https://github.com/nickray/usbd-ctaphid", branch = "main", features = ["logging"] }

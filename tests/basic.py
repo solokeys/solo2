@@ -33,17 +33,17 @@ if True:
             att.att_statement, att.auth_data, b"1234567890ABCDEF1234567890ABCDEF"
         )
 
-        # client_data_hash = b"some_client_data_hash_abcdefghij"
-        # assn = dev.get_assertion(
-        #     "https://yamnord.com",
-        #     client_data_hash,
-        #     allow_list=[
-        #         {
-        #             "type": "public-key",
-        #             "id": att.auth_data.credential_data.credential_id,
-        #         }
-        #     ],
-        # )
+        client_data_hash = b"some_client_data_hash_abcdefghij"
+        assn = dev.get_assertion(
+            "https://yamnord.com",
+            client_data_hash,
+            allow_list=[
+                {
+                    "type": "public-key",
+                    "id": att.auth_data.credential_data.credential_id,
+                }
+            ],
+        )
 
-        # # basic sanity check - would raise
-        # assn.verify(client_data_hash, att.auth_data.credential_data.public_key)
+        # basic sanity check - would raise
+        assn.verify(client_data_hash, att.auth_data.credential_data.public_key)

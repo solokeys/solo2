@@ -50,11 +50,7 @@ impl TryFrom<EncryptedSerializedCredential> for CredentialId {
 
     fn try_from(esc: EncryptedSerializedCredential) -> Result<CredentialId> {
         let mut credential_id = CredentialId::default();
-        credential_id.0.resize_to_capacity();
-        let buffer = &mut credential_id.0;
-        // let size = ctap_types::serde::cbor_serialize(&esc.0, buffer).map_err(|_| Error::Other)?;
-        let size = ctap_types::serde::cbor_serialize(&esc.0, buffer).unwrap();
-        credential_id.0.resize_default(size);
+        ctap_types::serde::cbor_serialize_bytes(&esc.0, &mut credential_id.0).map_err(|_| Error::Other)?;
         Ok(credential_id)
     }
 }
@@ -115,7 +111,7 @@ pub enum CredRandom {
 #[derive(Clone, Debug, serde_indexed::DeserializeIndexed, serde_indexed::SerializeIndexed)]
 #[serde_indexed(offset = 1)]
 pub struct Credential {
-    ctap: i32, //CtapVersion,
+    ctap: CtapVersion,
 
     // id, name, url
     rp: ctap_types::webauthn::PublicKeyCredentialRpEntity,
@@ -133,7 +129,7 @@ pub struct Credential {
     // --> use above Key enum
     // #[serde(skip_serializing_if = "Option::is_none")]
     // key_id: Option<ObjectHandle>,
-    pub the_key: Key,
+    pub key: Key,
 
     // extensions
     hmac_secret: Option<CredRandom>,
@@ -158,16 +154,14 @@ impl Credential {
         -> Self
     {
         Credential {
-            // ctap,
-            ctap: ctap as i32,
-
+            ctap,
             rp: parameters.rp.clone(),
             user: parameters.user.clone(),
 
             creation_time: timestamp,
             use_counter: true,
             algorithm: algorithm,
-            the_key: key,
+            key,
 
             hmac_secret,
             cred_protect,
@@ -176,15 +170,12 @@ impl Credential {
 
     pub fn serialize(&self) -> Result<SerializedCredential> {
         let mut serialized = SerializedCredential::new();
-        serialized.resize_to_capacity();
-        let buffer = &mut serialized;
-        let size = ctap_types::serde::cbor_serialize(self, buffer).map_err(|_| Error::Other)?;
-        serialized.resize_default(size);
+        let size = ctap_types::serde::cbor_serialize_bytes(self, &mut serialized).map_err(|_| Error::Other)?;
         Ok(serialized)
     }
 
     pub fn deserialize(bytes: &SerializedCredential) -> Result<Self> {
-        ctap_types::serde::cbor_deserialize(bytes).map_err(|_| Error::Other)
-        // Ok(ctap_types::serde::cbor_deserialize(bytes).unwrap())
+        // ctap_types::serde::cbor_deserialize(bytes).map_err(|_| Error::Other)
+        Ok(ctap_types::serde::cbor_deserialize(bytes).unwrap())
     }
 }

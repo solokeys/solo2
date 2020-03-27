@@ -104,7 +104,7 @@ pub mod request {
           - key: ObjectHandle
 
         FindObjects:
-            // - attributes: Attributes,
+            // - attributes: Attributes
 
         GenerateKey:
             - mechanism: Mechanism        // -> implies key type

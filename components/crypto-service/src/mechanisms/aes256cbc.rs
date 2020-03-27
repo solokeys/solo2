@@ -1,4 +1,4 @@
-use cortex_m_semihosting::hprintln;
+// use cortex_m_semihosting::hprintln;
 
 use crate::api::*;
 // use crate::config::*;
@@ -60,9 +60,7 @@ WrapKey<'a, 's, R, I, E, V> for super::Aes256Cbc
         let (serialized_key, _location) = resources.load_key_unchecked(&path)?;
 
         let mut message = Message::new();
-        message.resize_to_capacity();
-        let size = crate::service::cbor_serialize(&serialized_key, &mut message).map_err(|_| Error::CborError)?;
-        message.resize_default(size).map_err(|_| Error::InternalError)?;
+        crate::cbor_serialize_bytes(&serialized_key, &mut message).map_err(|_| Error::CborError)?;
 
         let encryption_request = request::Encrypt {
             mechanism: Mechanism::Aes256Cbc,

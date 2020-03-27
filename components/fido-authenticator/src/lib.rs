@@ -55,11 +55,9 @@ impl UserPresence for SilentAuthenticator {
     }
 }
 
-fn cbor_serialize_message<T: serde::Serialize>(object: &T) -> core::result::Result<Message, serde_cbor::Error> {
+fn cbor_serialize_message<T: serde::Serialize>(object: &T) -> core::result::Result<Message, ctap_types::serde::Error> {
     let mut message = Message::new();
-    message.resize_to_capacity();
-    let size = crypto_service::service::cbor_serialize(object, &mut message)?;
-    message.resize_default(size).unwrap();// map_err(  ??
+    ctap_types::serde::cbor_serialize_bytes(object, &mut message)?;
     Ok(message)
 }
 
@@ -344,7 +342,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 let public_key = syscall!(self.crypto.derive_p256_public_key(&private_key, StorageLocation::Volatile)).key;
                 let serialized_cose_key = syscall!(self.crypto.serialize_key(
                     Mechanism::P256, public_key, KeySerialization::Cose)).serialized_key;
-                let cose_key = crypto_service::service::cbor_deserialize(&serialized_cose_key).unwrap();
+                let cose_key = crypto_service::cbor_deserialize(&serialized_cose_key).unwrap();
 
                 // TODO: delete public key
 
@@ -712,27 +710,41 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         let allowed_credentials = if let Some(allow_list) = allow_list.as_ref() {
             let valid_allowed_credentials: CredentialList = allow_list.into_iter()
                 // discard not properly serialized encrypted credentials
-                .filter_map(|credential_descriptor|
-                    EncryptedSerializedCredential::try_from(CredentialId(credential_descriptor.id.clone())).ok()
+                .filter_map(|credential_descriptor| {
+                    hprintln!("validating {:?}", &credential_descriptor).ok();
+                    // hprintln!("validating").ok();
+                    let esc = EncryptedSerializedCredential::try_from(CredentialId(credential_descriptor.id.clone())).ok();
+                    hprintln!("step 1 passed: {}", esc.is_some()).ok();
+                    esc
                     // decrypt (and thereby filter out invalid credential IDs
-                    .and_then(|encrypted_credential|
-                        syscall!(self.crypto.decrypt_chacha8poly1305(
+                    .and_then(|encrypted_credential| {
+                        let ser = syscall!(self.crypto.decrypt_chacha8poly1305(
                             // TODO: use RpId as associated data here?
                             &kek,
                             &encrypted_credential.0.ciphertext,
                             &rp_id.as_bytes(),
                             &encrypted_credential.0.nonce,
                             &encrypted_credential.0.tag,
-                        )).plaintext
-                    )
-                    .and_then(|serialized_credential| Credential::deserialize(&serialized_credential).ok())
-                )
+                        )).plaintext;
+                        hprintln!("step 2 passed: {}", ser.is_some()).ok();
+                        ser
+                    })
+                    .and_then(|serialized_credential| {
+                        hprintln!("trying to deserialize {:?}", &serialized_credential).ok();
+                        let deser = Credential::deserialize(&serialized_credential).ok();
+                        hprintln!("step 3 passed: {}", deser.is_some()).ok();
+                        deser
+                    })
+                } )
                 .collect();
             if valid_allowed_credentials.len() < allow_list.len() {
+                hprintln!("invalid credential").ok();
                 return Err(Error::InvalidCredential);
             }
+            hprintln!("allowedList passed").ok();
             valid_allowed_credentials
         } else {
+            hprintln!("no allowedList passed").ok();
             CredentialList::new()
         };
 
@@ -744,7 +756,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
             // and bound to the specified rpId."
             allowed_credentials
                 .into_iter()
-                .filter(|credential| match credential.the_key.clone() {
+                .filter(|credential| match credential.key.clone() {
                     // TODO: should check if wrapped key is valid AEAD
                     Key::WrappedKey(_) => true,
                     Key::ResidentKey(key) => {
@@ -798,6 +810,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         // 5. Locate eligible credentials
         let credentials = self.locate_credentials(&parameters.rp_id, &parameters.allow_list, uv_performed)?;
         let num_credentials = credentials.len();
+        hprintln!("found {} applicable credentials", num_credentials).ok();
 
         hprintln!("GetAssertion not done YET").ok();
         Err(Error::InvalidCommand)
@@ -968,7 +981,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         let credential = Credential::new(
             credential::CtapVersion::Fido21Pre,
             parameters,
-            algorithm as i32,
+            -(algorithm as i32),
             key_parameter,
             123, // todo: get counter
             hmac_secret_requested.clone(),

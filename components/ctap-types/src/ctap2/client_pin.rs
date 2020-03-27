@@ -71,3 +71,22 @@ pub struct Response {
     pub retries: Option<u8>,
 
 }
+
+#[cfg(test)]
+mod tests {
+
+    #[test]
+    fn pin_v1_subcommand() {
+        // NB: This does *not* work without serde_repr, as the
+        // discriminant of a numerical enum does not have to coincide
+        // with its assigned value.
+        // E.g., for PinV1Subcommand, the first entry is set to
+        // value 1, but its discriminant (which our normal serialization
+        // to CBOR would output) is 0.
+        // The following test would then fail, as [1] != [2]
+        let mut buf = [0u8; 64];
+        let example = super::PinV1Subcommand::GetKeyAgreement;
+        let ser = crate::serde::cbor_serialize(&example, &mut buf).unwrap();
+        assert_eq!(ser, &[0x02]);
+    }
+}

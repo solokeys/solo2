@@ -73,7 +73,7 @@ DeserializeKey<'a, 's, R, I, E, V> for super::P256
         let public_key = match request.format {
             KeySerialization::Cose => {
                 // TODO: this should all be done upstream
-                let cose_public_key: ctap_types::cose::P256PublicKey = crate::service::cbor_deserialize(
+                let cose_public_key: ctap_types::cose::P256PublicKey = crate::cbor_deserialize(
                     &request.serialized_key).map_err(|_| Error::CborError)?;
                 let mut serialized_key = [0u8; 64];
                 if cose_public_key.x.len() != 32 || cose_public_key.y.len() != 32 {
@@ -165,9 +165,7 @@ SerializeKey<'a, 's, R, I, E, V> for super::P256
                     x: Bytes::try_from_slice(&public_key.x_coordinate()).unwrap(),
                     y: Bytes::try_from_slice(&public_key.y_coordinate()).unwrap(),
                 };
-                serialized_key.resize_to_capacity();
-                let size = crate::service::cbor_serialize(&cose_pk, &mut serialized_key).map_err(|_| Error::CborError)?;
-                serialized_key.resize_default(size).map_err(|_| Error::InternalError)?;
+                crate::cbor_serialize_bytes(&cose_pk, &mut serialized_key).map_err(|_| Error::CborError)?;
             }
             KeySerialization::Raw => {
                 serialized_key.extend_from_slice(public_key.as_bytes()).map_err(|_| Error::InternalError)?;

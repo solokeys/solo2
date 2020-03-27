@@ -21,5 +21,7 @@ pub use error::Error;
 pub use client::Client;
 pub use service::Service;
 
+pub use ctap_types::serde::{cbor_serialize, cbor_serialize_bytes, cbor_deserialize};
+
 // #[cfg(test)]
 // mod tests;
