@@ -167,8 +167,8 @@ impl AuthenticatorData {
         // the extensions data
         if let Some(ref extensions) = &self.extensions {
             let mut extensions_buf = [0u8; 128];
-            let l = crate::serde::cbor_serialize(&extensions, &mut extensions_buf).unwrap();
-            bytes.extend_from_slice(&extensions_buf[..l]).unwrap();
+            let ser = crate::serde::cbor_serialize(&extensions, &mut extensions_buf).unwrap();
+            bytes.extend_from_slice(ser).unwrap();
         }
 
         bytes

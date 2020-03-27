@@ -822,9 +822,9 @@ mod tests {
 
         for number in -128i8..=127 {
             println!("testing {}", number);
-            let n = cbor_serialize(&number, &mut buf).unwrap();
-            println!("serialized: {:?}", &buf[..n]);
-            let de: i8 = from_bytes(&buf).unwrap();
+            let ser = cbor_serialize(&number, &mut buf).unwrap();
+            println!("serialized: {:?}", ser);
+            let de: i8 = cbor_deserialize(ser).unwrap();
             assert_eq!(de, number);
         }
     }
@@ -878,29 +878,29 @@ mod tests {
         let mut buf = [0u8; 64];
 
         let number: i32 = -98304;
-        let _n = cbor_serialize(&number, &mut buf).unwrap();
-        println!("serialized number: {:?} of {}", &buf[.._n], i16::min_value());
-        let de: i32 = from_bytes(&buf).unwrap();
+        let ser = cbor_serialize(&number, &mut buf).unwrap();
+        println!("serialized number: {:?} of {}", ser, i16::min_value());
+        let de: i32 = from_bytes(ser).unwrap();
         assert_eq!(de, number);
 
         for number in (3*i16::min_value() as i32)..=3*(i16::max_value() as i32) {
             println!("testing {}", number);
-            let _n = cbor_serialize(&number, &mut buf).unwrap();
-            let de: i32 = from_bytes(&buf).unwrap();
+            let ser = cbor_serialize(&number, &mut buf).unwrap();
+            let de: i32 = from_bytes(ser).unwrap();
             assert_eq!(de, number);
         }
 
         for number in (i32::max_value() - i16::max_value() as i32)..=i32::max_value() {
             println!("testing {}", number);
-            let _n = cbor_serialize(&number, &mut buf).unwrap();
-            let de: i32 = from_bytes(&buf).unwrap();
+            let ser = cbor_serialize(&number, &mut buf).unwrap();
+            let de: i32 = from_bytes(ser).unwrap();
             assert_eq!(de, number);
         }
 
         for number in i32::min_value()..=(i32::min_value() - i16::min_value() as i32) {
             println!("testing {}", number);
-            let _n = cbor_serialize(&number, &mut buf).unwrap();
-            let de: i32 = from_bytes(&buf).unwrap();
+            let ser = cbor_serialize(&number, &mut buf).unwrap();
+            let de: i32 = from_bytes(ser).unwrap();
             assert_eq!(de, number);
         }
     }
@@ -913,8 +913,8 @@ mod tests {
 
         let slice = b"thank you postcard!";
         let bytes = heapless_bytes::Bytes::<U64>::try_from_slice(slice).unwrap();
-        let n = cbor_serialize(&bytes, &mut buf).unwrap();
-        println!("serialized bytes = {:?}", &buf[..n]);
+        let ser = cbor_serialize(&bytes, &mut buf).unwrap();
+        println!("serialized bytes = {:?}", ser);
         let de: heapless_bytes::Bytes::<U64> = from_bytes(&buf).unwrap();
         println!("deserialized bytes = {:?}", &de);
         assert_eq!(&de, slice);
@@ -982,8 +982,8 @@ mod tests {
     fn de_enum() {
 
         let mut buf = [0u8; 64];
-        let _n = cbor_serialize(&Some(3), &mut buf).unwrap();
-        println!("ser(e) = {:?}", &buf[.._n]);
+        let ser = cbor_serialize(&Some(3), &mut buf).unwrap();
+        println!("ser(e) = {:?}", ser);
 
         // let mut buf = [0u8; 64];
         // let _n = cbor_serialize(&None, &mut buf).unwrap();
@@ -1000,9 +1000,9 @@ mod tests {
         let mut buf = [0u8; 64];
 
         let e = Enum::Beta(-42);
-        let n = cbor_serialize(&e, &mut buf).unwrap();
-        println!("ser(e) = {:?}", &buf[..n]);
-        let de: Enum = cbor_deserialize(&buf[..n]).unwrap();
+        let ser = cbor_serialize(&e, &mut buf).unwrap();
+        println!("ser(e) = {:?}", ser);
+        let de: Enum = cbor_deserialize(ser).unwrap();
         assert_eq!(de, e);
 
         #[derive(Clone,Debug,Eq,PartialEq,Serialize,Deserialize)]
@@ -1013,15 +1013,15 @@ mod tests {
         }
 
         let e = SimpleEnum::Alpha(7);
-        let n = cbor_serialize(&e, &mut buf).unwrap();
-        println!("ser(e) = {:?}", &buf[..n]);
-        let de: SimpleEnum = cbor_deserialize(&buf[..n]).unwrap();
+        let ser = cbor_serialize(&e, &mut buf).unwrap();
+        println!("ser(e) = {:?}", ser);
+        let de: SimpleEnum = cbor_deserialize(ser).unwrap();
         assert_eq!(de, e);
 
         let e = SimpleEnum::Beta;
-        let n = cbor_serialize(&e, &mut buf).unwrap();
-        println!("ser(e) = {:?}", &buf[..n]);
-        let de: SimpleEnum = cbor_deserialize(&buf[..n]).unwrap();
+        let ser = cbor_serialize(&e, &mut buf).unwrap();
+        println!("ser(e) = {:?}", ser);
+        let de: SimpleEnum = cbor_deserialize(ser).unwrap();
         assert_eq!(de, e);
     }
 
