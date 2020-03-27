@@ -83,6 +83,9 @@ pub struct CtapOptions {
     pub rk: bool,
     pub up: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Note: This capability means capability to perform UV
+    /// *within the authenticator*, for instance with biometrics
+    /// or on-device PIN entry.
     pub uv: Option<bool>, // default not capable
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plat: Option<bool>, // default false

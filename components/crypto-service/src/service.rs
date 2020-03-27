@@ -43,6 +43,11 @@ pub trait Encrypt<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorag
     -> Result<reply::Encrypt, Error> { Err(Error::MechanismNotAvailable) }
 }
 
+pub trait Exists<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> {
+    fn exists(_resources: &mut ServiceResources<'a, 's, R, I, E, V>, _request: request::Exists)
+    -> Result<reply::Exists, Error> { Err(Error::MechanismNotAvailable) }
+}
+
 pub trait GenerateKey<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> {
     fn generate_key(_resources: &mut ServiceResources<'a, 's, R, I, E, V>, _request: request::GenerateKey)
     -> Result<reply::GenerateKey, Error> { Err(Error::MechanismNotAvailable) }
@@ -362,6 +367,16 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
                     _ => return Err(Error::MechanismNotAvailable),
 
                 }.map(|reply| Reply::Encrypt(reply))
+            },
+
+            Request::Exists(request) => {
+                match request.mechanism {
+
+                    Mechanism::Ed25519 => mechanisms::Ed25519::exists(self, request),
+                    Mechanism::P256 => mechanisms::P256::exists(self, request),
+                    _ => return Err(Error::MechanismNotAvailable),
+
+                }.map(|reply| Reply::Exists(reply))
             },
 
             Request::GenerateKey(request) => {

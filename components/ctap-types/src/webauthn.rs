@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use crate::{Bytes, consts, String};
+use crate::sizes::*;
 
 #[derive(Clone,Debug,Eq,PartialEq,Serialize,Deserialize)]
 pub struct PublicKeyCredentialRpEntity {
@@ -38,7 +39,9 @@ pub struct PublicKeyCredentialParameters {
 #[derive(Clone,Debug,Eq,PartialEq,Serialize,Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PublicKeyCredentialDescriptor {
-    pub id: Bytes<consts::U128>,
+    // NB: if this is too small, get a nasty error
+    // See serde::error/custom for more info
+    pub id: Bytes<MAX_CREDENTIAL_ID_LENGTH>,
     #[serde(rename = "type")]
     pub key_type: String<consts::U10>,
     // https://w3c.github.io/webauthn/#enumdef-authenticatortransport

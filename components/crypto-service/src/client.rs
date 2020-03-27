@@ -251,6 +251,21 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
         Ok(FutureResult::new(self))
     }
 
+    pub fn exists<'c>(
+        &'c mut self,
+        mechanism: Mechanism,
+        key: ObjectHandle,
+    )
+        -> core::result::Result<FutureResult<'a, 'c, reply::Exists>, ClientError>
+    {
+        self.raw.request(request::Exists {
+            key,
+            mechanism,
+        })?;
+        self.syscall.syscall();
+        Ok(FutureResult::new(self))
+    }
+
     pub fn generate_key<'c>(&'c mut self, mechanism: Mechanism, attributes: StorageAttributes)
         -> core::result::Result<FutureResult<'a, 'c, reply::GenerateKey>, ClientError>
     {

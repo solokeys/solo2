@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_indexed::{DeserializeIndexed, SerializeIndexed};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
-use super::AuthenticatorOptions;
+use super::{AuthenticatorOptions, PinAuth};
 use crate::sizes::*;
 use crate::webauthn::*;
 
@@ -103,7 +103,7 @@ pub struct Parameters {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub options: Option<AuthenticatorOptions>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub pin_auth: Option<Bytes<consts::U16>>,
+    pub pin_auth: Option<PinAuth>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pin_protocol: Option<u32>,
 }
@@ -182,7 +182,7 @@ pub struct AttestedCredentialData {
 	pub aaguid: Bytes<consts::U16>,
     // this is where "unlimited non-resident keys" get stored
     // TODO: Model as actual credential ID, with ser/de to bytes (format is up to authenticator)
-    pub credential_id: Bytes<CREDENTIAL_ID_LENGTH>,
+    pub credential_id: Bytes<MAX_CREDENTIAL_ID_LENGTH>,
     // pub credential_public_key: crate::cose::PublicKey,//Bytes<COSE_KEY_LENGTH>,
     pub credential_public_key: Bytes<COSE_KEY_LENGTH>,
 }
@@ -199,7 +199,8 @@ impl AttestedCredentialData {
         bytes.extend_from_slice(&self.credential_id[..self.credential_id.len()]).unwrap();
 
         // use existing `bytes` buffer
-        let mut cbor_key = [0u8; 128];
+        // let mut cbor_key = [0u8; 128];
+
         // CHANGE this back if credential_public_key is not serialized again
         // let l = crate::serde::cbor_serialize(&self.credential_public_key, &mut cbor_key).unwrap();
         // bytes.extend_from_slice(&cbor_key[..l]).unwrap();

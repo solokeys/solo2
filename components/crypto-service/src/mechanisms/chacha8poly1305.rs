@@ -77,9 +77,15 @@ Decrypt<'a, 's, R, I, E, V> for super::Chacha8Poly1305
         let outcome = aead.decrypt_in_place_detached(
             &nonce, &request.associated_data, &mut plaintext, &tag);
 
-        outcome.map_err(|_| Error::AeadError)?;
+        // outcome.map_err(|_| Error::AeadError)?;
 
-        Ok(reply::Decrypt { plaintext })
+        Ok(reply::Decrypt { plaintext: {
+            if outcome.is_ok() {
+                Some(plaintext)
+            } else {
+                None
+            }
+        }})
     }
 }
 
@@ -179,7 +185,13 @@ UnwrapKey<'a, 's, R, I, E, V> for super::Chacha8Poly1305
             tag,
         };
 
-        let serialized_key = <super::Chacha8Poly1305>::decrypt(resources, decryption_request)?.plaintext;
+        let serialized_key = if let Some(serialized_key) = <super::Chacha8Poly1305>::decrypt(resources, decryption_request)?.plaintext {
+            serialized_key
+        } else {
+            return Err(Error::AeadError);
+        };
+
+        // TODO: probably change this to returning Option<key> too
         let SerializedKey { kind, value } = crate::service::cbor_deserialize(&serialized_key).map_err(|_| Error::CborError)?;
         let kind = KeyKind::try_from(kind).map_err(|_| Error::InternalError)?;
 

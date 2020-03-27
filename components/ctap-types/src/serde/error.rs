@@ -16,8 +16,8 @@ pub enum Error {
     WontImplement,
     /// This is a feature that ctapcbor intends to support, but does not yet
     NotYetImplemented,
-    // /// The serialize buffer is full
-    // SerializeBufferFull,
+    /// The serialize buffer is full
+    SerializeBufferFull(usize),
     // /// The length of a sequence must be known
     // SerializeSeqLengthUnknown,
     /// Hit the end of buffer, expected more data
@@ -33,7 +33,8 @@ pub enum Error {
     // /// Found an Option discriminant that wasn't 0 or 1
     // DeserializeBadOption,
     // /// Found an enum discriminant that was > u32::max_value()
-    // DeserializeBadEnum,
+    /// Could not parse an enum
+    DeserializeBadEnum,
     // /// The original data was not well encoded
     // DeserializeBadEncoding,
     /// Expected a different major type
@@ -71,7 +72,7 @@ impl Display for Error {
                 NotYetImplemented => {
                     "This is a feature that ctapcbor intends to support, but does not yet"
                 }
-                // SerializeBufferFull => "The serialize buffer is full",
+                SerializeBufferFull(i) => "The serialize buffer is full",
                 // SerializeSeqLengthUnknown => "The length of a sequence must be known",
                 DeserializeUnexpectedEnd => "Hit the end of buffer, expected more data",
                 // DeserializeBadVarint => {
@@ -82,6 +83,7 @@ impl Display for Error {
                 DeserializeBadUtf8 => "Tried to parse invalid utf-8",
                 // DeserializeBadOption => "Found an Option discriminant that wasn't 0 or 1",
                 // DeserializeBadEnum => "Found an enum discriminant that was > u32::max_value()",
+                DeserializeBadEnum => "Could not parse an enum",
                 // DeserializeBadEncoding => "The original data was not well encoded",
                 DeserializeBadI8 => "Expected a i8",
                 DeserializeBadI16 => "Expected a i16",
@@ -113,6 +115,21 @@ impl serde::de::Error for Error {
     where
         T: Display,
     {
+        // TODO: Would be helpful to log this to system logger
+        // This shows e.g.
+        // - missing fields
+        // - expected sequence, received X
+        // - etc.
+        //
+        // Particularly helpful would be better errors when receiving
+        // structures are undersized.
+        //
+        // E.g. if there is a `Bytes<N>` and more than N bytes are delivered,
+        // currently the error _msg: T is:
+        //
+        // `invalid length 297, expected a sequence`
+        //
+        cortex_m_semihosting::hprintln!("Serde custom error: {}", &_msg).ok();
         Error::SerdeDeCustom
     }
 }

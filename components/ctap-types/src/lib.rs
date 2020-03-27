@@ -1,5 +1,5 @@
-// #![cfg_attr(not(test), no_std)]
-#![no_std]
+#![cfg_attr(not(test), no_std)]
+// #![no_std]
 
 //! `ctap-types` maps the various types involved in the FIDO CTAP protocol
 //! to Rust structures consisting of `heapless` data types.

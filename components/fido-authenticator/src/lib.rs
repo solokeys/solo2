@@ -2,6 +2,7 @@
 
 use core::task::Poll;
 use core::convert::{TryFrom, TryInto};
+use core::iter::FromIterator;
 
 use cortex_m_semihosting::hprintln;
 
@@ -254,13 +255,29 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 match request {
                     Request::Ctap2(request) => {
                         match request {
+
+                            // 0x4
                             ctap2::Request::GetInfo => {
                                 let response = self.get_info();
                                 self.rpc.send.enqueue(
                                     Ok(Response::Ctap2(ctap2::Response::GetInfo(response))))
                                     .expect("internal error");
                             }
+
                             // 0x1
+                            ctap2::Request::GetAssertion(parameters) => {
+                                // hprintln!("GA: {:?}", &parameters).ok();
+                                let response = self.get_assertion(&parameters);
+                                self.rpc.send.enqueue(
+                                    match response {
+                                        Ok(response) => Ok(Response::Ctap2(ctap2::Response::GetAssertion(response))),
+                                        Err(error) => Err(error)
+                                    })
+                                    .expect("internal error");
+                                hprintln!("enqueued GA response").ok();
+                            }
+
+                            // 0x2
                             ctap2::Request::MakeCredential(parameters) => {
                                 // hprintln!("MC: {:?}", &parameters).ok();
                                 let response = self.make_credential(&parameters);
@@ -488,7 +505,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         -> Result<()>
     {
         let pin_hash = syscall!(self.crypto.decrypt_aes256cbc(
-            &shared_secret, pin_hash_enc)).plaintext;
+            &shared_secret, pin_hash_enc)).plaintext.ok_or(Error::Other)?;
 
         let stored_pin_hash = match self.state.pin_hash {
             Some(hash) => hash,
@@ -520,7 +537,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
     fn decrypt_pin_check_length(&mut self, shared_secret: &ObjectHandle, pin_enc: &[u8]) -> Result<Message> {
         let mut pin = syscall!(self.crypto.decrypt_aes256cbc(
-            &shared_secret, &pin_enc)).plaintext;
+            &shared_secret, &pin_enc)).plaintext.ok_or(Error::Other)?;
 
         // it is expected to be filled with null bytes to length at least 64
         if pin.len() < 64 {
@@ -592,14 +609,22 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         Ok(shared_secret)
     }
 
-    fn make_credential(&mut self, parameters: &ctap2::make_credential::Parameters) -> Result<ctap2::make_credential::Response> {
 
+    /// Returns whether UV was performed.
+    fn pin_prechecks(&mut self,
+        options: &Option<ctap2::AuthenticatorOptions>,
+        pin_auth: &Option<ctap2::PinAuth>,
+        pin_protocol: &Option<u32>,
+        data: &[u8],
+    )
+        -> Result<bool>
+    {
         // 1. pinAuth zero length -> wait for user touch, then
         // return PinNotSet if not set, PinInvalid if set
         //
         // the idea is for multi-authnr scenario where platform
         // wants to enforce PIN and needs to figure out which authnrs support PIN
-        if let Some(ref pin_auth) = &parameters.pin_auth {
+        if let Some(pin_auth) = pin_auth.as_ref() {
             if pin_auth.len() == 0 {
                 if !self.up.user_present() {
                     return Err(Error::OperationDenied);
@@ -609,13 +634,12 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 } else {
                     return Err(Error::PinAuthInvalid);
                 }
-
             }
         }
 
         // 2. check PIN protocol is 1 if pinAuth was sent
-        if let Some(ref _pin_auth) = &parameters.pin_auth {
-            if let Some(1) = parameters.pin_protocol {
+        if let Some(ref _pin_auth) = pin_auth {
+            if let Some(1) = pin_protocol {
             } else {
                 return Err(Error::PinAuthInvalid);
             }
@@ -624,22 +648,171 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         // 3. if no PIN is set (we have no other form of UV),
         // and platform sent `uv` or `pinAuth`, return InvalidOption
         if !self.pin_is_set() {
-            if let Some(ref options) = &parameters.options {
+            if let Some(ref options) = &options {
                 if Some(true) == options.uv {
                     return Err(Error::InvalidOption);
                 }
             }
-            if parameters.pin_auth.is_some() {
+            if pin_auth.is_some() {
                 return Err(Error::InvalidOption);
             }
         }
 
-        // 4. TODO: move pinAuth up here
-        // Also clarify the confusion... I think we should fail if `uv` is passed?
-        // As we don't have our "own" gesture such as fingerprint or on-board PIN entry?
+        // 4. If authenticator is protected by som form of user verification, do it
+        //
+        // TODO: Should we should fail if `uv` is passed?
+        // Current thinking: no
+        if self.pin_is_set() {
 
+            let mut uv_performed = false;
+            if let Some(ref pin_auth) = pin_auth {
+                if pin_auth.len() != 16 {
+                    return Err(Error::InvalidParameter);
+                }
+                // seems a bit redundant to check here in light of 2.
+                // I guess the CTAP spec writers aren't implementers :D
+                if let Some(1) = pin_protocol {
+                    // 5. if pinAuth is present and pinProtocol = 1, verify
+                    // success --> set uv = 1
+                    // error --> PinAuthInvalid
+                    self.verify_pin(
+                        // unwrap panic ruled out above
+                        pin_auth.as_ref().try_into().unwrap(),
+                        data,
+                    )?;
 
-        // 5. credProtect?
+                    return Ok(true);
+
+                } else {
+                    // 7. pinAuth present + pinProtocol != 1 --> error PinAuthInvalid
+                    return Err(Error::PinAuthInvalid);
+                }
+
+            } else {
+                // 6. pinAuth not present + clientPin set --> error PinRequired
+                if self.pin_is_set() {
+                    return Err(Error::PinRequired);
+                }
+            }
+        }
+
+        Ok(false)
+    }
+
+    fn locate_credentials(
+        &mut self, rp_id: &String<consts::U64>,
+        allow_list: &Option<ctap2::get_assertion::AllowList>,
+        uv_performed: bool,
+    )
+        -> Result<CredentialList>
+    {
+        let kek = self.key_encryption_key()?;
+
+        // validate allowList
+        let allowed_credentials = if let Some(allow_list) = allow_list.as_ref() {
+            let valid_allowed_credentials: CredentialList = allow_list.into_iter()
+                // discard not properly serialized encrypted credentials
+                .filter_map(|credential_descriptor|
+                    EncryptedSerializedCredential::try_from(CredentialId(credential_descriptor.id.clone())).ok()
+                    // decrypt (and thereby filter out invalid credential IDs
+                    .and_then(|encrypted_credential|
+                        syscall!(self.crypto.decrypt_chacha8poly1305(
+                            // TODO: use RpId as associated data here?
+                            &kek,
+                            &encrypted_credential.0.ciphertext,
+                            &rp_id.as_bytes(),
+                            &encrypted_credential.0.nonce,
+                            &encrypted_credential.0.tag,
+                        )).plaintext
+                    )
+                    .and_then(|serialized_credential| Credential::deserialize(&serialized_credential).ok())
+                )
+                .collect();
+            if valid_allowed_credentials.len() < allow_list.len() {
+                return Err(Error::InvalidCredential);
+            }
+            valid_allowed_credentials
+        } else {
+            CredentialList::new()
+        };
+
+        let allowed_credentials_passed = allowed_credentials.len() > 0;
+
+        let existing_credentials: CredentialList = if allowed_credentials_passed {
+            // "If an allowList is present and is non-empty,
+            // locate all denoted credentials present on this authenticator
+            // and bound to the specified rpId."
+            allowed_credentials
+                .into_iter()
+                .filter(|credential| match credential.the_key.clone() {
+                    // TODO: should check if wrapped key is valid AEAD
+                    Key::WrappedKey(_) => true,
+                    Key::ResidentKey(key) => {
+                        match credential.algorithm {
+                            -7 => syscall!(self.crypto.exists(Mechanism::P256, key)).exists,
+                            -8 => syscall!(self.crypto.exists(Mechanism::Ed25519, key)).exists,
+                            _ => false,
+                        }
+                    }
+                })
+                .collect()
+        } else {
+            // If an allowList is not present,
+            // locate all credentials that are present on this authenticator
+            // and bound to the specified rpId.
+            todo!("implement empty allowList");
+        };
+
+        // apply credential protection policy
+        let applicable_credentials: CredentialList = existing_credentials
+            .into_iter()
+            .filter(|credential| {
+                use credential::CredentialProtectionPolicy as Policy;
+                match credential.cred_protect {
+                    Policy::Optional => true,
+                    Policy::OptionalWithCredentialIdList => allowed_credentials_passed || uv_performed,
+                    Policy::Required => uv_performed,
+
+                }
+            })
+            .collect()
+            ;
+        //
+
+        // "If no applicable credentials were found, return CTAP2_ERR_NO_CREDENTIALS"
+        if applicable_credentials.len() == 0 {
+            return Err(Error::NoCredentials);
+        }
+
+        Ok(applicable_credentials)
+    }
+
+    fn get_assertion(&mut self, parameters: &ctap2::get_assertion::Parameters) -> Result<ctap2::get_assertion::Response> {
+
+        // 1-4.
+        let uv_performed = self.pin_prechecks(
+            &parameters.options, &parameters.pin_auth, &parameters.pin_protocol,
+            &parameters.client_data_hash.as_ref(),
+        )?;
+
+        // 5. Locate eligible credentials
+        let credentials = self.locate_credentials(&parameters.rp_id, &parameters.allow_list, uv_performed)?;
+        let num_credentials = credentials.len();
+
+        hprintln!("GetAssertion not done YET").ok();
+        Err(Error::InvalidCommand)
+    }
+
+    fn make_credential(&mut self, parameters: &ctap2::make_credential::Parameters) -> Result<ctap2::make_credential::Response> {
+
+        // 1-4.
+        let uv_performed = self.pin_prechecks(
+            &parameters.options, &parameters.pin_auth, &parameters.pin_protocol,
+            &parameters.client_data_hash.as_ref(),
+        )?;
+
+        // 5. "persist credProtect value for this credential"
+        // --> seems out of place here, see 9.
 
         // 6. excludeList present, contains credential ID on this authenticator bound to RP?
         // --> wait for UP, error CredentialExcluded
@@ -734,36 +907,6 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         }
 
         // hprintln!("hmac-secret = {:?}, credProtect = {:?}", hmac_secret_requested, cred_protect_requested).ok();
-
-        // "old" (CTAP2, not CTAP2.1): 5., 6., 7. pinAuth handling
-        // TODO: move up
-
-        let mut uv_performed = false;
-        if let Some(ref pin_auth) = &parameters.pin_auth {
-            if pin_auth.len() != 16 {
-                return Err(Error::InvalidParameter);
-            }
-            if let Some(1) = parameters.pin_protocol {
-                // 5. if pinAuth is present and pinProtocol = 1, verify
-                // success --> set uv = 1
-                // error --> PinAuthInvalid
-                self.verify_pin(
-                    // unwrap panic ruled out above
-                    pin_auth.as_ref().try_into().unwrap(),
-                    &parameters.client_data_hash.as_ref(),
-                )?;
-                uv_performed = true;
-            } else {
-                // 7. pinAuth present + pinProtocol != 1 --> error PinAuthInvalid
-                return Err(Error::PinAuthInvalid);
-            }
-
-        } else {
-            // 6. pinAuth not present + clientPin set --> error PinRequired
-            if self.pin_is_set() {
-                return Err(Error::PinRequired);
-            }
-        }
 
         // 10. get UP, if denied error OperationDenied
         if !self.up.user_present() {
@@ -926,6 +1069,13 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         // hprintln!("client_data_hash = {:?}", &parameters.client_data_hash).ok();
         // hprintln!("commitment = {:?}", &commitment).ok();
 
+        // NB: the other/normal one is called "basic" or "batch" attestation,
+        // because it attests the authenticator is part of a batch: the model
+        // specified by AAGUID.
+        // "self signed" is also called "surrogate basic".
+        //
+        // we should also directly support "none" format, it's a bit weird
+        // how browsers firefox this
         const SELF_SIGNED: bool  = true;
 
         let (signature, attestation_algorithm) = {
@@ -963,6 +1113,9 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 false => {
                     // let mut x5c = Vec::new();
                     // x5c.push(Bytes::try_from_slice(&SOLO_HACKER_ATTN_CERT).unwrap()).unwrap();
+                    //
+                    // See: https://www.w3.org/TR/webauthn-2/#sctn-packed-attestation-cert-requirements
+                    //
                     todo!("solve the cert conundrum");
                 }
             },
@@ -978,13 +1131,6 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         };
 
         Ok(attestation_object)
-
-        // ctap2::make_credential::Response {
-        //     versions,
-        //     aaguid: self.config.aaguid.clone(),
-        //     max_msg_size: Some(ctap_types::sizes::MESSAGE_SIZE),
-        //     ..ctap2::get_info::Response::default()
-        // }
     }
 
     // fn credential_id(credential: &Credential) -> CredentialId {

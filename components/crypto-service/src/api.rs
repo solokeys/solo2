@@ -25,6 +25,7 @@ generate_enums! {
     DeriveKey: 3
     DeserializeKey: 4
     Encrypt: 5
+    Exists: 16
     // DeriveKeypair: 3
     FindObjects: 6
     GenerateKey: 7
@@ -97,6 +98,10 @@ pub mod request {
           - key: ObjectHandle
           - message: Message
           - associated_data: ShortData
+
+        Exists:
+          - mechanism: Mechanism
+          - key: ObjectHandle
 
         FindObjects:
             // - attributes: Attributes,
@@ -194,10 +199,14 @@ pub mod reply {
             - num_objects: usize
 
 		Decrypt:
-            - plaintext: Message
+            - plaintext: Option<Message>
 
         DeriveKey:
             - key: ObjectHandle
+
+        // DeriveKeypair:
+        //     - private_key: ObjectHandle
+        //     - public_key: ObjectHandle
 
         DeserializeKey:
             - key: ObjectHandle
@@ -207,9 +216,8 @@ pub mod reply {
             - nonce: ShortData
             - tag: ShortData
 
-        // DeriveKeypair:
-        //     - private_key: ObjectHandle
-        //     - public_key: ObjectHandle
+        Exists:
+            - exists: bool
 
         GenerateKey:
             - key: ObjectHandle

@@ -114,7 +114,7 @@ Decrypt<'a, 's, R, I, E, V> for super::Aes256Cbc
 		let plaintext = cipher.decrypt(&mut buffer).unwrap();
         let plaintext = Message::try_from_slice(&plaintext).unwrap();
 
-        Ok(reply::Decrypt { plaintext })
+        Ok(reply::Decrypt { plaintext: Some(plaintext) })
     }
 }
 

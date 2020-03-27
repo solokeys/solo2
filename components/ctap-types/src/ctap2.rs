@@ -32,6 +32,9 @@ pub struct AuthenticatorOptions {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub up: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Note: This flag asks to perform UV *within the authenticator*,
+    /// for instance with biometrics or on-device PIN entry,
+    /// use of pinAuth is implicit where required.
     pub uv: Option<bool>,
 }
 
@@ -76,6 +79,8 @@ pub struct AuthenticatorOptions {
 //#[serde(rename_all = "camelCase")]
 //pub struct CredentialPublicKey {
 //}
+
+pub type PinAuth = Bytes<consts::U16>;
 
 #[derive(Clone,Debug,Eq,PartialEq)]
 // #[serde(rename_all = "camelCase")]

@@ -188,6 +188,23 @@ SerializeKey<'a, 's, R, I, E, V> for super::P256
 
 #[cfg(feature = "p256")]
 impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
+Exists<'a, 's, R, I, E, V> for super::P256
+{
+    fn exists(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::Exists)
+        -> Result<reply::Exists, Error>
+    {
+        let key_id = request.key.object_id;
+
+        let mut seed = [0u8; 32];
+        let path = resources.prepare_path_for_key(KeyType::Private, &key_id)?;
+
+        let exists = resources.load_key(&path, KeyKind::P256, &mut seed).is_ok();
+        Ok(reply::Exists { exists })
+    }
+}
+
+#[cfg(feature = "p256")]
+impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
 Sign<'a, 's, R, I, E, V> for super::P256
 {
     fn sign(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::Sign)

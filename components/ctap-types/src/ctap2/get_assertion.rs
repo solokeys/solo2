@@ -2,7 +2,7 @@ use crate::{Bytes, consts, String, Vec};
 use serde::{Deserialize, Serialize};
 use serde_indexed::{DeserializeIndexed, SerializeIndexed};
 
-use super::AuthenticatorOptions;
+use super::{AuthenticatorOptions, PinAuth};
 use crate::cose::P256PublicKey;
 use crate::sizes::*;
 use crate::webauthn::*;
@@ -31,6 +31,7 @@ pub struct Extensions {
     pub hmac_secret: Option<HmacSecretInput>,
 }
 
+pub type AllowList = Vec<PublicKeyCredentialDescriptor, MAX_CREDENTIAL_COUNT_IN_LIST>;
 
 #[derive(Clone,Debug,Eq,PartialEq,SerializeIndexed,DeserializeIndexed)]
 // #[serde(rename_all = "camelCase")]
@@ -38,13 +39,14 @@ pub struct Extensions {
 pub struct Parameters {
     pub rp_id: String<consts::U64>,
     pub client_data_hash: Bytes<consts::U32>,
-    pub allow_list: Vec<PublicKeyCredentialDescriptor, consts::U8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allow_list: Option<AllowList>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extensions: Option<Extensions>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub options: Option<AuthenticatorOptions>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub pin_auth: Option<Bytes<consts::U16>>,
+    pub pin_auth: Option<PinAuth>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pin_protocol: Option<u32>,
 }

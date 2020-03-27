@@ -8,11 +8,12 @@ use crypto_service::{
     },
 };
 
-use ctap_types::{
-    Bytes, consts,
+pub(crate) use ctap_types::{
+    Bytes, consts, Vec,
     // authenticator::{ctap1, ctap2, Error, Request, Response},
     authenticator::ctap2,
     ctap2::make_credential::CredentialProtectionPolicy,
+    sizes::*,
 };
 
 use super::{Error, Result};
@@ -26,7 +27,7 @@ pub enum CtapVersion {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct CredentialId(pub Bytes<consts::U384>);
+pub struct CredentialId(pub Bytes<MAX_CREDENTIAL_ID_LENGTH>);
 
 // TODO: how to determine necessary size?
 // pub type SerializedCredential = Bytes<consts::U512>;
@@ -65,7 +66,7 @@ impl TryFrom<CredentialId> for EncryptedSerializedCredential {
 
     fn try_from(cid: CredentialId) -> Result<EncryptedSerializedCredential> {
         let encrypted_serialized_credential = EncryptedSerializedCredential(
-            ctap_types::serde::cbor_deserialize(&cid.0).map_err(|_| Error::Other)?
+            ctap_types::serde::cbor_deserialize(&cid.0).map_err(|_| Error::InvalidCredential)?
         );
         Ok(encrypted_serialized_credential)
     }
@@ -123,24 +124,26 @@ pub struct Credential {
 
     // can be just a counter, need to be able to determine "latest"
     creation_time: u32,
-    // for deterministic keys, it seems CTAP2 (but not CTAP1) makes signature counters optional
+    // for stateless deterministic keys, it seems CTAP2 (but not CTAP1) makes signature counters optional
     use_counter: bool,
     // P256 or Ed25519
-    algorithm: i32,
+    pub algorithm: i32,
     // for RK in non-deterministic mode: refers to actual key
     // TODO(implement enums in cbor-deser): for all others, is a wrapped key
     // --> use above Key enum
     // #[serde(skip_serializing_if = "Option::is_none")]
     // key_id: Option<ObjectHandle>,
-    the_key: Key,
+    pub the_key: Key,
 
     // extensions
     hmac_secret: Option<CredRandom>,
-    cred_protect: CredentialProtectionPolicy,
+    pub cred_protect: CredentialProtectionPolicy,
 
     // TODO: add `sig_counter: Option<ObjectHandle>`,
     // and grant RKs a per-credential sig-counter.
 }
+
+pub type CredentialList = Vec<Credential, ctap_types::sizes::MAX_CREDENTIAL_COUNT_IN_LIST>;
 
 impl Credential {
     pub fn new(
@@ -181,7 +184,7 @@ impl Credential {
     }
 
     pub fn deserialize(bytes: &SerializedCredential) -> Result<Self> {
-        // ctap_types::serde::cbor_deserialize(bytes).map_err(|_| Error::Other)
-        Ok(ctap_types::serde::cbor_deserialize(bytes).unwrap())
+        ctap_types::serde::cbor_deserialize(bytes).map_err(|_| Error::Other)
+        // Ok(ctap_types::serde::cbor_deserialize(bytes).unwrap())
     }
 }
