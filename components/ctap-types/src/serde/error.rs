@@ -129,7 +129,7 @@ impl serde::de::Error for Error {
         //
         // `invalid length 297, expected a sequence`
         //
-        cortex_m_semihosting::hprintln!("Serde custom error: {}", &_msg).ok();
+        // cortex_m_semihosting::hprintln!("Serde custom error: {}", &_msg).ok();
         Error::SerdeDeCustom
     }
 }

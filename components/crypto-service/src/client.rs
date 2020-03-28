@@ -285,10 +285,20 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
         Ok(FutureResult::new(self))
     }
 
-    pub fn store_blob<'c>(&'c mut self, prefix: Option<Letters>, /*id: MediumData,*/ data: Message, location: StorageLocation)
+    pub fn store_blob<'c>(
+        &'c mut self,
+        prefix: Option<Letters>, /*id: MediumData,*/
+        data: Message,
+        location: StorageLocation,
+        user_attribute: Option<UserAttribute>,
+        )
         -> core::result::Result<FutureResult<'a, 'c, reply::StoreBlob>, ClientError>
     {
-        self.raw.request(request::StoreBlob { prefix, /*id,*/ data, attributes: StorageAttributes { persistence: location } } )?;
+        self.raw.request(request::StoreBlob {
+            prefix, /*id,*/ data,
+            attributes: StorageAttributes { persistence: location },
+            user_attribute,
+        } )?;
         self.syscall.syscall();
         Ok(FutureResult::new(self))
     }

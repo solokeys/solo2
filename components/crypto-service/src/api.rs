@@ -152,6 +152,7 @@ pub mod request {
           // - id: MediumData
           - data: Message
           - attributes: StorageAttributes
+          - user_attribute: Option<UserAttribute>
 
         UnwrapKey:
           - mechanism: Mechanism
@@ -248,7 +249,7 @@ pub mod reply {
             - valid: bool
 
         UnwrapKey:
-            - key: ObjectHandle
+            - key: Option<ObjectHandle>
 
         WrapKey:
             - wrapped_key: Message

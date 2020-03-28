@@ -16,5 +16,7 @@ pub type MAX_SERIALIZED_KEY_LENGTH = consts::U128;
 pub type MAX_SERVICE_CLIENTS = consts::U5;
 pub type MAX_SHORT_DATA_LENGTH = consts::U128;
 pub type MAX_SIGNATURE_LENGTH = consts::U72;
+pub type MAX_USER_ATTRIBUTE_LENGTH = consts::U256;
 
+pub const USER_ATTRIBUTE_NUMBER: u8 = 37;
 

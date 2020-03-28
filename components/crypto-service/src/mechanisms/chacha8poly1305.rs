@@ -1,4 +1,4 @@
-// use cortex_m_semihosting::hprintln;
+use cortex_m_semihosting::hprintln;
 
 use core::convert::{TryFrom, TryInto};
 
@@ -154,6 +154,7 @@ WrapKey<'a, 's, R, I, E, V> for super::Chacha8Poly1305
             associated_data: ShortData::new(),
         };
         let encryption_reply = <super::Chacha8Poly1305>::encrypt(resources, encryption_request)?;
+        // hprintln!("Reply {:?}", &encryption_reply).ok();
 
         let mut wrapped_key = Message::new();
         crate::cbor_serialize_bytes(&encryption_reply, &mut wrapped_key).map_err(|_| Error::CborError)?;
@@ -181,10 +182,12 @@ UnwrapKey<'a, 's, R, I, E, V> for super::Chacha8Poly1305
             tag,
         };
 
+        // hprintln!("Request {:?}", &decryption_request).ok();
+
         let serialized_key = if let Some(serialized_key) = <super::Chacha8Poly1305>::decrypt(resources, decryption_request)?.plaintext {
             serialized_key
         } else {
-            return Err(Error::AeadError);
+            return Ok(reply::UnwrapKey { key: None } );
         };
 
         // TODO: probably change this to returning Option<key> too
@@ -202,7 +205,7 @@ UnwrapKey<'a, 's, R, I, E, V> for super::Chacha8Poly1305
             &value,
         )?;
 
-        Ok(reply::UnwrapKey { key: ObjectHandle { object_id: key_id } } )
+        Ok(reply::UnwrapKey { key: Some(ObjectHandle { object_id: key_id }) } )
     }
 }
 

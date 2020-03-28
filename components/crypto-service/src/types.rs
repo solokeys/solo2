@@ -354,6 +354,8 @@ impl core::fmt::Debug for UniqueId {
     }
 }
 
+pub type UserAttribute = Bytes<MAX_USER_ATTRIBUTE_LENGTH>;
+
 // PANICS
 const HEX_CHARS: &[u8] = b"0123456789abcdef";
 fn format_hex(data: &[u8], mut buffer: &mut [u8]) {

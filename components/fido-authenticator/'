@@ -5,7 +5,6 @@ use core::convert::{TryFrom, TryInto};
 use core::iter::FromIterator;
 
 use cortex_m_semihosting::hprintln;
-use funnel::{debug, info};
 
 use crypto_service::{
     Client as CryptoClient,
@@ -712,8 +711,10 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
             let valid_allowed_credentials: CredentialList = allow_list.into_iter()
                 // discard not properly serialized encrypted credentials
                 .filter_map(|credential_descriptor| {
+                    hprintln!("validating {:?}", &credential_descriptor).ok();
                     // hprintln!("validating").ok();
                     let esc = EncryptedSerializedCredential::try_from(CredentialId(credential_descriptor.id.clone())).ok();
+                    hprintln!("step 1 passed: {}", esc.is_some()).ok();
                     esc
                     // decrypt (and thereby filter out invalid credential IDs
                     .and_then(|encrypted_credential| {
@@ -725,11 +726,13 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                             &encrypted_credential.0.nonce,
                             &encrypted_credential.0.tag,
                         )).plaintext;
+                        hprintln!("step 2 passed: {}", ser.is_some()).ok();
                         ser
                     })
                     .and_then(|serialized_credential| {
-                        // hprintln!("trying to deserialize {:?}", &serialized_credential).ok();
+                        hprintln!("trying to deserialize {:?}", &serialized_credential).ok();
                         let deser = Credential::deserialize(&serialized_credential).ok();
+                        hprintln!("step 3 passed: {}", deser.is_some()).ok();
                         deser
                     })
                 } )
@@ -798,12 +801,6 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
     fn get_assertion(&mut self, parameters: &ctap2::get_assertion::Parameters) -> Result<ctap2::get_assertion::Response> {
 
-        let rp_id_hash = {
-            let hash = syscall!(self.crypto.hash_sha256(&parameters.rp_id.as_ref())).hash;
-            // Bytes::try_from_slice(&hash)
-            hash.try_convert_into().map_err(|_| Error::Other)?
-        };
-
         // 1-4.
         let uv_performed = self.pin_prechecks(
             &parameters.options, &parameters.pin_auth, &parameters.pin_protocol,
@@ -828,93 +825,13 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
         // 8. collect user presence
 
-        // 9./10. sign clientDataHash || authData with "first" credential
+        // 10. sign clientDataHash || authData with "first" credential
 
-        let credential = credentials[0].clone();
-
-        use ctap2::AuthenticatorDataFlags as Flags;
-
-        // TODO!
-        let sig_count = 124;
-
-        let authenticator_data = ctap2::get_assertion::AuthenticatorData {
-            // rp_id_hash: rp_id_hash.try_convert_into().map_err(|_| Error::Other)?,
-            rp_id_hash: rp_id_hash.clone(),
-
-            flags: {
-                let mut flags = Flags::USER_PRESENCE;
-                if uv_performed {
-                    flags |= Flags::USER_VERIFIED;
-                }
-                // if hmac_secret_requested.is_some() ||  cred_protect_requested != CredentialProtectionPolicy::Optional {
-                //     flags |= Flags::EXTENSION_DATA;
-                // }
-                flags
-            },
-
-            sign_count: sig_count,
-            attested_credential_data: None,
-            extensions: None,
-            // extensions: {
-            //     parameters.extensions.clone()
-            // },
-        };
-
-        let serialized_auth_data = authenticator_data.serialize();
-
-        let mut commitment = Bytes::<consts::U1024>::new();
-        commitment.extend_from_slice(&serialized_auth_data).map_err(|_| Error::Other)?;
-        commitment.extend_from_slice(&parameters.client_data_hash).map_err(|_| Error::Other)?;
-
-        let key = match credential.key {
-            Key::ResidentKey(key) => key,
-            Key::WrappedKey(bytes) => {
-                let wrapping_key = &self.key_encryption_key()?;
-                let key_result = syscall!(self.crypto.unwrap_key_chacha8poly1305(
-                    &wrapping_key,
-                    &bytes.try_convert_into().map_err(|_| Error::Other)?,
-                    b"",
-                    // &rp_id_hash,
-                    StorageLocation::Volatile,
-                )).key;
-                // hprintln!("key result: {:?}", &key_result).ok();
-                match key_result {
-                    Some(key) => key,
-                    None => { return Err(Error::Other); }
-                }
-            }
-        };
-
-        let (mechanism, serialization) = match credential.algorithm {
-            -7 => (Mechanism::P256, SignatureSerialization::Asn1Der),
-            -8 => (Mechanism::Ed25519, SignatureSerialization::Raw),
-            _ => { return Err(Error::Other); }
-        };
-
-        info!("signing with {:?}, {:?}", &mechanism, &serialization).ok();
-        let signature = syscall!(self.crypto.sign(mechanism, key, &commitment, serialization)).signature
-            .try_convert_into().map_err(|_| Error::Other)?;
-
-        let response = ctap2::get_assertion::Response {
-            credential: None,
-            // credential: Some(credential),
-            auth_data: Bytes::try_from_slice(&serialized_auth_data).map_err(|_| Error::Other)?,
-            signature,
-            user: None,
-            // number_of_credentials: if num_credentials > 1 { Some(num_credentials as u32) } else { None },
-            number_of_credentials: if num_credentials > 1 { Some(num_credentials as u32) } else { Some(1) },
-        };
-
-        Ok(response)
+        hprintln!("GetAssertion not done YET").ok();
+        Err(Error::InvalidCommand)
     }
 
     fn make_credential(&mut self, parameters: &ctap2::make_credential::Parameters) -> Result<ctap2::make_credential::Response> {
-
-        let rp_id_hash = {
-            let hash = syscall!(self.crypto.hash_sha256(&parameters.rp.id.as_ref())).hash;
-            // Bytes::try_from_slice(&hash)
-            hash.try_convert_into().map_err(|_| Error::Other)?
-        };
 
         // 1-4.
         let uv_performed = self.pin_prechecks(
@@ -1000,7 +917,6 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                         let wrapped_key = syscall!(self.crypto.wrap_key_chacha8poly1305(
                             &wrapping_key,
                             &cred_random,
-                            // &rp_id_hash,
                             b"",
                         )).wrapped_key;
 
@@ -1062,7 +978,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 let wrapped_key = syscall!(self.crypto.wrap_key_chacha8poly1305(
                     &wrapping_key,
                     &private_key,
-                    &rp_id_hash,
+                    b"",
                 )).wrapped_key;
                 // hprintln!("wrapped_key = {:?}", &wrapped_key).ok();
 
@@ -1080,13 +996,19 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         let credential = Credential::new(
             credential::CtapVersion::Fido21Pre,
             parameters,
-            algorithm as i32,
+            -(algorithm as i32),
             key_parameter,
             123, // todo: get counter
             hmac_secret_requested.clone(),
             cred_protect_requested,
         );
         // hprintln!("credential = {:?}", &credential).ok();
+
+        let rp_id_hash = {
+            let hash = syscall!(self.crypto.hash_sha256(&parameters.rp.id.as_ref())).hash;
+            // Bytes::try_from_slice(&hash)
+            hash.try_convert_into().map_err(|_| Error::Other)?
+        };
 
         // store it.
         // TODO: overwrite, error handling with KeyStoreFull
@@ -1123,7 +1045,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         // 13. generate and return attestation statement using clientDataHash
 
         // 13.a AuthenticatorData and its serialization
-        use ctap2::AuthenticatorDataFlags as Flags;
+        use ctap2::make_credential::Flags;
         let authenticator_data = ctap2::make_credential::AuthenticatorData {
             rp_id_hash: rp_id_hash.try_convert_into().map_err(|_| Error::Other)?,
 

@@ -1,6 +1,5 @@
 use crate::{Bytes, consts, String, Vec};
 
-use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
 use serde_indexed::{DeserializeIndexed, SerializeIndexed};
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -122,58 +121,51 @@ pub type AttestationObject = Response;
 //     pub att_stmt: Option<AttestationStatement>,
 // }
 
-bitflags! {
-    pub struct Flags: u8 {
-        const USER_PRESENCE = 1 << 0;
-        const USER_VERIFIED = 1 << 2;
-        const ATTESTED_CREDENTIAL_DATA = 1 << 6;
-        const EXTENSION_DATA = 1 << 7;
-    }
-}
+pub type AuthenticatorData = super::AuthenticatorData<AttestedCredentialData, Extensions>;
 
-#[derive(Clone,Debug,Eq,PartialEq)]
-// #[serde(rename_all = "camelCase")]
-pub struct AuthenticatorData {
-    pub rp_id_hash: Bytes<consts::U32>,
-    pub flags: Flags,
-    pub sign_count: u32,
-    // this can get pretty long
-    // pub attested_credential_data: Option<Bytes<ATTESTED_CREDENTIAL_DATA_LENGTH>>,
-    pub attested_credential_data: Option<AttestedCredentialData>,
-    pub extensions: Option<Extensions>
-}
+// #[derive(Clone,Debug,Eq,PartialEq)]
+// // #[serde(rename_all = "camelCase")]
+// pub struct AuthenticatorData {
+//     pub rp_id_hash: Bytes<consts::U32>,
+//     pub flags: Flags,
+//     pub sign_count: u32,
+//     // this can get pretty long
+//     // pub attested_credential_data: Option<Bytes<ATTESTED_CREDENTIAL_DATA_LENGTH>>,
+//     pub attested_credential_data: Option<AttestedCredentialData>,
+//     pub extensions: Option<Extensions>
+// }
 
-pub type SerializedAuthenticatorData = Bytes<AUTHENTICATOR_DATA_LENGTH>;
+// pub type SerializedAuthenticatorData = Bytes<AUTHENTICATOR_DATA_LENGTH>;
 
-// The reason for this non-use of CBOR is for compatibility with
-// FIDO U2F authentication signatures.
-impl AuthenticatorData {
-    pub fn serialize(&self) -> SerializedAuthenticatorData {
-        // let mut bytes = Vec::<u8, AUTHENTICATOR_DATA_LENGTH>::new();
-        let mut bytes = SerializedAuthenticatorData::new();
+// // The reason for this non-use of CBOR is for compatibility with
+// // FIDO U2F authentication signatures.
+// impl AuthenticatorData {
+//     pub fn serialize(&self) -> SerializedAuthenticatorData {
+//         // let mut bytes = Vec::<u8, AUTHENTICATOR_DATA_LENGTH>::new();
+//         let mut bytes = SerializedAuthenticatorData::new();
 
-        // 32 bytes, the RP id's hash
-        bytes.extend_from_slice(&self.rp_id_hash).unwrap();
-        // flags
-        bytes.push(self.flags.bits()).unwrap();
-        // signature counts as 32-bit unsigned big-endian integer.
-        bytes.extend_from_slice(&self.sign_count.to_be_bytes()).unwrap();
+//         // 32 bytes, the RP id's hash
+//         bytes.extend_from_slice(&self.rp_id_hash).unwrap();
+//         // flags
+//         bytes.push(self.flags.bits()).unwrap();
+//         // signature counts as 32-bit unsigned big-endian integer.
+//         bytes.extend_from_slice(&self.sign_count.to_be_bytes()).unwrap();
 
-        // the attested credential data
-        if let Some(ref attested_credential_data) = &self.attested_credential_data {
-            bytes.extend_from_slice(&attested_credential_data.serialize()).unwrap();
-        }
+//         // the attested credential data
+//         if let Some(ref attested_credential_data) = &self.attested_credential_data {
+//             bytes.extend_from_slice(&attested_credential_data.serialize()).unwrap();
+//         }
 
-        // the extensions data
-        if let Some(ref extensions) = &self.extensions {
-            let mut extensions_buf = [0u8; 128];
-            let ser = crate::serde::cbor_serialize(&extensions, &mut extensions_buf).unwrap();
-            bytes.extend_from_slice(ser).unwrap();
-        }
+//         // the extensions data
+//         if let Some(ref extensions) = &self.extensions {
+//             let mut extensions_buf = [0u8; 128];
+//             let ser = crate::serde::cbor_serialize(&extensions, &mut extensions_buf).unwrap();
+//             bytes.extend_from_slice(ser).unwrap();
+//         }
 
-        bytes
-    }
-}
+//         bytes
+//     }
+// }
 
 // NOTE: This is not CBOR, it has a custom encoding...
 // https://www.w3.org/TR/webauthn/#sec-attested-credential-data
@@ -187,8 +179,8 @@ pub struct AttestedCredentialData {
     pub credential_public_key: Bytes<COSE_KEY_LENGTH>,
 }
 
-impl AttestedCredentialData {
-    pub fn serialize(&self) -> Bytes<ATTESTED_CREDENTIAL_DATA_LENGTH> {
+impl super::SerializeAttestedCredentialData for AttestedCredentialData {
+    fn serialize(&self) -> Bytes<ATTESTED_CREDENTIAL_DATA_LENGTH> {
         let mut bytes = Vec::<u8, ATTESTED_CREDENTIAL_DATA_LENGTH>::new();
         // 16 bytes, the aaguid
         bytes.extend_from_slice(&self.aaguid).unwrap();
@@ -214,7 +206,7 @@ impl AttestedCredentialData {
 #[serde_indexed(offset = 1)]
 pub struct Response {
     pub fmt: String<consts::U32>,
-    pub auth_data: SerializedAuthenticatorData,
+    pub auth_data: super::SerializedAuthenticatorData,
     // pub att_stmt: Bytes<consts::U64>,
     pub att_stmt: AttestationStatement,
 }

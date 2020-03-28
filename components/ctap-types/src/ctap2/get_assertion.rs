@@ -31,6 +31,16 @@ pub struct Extensions {
     pub hmac_secret: Option<HmacSecretInput>,
 }
 
+pub struct NoAttestedCredentialData (core::marker::PhantomData<()>);
+
+impl super::SerializeAttestedCredentialData for NoAttestedCredentialData {
+    fn serialize(&self) -> Bytes<ATTESTED_CREDENTIAL_DATA_LENGTH> {
+        Bytes::new()
+    }
+}
+
+pub type AuthenticatorData = super::AuthenticatorData<NoAttestedCredentialData, Extensions>;
+
 pub type AllowList = Vec<PublicKeyCredentialDescriptor, MAX_CREDENTIAL_COUNT_IN_LIST>;
 
 #[derive(Clone,Debug,Eq,PartialEq,SerializeIndexed,DeserializeIndexed)]

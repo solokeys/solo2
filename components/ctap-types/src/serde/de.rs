@@ -438,7 +438,8 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: Visitor<'de>,
     {
         // not sure, can this be implemented?
-        todo!("implement `deserialize_char`");
+        // todo!("implement `deserialize_char`");
+        Err(Error::NotYetImplemented)
         // let mut buf = [0u8; 4];
         // let bytes = self.try_take_n(4)?;
         // buf.copy_from_slice(bytes);
@@ -500,7 +501,8 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: Visitor<'de>,
     {
         // Not sure if this is simple value null (22) or undefined (23) or what
-        todo!("implement `deserialize_unit`");
+        // todo!("implement `deserialize_unit`");
+        Err(Error::NotYetImplemented)
         // visitor.visit_unit()
     }
 
@@ -510,7 +512,8 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: Visitor<'de>,
     {
         // Not sure if this is simple value null (22) or undefined (23) or what
-        todo!("implement `deserialize_unit_struct`");
+        // todo!("implement `deserialize_unit_struct`");
+        Err(Error::NotYetImplemented)
         // self.deserialize_unit(visitor)
     }
 
@@ -519,7 +522,8 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: Visitor<'de>,
     {
         // can we follow postcard's approach here?
-        todo!("implement `deserialize_newtype_struct`");
+        // todo!("implement `deserialize_newtype_struct`");
+        Err(Error::NotYetImplemented)
         // visitor.visit_newtype_struct(self)
     }
 
@@ -982,8 +986,13 @@ mod tests {
     fn de_enum() {
 
         let mut buf = [0u8; 64];
-        let ser = cbor_serialize(&Some(3), &mut buf).unwrap();
-        println!("ser(e) = {:?}", ser);
+        let e = Some(3);
+        let ser = cbor_serialize(&e, &mut buf).unwrap();
+        println!("ser(Some(3)) = {:?}", ser);
+        let de: Option<u8> = cbor_deserialize(ser).unwrap();
+        assert_eq!(de, e);
+        let e: Option<u8> = None;
+        println!("ser({:?}) = {:x?}", &e, cbor_serialize(&e, &mut buf).unwrap());
 
         // let mut buf = [0u8; 64];
         // let _n = cbor_serialize(&None, &mut buf).unwrap();
@@ -994,14 +1003,16 @@ mod tests {
         #[derive(Clone,Debug,Eq,PartialEq,Serialize,Deserialize)]
         pub enum Enum {
             Alpha(u8),
+            // Beta((i32, u32)),
             Beta(i32),
         }
 
         let mut buf = [0u8; 64];
 
+        // let e = Enum::Beta((-42, 7));
         let e = Enum::Beta(-42);
         let ser = cbor_serialize(&e, &mut buf).unwrap();
-        println!("ser(e) = {:?}", ser);
+        println!("ser({:?}) = {:?}", &e, ser);
         let de: Enum = cbor_deserialize(ser).unwrap();
         assert_eq!(de, e);
 
@@ -1014,15 +1025,22 @@ mod tests {
 
         let e = SimpleEnum::Alpha(7);
         let ser = cbor_serialize(&e, &mut buf).unwrap();
-        println!("ser(e) = {:?}", ser);
+        println!("ser({:?}) = {:?}", &e, ser);
         let de: SimpleEnum = cbor_deserialize(ser).unwrap();
         assert_eq!(de, e);
 
         let e = SimpleEnum::Beta;
         let ser = cbor_serialize(&e, &mut buf).unwrap();
-        println!("ser(e) = {:?}", ser);
+        println!("ser({:?}) = {:?}", &e, ser);
         let de: SimpleEnum = cbor_deserialize(ser).unwrap();
         assert_eq!(de, e);
+    }
+
+    #[test]
+    fn fuzzer_things() {
+        let data: [u8; 2] = [160, 96];
+        type T = crate::webauthn::PublicKeyCredentialUserEntity;
+        cbor_deserialize::<T>(&data).ok();
     }
 
 }

@@ -1,4 +1,4 @@
-// use cortex_m_semihosting::hprintln;
+use cortex_m_semihosting::hprintln;
 
 use core::convert::TryFrom;
 
@@ -168,20 +168,31 @@ pub(crate) fn load_serialized_key<'s, S: LfsStorage>(fs: &mut FilesystemWith<'s,
 
 pub fn store_serialized_key<'s, S: LfsStorage>(
     fs: &mut FilesystemWith<'s, 's, S>,
-    path: &[u8], buf: &[u8]
+    path: &[u8], buf: &[u8],
+    user_attribute: Option<UserAttribute>,
 )
     -> Result<(), Error>
 {
 
-    use littlefs2::fs::{File, FileWith};
+    use littlefs2::fs::{Attribute, File, FileWith};
     let mut alloc = File::allocate();
-    let mut file = FileWith::create(&path[..], &mut alloc, fs)
-        .map_err(|_| Error::FilesystemWriteFailure)?;
-    use littlefs2::io::WriteWith;
-    file.write(&buf)
-        .map_err(|_| Error::FilesystemWriteFailure)?;
-    file.sync()
-        .map_err(|_| Error::FilesystemWriteFailure)?;
+    {
+        let mut file = FileWith::create(&path[..], &mut alloc, fs)
+            .map_err(|_| Error::FilesystemWriteFailure)?;
+        use littlefs2::io::WriteWith;
+        file.write(&buf)
+            .map_err(|_| Error::FilesystemWriteFailure)?;
+        file.sync()
+            .map_err(|_| Error::FilesystemWriteFailure)?;
+    }
+    if let Some(user_attribute) = user_attribute.as_ref() {
+        let mut attribute = Attribute::new(crate::config::USER_ATTRIBUTE_NUMBER);
+        attribute.set_data(user_attribute);
+        fs.set_attribute(path, &attribute).map_err(|e| {
+            hprintln!("error setting attribute: {:?}", &e).ok();
+            Error::FilesystemWriteFailure
+        })?;
+    }
 
     // file.close()
     //     .map_err(|_| Error::FilesystemWriteFailure)?;
@@ -258,9 +269,9 @@ impl<'s, I: LfsStorage, E: LfsStorage, V: LfsStorage> TriStorage<'s, I, E, V> {
         crate::cbor_serialize(&serialized_key, &mut buf).map_err(|_| Error::CborError)?;
 
         match persistence {
-            StorageLocation::Internal => store_serialized_key(&mut self.ifs, path, &buf),
-            StorageLocation::External => store_serialized_key(&mut self.efs, path, &buf),
-            StorageLocation::Volatile => store_serialized_key(&mut self.vfs, path, &buf),
+            StorageLocation::Internal => store_serialized_key(&mut self.ifs, path, &buf, None),
+            StorageLocation::External => store_serialized_key(&mut self.efs, path, &buf, None),
+            StorageLocation::Volatile => store_serialized_key(&mut self.vfs, path, &buf, None),
         }
 
     }
@@ -438,9 +449,12 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
                 let path = self.blob_path(&request.prefix, &blob_id)?;
                 // hprintln!("saving blob to {:?}", &path).ok();
                 match request.attributes.persistence {
-                    StorageLocation::Internal => store_serialized_key(&mut self.tri.ifs,& path, &request.data),
-                    StorageLocation::External => store_serialized_key(&mut self.tri.efs, &path, &request.data),
-                    StorageLocation::Volatile => store_serialized_key(&mut self.tri.vfs, &path, &request.data),
+                    StorageLocation::Internal => store_serialized_key(
+                        &mut self.tri.ifs,& path, &request.data, request.user_attribute),
+                    StorageLocation::External => store_serialized_key(
+                        &mut self.tri.efs, &path, &request.data, request.user_attribute),
+                    StorageLocation::Volatile => store_serialized_key(
+                        &mut self.tri.vfs, &path, &request.data, request.user_attribute),
                 }?;
                 Ok(Reply::StoreBlob(reply::StoreBlob { blob: ObjectHandle { object_id: blob_id } }))
             }

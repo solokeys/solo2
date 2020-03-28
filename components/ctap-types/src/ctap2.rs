@@ -1,6 +1,7 @@
+use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
 
-use crate::{Bytes, consts, Vec};
+use crate::{Bytes, consts};
 use crate::sizes::*;
 
 pub mod client_pin;
@@ -82,38 +83,96 @@ pub struct AuthenticatorOptions {
 
 pub type PinAuth = Bytes<consts::U16>;
 
-#[derive(Clone,Debug,Eq,PartialEq)]
-// #[serde(rename_all = "camelCase")]
-pub struct AuthenticatorData {
-    pub rp_id_hash: Bytes<consts::U32>,
-    pub flags: u8,
-    pub sign_count: u32,
-    // this can get pretty long
-    pub attested_credential_data: Option<Bytes<ATTESTED_CREDENTIAL_DATA_LENGTH>>,
-    // pub extensions: ?
+// #[derive(Clone,Debug,Eq,PartialEq)]
+// // #[serde(rename_all = "camelCase")]
+// pub struct AuthenticatorData {
+//     pub rp_id_hash: Bytes<consts::U32>,
+//     pub flags: u8,
+//     pub sign_count: u32,
+//     // this can get pretty long
+//     pub attested_credential_data: Option<Bytes<ATTESTED_CREDENTIAL_DATA_LENGTH>>,
+//     // pub extensions: ?
+// }
+
+// impl AuthenticatorData {
+//     pub fn serialize(&self) -> Bytes<AUTHENTICATOR_DATA_LENGTH> {
+//         let mut bytes = Vec::<u8, AUTHENTICATOR_DATA_LENGTH>::new();
+
+//         // 32 bytes, the RP id's hash
+//         bytes.extend_from_slice(&self.rp_id_hash).unwrap();
+//         // flags
+//         bytes.push(self.flags).unwrap();
+//         // signature counts as 32-bit unsigned big-endian integer.
+//         bytes.extend_from_slice(&self.sign_count.to_be_bytes()).unwrap();
+//         match &self.attested_credential_data {
+//             Some(ref attested_credential_data) => {
+//                 // finally the attested credential data
+//                 bytes.extend_from_slice(&attested_credential_data).unwrap();
+//             },
+//             None => {},
+//         }
+
+//         Bytes::from(bytes)
+//     }
+// }
+
+bitflags! {
+    pub struct AuthenticatorDataFlags: u8 {
+        const USER_PRESENCE = 1 << 0;
+        const USER_VERIFIED = 1 << 2;
+        const ATTESTED_CREDENTIAL_DATA = 1 << 6;
+        const EXTENSION_DATA = 1 << 7;
+    }
 }
 
-impl AuthenticatorData {
-    pub fn serialize(&self) -> Bytes<AUTHENTICATOR_DATA_LENGTH> {
-        let mut bytes = Vec::<u8, AUTHENTICATOR_DATA_LENGTH>::new();
+pub trait SerializeAttestedCredentialData {
+    fn serialize(&self) -> Bytes<ATTESTED_CREDENTIAL_DATA_LENGTH>;
+}
+
+#[derive(Clone,Debug,Eq,PartialEq)]
+// #[serde(rename_all = "camelCase")]
+pub struct AuthenticatorData<A, E> {
+    pub rp_id_hash: Bytes<consts::U32>,
+    pub flags: AuthenticatorDataFlags,
+    pub sign_count: u32,
+    // this can get pretty long
+    // pub attested_credential_data: Option<Bytes<ATTESTED_CREDENTIAL_DATA_LENGTH>>,
+    pub attested_credential_data: Option<A>,
+    pub extensions: Option<E>
+}
+
+pub type SerializedAuthenticatorData = Bytes<AUTHENTICATOR_DATA_LENGTH>;
+
+// The reason for this non-use of CBOR is for compatibility with
+// FIDO U2F authentication signatures.
+impl<A: SerializeAttestedCredentialData, E: serde::Serialize> AuthenticatorData<A, E> {
+    pub fn serialize(&self) -> SerializedAuthenticatorData {
+        // let mut bytes = Vec::<u8, AUTHENTICATOR_DATA_LENGTH>::new();
+        let mut bytes = SerializedAuthenticatorData::new();
 
         // 32 bytes, the RP id's hash
         bytes.extend_from_slice(&self.rp_id_hash).unwrap();
         // flags
-        bytes.push(self.flags).unwrap();
+        bytes.push(self.flags.bits()).unwrap();
         // signature counts as 32-bit unsigned big-endian integer.
         bytes.extend_from_slice(&self.sign_count.to_be_bytes()).unwrap();
-        match &self.attested_credential_data {
-            Some(ref attested_credential_data) => {
-                // finally the attested credential data
-                bytes.extend_from_slice(&attested_credential_data).unwrap();
-            },
-            None => {},
+
+        // the attested credential data
+        if let Some(ref attested_credential_data) = &self.attested_credential_data {
+            bytes.extend_from_slice(&attested_credential_data.serialize()).unwrap();
         }
 
-        Bytes::from(bytes)
+        // the extensions data
+        if let Some(extensions) = self.extensions.as_ref() {
+            let mut extensions_buf = [0u8; 128];
+            let ser = crate::serde::cbor_serialize(extensions, &mut extensions_buf).unwrap();
+            bytes.extend_from_slice(ser).unwrap();
+        }
+
+        bytes
     }
 }
+
 
 // // TODO: add Default and builder
 // #[derive(Clone,Debug,Eq,PartialEq,Serialize)]
