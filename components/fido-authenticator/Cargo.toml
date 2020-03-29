@@ -7,7 +7,8 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cortex-m-funnel = { version = "0.1.0-alpha.1", optional = true }
+# cortex-m-funnel = { version = "0.1.0-alpha.1", optional = true }
+cortex-m-funnel = { version = "0.1.0-alpha.1" }
 cortex-m-semihosting = "0.3.5"
 ctap-types = { path = "../ctap-types" }
 crypto-service = { path = "../crypto-service" } # , default-features = false }
@@ -16,7 +17,7 @@ serde = { version = "1.0", default-features = false }
 serde_cbor = { version = "0.11.0", default-features = false }
 serde-indexed = "0.0.3"
 # usbd-ctaphid = { git = "https://github.com/nickray/usbd-ctaphid", branch = "main", features = ["logging"] }
+ufmt = "0.1.0"
 
 [features]
-default = ["log-info"]
-log-info = ["cortex-m-funnel/release_max_level_info"]
+debug-logs = []

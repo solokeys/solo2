@@ -10,10 +10,16 @@ use app::{board, hal};
 //     Authenticator,
 // };
 
-#[allow(unused_imports)]
-use cortex_m_semihosting::{dbg, hprintln};
 // use rtfm::Exclusive;
-use funnel::{debug, info};
+use funnel::info;
+
+#[cfg(feature = "debug-app")]
+#[macro_use(debug)]
+extern crate funnel;
+
+#[cfg(not(feature = "debug-app"))]
+#[macro_use]
+macro_rules! debug { ($($tt:tt)*) => {{ core::result::Result::<(), core::convert::Infallible>::Ok(()) }} }
 
 use rtfm::cyccnt::{Instant, U32Ext as _};
 const PERIOD: u32 = 1*48_000_000;
@@ -50,14 +56,17 @@ const APP: () = {
 
     #[idle(resources = [authnr, ctaphid, serial, usbd])]
     fn idle(c: idle::Context) -> ! {
-        let idle::Resources { mut authnr, mut ctaphid, mut serial, mut usbd } = c.resources;
+        let idle::Resources { authnr, mut ctaphid, mut serial, mut usbd } = c.resources;
 
         loop {
             // not sure why we can't use `Exclusive` here, should we? how?
             // https://rtfm.rs/0.5/book/en/by-example/tips.html#generics
             // Important: do not pass unlocked serial :)
             // cortex_m_semihosting::hprintln!("idle loop").ok();
+            #[cfg(feature = "log-serial")]
             app::drain_log_to_serial(&mut serial);
+            #[cfg(feature = "log-semihosting")]
+            app::drain_log_to_semihosting();
 
             usbd.lock(|usbd| ctaphid.lock(|ctaphid| serial.lock(|serial| {
                 ctaphid.check_for_responses();
@@ -103,13 +112,13 @@ const APP: () = {
         let intstat = usb.intstat.read().bits();
         let mask = inten & intstat;
         if mask != 0 {
-            cortex_m_semihosting::hprintln!("uncleared interrupts: {:?}", mask).ok();
+            debug!("uncleared interrupts: {:?}", mask).ok();
             for i in 0..5 {
                 if mask & (1 << 2*i) != 0 {
-                    cortex_m_semihosting::hprintln!("EP{}OUT", i).ok();
+                    debug!("EP{}OUT", i).ok();
                 }
                 if mask & (1 << (2*i + 1)) != 0 {
-                    cortex_m_semihosting::hprintln!("EP{}IN", i).ok();
+                    debug!("EP{}IN", i).ok();
                 }
             }
             // Serial sends a stray 0x70 ("p") to CDC-ACM "data" OUT endpoint (3)
@@ -138,11 +147,14 @@ const APP: () = {
 
     #[task(resources = [ctaphid, rgb], schedule = [toggle_red], priority = 1)]
     fn toggle_red(c: toggle_red::Context) {
+
         static mut TOGGLES: u32 = 1;
         use hal::traits::wg::digital::v2::ToggleableOutputPin;
         c.resources.rgb.red.toggle().ok();
         c.schedule.toggle_red(Instant::now() + PERIOD.cycles()).unwrap();
+        // debug!("{}:{} toggled red LED #{}", file!(), line!(), TOGGLES).ok();
         debug!("toggled red LED #{}", TOGGLES).ok();
+
         // let sig_count = c.resources.ctaphid.borrow_mut_authenticator()
         //     .signature_counter().expect("issue reading sig count");
         // hprintln!("sigs: {}", sig_count).ok();

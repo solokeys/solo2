@@ -16,7 +16,7 @@ name = "rtfm"
 path = "src/app_rtfm.rs"
 
 [dependencies]
-cortex-m-funnel = { version = "0.1.0-alpha.1", features = ["release_max_level_info"] }
+cortex-m-funnel = { version = "0.1.0-alpha.1" }
 cortex-m-rtfm = "0.5.1"
 cortex-m-semihosting = "0.3.5"
 heapless = "0.5.3"
@@ -44,8 +44,27 @@ littlefs2 = { git = "https://github.com/nickray/littlefs2", branch = "main" }
 
 [features]
 default = ["board-lpcxpresso"]
+
 board-lpcxpresso = ["lpcxpresso55"]
 board-prototype = ["prototype-bee"]
+
+# log debug! level of app itself?
+debug-app = []
+# log debug! level of component libraries?
+debug-crypto-service = ["crypto-service/debug-logs"]
+debug-fido-authenticator = ["fido-authenticator/debug-logs"]
+
+# This would need funnel features to be additive, not subtractive
+# debug = [] # "cortex-m-funnel/release_max_level_debug"]
+
+# Not sure if this approach works either, code size doesn't seem to change
+disable-debug = ["cortex-m-funnel/release_max_level_info"]
+
+# destination for all logs, by default none
+# log-itm = []
+# log-rtt = []
+log-serial = []
+log-semihosting = []
 
 # patch dependencies like so to test local changes
 
@@ -53,3 +72,5 @@ board-prototype = ["prototype-bee"]
 lpc55-hal = { path = "../../lpc55-hal" }
 [patch."https://github.com/nickray/littlefs2"]
 littlefs2 = { path = "../../littlefs2" }
+[patch.crates-io]
+cortex-m-funnel = { git = "https://github.com/conorpp/cortex-m-funnel" }

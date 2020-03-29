@@ -5,7 +5,7 @@ use core::convert::{TryFrom, TryInto};
 use core::iter::FromIterator;
 
 use cortex_m_semihosting::hprintln;
-use funnel::{debug, info};
+use funnel::info;
 
 use crypto_service::{
     Client as CryptoClient,
@@ -31,6 +31,15 @@ use ctap_types::{
 
 pub mod credential;
 pub use credential::*;
+
+
+#[cfg(feature = "debug-logs")]
+#[macro_use(debug)]
+extern crate funnel;
+
+#[cfg(not(feature = "debug-logs"))]
+#[macro_use]
+macro_rules! debug { ($($tt:tt)*) => {{ core::result::Result::<(), core::convert::Infallible>::Ok(()) }} }
 
 type Result<T> = core::result::Result<T, Error>;
 
@@ -249,7 +258,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
             Some(request) => {
                 // hprintln!("request: {:?}", &request).ok();
 
-                use ctap_types::authenticator::{Error, Request, Response};
+                use ctap_types::authenticator::{Error, Request};
 
                 match request {
                     Request::Ctap2(request) => {
@@ -891,7 +900,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
             _ => { return Err(Error::Other); }
         };
 
-        info!("signing with {:?}, {:?}", &mechanism, &serialization).ok();
+        debug!("signing with {:?}, {:?}", &mechanism, &serialization).ok();
         let signature = syscall!(self.crypto.sign(mechanism, key, &commitment, serialization)).signature
             .try_convert_into().map_err(|_| Error::Other)?;
 
@@ -910,6 +919,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
     fn make_credential(&mut self, parameters: &ctap2::make_credential::Parameters) -> Result<ctap2::make_credential::Response> {
 
+        debug!("info! test: MC").unwrap();
         let rp_id_hash = {
             let hash = syscall!(self.crypto.hash_sha256(&parameters.rp.id.as_ref())).hash;
             // Bytes::try_from_slice(&hash)
@@ -976,7 +986,6 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         //     };
         // }
 
-        use ctap2::make_credential::CredentialProtectionPolicy;
         let mut hmac_secret_requested = None;
         // let mut cred_protect_requested = CredentialProtectionPolicy::Optional;
         let mut cred_protect_requested = CredentialProtectionPolicy::default();

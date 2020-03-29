@@ -11,6 +11,7 @@ aes = { version = "0.3.2", default-features = false }
 block-modes = { version = "0.3.3", default-features = false }
 chacha20 = { version = "0.3.4" }
 chacha20poly1305 = { version = "0.3.3", default-features = false, features = ["heapless", "reduced-round"] }
+cortex-m-funnel = { version = "0.1.0-alpha.1" }
 cortex-m-semihosting = "0.3.5"
 # ctapcbor = { git = "https://github.com/nickray/ctapcbor", branch = "main" }
 # TODO: Currently, only depend on this for cose::P256PublicKey
@@ -27,6 +28,7 @@ serde = { version = "1.0", default-features = false }
 serde_cbor = { version = "0.11.0", default-features = false }
 serde-indexed = "0.0.4"
 sha2 = { version = "0.8.0", default-features = false }
+ufmt = "0.1.0"
 
 [dependencies.heapless-bytes]
 # version = "0.1.0"
@@ -55,6 +57,7 @@ features = ["cose"]
 default = ["default-mechanisms"]
 verbose-tests = ["littlefs2/ll-assertions"]
 verbose-lfs = ["littlefs2/ll-assertions", "littlefs2/ll-trace"]
+debug-logs = []
 
 # mechanisms
 # default-mechanisms = ["aes256-cbc", "chacha8-poly1305", "ed25519", "hmac-sha256", "p256", "sha256", "trng"]

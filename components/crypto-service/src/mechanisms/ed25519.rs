@@ -2,6 +2,7 @@ use core::convert::{TryFrom, TryInto};
 
 use crate::api::*;
 // use crate::config::*;
+// use crate::debug;
 use crate::error::Error;
 use crate::service::*;
 use crate::types::*;
@@ -147,6 +148,11 @@ Sign<'a, 's, R, I, E, V> for super::Ed25519
     fn sign(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::Sign)
         -> Result<reply::Sign, Error>
     {
+        // Not so nice, expands to
+        // `crypto-service::/home/nicolas/projects/solo-bee/components/crypto-service/src/mechanisms/ed25519.rs:151
+        // Ed25519::Sign`, i.e. VEERY long
+        // debug!("crypto-service::{}:{} Ed25519::Sign", file!(), line!()).ok();
+        debug!("crypto-service: Ed25519::Sign").ok();
         if let SignatureSerialization::Raw = request.format {
         } else {
             return Err(Error::InvalidSerializationFormat);

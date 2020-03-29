@@ -19,6 +19,8 @@ pub use littlefs2::{
 
 use serde::{Deserialize, Serialize};
 
+use ufmt::derive::uDebug;
+
 use crate::config::*;
 
 pub use crate::client::FutureResult;
@@ -294,7 +296,7 @@ impl StorageAttributes {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize, uDebug)]
 pub enum Mechanism {
     Aes256Cbc,
     Chacha8Poly1305,
@@ -324,7 +326,7 @@ pub enum KeySerialization {
 
 pub type Signature = Bytes<MAX_SIGNATURE_LENGTH>;
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize, uDebug)]
 pub enum SignatureSerialization {
     Asn1Der,
     // Cose,

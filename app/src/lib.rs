@@ -253,9 +253,11 @@ use funnel::{funnel, Drain};
 use rtfm::Mutex;
 
 funnel!(NVIC_PRIO_BITS = hal::raw::NVIC_PRIO_BITS, {
+    0: 1024,
     1: 1024,
     2: 512,
     3: 512,
+    7: 1024,
 });
 
 pub fn drain_log_to_serial(mut serial: impl Mutex<T = types::SerialClass>) {
@@ -313,6 +315,25 @@ pub fn drain_log_to_serial(mut serial: impl Mutex<T = types::SerialClass>) {
                 // not much we can do
                 serial.flush().ok();
             });
+        }
+    }
+}
+
+pub fn drain_log_to_semihosting() {
+    use cortex_m_semihosting::{hprint, hprintln};
+    let drains = Drain::get_all();
+    let mut buf = [0u8; 64];
+
+    for (_, drain) in drains.iter().enumerate() {
+        'l: loop {
+            let n = drain.read(&mut buf).len();
+            if n == 0 {
+                break 'l;
+            }
+            match core::str::from_utf8(&buf[..n]) {
+                Ok(string) => hprint!(string).ok(),
+                Err(e) => hprintln!("ERROR {:?}", &e).ok(),
+            };
         }
     }
 }

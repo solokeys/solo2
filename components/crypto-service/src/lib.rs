@@ -7,6 +7,14 @@
 // #[cfg(test)]
 // extern crate std;
 
+#[cfg(feature = "debug-logs")]
+#[macro_use(debug)]
+extern crate funnel;
+
+#[cfg(not(feature = "debug-logs"))]
+#[macro_use]
+macro_rules! debug { ($($tt:tt)*) => {{ core::result::Result::<(), core::convert::Infallible>::Ok(()) }} }
+
 pub mod api;
 pub mod client;
 pub mod config;
