@@ -1,8 +1,8 @@
-
-
-use core::convert::TryFrom;
+use core::convert::{TryFrom, TryInto};
 
 use crypto_service::{
+    Client as CryptoClient,
+    pipe::Syscall as CryptoSyscall,
     types::{
         ObjectHandle,
     },
@@ -26,7 +26,7 @@ pub enum CtapVersion {
     Fido21Pre,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, ufmt::derive::uDebug, Default, serde::Serialize, serde::Deserialize)]
 pub struct CredentialId(pub Bytes<MAX_CREDENTIAL_ID_LENGTH>);
 
 // TODO: how to determine necessary size?
@@ -39,14 +39,6 @@ pub struct EncryptedSerializedCredential(pub crypto_service::api::reply::Encrypt
 
 impl TryFrom<EncryptedSerializedCredential> for CredentialId {
     type Error = Error;
-
-    // fn try_from(esc: EncryptedSerializedCredential) -> Result<CredentialId> {
-    //     let mut credential_id = crypto_service::types::Message::new();
-    //     credential_id.extend_from_slice(&esc.0.tag).map_err(|_| Error::Other)?;
-    //     credential_id.extend_from_slice(&esc.0.nonce).map_err(|_| Error::Other)?;
-    //     credential_id.extend_from_slice(&esc.0.ciphertext).map_err(|_| Error::Other)?;
-    //     Ok(CredentialId(credential_id))
-    // }
 
     fn try_from(esc: EncryptedSerializedCredential) -> Result<CredentialId> {
         let mut credential_id = CredentialId::default();
@@ -66,32 +58,6 @@ impl TryFrom<CredentialId> for EncryptedSerializedCredential {
         );
         Ok(encrypted_serialized_credential)
     }
-
-    // fn try_from(cid: CredentialId) -> Result<EncryptedSerializedCredential> {
-    //     if cid.0.len() < 28 {
-    //         return Err(Error::InvalidCredential);
-    //     }
-    //     let tag = &cid.0[..16];
-    //     let nonce = &cid.0[16..][..12];
-    //     let cipher = &cid.0[28..];
-    //     Ok(EncryptedSerializedCredential(crypto_service::api::reply::Encrypt {
-    //         ciphertext: {
-    //             let mut c = crypto_service::types::Message::new();
-    //             c.extend_from_slice(cipher).map_err(|_| Error::Other)?;
-    //             c
-    //         },
-    //         nonce: {
-    //             let mut c = crypto_service::types::ShortData::new();
-    //             c.extend_from_slice(nonce).map_err(|_| Error::Other)?;
-    //             c
-    //         },
-    //         tag: {
-    //             let mut c = crypto_service::types::ShortData::new();
-    //             c.extend_from_slice(tag).map_err(|_| Error::Other)?;
-    //             c
-    //         },
-    //     }))
-    // }
 }
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
@@ -106,13 +72,8 @@ pub enum CredRandom {
     Wrapped(Bytes<consts::U92>),
 }
 
-// TODO: figure out sizes
-// We may or may not follow https://github.com/satoshilabs/slips/blob/master/slip-0022.md
 #[derive(Clone, Debug, serde_indexed::DeserializeIndexed, serde_indexed::SerializeIndexed)]
-#[serde_indexed(offset = 1)]
-pub struct Credential {
-    ctap: CtapVersion,
-
+pub struct CredentialData {
     // id, name, url
     rp: ctap_types::webauthn::PublicKeyCredentialRpEntity,
     // id, name, display_name
@@ -139,6 +100,24 @@ pub struct Credential {
     // and grant RKs a per-credential sig-counter.
 }
 
+// TODO: figure out sizes
+// We may or may not follow https://github.com/satoshilabs/slips/blob/master/slip-0022.md
+#[derive(Clone, Debug, serde_indexed::DeserializeIndexed, serde_indexed::SerializeIndexed)]
+// #[serde_indexed(offset = 1)]
+pub struct Credential {
+    ctap: CtapVersion,
+    data: CredentialData,
+    nonce: Bytes<consts::U12>,
+}
+
+impl core::ops::Deref for Credential {
+    type Target = CredentialData;
+
+    fn deref(&self) -> &Self::Target {
+        &self.data
+    }
+}
+
 pub type CredentialList = Vec<Credential, ctap_types::sizes::MAX_CREDENTIAL_COUNT_IN_LIST>;
 
 impl Credential {
@@ -150,11 +129,11 @@ impl Credential {
         timestamp: u32,
         hmac_secret: Option<CredRandom>,
         cred_protect: CredentialProtectionPolicy,
+        nonce: [u8; 12],
     )
         -> Self
     {
-        Credential {
-            ctap,
+        let data = CredentialData {
             rp: parameters.rp.clone(),
             user: parameters.user.clone(),
 
@@ -165,12 +144,40 @@ impl Credential {
 
             hmac_secret,
             cred_protect,
+        };
+
+        Credential {
+            ctap,
+            data,
+            nonce: Bytes::try_from_slice(&nonce).unwrap(),
         }
+    }
+
+    pub fn id<'a, S>(
+        &self,
+        crypto: &mut CryptoClient<'a, S>,
+        key_encryption_key: &ObjectHandle,
+    )
+        -> Result<CredentialId>
+    where
+        S: CryptoSyscall,
+    {
+        let serialized_credential = self.serialize()?;
+        let message = &serialized_credential;
+        // info!("ser cred = {:?}", message).ok();
+        let associated_data = self.rp.id.as_bytes();
+        let nonce: [u8; 12] = self.nonce.as_ref().try_into().unwrap();
+        let encrypted_serialized_credential = EncryptedSerializedCredential(
+            syscall!(crypto.encrypt_chacha8poly1305(
+                    key_encryption_key, message, associated_data, Some(&nonce))));
+        let credential_id: CredentialId = encrypted_serialized_credential.try_into().unwrap();
+
+        Ok(credential_id)
     }
 
     pub fn serialize(&self) -> Result<SerializedCredential> {
         let mut serialized = SerializedCredential::new();
-        let size = ctap_types::serde::cbor_serialize_bytes(self, &mut serialized).map_err(|_| Error::Other)?;
+        let _size = ctap_types::serde::cbor_serialize_bytes(self, &mut serialized).map_err(|_| Error::Other)?;
         Ok(serialized)
     }
 
@@ -178,4 +185,33 @@ impl Credential {
         // ctap_types::serde::cbor_deserialize(bytes).map_err(|_| Error::Other)
         Ok(ctap_types::serde::cbor_deserialize(bytes).unwrap())
     }
+
+    // Does not work, as it would use a new, different nonce!
+    //
+    // pub fn id(&self) -> Result<CredentialId> {
+    //     let serialized_credential = self.serialize()?;
+    //     let key = &self.key_encryption_key()?;
+    //     let message = &serialized_credential;
+    //     let associated_data = parameters.rp.id.as_bytes();
+    //     let encrypted_serialized_credential = EncryptedSerializedCredential(
+    //         syscall!(self.crypto.encrypt_chacha8poly1305(key, message, associated_data)));
+    //     let credential_id: CredentialId = encrypted_serialized_credential.try_into().unwrap();
+    //     credential_id
+    // }
+
+    // pub fn store(&self) -> Result<gt
+    //     let serialized_credential = self.serialize()?;
+    //     let mut prefix = crypto_service::types::ShortData::new();
+    //     prefix.extend_from_slice(b"rk").map_err(|_| Error::Other)?;
+    //     let prefix = Some(crypto_service::types::Letters::try_from(prefix).map_err(|_| Error::Other)?);
+    //     let blob_id = syscall!(self.crypto.store_blob(
+    //         prefix.clone(),
+    //         // credential_id.0.clone(),
+    //         serialized_credential.clone(),
+    //         StorageLocation::Internal,
+    //         Some(rp_id_hash.clone()),
+    //     )).blob;
+
+    //     blob_id
+    // }
 }

@@ -1,10 +1,7 @@
  #![cfg_attr(not(test), no_std)]
 
-use core::task::Poll;
 use core::convert::{TryFrom, TryInto};
-use core::iter::FromIterator;
 
-use cortex_m_semihosting::hprintln;
 use funnel::info;
 
 use crypto_service::{
@@ -24,17 +21,49 @@ use crypto_service::{
 use ctap_types::{
     Bytes, consts, String, Vec,
     cose::P256PublicKey as CoseP256PublicKey,
-    cose::PublicKey as CosePublicKey,
+    // cose::PublicKey as CosePublicKey,
     rpc::AuthenticatorEndpoint,
-    authenticator::{ctap1, ctap2, Error, Request, Response},
+    // authenticator::ctap1,
+    authenticator::{ctap2, Error, Request, Response},
 };
+
+macro_rules! block {
+    ($future_result:expr) => {{
+        // evaluate the expression
+        let mut future_result = $future_result;
+        loop {
+            match future_result.poll() {
+                core::task::Poll::Ready(result) => { break result; },
+                core::task::Poll::Pending => {},
+            }
+        }
+    }}
+}
+
+#[macro_use]
+macro_rules! syscall {
+    ($pre_future_result:expr) => {{
+        // evaluate the expression
+        let mut future_result = $pre_future_result.expect("no client error");
+        loop {
+            match future_result.poll() {
+                core::task::Poll::Ready(result) => { break result.expect("no errors"); },
+                core::task::Poll::Pending => {},
+            }
+        }
+    }}
+}
 
 pub mod credential;
 pub use credential::*;
 
+#[cfg(not(feature = "debug-logs"))]
+#[macro_use(info)]
+extern crate funnel;
 
+#[allow(unused_imports)]
 #[cfg(feature = "debug-logs")]
-#[macro_use(debug)]
+#[macro_use(debug,info)]
 extern crate funnel;
 
 #[cfg(not(feature = "debug-logs"))]
@@ -110,32 +139,6 @@ where
 //     Catchall,
 // }
 
-macro_rules! block {
-    ($future_result:expr) => {{
-        // evaluate the expression
-        let mut future_result = $future_result;
-        loop {
-            match future_result.poll() {
-                Poll::Ready(result) => { break result; },
-                Poll::Pending => {},
-            }
-        }
-    }}
-}
-
-macro_rules! syscall {
-    ($pre_future_result:expr) => {{
-        // evaluate the expression
-        let mut future_result = $pre_future_result.expect("no client error");
-        loop {
-            match future_result.poll() {
-                Poll::Ready(result) => { break result.expect("no errors"); },
-                Poll::Pending => {},
-            }
-        }
-    }}
-}
-
 impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
     pub fn new(crypto: CryptoClient<'a, S>, rpc: AuthenticatorEndpoint<'a>, up: UP) -> Self {
@@ -175,6 +178,9 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
     pub fn rotate_key_encryption_key(&mut self) -> Result<ObjectHandle> {
         // TODO: delete old one first
+        if let Some(key) = self.state.key_encryption_key.as_ref() {
+            info!("deleted kek during rotation: {}", syscall!(self.crypto.delete(key.clone())).success).ok();
+        }
         let key = block!(self.crypto
             .generate_chacha8poly1305_key(StorageLocation::Volatile).map_err(|_| Error::Other)?)
             .map_err(|_| Error::Other)?.key;
@@ -190,6 +196,9 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
     }
 
     pub fn rotate_key_agreement_key(&mut self) -> Result<ObjectHandle> {
+        if let Some(key) = self.state.key_agreement_key.as_ref() {
+            info!("deleted kek during rotation: {}", syscall!(self.crypto.delete(key.clone())).success).ok();
+        }
         let key = block!(self.crypto
             .generate_p256_private_key(StorageLocation::Volatile).map_err(|_| Error::Other)?)
             .map_err(|_| Error::Other)?.key;
@@ -232,6 +241,9 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
     }
 
     pub fn rotate_pin_token(&mut self) -> Result<ObjectHandle> {
+        if let Some(key) = self.state.pin_token.as_ref() {
+            info!("deleted kek during rotation: {}", syscall!(self.crypto.delete(key.clone())).success).ok();
+        }
         let key = syscall!(self.crypto.generate_hmacsha256_key(StorageLocation::Volatile)).key;
         self.state.pin_token = Some(key.clone());
         Ok(key)
@@ -251,14 +263,12 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
     pub fn poll(&mut self) {
         let _kek = self.key_agreement_key().unwrap();
-        // hprintln!("polling authnr, kek = {:?}", &kek).ok();
+        // debug!("polling authnr, kek = {:?}", &kek).ok();
 
         match self.rpc.recv.dequeue() {
             None => {},
             Some(request) => {
-                // hprintln!("request: {:?}", &request).ok();
-
-                use ctap_types::authenticator::{Error, Request};
+                // debug!("request: {:?}", &request).ok();
 
                 match request {
                     Request::Ctap2(request) => {
@@ -266,6 +276,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
                             // 0x4
                             ctap2::Request::GetInfo => {
+                                debug!("GI").ok();
                                 let response = self.get_info();
                                 self.rpc.send.enqueue(
                                     Ok(Response::Ctap2(ctap2::Response::GetInfo(response))))
@@ -274,7 +285,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
                             // 0x1
                             ctap2::Request::GetAssertion(parameters) => {
-                                // hprintln!("GA: {:?}", &parameters).ok();
+                                // debug!("GA: {:?}", &parameters).ok();
                                 let response = self.get_assertion(&parameters);
                                 self.rpc.send.enqueue(
                                     match response {
@@ -282,12 +293,12 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                                         Err(error) => Err(error)
                                     })
                                     .expect("internal error");
-                                hprintln!("enqueued GA response").ok();
+                                debug!("enqueued GA response").ok();
                             }
 
                             // 0x2
                             ctap2::Request::MakeCredential(parameters) => {
-                                // hprintln!("MC: {:?}", &parameters).ok();
+                                // debug!("MC: {:?}", &parameters).ok();
                                 let response = self.make_credential(&parameters);
                                 self.rpc.send.enqueue(
                                     match response {
@@ -295,7 +306,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                                         Err(error) => Err(error)
                                     })
                                     .expect("internal error");
-                                hprintln!("enqueued MC response").ok();
+                                debug!("enqueued MC response").ok();
                             }
 
                             // 0x6
@@ -307,16 +318,17 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                                         Err(error) => Err(error)
                                     })
                                     .expect("internal error");
-                                hprintln!("enqueued CP response").ok();
+                                debug!("enqueued CP response").ok();
                             }
                             _ => {
-                                hprintln!("not implemented: {:?}", &request).ok();
+                                // debug!("not implemented: {:?}", &request).ok();
+                                debug!("request not implemented").ok();
                                 self.rpc.send.enqueue(Err(Error::InvalidCommand)).expect("internal error");
                             }
                         }
                     }
                     Request::Ctap1(request) => {
-                        hprintln!("ctap1 not implemented: {:?}", &request).ok();
+                        debug!("ctap1 not implemented: {:?}", &request).ok();
                         // self.rpc.send.enqueue(Err(Error::InvalidCommand)).expect("internal error");
                         self.respond(Err(Error::InvalidCommand));
                     }
@@ -327,7 +339,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
     fn client_pin(&mut self, parameters: &ctap2::client_pin::Parameters) -> Result<ctap2::client_pin::Response> {
         use ctap2::client_pin::PinV1Subcommand as Subcommand;
-        hprintln!("processing CP").ok();
+        debug!("processing CP").ok();
 
         if parameters.pin_protocol != 1{
             return Err(Error::InvalidParameter);
@@ -336,7 +348,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         Ok(match parameters.sub_command {
 
             Subcommand::GetRetries => {
-                hprintln!("processing CP.GR").ok();
+                debug!("processing CP.GR").ok();
 
                 ctap2::client_pin::Response {
                     key_agreement: None,
@@ -346,7 +358,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
             }
 
             Subcommand::GetKeyAgreement => {
-                hprintln!("processing CP.GKA").ok();
+                debug!("processing CP.GKA").ok();
 
                 let private_key = self.key_agreement_key().unwrap();
                 let public_key = syscall!(self.crypto.derive_p256_public_key(&private_key, StorageLocation::Volatile)).key;
@@ -394,7 +406,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
                 // 6. store LEFT(SHA-256(newPin), 16), set retries to 8
                 self.hash_store_pin(&new_pin)?;
-                self.reset_retries();
+                self.reset_retries().map_err(|_| Error::Other)?;
 
                 ctap2::client_pin::Response {
                     key_agreement: None,
@@ -460,7 +472,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
             }
 
             Subcommand::GetPinToken => {
-                hprintln!("processing CP.GKA").ok();
+                debug!("processing CP.GKA").ok();
 
                 // 1. check mandatory parameters
                 let platform_kek = match parameters.key_agreement.as_ref() {
@@ -491,6 +503,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
                 // 7. return encrypted pinToken
                 let pin_token = self.pin_token().unwrap();
+                debug!("wrapping pin token").ok();
                 let pin_token_enc = syscall!(self.crypto.wrap_key_aes256cbc(&shared_secret, &pin_token)).wrapped_key;
 
                 // ble...
@@ -672,7 +685,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         // Current thinking: no
         if self.pin_is_set() {
 
-            let mut uv_performed = false;
+            // let mut uv_performed = false;
             if let Some(ref pin_auth) = pin_auth {
                 if pin_auth.len() != 16 {
                     return Err(Error::InvalidParameter);
@@ -721,7 +734,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
             let valid_allowed_credentials: CredentialList = allow_list.into_iter()
                 // discard not properly serialized encrypted credentials
                 .filter_map(|credential_descriptor| {
-                    // hprintln!("validating").ok();
+                    // debug!("validating").ok();
                     let esc = EncryptedSerializedCredential::try_from(CredentialId(credential_descriptor.id.clone())).ok();
                     esc
                     // decrypt (and thereby filter out invalid credential IDs
@@ -737,20 +750,20 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                         ser
                     })
                     .and_then(|serialized_credential| {
-                        // hprintln!("trying to deserialize {:?}", &serialized_credential).ok();
+                        // debug!("trying to deserialize {:?}", &serialized_credential).ok();
                         let deser = Credential::deserialize(&serialized_credential).ok();
                         deser
                     })
                 } )
                 .collect();
             if valid_allowed_credentials.len() < allow_list.len() {
-                hprintln!("invalid credential").ok();
+                debug!("invalid credential").ok();
                 return Err(Error::InvalidCredential);
             }
-            hprintln!("allowedList passed").ok();
+            debug!("allowedList passed").ok();
             valid_allowed_credentials
         } else {
-            hprintln!("no allowedList passed").ok();
+            debug!("no allowedList passed").ok();
             CredentialList::new()
         };
 
@@ -764,8 +777,10 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 .into_iter()
                 .filter(|credential| match credential.key.clone() {
                     // TODO: should check if wrapped key is valid AEAD
+                    // On the other hand, we already decrypted a valid AEAD
                     Key::WrappedKey(_) => true,
                     Key::ResidentKey(key) => {
+                        debug!("checking if ResidentKey {:?} exists", &key).ok();
                         match credential.algorithm {
                             -7 => syscall!(self.crypto.exists(Mechanism::P256, key)).exists,
                             -8 => syscall!(self.crypto.exists(Mechanism::Ed25519, key)).exists,
@@ -786,6 +801,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
             .into_iter()
             .filter(|credential| {
                 use credential::CredentialProtectionPolicy as Policy;
+                debug!("CredentialProtectionPolicy {:?}", &credential.cred_protect).ok();
                 match credential.cred_protect {
                     Policy::Optional => true,
                     Policy::OptionalWithCredentialIdList => allowed_credentials_passed || uv_performed,
@@ -822,13 +838,14 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         // 5. Locate eligible credentials
         let credentials = self.locate_credentials(&parameters.rp_id, &parameters.allow_list, uv_performed)?;
         let num_credentials = credentials.len();
-        hprintln!("found {} applicable credentials", num_credentials).ok();
+        debug!("found {} applicable credentials", num_credentials).ok();
 
         assert!(num_credentials > 0);
 
         if num_credentials > 1 {
             // TODO: cache credentials[1..] for following GetNextAssertion calls.
             // Also add channel ID!
+            info!("caching credentials not implemented yet").ok();
         }
 
         // 6. process any options present
@@ -840,6 +857,8 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         // 9./10. sign clientDataHash || authData with "first" credential
 
         let credential = credentials[0].clone();
+        let kek = self.key_encryption_key()?.clone();
+        let _credential_id = credential.id(&mut self.crypto, &kek)?;
 
         use ctap2::AuthenticatorDataFlags as Flags;
 
@@ -875,8 +894,8 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         commitment.extend_from_slice(&serialized_auth_data).map_err(|_| Error::Other)?;
         commitment.extend_from_slice(&parameters.client_data_hash).map_err(|_| Error::Other)?;
 
-        let key = match credential.key {
-            Key::ResidentKey(key) => key,
+        let (key, gc) = match credential.key.clone() {
+            Key::ResidentKey(key) => (key, false),
             Key::WrappedKey(bytes) => {
                 let wrapping_key = &self.key_encryption_key()?;
                 let key_result = syscall!(self.crypto.unwrap_key_chacha8poly1305(
@@ -886,9 +905,9 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                     // &rp_id_hash,
                     StorageLocation::Volatile,
                 )).key;
-                // hprintln!("key result: {:?}", &key_result).ok();
+                // debug!("key result: {:?}", &key_result).ok();
                 match key_result {
-                    Some(key) => key,
+                    Some(key) => (key, true),
                     None => { return Err(Error::Other); }
                 }
             }
@@ -901,12 +920,15 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         };
 
         debug!("signing with {:?}, {:?}", &mechanism, &serialization).ok();
-        let signature = syscall!(self.crypto.sign(mechanism, key, &commitment, serialization)).signature
+        let signature = syscall!(self.crypto.sign(mechanism, key.clone(), &commitment, serialization)).signature
             .try_convert_into().map_err(|_| Error::Other)?;
+        if gc {
+            info!("deleted: {}", syscall!(self.crypto.delete(key)).success).ok();
+        }
 
         let response = ctap2::get_assertion::Response {
-            credential: None,
             // credential: Some(credential),
+            credential: None,
             auth_data: Bytes::try_from_slice(&serialized_auth_data).map_err(|_| Error::Other)?,
             signature,
             user: None,
@@ -952,13 +974,14 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
             Some(algorithm) => algorithm,
             None => { return Err(Error::UnsupportedAlgorithm); }
         };
-        // hprintln!("making credential, eddsa = {}", eddsa).ok();
+        // debug!("making credential, eddsa = {}", eddsa).ok();
 
 
         // 8. process options; on known but unsupported error UnsupportedOption
 
         let mut rk_requested = false;
-        let mut uv_requested = false;
+        // TODO: why is this unused?
+        let mut _uv_requested = false;
         let _up_requested = true; // can't be toggled
 
         if let Some(ref options) = &parameters.options {
@@ -966,7 +989,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 rk_requested = true;
             }
             if Some(true) == options.uv {
-                uv_requested = true;
+                _uv_requested = true;
             }
         }
 
@@ -1006,6 +1029,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
                     false => {
                         let wrapping_key = &self.key_encryption_key()?;
+                        info!("wrapping credRandom").ok();
                         let wrapped_key = syscall!(self.crypto.wrap_key_chacha8poly1305(
                             &wrapping_key,
                             &cred_random,
@@ -1027,7 +1051,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
             }
         }
 
-        // hprintln!("hmac-secret = {:?}, credProtect = {:?}", hmac_secret_requested, cred_protect_requested).ok();
+        // debug!("hmac-secret = {:?}, credProtect = {:?}", hmac_secret_requested, cred_protect_requested).ok();
 
         // 10. get UP, if denied error OperationDenied
         if !self.up.user_present() {
@@ -1050,6 +1074,8 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 cose_public_key = syscall!(self.crypto.serialize_key(
                     Mechanism::P256, public_key.clone(), KeySerialization::Cose
                 )).serialized_key;
+
+                info!("deleted public P256 key: {}", syscall!(self.crypto.delete(public_key)).success).ok();
             }
             SupportedAlgorithm::Ed25519 => {
                 private_key = syscall!(self.crypto.generate_ed25519_private_key(location)).key;
@@ -1057,6 +1083,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 cose_public_key = syscall!(self.crypto.serialize_key(
                     Mechanism::Ed25519, public_key.clone(), KeySerialization::Cose
                 )).serialized_key;
+                info!("deleted public Ed25519 key: {}", syscall!(self.crypto.delete(public_key)).success).ok();
             }
         }
 
@@ -1068,23 +1095,28 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
             false => {
                 // WrappedKey version
                 let wrapping_key = &self.key_encryption_key()?;
+                debug!("wrapping private key").ok();
                 let wrapped_key = syscall!(self.crypto.wrap_key_chacha8poly1305(
                     &wrapping_key,
                     &private_key,
                     &rp_id_hash,
                 )).wrapped_key;
-                // hprintln!("wrapped_key = {:?}", &wrapped_key).ok();
+                // debug!("wrapped_key = {:?}", &wrapped_key).ok();
 
                 // 32B key, 12B nonce, 16B tag + some info on algorithm (P256/Ed25519)
                 // Turns out it's size 92 (enum serialization not optimized yet...)
                 // let mut wrapped_key = Bytes::<consts::U60>::new();
                 // wrapped_key.extend_from_slice(&wrapped_key_msg).unwrap();
                 Key::WrappedKey(wrapped_key.try_convert_into().map_err(|_| Error::Other)?)
-                // hprintln!("len wrapped key = {}", wrapped_key.len()).ok();
+                // debug!("len wrapped key = {}", wrapped_key.len()).ok();
                 // Key::WrappedKey(wrapped_key.try_convert_into().unwrap())
 
             }
         };
+
+        // this is a bit mehhh..
+        let nonce = syscall!(self.crypto.random_bytes(12)).bytes.as_ref().try_into().unwrap();
+        info!("nonce = {:?}", &nonce).ok();
 
         let credential = Credential::new(
             credential::CtapVersion::Fido21Pre,
@@ -1094,8 +1126,12 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
             123, // todo: get counter
             hmac_secret_requested.clone(),
             cred_protect_requested,
+            nonce,
         );
-        // hprintln!("credential = {:?}", &credential).ok();
+
+        // 12.b generate credential ID { = AEAD(Serialize(Credential)) }
+        let kek = self.key_encryption_key()?.clone();
+        let credential_id = credential.id(&mut self.crypto, &kek)?;
 
         // store it.
         // TODO: overwrite, error handling with KeyStoreFull
@@ -1104,30 +1140,15 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         let mut prefix = crypto_service::types::ShortData::new();
         prefix.extend_from_slice(b"rk").map_err(|_| Error::Other)?;
         let prefix = Some(crypto_service::types::Letters::try_from(prefix).map_err(|_| Error::Other)?);
-        let blob_id = syscall!(self.crypto.store_blob(
+        let _blob_id = syscall!(self.crypto.store_blob(
             prefix.clone(),
             // credential_id.0.clone(),
             serialized_credential.clone(),
             StorageLocation::Internal,
+
+            // user attribute for later easy lookup
             Some(rp_id_hash.clone()),
         )).blob;
-
-
-        // 12.b generate credential ID { = AEAD(Serialize(Credential)) }
-
-        let key = &self.key_encryption_key()?;
-        let message = &serialized_credential;
-        let associated_data = parameters.rp.id.as_bytes();
-        let encrypted_serialized_credential = EncryptedSerializedCredential(
-            syscall!(self.crypto.encrypt_chacha8poly1305(key, message, associated_data)));
-
-        // hprintln!("esc = {:?}", &encrypted_serialized_credential).ok();
-        // e.g., 72B
-        let credential_id: CredentialId = encrypted_serialized_credential.try_into().unwrap();
-        // hprintln!("cid = {:?}", &credential_id).ok();
-        // hprintln!("credential_id.len() = {}", credential_id.0.len()).ok();
-
-
 
         // 13. generate and return attestation statement using clientDataHash
 
@@ -1156,15 +1177,13 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
             },
 
             attested_credential_data: {
-                // hprintln!("acd in, cid len {}, pk len {}", credential_id.0.len(), cose_public_key.len()).ok();
+                // debug!("acd in, cid len {}, pk len {}", credential_id.0.len(), cose_public_key.len()).ok();
                 let attested_credential_data = ctap2::make_credential::AttestedCredentialData {
                     aaguid: self.config.aaguid.clone(),
-                    // credential_id: credential_id.0.try_convert_into().map_err(|_| Error::Other)?,
-                    // credential_public_key: cose_public_key.try_convert_into().map_err(|_| Error::Other)?,
                     credential_id: credential_id.0.try_convert_into().unwrap(),
                     credential_public_key: cose_public_key.try_convert_into().unwrap(),
                 };
-                // hprintln!("cose PK = {:?}", &attested_credential_data.credential_public_key).ok();
+                // debug!("cose PK = {:?}", &attested_credential_data.credential_public_key).ok();
                 Some(attested_credential_data)
             },
 
@@ -1172,20 +1191,20 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 parameters.extensions.clone()
             },
         };
-        // hprintln!("authData = {:?}", &authenticator_data).ok();
+        // debug!("authData = {:?}", &authenticator_data).ok();
 
         let serialized_auth_data = authenticator_data.serialize();
 
         // 13.b The Signature
 
         // can we write Sum<M, N> somehow?
-        // hprintln!("seeking commitment, {} + {}", serialized_auth_data.len(), parameters.client_data_hash.len()).ok();
+        // debug!("seeking commitment, {} + {}", serialized_auth_data.len(), parameters.client_data_hash.len()).ok();
         let mut commitment = Bytes::<consts::U1024>::new();
         commitment.extend_from_slice(&serialized_auth_data).map_err(|_| Error::Other)?;
-        // hprintln!("serialized_auth_data ={:?}", &serialized_auth_data).ok();
+        // debug!("serialized_auth_data ={:?}", &serialized_auth_data).ok();
         commitment.extend_from_slice(&parameters.client_data_hash).map_err(|_| Error::Other)?;
-        // hprintln!("client_data_hash = {:?}", &parameters.client_data_hash).ok();
-        // hprintln!("commitment = {:?}", &commitment).ok();
+        // debug!("client_data_hash = {:?}", &parameters.client_data_hash).ok();
+        // debug!("commitment = {:?}", &commitment).ok();
 
         // NB: the other/normal one is called "basic" or "batch" attestation,
         // because it attests the authenticator is part of a batch: the model
@@ -1221,9 +1240,13 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 (signature.try_convert_into().map_err(|_| Error::Other)?, -7)
             }
         };
-        // hprintln!("SIG = {:?}", &signature).ok();
+        // debug!("SIG = {:?}", &signature).ok();
 
-        let mut packed_attn_stmt = ctap2::make_credential::PackedAttestationStatement {
+        if !rk_requested {
+            info!("deleted private credential key: {}", syscall!(self.crypto.delete(private_key)).success).ok();
+        }
+
+        let packed_attn_stmt = ctap2::make_credential::PackedAttestationStatement {
             alg: attestation_algorithm,
             sig: signature,
             x5c: match SELF_SIGNED {
@@ -1265,41 +1288,41 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         // let ser_pk = syscall!(self.crypto.serialize_key(
         //     Mechanism::P256, public_key.clone(), KeySerialization::Raw
         // )).serialized_key;
-        // hprintln!("ser pk = {:?}", &ser_pk).ok();
+        // debug!("ser pk = {:?}", &ser_pk).ok();
 
         // let cose_ser_pk = syscall!(self.crypto.serialize_key(
         //     Mechanism::P256, public_key.clone(), KeySerialization::Cose
         // )).serialized_key;
-        // hprintln!("COSE ser pk = {:?}", &cose_ser_pk).ok();
+        // debug!("COSE ser pk = {:?}", &cose_ser_pk).ok();
 
         // let deser_pk = syscall!(self.crypto.deserialize_key(
         //     Mechanism::P256, ser_pk.clone(), KeySerialization::Raw,
         //     StorageAttributes::new().set_persistence(StorageLocation::Volatile)
         // )).key;
-        // hprintln!("deser pk = {:?}", &deser_pk).ok();
+        // debug!("deser pk = {:?}", &deser_pk).ok();
 
         // let cose_deser_pk = syscall!(self.crypto.deserialize_key(
         //     Mechanism::P256, cose_ser_pk.clone(), KeySerialization::Cose,
         //     StorageAttributes::new().set_persistence(StorageLocation::Volatile)
         // )).key;
-        // hprintln!("COSE deser pk = {:?}", &cose_deser_pk).ok();
-        // hprintln!("raw ser of COSE deser pk = {:?}",
+        // debug!("COSE deser pk = {:?}", &cose_deser_pk).ok();
+        // debug!("raw ser of COSE deser pk = {:?}",
         //           syscall!(self.crypto.serialize_key(Mechanism::P256, cose_deser_pk.clone(), KeySerialization::Raw)).
         //           serialized_key).ok();
 
-        // hprintln!("priv {:?}", &private_key).ok();
-        // hprintln!("pub {:?}", &public_key).ok();
+        // debug!("priv {:?}", &private_key).ok();
+        // debug!("pub {:?}", &public_key).ok();
 
         // let _loaded_credential = syscall!(self.crypto.load_blob(
         //     prefix.clone(),
         //     blob_id,
         //     StorageLocation::Volatile,
         // )).data;
-        // // hprintln!("loaded credential = {:?}", &loaded_credential).ok();
+        // // debug!("loaded credential = {:?}", &loaded_credential).ok();
 
-        // hprintln!("credential = {:?}", &Credential::deserialize(&serialized_credential)?).ok();
+        // debug!("credential = {:?}", &Credential::deserialize(&serialized_credential)?).ok();
 
-    //     // hprintln!("unwrapped_key = {:?}", &unwrapped_key).ok();
+    //     // debug!("unwrapped_key = {:?}", &unwrapped_key).ok();
 
     fn get_info(&mut self) -> ctap2::get_info::Response {
 

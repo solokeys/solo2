@@ -51,6 +51,8 @@ pub enum Error {
     DeserializeBadU16,
     /// Expected a u32
     DeserializeBadU32,
+    /// Expected a NULL marker
+    DeserializeExpectedNull,
     /// Inexistent slice-to-array cast error. Used here to avoid calling unwrap.
     InexistentSliceToArrayError,
     /// Value may be valid, but not encoded in minimal way
@@ -92,6 +94,7 @@ impl Display for Error {
                 DeserializeBadU8 => "Expected a u8",
                 DeserializeBadU16 => "Expected a u16",
                 DeserializeBadU32 => "Expected a u32",
+                DeserializeExpectedNull => "Expected 0xf6",
                 InexistentSliceToArrayError => "",
                 DeserializeNonMinimal => "Value may be valid, but not encoded in minimal way",
                 SerdeSerCustom => "Serde Serialization Error",

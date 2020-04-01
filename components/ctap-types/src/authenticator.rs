@@ -6,12 +6,14 @@
 //     fn process(&mut self, request: &mut Request) -> Result<Response, Error>;
 // }
 
-#[derive(Debug)]
+#[derive(Debug,uDebug)]
 pub enum Request {
     Ctap1(ctap1::Request),
     Ctap2(ctap2::Request),
 }
 
+// see below
+// #[derive(Debug,uDebug)]
 #[derive(Debug)]
 pub enum Response {
     Ctap1(ctap1::Response),
@@ -21,13 +23,15 @@ pub enum Response {
 pub mod ctap1 {
     pub use crate::ctap1;
 
-    #[derive(Debug)]
+    #[derive(Debug,uDebug)]
     pub enum Request {
         Register(ctap1::Register),
         Authenticate(ctap1::Register),
         Version,
     }
 
+    // Seems ufmt-macros can't hhandle empty enums
+    // #[derive(Debug,uDebug)]
     #[derive(Debug)]
     pub enum Response {
     }
@@ -36,7 +40,7 @@ pub mod ctap1 {
 pub mod ctap2 {
     pub use crate::ctap2::*;
 
-    #[derive(Debug)]
+    #[derive(Debug,uDebug)]
     pub enum Request {
         // 0x1
         MakeCredential(make_credential::Parameters),
@@ -54,7 +58,7 @@ pub mod ctap2 {
         CredentialManagement(credential_management::Parameters),
     }
 
-    #[derive(Debug)]
+    #[derive(Debug,uDebug)]
     pub enum Response {
         MakeCredential(make_credential::Response),
         GetAssertion(get_assertion::Response),
@@ -69,7 +73,7 @@ pub mod ctap2 {
 
 // pub type Result<T> = core::result::Result<T, Error>;
 
-#[derive(Clone,Copy,Debug,Eq,PartialEq)]
+#[derive(Clone,Copy,Debug,uDebug,Eq,PartialEq)]
 pub enum Error {
     Success = 0x00,
     InvalidCommand = 0x01,

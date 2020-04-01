@@ -7,8 +7,12 @@
 // #[cfg(test)]
 // extern crate std;
 
+#[cfg(not(feature = "debug-logs"))]
+#[macro_use(info)]
+extern crate funnel;
+
 #[cfg(feature = "debug-logs")]
-#[macro_use(debug)]
+#[macro_use(debug,info)]
 extern crate funnel;
 
 #[cfg(not(feature = "debug-logs"))]

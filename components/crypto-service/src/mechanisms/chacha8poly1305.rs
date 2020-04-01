@@ -110,7 +110,11 @@ Encrypt<'a, 's, R, I, E, V> for super::Chacha8Poly1305
         }
         resources.store_key(location, &path, KeyKind::Symmetric32Nonce12, &serialized)?;
 
-        let (symmetric_key, nonce) = serialized.split_at_mut(32);
+        let (symmetric_key, generated_nonce) = serialized.split_at_mut(32);
+        let nonce = match request.nonce.as_ref() {
+            Some(nonce) => nonce.as_ref(),
+            None => generated_nonce,
+        };
 
         // keep in state?
         let aead = ChaCha8Poly1305::new(GenericArray::clone_from_slice(symmetric_key));
@@ -151,6 +155,7 @@ WrapKey<'a, 's, R, I, E, V> for super::Chacha8Poly1305
             key: request.wrapping_key.clone(),
             message,
             associated_data: ShortData::new(),
+            nonce: None,
         };
         let encryption_reply = <super::Chacha8Poly1305>::encrypt(resources, encryption_request)?;
         // hprintln!("Reply {:?}", &encryption_reply).ok();

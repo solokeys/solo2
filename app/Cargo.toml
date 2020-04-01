@@ -18,7 +18,7 @@ path = "src/app_rtfm.rs"
 [dependencies]
 cortex-m-funnel = { version = "0.1.0-alpha.1" }
 cortex-m-rtfm = "0.5.1"
-cortex-m-semihosting = "0.3.5"
+cortex-m-semihosting = { version = "0.3.5", optional = true }
 heapless = "0.5.3"
 ufmt = "0.1.0"
 usb-device = "0.2.3"
@@ -64,7 +64,9 @@ disable-debug = ["cortex-m-funnel/release_max_level_info"]
 # log-itm = []
 # log-rtt = []
 log-serial = []
-log-semihosting = []
+log-semihosting = ["cortex-m-semihosting"]
+
+trace-crypto-service-ram = ["crypto-service/deep-semihosting-logs"]
 
 # patch dependencies like so to test local changes
 
@@ -74,3 +76,5 @@ lpc55-hal = { path = "../../lpc55-hal" }
 littlefs2 = { path = "../../littlefs2" }
 [patch.crates-io]
 cortex-m-funnel = { git = "https://github.com/conorpp/cortex-m-funnel" }
+heapless = { path = "../../heapless" }
+ufmt = { path = "../../ufmt" }

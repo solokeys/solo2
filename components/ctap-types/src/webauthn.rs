@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use crate::{Bytes, consts, String};
 use crate::sizes::*;
 
-#[derive(Clone,Debug,Eq,PartialEq,Serialize,Deserialize)]
+#[derive(Clone,Debug,uDebug,Eq,PartialEq,Serialize,Deserialize)]
 pub struct PublicKeyCredentialRpEntity {
     pub id: String<consts::U256>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -11,7 +11,7 @@ pub struct PublicKeyCredentialRpEntity {
     pub url: Option<String<consts::U64>>,
 }
 
-#[derive(Clone,Debug,Eq,PartialEq,Serialize,Deserialize)]
+#[derive(Clone,Debug,uDebug,Eq,PartialEq,Serialize,Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PublicKeyCredentialUserEntity {
     pub id: Bytes<consts::U64>,
@@ -29,14 +29,14 @@ impl PublicKeyCredentialUserEntity {
     }
 }
 
-#[derive(Clone,Debug,Eq,PartialEq,Serialize,Deserialize)]
+#[derive(Clone,Debug,uDebug,Eq,PartialEq,Serialize,Deserialize)]
 pub struct PublicKeyCredentialParameters {
     pub alg: i32,
     #[serde(rename = "type")]
     pub key_type: String<consts::U10>,
 }
 
-#[derive(Clone,Debug,Eq,PartialEq,Serialize,Deserialize)]
+#[derive(Clone,Debug,uDebug,Eq,PartialEq,Serialize,Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PublicKeyCredentialDescriptor {
     // NB: if this is too small, get a nasty error

@@ -25,6 +25,7 @@ generate_enums! {
     DeriveKey: 3
     DeserializeKey: 4
     Encrypt: 5
+    Delete: 18
     Exists: 16
     // DeriveKeypair: 3
     FindObjects: 6
@@ -33,6 +34,7 @@ generate_enums! {
     Hash: 8
     LoadBlob: 9
     // ReadCounter: 7
+    RandomBytes: 17
     SerializeKey: 10
     Sign: 11
     StoreBlob: 12
@@ -64,6 +66,9 @@ pub mod request {
           - associated_data: Message
           - nonce: ShortData
           - tag: ShortData
+
+        Delete:
+          - key: ObjectHandle
 
         // DeleteBlob:
         //   - prefix: Option<Letters>
@@ -98,6 +103,7 @@ pub mod request {
           - key: ObjectHandle
           - message: Message
           - associated_data: ShortData
+          - nonce: Option<ShortData>
 
         Exists:
           - mechanism: Mechanism
@@ -135,6 +141,9 @@ pub mod request {
         // use GetAttribute(value) on counter instead
         // ReadCounter:
         //     - counter: ObjectHandle
+
+        RandomBytes:
+          - count: usize
 
         SerializeKey:
           - mechanism: Mechanism
@@ -202,6 +211,9 @@ pub mod reply {
 		Decrypt:
             - plaintext: Option<Message>
 
+        Delete:
+            - success: bool
+
         DeriveKey:
             - key: ObjectHandle
 
@@ -235,6 +247,9 @@ pub mod reply {
 
         // ReadCounter:
         //     - counter: u32
+
+        RandomBytes:
+            - bytes: Message
 
         SerializeKey:
             - serialized_key: Message

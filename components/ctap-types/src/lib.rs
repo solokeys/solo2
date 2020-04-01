@@ -15,6 +15,9 @@
 //! low-level protocol details and deserialize requests / serialize responses,
 //! so the authenticator logic is decoupled from these details.
 
+#[macro_use]
+extern crate ufmt_macros;
+
 pub use heapless::{consts, ArrayLength, String, Vec};
 pub use heapless::spsc::{Consumer, Producer, Queue};
 pub use heapless_bytes::Bytes;

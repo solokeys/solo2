@@ -11,7 +11,7 @@ use crate::webauthn::*;
 // // Approach 1:
 // pub type AuthenticatorExtensions = heapless::LinearMap<String<consts::U11>, bool, consts::U2>;
 
- #[derive(Copy,Clone,Debug,Eq,PartialEq,Serialize_repr,Deserialize_repr)]
+ #[derive(Copy,Clone,Debug,uDebug,Eq,PartialEq,Serialize_repr,Deserialize_repr)]
 // #[derive(Clone,Debug,Eq,PartialEq,Serialize, Deserialize)]
 // #[serde(tag = "credProtect")]
 #[repr(u8)]
@@ -57,7 +57,7 @@ impl core::convert::TryFrom<u8> for CredentialProtectionPolicy {
 }
 
 // Approach 2:
-#[derive(Clone,Debug,Eq,PartialEq,Serialize,Deserialize)]
+#[derive(Clone,Debug,uDebug,Eq,PartialEq,Serialize,Deserialize)]
 pub struct Extensions {
     #[serde(rename = "hmac-secret")]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -86,7 +86,7 @@ pub struct Extensions {
 //     pub extensions: Vec<AuthenticatorExtension, consts::U3>,
 // }
 
-#[derive(Clone,Debug,Eq,PartialEq,SerializeIndexed,DeserializeIndexed)]
+#[derive(Clone,Debug,uDebug,Eq,PartialEq,SerializeIndexed,DeserializeIndexed)]
 // #[serde(rename_all = "camelCase")]
 #[serde_indexed(offset = 1)]
 pub struct Parameters {
@@ -202,7 +202,7 @@ impl super::SerializeAttestedCredentialData for AttestedCredentialData {
     }
 }
 
-#[derive(Clone,Debug,Eq,PartialEq,SerializeIndexed)]
+#[derive(Clone,Debug,uDebug,Eq,PartialEq,SerializeIndexed)]
 #[serde_indexed(offset = 1)]
 pub struct Response {
     pub fmt: String<consts::U32>,
@@ -211,7 +211,7 @@ pub struct Response {
     pub att_stmt: AttestationStatement,
 }
 
-#[derive(Clone,Debug,Eq,PartialEq,Serialize)]
+#[derive(Clone,Debug,uDebug,Eq,PartialEq,Serialize)]
 #[serde(untagged)]
 pub enum AttestationStatement {
     None(NoneAttestationStatement),
@@ -229,10 +229,10 @@ pub enum AttestationStatementFormat {
     // FidoU2f,
 }
 
-#[derive(Clone,Debug,Eq,PartialEq,Serialize)]
+#[derive(Clone,Debug,uDebug,Eq,PartialEq,Serialize)]
 pub struct NoneAttestationStatement {}
 
-#[derive(Clone,Debug,Eq,PartialEq,Serialize)]
+#[derive(Clone,Debug,uDebug,Eq,PartialEq,Serialize)]
 pub struct PackedAttestationStatement {
     pub alg: i32,
     pub sig: Bytes<ASN1_SIGNATURE_LENGTH>,

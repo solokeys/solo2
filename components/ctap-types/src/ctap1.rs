@@ -11,7 +11,7 @@ use crate::{Bytes, consts};
 pub const NO_ERROR: u16 = 0x9000;
 
 #[repr(u16)]
-#[derive(Copy,Clone,Debug,Eq,PartialEq)]
+#[derive(Copy,Clone,Debug,uDebug,Eq,PartialEq)]
 pub enum Error {
     ConditionsNotSatisfied = 0x6985,
     WrongData = 0x6A80,
@@ -21,7 +21,7 @@ pub enum Error {
 }
 
 #[repr(u8)]
-#[derive(Copy,Clone,Debug,Eq,PartialEq)]
+#[derive(Copy,Clone,Debug,uDebug,Eq,PartialEq)]
 pub enum ControlByte {
 	// Conor:
     // I think U2F check-only maps to FIDO2 MakeCredential with the credID in the excludeList,
@@ -62,7 +62,7 @@ pub type Result<T> = core::result::Result<T, Error>;
 // }
 
 
-#[derive(Clone,Debug,Eq,PartialEq)]
+#[derive(Clone,Debug,uDebug,Eq,PartialEq)]
 pub struct Register {
     client_data_hash: Bytes<consts::U32>,
     app_id_hash: Bytes<consts::U32>,
@@ -119,7 +119,7 @@ pub struct Register {
 //     }
 // }
 
-#[derive(Clone,Debug,Eq,PartialEq)]
+#[derive(Clone,Debug,uDebug,Eq,PartialEq)]
 pub struct Authenticate {
     control_byte: ControlByte,
     client_data_hash: Bytes<consts::U32>,
@@ -128,7 +128,7 @@ pub struct Authenticate {
     max_response: usize,
 }
 
-#[derive(Clone,Debug,Eq,PartialEq)]
+#[derive(Clone,Debug,uDebug,Eq,PartialEq)]
 pub enum Command {
     Register(Register),
     Authenticate(Authenticate),

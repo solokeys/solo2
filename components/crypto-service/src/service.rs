@@ -1,7 +1,7 @@
-use cortex_m_semihosting::hprintln;
-
 use core::convert::TryFrom;
 
+#[cfg(feature = "deep-semihosting-logs")]
+use cortex_m_semihosting::hprintln;
 use heapless_bytes::Bytes;
 use serde_indexed::{DeserializeIndexed, SerializeIndexed};
 
@@ -189,7 +189,7 @@ pub fn store_serialized_key<'s, S: LfsStorage>(
         let mut attribute = Attribute::new(crate::config::USER_ATTRIBUTE_NUMBER);
         attribute.set_data(user_attribute);
         fs.set_attribute(path, &attribute).map_err(|e| {
-            hprintln!("error setting attribute: {:?}", &e).ok();
+            info!("error setting attribute: {:?}", &e).ok();
             Error::FilesystemWriteFailure
         })?;
     }
@@ -202,7 +202,31 @@ pub fn store_serialized_key<'s, S: LfsStorage>(
     Ok(())
 }
 
+pub(crate) fn delete<'s, S: LfsStorage>(fs: &mut FilesystemWith<'s, 's, S>, path: &[u8]) -> bool {
+
+    match fs.remove(path) {
+        Ok(_) => true,
+        Err(_) => false,
+    }
+}
+
 impl<'s, I: LfsStorage, E: LfsStorage, V: LfsStorage> TriStorage<'s, I, E, V> {
+
+    pub fn delete_key(&mut self, path: &[u8]) -> bool {
+
+        // try each storage backend in turn, attempting to locate the key
+        match delete(&mut self.vfs, path) {
+            true => true,
+            false => {
+                match delete(&mut self.ifs, path) {
+                    true => true,
+                    false => {
+                        delete(&mut self.efs, path)
+                    }
+                }
+            }
+        }
+    }
 
     pub fn load_key_unchecked(&mut self, path: &[u8]) -> Result<(SerializedKey, StorageLocation), Error> {
         // #[cfg(test)]
@@ -323,6 +347,20 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
     pub fn reply_to(&mut self, request: Request) -> Result<Reply, Error> {
         // TODO: what we want to do here is map an enum to a generic type
         // Is there a nicer way to do this?
+        // debug!("crypto-service request: {:?}", &request).ok();
+        // debug!("IFS/EFS/VFS available BEFORE: {}/{}/{}",
+        //       self.tri.ifs.available_blocks().unwrap(),
+        //       self.tri.efs.available_blocks().unwrap(),
+        //       self.tri.vfs.available_blocks().unwrap(),
+        // ).ok();
+        #[cfg(feature = "deep-semihosting-logs")]
+        hprintln!("crypto-service request: {:?}", &request).ok();
+        #[cfg(feature = "deep-semihosting-logs")]
+        hprintln!("IFS/EFS/VFS available BEFORE: {}/{}/{}",
+              self.tri.ifs.available_blocks().unwrap(),
+              self.tri.efs.available_blocks().unwrap(),
+              self.tri.vfs.available_blocks().unwrap(),
+        ).ok();
         match request {
             Request::DummyRequest => {
                 // #[cfg(test)]
@@ -380,6 +418,26 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
                 }.map(|reply| Reply::Encrypt(reply))
             },
 
+            Request::Delete(request) => {
+                let success = {
+                    let path = self.prepare_path_for_key(KeyType::Private, &request.key.object_id)?;
+                    match self.tri.delete_key(&path) {
+                        true => true,
+                        false => {
+                            let path = self.prepare_path_for_key(KeyType::Public, &request.key.object_id)?;
+                            match self.tri.delete_key(&path) {
+                                true => true,
+                                false => {
+                                    let path = self.prepare_path_for_key(KeyType::Secret, &request.key.object_id)?;
+                                    self.tri.delete_key(&path)
+                                }
+                            }
+                        }
+                    }
+                };
+                Ok(Reply::Delete(reply::Delete { success } ))
+            },
+
             Request::Exists(request) => {
                 match request.mechanism {
 
@@ -423,6 +481,18 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
                 Ok(Reply::LoadBlob(reply::LoadBlob { data } ))
             }
 
+            Request::RandomBytes(request) => {
+                if request.count < 1024 {
+                    let mut bytes = Message::new();
+                    bytes.resize_default(request.count).unwrap();
+                    self.rng.read(&mut bytes)
+                        .map_err(|_| Error::EntropyMalfunction)?;
+                    Ok(Reply::RandomBytes(reply::RandomBytes { bytes } ))
+                } else {
+                    return Err(Error::MechanismNotAvailable);
+                }
+            }
+
             Request::SerializeKey(request) => {
                 match request.mechanism {
 
@@ -448,6 +518,7 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
                 let blob_id = self.generate_unique_id()?;
                 let path = self.blob_path(&request.prefix, &blob_id)?;
                 // hprintln!("saving blob to {:?}", &path).ok();
+                info!("StoreBlob of size {}", request.data.len()).ok();
                 match request.attributes.persistence {
                     StorageLocation::Internal => store_serialized_key(
                         &mut self.tri.ifs,& path, &request.data, request.user_attribute),
@@ -599,6 +670,17 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> Service<'a
 
             }
         }
+        // debug!("IFS/EFS/VFS available AFTER: {}/{}/{}",
+        //       self.resources.tri.ifs.available_blocks().unwrap(),
+        //       self.resources.tri.efs.available_blocks().unwrap(),
+        //       self.resources.tri.vfs.available_blocks().unwrap(),
+        // ).ok();
+        #[cfg(feature = "deep-semihosting-logs")]
+        hprintln!("IFS/EFS/VFS available AFTER: {}/{}/{}",
+              self.resources.tri.ifs.available_blocks().unwrap(),
+              self.resources.tri.efs.available_blocks().unwrap(),
+              self.resources.tri.vfs.available_blocks().unwrap(),
+        ).ok();
     }
 }
 

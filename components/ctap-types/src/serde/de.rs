@@ -496,35 +496,32 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     // In Serde, unit means an anonymous value containing no data.
-    fn deserialize_unit<V>(self, _visitor: V) -> Result<V::Value>
+    fn deserialize_unit<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        // Not sure if this is simple value null (22) or undefined (23) or what
-        // todo!("implement `deserialize_unit`");
-        Err(Error::NotYetImplemented)
-        // visitor.visit_unit()
+        match self.peek()? {
+            0xf6 => {
+                self.consume()?;
+                visitor.visit_unit()
+            }
+            _ => Err(Error::DeserializeExpectedNull)
+        }
     }
 
     // Unit struct means a named value containing no data.
-    fn deserialize_unit_struct<V>(self, _name: &'static str, _visitor: V) -> Result<V::Value>
+    fn deserialize_unit_struct<V>(self, _name: &'static str, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        // Not sure if this is simple value null (22) or undefined (23) or what
-        // todo!("implement `deserialize_unit_struct`");
-        Err(Error::NotYetImplemented)
-        // self.deserialize_unit(visitor)
+        self.deserialize_unit(visitor)
     }
 
-    fn deserialize_newtype_struct<V>(self, _name: &'static str, _visitor: V) -> Result<V::Value>
+    fn deserialize_newtype_struct<V>(self, _name: &'static str, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        // can we follow postcard's approach here?
-        // todo!("implement `deserialize_newtype_struct`");
-        Err(Error::NotYetImplemented)
-        // visitor.visit_newtype_struct(self)
+        visitor.visit_newtype_struct(self)
     }
 
     fn deserialize_seq<V>(self, visitor: V) -> Result<V::Value>

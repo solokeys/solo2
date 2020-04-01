@@ -55,57 +55,9 @@ use usb_device::device::{UsbDeviceBuilder, UsbVidPid};
 // bring traits in scope
 use hal::prelude::*;
 
-// filesystem starting at 320KB
-// this needs to be synchronized with contents of `memory.x`
-const FS_BASE: usize = 0x50_000;
-
-// impl From<hal::drivers::FlashGordon> for FlashStorage {
-//     fn from(driver: hal::drivers::FlashGordon) -> Self {
-//         Self { driver }
-//     }
-// }
-
-// impl littlefs2::driver::Storage for FlashStorage {
-//     const READ_SIZE: usize = 16;
-//     const WRITE_SIZE: usize = 512;
-//     const BLOCK_SIZE: usize = 512;
-//     const BLOCK_COUNT: usize = 64;
-//     type CACHE_SIZE = consts::U512;
-//     type LOOKAHEADWORDS_SIZE = consts::U16;
-//     type FILENAME_MAX_PLUS_ONE = consts::U256;
-//     type PATH_MAX_PLUS_ONE = consts::U256;
-//     type ATTRBYTES_MAX = consts::U1022;
-
-//     // Read data from the storage device. Guaranteed to be called only with bufs of length a multiple of READ_SIZE.
-//     fn read(&self, off: usize, buf: &mut [u8]) -> Result<usize, FsError> {
-//         hprintln!("reading {} from offset {}", buf.len(), off).ok();
-//         let mut addr = FS_BASE + off;
-//         for chunk in buf.chunks_mut(Self::READ_SIZE) {
-//             self.driver.read(addr, chunk);
-//             addr += Self::READ_SIZE;
-//         }
-//         Ok(buf.len())
-//     }
-//     fn write(&mut self, off: usize, data: &[u8]) -> Result<usize, FsError> {
-//         hprintln!("writing {} to offset {}", data.len(), off).ok();
-//         let mut addr = FS_BASE + off;
-//         for chunk in data.chunks(Self::WRITE_SIZE) {
-//             self.driver.write(addr, chunk).unwrap();
-//             addr += Self::WRITE_SIZE;
-//         }
-//         Ok(data.len())
-//     }
-//     fn erase(&mut self, off: usize, len: usize) -> Result<usize, FsError> {
-//         hprintln!("erasing {} from offset {}", len, off).ok();
-//         let mut addr = FS_BASE + off;
-//         let pages = len / Self::BLOCK_SIZE;
-//         for page in 0..pages {
-//             self.driver.erase_page(addr >> 4).unwrap();
-//             addr += Self::BLOCK_SIZE;
-//         }
-//         Ok(len)
-//     }
-// }
+// // filesystem starting at 320KB
+// // this needs to be synchronized with contents of `memory.x`
+// const FS_BASE: usize = 0x50_000;
 
 // TODO: move board-specifics to BSPs
 #[cfg(feature = "board-lpcxpresso")]
@@ -253,11 +205,11 @@ use funnel::{funnel, Drain};
 use rtfm::Mutex;
 
 funnel!(NVIC_PRIO_BITS = hal::raw::NVIC_PRIO_BITS, {
-    0: 1024,
+    0: 2048,
     1: 1024,
     2: 512,
     3: 512,
-    7: 1024,
+    7: 8192,
 });
 
 pub fn drain_log_to_serial(mut serial: impl Mutex<T = types::SerialClass>) {

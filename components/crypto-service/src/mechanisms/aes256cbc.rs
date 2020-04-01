@@ -67,6 +67,7 @@ WrapKey<'a, 's, R, I, E, V> for super::Aes256Cbc
             key: request.wrapping_key.clone(),
             message,
             associated_data: ShortData::new(),
+            nonce: None,
         };
         let encryption_reply = <super::Aes256Cbc>::encrypt(resources, encryption_request)?;
 

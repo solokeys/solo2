@@ -23,7 +23,7 @@ if True:
             {"id": b"nickray"},
             [{"type": "public-key", "alg": alg}],
             extensions={"hmac-secret": True},
-            # options={"rk": True},
+            options={"rk": True},
         )
 
         # basic sanity check - would raise

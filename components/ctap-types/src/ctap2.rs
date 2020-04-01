@@ -26,7 +26,7 @@ pub mod make_credential;
 //     // pub cred_protect:
 // }
 
-#[derive(Clone,Debug,Eq,PartialEq,Serialize,Deserialize)]
+#[derive(Clone,Debug,uDebug,Eq,PartialEq,Serialize,Deserialize)]
 pub struct AuthenticatorOptions {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rk: Option<bool>,

@@ -12,7 +12,7 @@ use crate::{
     }
 };
 
-#[derive(Clone,Debug,Eq,PartialEq,Serialize_repr,Deserialize_repr)]
+#[derive(Clone,Debug,uDebug,Eq,PartialEq,Serialize_repr,Deserialize_repr)]
 #[repr(u8)]
 pub enum Subcommand  {
     GetCredsMetadata = 0x01, // 1, 2
@@ -24,7 +24,7 @@ pub enum Subcommand  {
 }
 
 
-#[derive(Clone,Debug,Eq,PartialEq,SerializeIndexed,DeserializeIndexed)]
+#[derive(Clone,Debug,uDebug,Eq,PartialEq,SerializeIndexed,DeserializeIndexed)]
 #[serde_indexed(offset = 1)]
 pub struct SubcommandParameters {
     // 0x01
@@ -35,7 +35,7 @@ pub struct SubcommandParameters {
     pub credential_id: Option<PublicKeyCredentialDescriptor>,
 }
 
-#[derive(Clone,Debug,Eq,PartialEq,SerializeIndexed,DeserializeIndexed)]
+#[derive(Clone,Debug,uDebug,Eq,PartialEq,SerializeIndexed,DeserializeIndexed)]
 #[serde_indexed(offset = 1)]
 pub struct Parameters {
     // 0x01
@@ -49,7 +49,7 @@ pub struct Parameters {
     pub pin_auth: Bytes<consts::U16>,
 }
 
-#[derive(Clone,Debug,Eq,PartialEq,SerializeIndexed,DeserializeIndexed)]
+#[derive(Clone,Debug,uDebug,Eq,PartialEq,SerializeIndexed,DeserializeIndexed)]
 #[serde_indexed(offset = 1)]
 pub struct Response {
 

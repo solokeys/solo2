@@ -47,7 +47,7 @@ use serde::Serialize;
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
 #[repr(i8)]
-#[derive(Clone, Debug, Eq, PartialEq, Serialize_repr, Deserialize_repr)]
+#[derive(Clone, Debug, uDebug, Eq, PartialEq, Serialize_repr, Deserialize_repr)]
 enum Label {
     Kty = 1,
     Alg = 3,
@@ -57,7 +57,7 @@ enum Label {
 }
 
 #[repr(i8)]
-#[derive(Clone, Debug, Eq, PartialEq, Serialize_repr, Deserialize_repr)]
+#[derive(Clone, Debug, uDebug, Eq, PartialEq, Serialize_repr, Deserialize_repr)]
 enum Kty {
     Okp = 1,
     Ec2 = 2,
@@ -65,7 +65,7 @@ enum Kty {
 }
 
 #[repr(i8)]
-#[derive(Clone, Debug, Eq, PartialEq, Serialize_repr, Deserialize_repr)]
+#[derive(Clone, Debug, uDebug, Eq, PartialEq, Serialize_repr, Deserialize_repr)]
 enum Alg {
     Es256 = -7, // ECDSA with SHA-256
     EdDsa = -8,
@@ -84,7 +84,7 @@ enum Alg {
 }
 
 #[repr(i8)]
-#[derive(Clone, Debug, Eq, PartialEq, Serialize_repr, Deserialize_repr)]
+#[derive(Clone, Debug, uDebug, Eq, PartialEq, Serialize_repr, Deserialize_repr)]
 enum Crv {
     P256 = 1,
     // P384 = 2,
@@ -97,7 +97,7 @@ enum Crv {
 
 // `Deserialize` can't be derived on untagged enum,
 // would need to "sniff" for correct (Kty, Alg, Crv) triple
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, uDebug, Eq, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum PublicKey {
     P256Key(P256PublicKey),
@@ -122,7 +122,7 @@ trait PublicKeyConstants {
     const CRV: Crv;
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, uDebug, Eq, PartialEq)]
 pub struct P256PublicKey {
     pub x: Bytes<consts::U32>,
     pub y: Bytes<consts::U32>,
@@ -134,7 +134,7 @@ impl PublicKeyConstants for P256PublicKey {
     const CRV: Crv = Crv::P256;
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, uDebug, Eq, PartialEq)]
 pub struct Ed25519PublicKey {
     pub x: Bytes<consts::U32>,
 }
@@ -145,7 +145,7 @@ impl PublicKeyConstants for Ed25519PublicKey {
     const CRV: Crv = Crv::Ed25519;
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, uDebug, Eq, PartialEq)]
 pub struct X25519PublicKey {
     pub pub_key: Bytes<consts::U32>,
 }

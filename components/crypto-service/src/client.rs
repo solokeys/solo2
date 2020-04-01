@@ -1,7 +1,5 @@
 use core::marker::PhantomData;
 
-use cortex_m_semihosting::hprintln;
-
 use crate::api::*;
 // use crate::config::*;
 use crate::error::*;
@@ -74,7 +72,7 @@ impl<'a, 'c> RawFutureResult<'a, 'c> {
                             core::task::Poll::Ready(Ok(reply))
                         } else  {
                             // #[cfg(all(test, feature = "verbose-tests"))]
-                            hprintln!("got: {:?}, expected: {:?}", Some(u8::from(&reply)), self.c.pending).ok();
+                            info!("got: {:?}, expected: {:?}", Some(u8::from(&reply)), self.c.pending).ok();
                             core::task::Poll::Ready(Err(Error::InternalError))
                         }
                     }
@@ -205,12 +203,12 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
           // - message: Message
           // - associated_data: ShortData
     pub fn encrypt<'c>(&'c mut self, mechanism: Mechanism, key: ObjectHandle,
-                       message: &[u8], associated_data: &[u8])
+                       message: &[u8], associated_data: &[u8], nonce: Option<ShortData>)
         -> core::result::Result<FutureResult<'a, 'c, reply::Encrypt>, ClientError>
     {
         let message = Message::try_from_slice(message).map_err(|_| ClientError::DataTooLarge)?;
         let associated_data = ShortData::try_from_slice(associated_data).map_err(|_| ClientError::DataTooLarge)?;
-        self.raw.request(request::Encrypt { mechanism, key, message, associated_data })?;
+        self.raw.request(request::Encrypt { mechanism, key, message, associated_data, nonce })?;
         self.syscall.syscall();
         Ok(FutureResult::new(self))
     }
@@ -247,6 +245,21 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
         self.raw.request(request::DeserializeKey {
             mechanism, serialized_key, format, attributes
         } )?;
+        self.syscall.syscall();
+        Ok(FutureResult::new(self))
+    }
+
+    pub fn delete<'c>(
+        &'c mut self,
+        // mechanism: Mechanism,
+        key: ObjectHandle,
+    )
+        -> core::result::Result<FutureResult<'a, 'c, reply::Delete>, ClientError>
+    {
+        self.raw.request(request::Delete {
+            key,
+            // mechanism,
+        })?;
         self.syscall.syscall();
         Ok(FutureResult::new(self))
     }
@@ -359,6 +372,14 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
     }
 
 
+    pub fn random_bytes<'c>(&'c mut self, count: usize)
+        -> core::result::Result<FutureResult<'a, 'c, reply::RandomBytes>, ClientError>
+    {
+        self.raw.request(request::RandomBytes { count } )?;
+        self.syscall.syscall();
+        Ok(FutureResult::new(self))
+    }
+
     pub fn hash<'c>(&'c mut self, mechanism: Mechanism, message: Message)
         -> core::result::Result<FutureResult<'a, 'c, reply::Hash>, ClientError>
     {
@@ -388,10 +409,12 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
         )
     }
 
-    pub fn encrypt_chacha8poly1305<'c>(&'c mut self, key: &ObjectHandle, message: &[u8], associated_data: &[u8])
+    pub fn encrypt_chacha8poly1305<'c>(&'c mut self, key: &ObjectHandle, message: &[u8], associated_data: &[u8],
+                                       nonce: Option<&[u8; 12]>)
         -> core::result::Result<FutureResult<'a, 'c, reply::Encrypt>, ClientError>
     {
-        self.encrypt(Mechanism::Chacha8Poly1305, key.clone(), message, associated_data)
+        self.encrypt(Mechanism::Chacha8Poly1305, key.clone(), message, associated_data,
+            nonce.and_then(|nonce| ShortData::try_from_slice(nonce).ok()))
     }
 
     pub fn generate_chacha8poly1305_key<'c>(&'c mut self, persistence: StorageLocation)
