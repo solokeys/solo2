@@ -32,6 +32,8 @@ generate_enums! {
     GenerateKey: 7
     // GenerateKeypair: 6
     Hash: 8
+    ListBlobsFirst: 19
+    ListBlobsNext: 20
     LoadBlob: 9
     // ReadCounter: 7
     RandomBytes: 17
@@ -131,6 +133,13 @@ pub mod request {
         Hash:
           - mechanism: Mechanism
           - message: Message
+
+        ListBlobsFirst:
+          - prefix: Option<Letters>
+          - location: StorageLocation
+          - user_attribute: Option<UserAttribute>
+
+        ListBlobsNext:
 
         LoadBlob:
           - prefix: Option<Letters>
@@ -241,6 +250,14 @@ pub mod reply {
 
         Hash:
           - hash: ShortData
+
+        ListBlobsFirst:
+          - id: ObjectHandle
+          - data: Message
+
+        ListBlobsNext:
+          - id: ObjectHandle
+          - data: Message
 
         LoadBlob:
           - data: Message

@@ -793,6 +793,22 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
             // If an allowList is not present,
             // locate all credentials that are present on this authenticator
             // and bound to the specified rpId.
+
+            let mut prefix = crypto_service::types::ShortData::new();
+            prefix.extend_from_slice(b"rk").map_err(|_| Error::Other)?;
+            let prefix = Some(crypto_service::types::Letters::try_from(prefix).map_err(|_| Error::Other)?);
+
+            let rp_id_hash = {
+                let hash = syscall!(self.crypto.hash_sha256(rp_id.as_ref())).hash;
+                // Bytes::try_from_slice(&hash)
+                hash.try_convert_into().map_err(|_| Error::Other)?
+            };
+
+            let first = syscall!(self.crypto.list_blobs_first(
+                prefix,
+                StorageLocation::Internal,
+                Some(rp_id_hash.clone()),
+            ));
             todo!("implement empty allowList");
         };
 

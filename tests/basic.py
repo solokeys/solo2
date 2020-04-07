@@ -37,12 +37,12 @@ if True:
         assn = dev.get_assertion(
             "https://yamnord.com",
             client_data_hash,
-            allow_list=[
-                {
-                    "type": "public-key",
-                    "id": att.auth_data.credential_data.credential_id,
-                }
-            ],
+            # allow_list=[
+            #     {
+            #         "type": "public-key",
+            #         "id": att.auth_data.credential_data.credential_id,
+            #     }
+            # ],
         )
 
         # basic sanity check - would raise

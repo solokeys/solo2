@@ -1,6 +1,6 @@
 use core::convert::TryFrom;
 
-#[cfg(feature = "deep-semihosting-logs")]
+#[cfg(feature = "semihosting")]
 use cortex_m_semihosting::hprintln;
 use heapless_bytes::Bytes;
 use serde_indexed::{DeserializeIndexed, SerializeIndexed};
@@ -157,6 +157,12 @@ pub(crate) fn load_serialized_key<'s, S: LfsStorage>(fs: &mut FilesystemWith<'s,
     use littlefs2::io::ReadWith;
 
     let mut alloc = File::allocate();
+    // hprintln!("sizeof<FileAllocation> = {}", core::mem::size_of::<littlefs2::fs::FileAllocation<S>>()).ok();
+    // hprintln!("sizeof<FilesystemAllocation> = {}", core::mem::size_of::<littlefs2::fs::FilesystemAllocation<S>>()).ok();
+    // hprintln!("sizeof<lfs_t> = {}", core::mem::size_of::<littlefs2::fs::ll::lfs_t>()).ok();
+    // hprintln!("sizeof<lfs_config> = {}", core::mem::size_of::<littlefs2::fs::ll::lfs_config>()).ok();
+    // hprintln!("sizeof<lfs_file_t> = {}", core::mem::size_of::<littlefs2::fs::ll::lfs_file_t>()).ok();
+    // hprintln!("sizeof<lfs_file_config> = {}", core::mem::size_of::<littlefs2::fs::ll::lfs_file_config>()).ok();
     let mut file = FileWith::open(&path[..], &mut alloc, fs)
         .map_err(|_| Error::FilesystemReadFailure)?;
 
@@ -166,6 +172,39 @@ pub(crate) fn load_serialized_key<'s, S: LfsStorage>(fs: &mut FilesystemWith<'s,
     Ok(size)
 }
 
+// pub fn find_next(
+//     fs: &mut FilesystemWith<'s, 's, S>,
+//     dir: &[u8],
+//     user_attribute: Option<UserAttribute>,
+//     previous: Option<ObjectHandle>,
+// )
+//     -> Result<Option<ObjectHandle>, Error>
+// {
+//     let mut read_dir = fs.read_dir(dir, &mut storage).unwrap();
+// }
+
+pub fn create_directories<'s, S: LfsStorage>(
+    fs: &mut FilesystemWith<'s, 's, S>,
+    path: &[u8],
+) -> Result<(), Error>
+{
+    hprintln!("preparing {:?}", core::str::from_utf8(path).unwrap()).ok();
+    for i in 0..path.len() {
+        if path[i] == b'/' {
+            let dir = &path[..i];
+            let dir_str = core::str::from_utf8(dir).unwrap();
+            hprintln!("create dir {:?}", dir_str).ok();
+            // fs.create_dir(dir).map_err(|_| Error::FilesystemWriteFailure)?;
+            match fs.create_dir(dir) {
+                Err(littlefs2::io::Error::EntryAlreadyExisted) => {}
+                Ok(()) => {}
+                error => { panic!("{:?}", &error); }
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn store_serialized_key<'s, S: LfsStorage>(
     fs: &mut FilesystemWith<'s, 's, S>,
     path: &[u8], buf: &[u8],
@@ -173,8 +212,11 @@ pub fn store_serialized_key<'s, S: LfsStorage>(
 )
     -> Result<(), Error>
 {
-
     use littlefs2::fs::{Attribute, File, FileWith};
+
+    // create directories if missing
+    create_directories(fs, path)?;
+
     let mut alloc = File::allocate();
     {
         let mut file = FileWith::create(&path[..], &mut alloc, fs)
@@ -185,6 +227,7 @@ pub fn store_serialized_key<'s, S: LfsStorage>(
         file.sync()
             .map_err(|_| Error::FilesystemWriteFailure)?;
     }
+
     if let Some(user_attribute) = user_attribute.as_ref() {
         let mut attribute = Attribute::new(crate::config::USER_ATTRIBUTE_NUMBER);
         attribute.set_data(user_attribute);
@@ -467,9 +510,75 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
                 }.map(|reply| Reply::Hash(reply))
             },
 
+            Request::ListBlobsFirst(request) => {
+                let path = self.blob_path(&request.prefix, None)?;
+                // TODO: ergonooomics
+
+                let mut path = Bytes::<MAX_PATH_LENGTH>::new();
+                path.extend_from_slice(b"/").map_err(|_| Error::InternalError)?;
+                path.extend_from_slice(self.currently_serving.as_bytes()).map_err(|_| Error::InternalError)?;
+                if let Some(prefix) = request.prefix {
+                    path.extend_from_slice(b"/").map_err(|_| Error::InternalError)?;
+                    path.extend_from_slice(&prefix.0).map_err(|_| Error::InternalError)?;
+                }
+
+                #[cfg(feature = "semihosting")]
+                hprintln!("listing blobs in {:?}", &path).ok();
+
+                let entry = self.tri.ifs.within(
+                    |fs, storage| -> littlefs2::io::Result<littlefs2::fs::DirEntry<I>> {
+                        let mut read_dir = fs.read_dir(&path[..], storage)?;
+                        // "desugared iterator"
+                        loop {
+                            match read_dir.next(fs, storage) {
+                                Some(entry) => {
+                                    let entry = entry?;
+                                    if entry.file_type().is_dir() {
+                                        // no filesystem walking here
+                                        let filename = entry.file_name();
+                                        let filename_bytes = filename.as_bytes();
+                                        let l = filename_bytes.into_iter().position(|x| *x == b'\0').unwrap();
+                                        #[cfg(feature = "semihosting")]
+                                        hprintln!("skipping subdirectory {:?}", core::str::from_utf8(&filename_bytes[..l]).unwrap()).ok();
+                                        continue;
+                                    }
+
+                                    let filename = entry.file_name();
+                                    let filename_bytes = filename.as_bytes();
+                                    let l = filename_bytes.into_iter().position(|x| *x == b'\0').unwrap();
+                                    #[cfg(feature = "semihosting")]
+                                    hprintln!("first file found: {:?}", core::str::from_utf8(&filename_bytes[..l]).unwrap()).ok();
+                                    return Ok(entry);
+                                }
+                                None => break,
+                            }
+                        }
+                        Err(littlefs2::io::Error::NoSuchEntry)
+                    }
+                ).map_err(|_| Error::InternalError)?;
+
+                // let mut data = Message::new();
+                // data.resize_to_capacity();
+
+                // let size = match request.location {
+                //     StorageLocation::Internal => load_serialized_key(&mut self.tri.ifs, &path, &mut data),
+                //     StorageLocation::External => load_serialized_key(&mut self.tri.efs, &path, &mut data),
+                //     StorageLocation::Volatile => load_serialized_key(&mut self.tri.vfs, &path, &mut data),
+                // }?;
+
+                // data.resize_default(size).map_err(|_| Error::InternalError)?;
+
+                let unique_id = UniqueId::try_from_hex(&entry.file_name().as_bytes()).map_err(|_| Error::InternalError)?;
+
+                Ok(Reply::ListBlobsFirst(reply::ListBlobsFirst {
+                    // maybe return size too?
+                    id: ObjectHandle { object_id: unique_id },
+                    data: Message::new(),
+                } ))
+            }
 
             Request::LoadBlob(request) => {
-                let path = self.blob_path(&request.prefix, &request.id.object_id)?;
+                let path = self.blob_path(&request.prefix, Some(&request.id.object_id))?;
                 let mut data = Message::new();
                 data.resize_to_capacity();
                 let size = match request.location {
@@ -516,7 +625,7 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
 
             Request::StoreBlob(request) => {
                 let blob_id = self.generate_unique_id()?;
-                let path = self.blob_path(&request.prefix, &blob_id)?;
+                let path = self.blob_path(&request.prefix, Some(&blob_id))?;
                 // hprintln!("saving blob to {:?}", &path).ok();
                 info!("StoreBlob of size {}", request.data.len()).ok();
                 match request.attributes.persistence {
@@ -579,33 +688,33 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
         // self.pfs.create_dir(path.as_ref()).map_err(|_| Error::FilesystemWriteFailure)?;
 
         path.extend_from_slice(match key_type {
-            KeyType::Private => b"-private",
-            KeyType::Public => b"-public",
-            KeyType::Secret => b"-secret",
+            KeyType::Private => b"/private",
+            KeyType::Public => b"/public",
+            KeyType::Secret => b"/secret",
         }).map_err(|_| Error::InternalError)?;
 
         // #[cfg(all(test, feature = "verbose-tests"))]
         // println!("creating dir {:?}", &path);
         // self.pfs.create_dir(path.as_ref()).map_err(|_| Error::FilesystemWriteFailure)?;
-        path.extend_from_slice(b"-").map_err(|_| Error::InternalError)?;
+        path.extend_from_slice(b"/").map_err(|_| Error::InternalError)?;
         path.extend_from_slice(&id.hex()).map_err(|_| Error::InternalError)?;
         Ok(path)
     }
 
-    pub fn blob_path(&mut self, prefix: &Option<Letters>, id: &UniqueId)
+    pub fn blob_path(&mut self, prefix: &Option<Letters>, id: Option<&UniqueId>)
         -> Result<Bytes<MAX_PATH_LENGTH>, Error> {
         let mut path = Bytes::<MAX_PATH_LENGTH>::new();
 
         path.extend_from_slice(b"/").map_err(|_| Error::InternalError)?;
         path.extend_from_slice(self.currently_serving.as_bytes()).map_err(|_| Error::InternalError)?;
-        path.extend_from_slice(b"-").map_err(|_| Error::InternalError)?;
+        path.extend_from_slice(b"/").map_err(|_| Error::InternalError)?;
 
         if let Some(prefix) = &prefix {
             if !prefix.0.iter().all(|b| *b >= b'a' && *b <= b'z') {
                 return Err(crate::error::Error::NotJustLetters);
             }
             path.extend_from_slice(&prefix.0).map_err(|_| Error::InternalError)?;
-            path.extend_from_slice(b"-").map_err(|_| Error::InternalError)?;
+            path.extend_from_slice(b"/").map_err(|_| Error::InternalError)?;
         }
 
         // const HEX_CHARS: &[u8] = b"0123456789abcdef";
@@ -614,7 +723,9 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
         //     path.push(HEX_CHARS[(byte >> 4) as usize]).map_err(|_| Error::InternalError)?;
         //     path.push(HEX_CHARS[(byte & 0xf) as usize]).map_err(|_| Error::InternalError)?;
         // }
-        path.extend_from_slice(&id.hex()).map_err(|_| Error::InternalError)?;
+        if let Some(id) = id {
+            path.extend_from_slice(&id.hex()).map_err(|_| Error::InternalError)?;
+        }
         Ok(path)
     }
 

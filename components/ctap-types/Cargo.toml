@@ -16,4 +16,10 @@ serde = { version = "1.0", default-features = false, features = ["derive"] }
 serde-indexed = "0.0.3"
 serde_repr = "0.1"
 ufmt = "0.1.0"
-ufmt-macros = "0.1.1"
+# ufmt-macros = "0.1.0"
+ufmt-macros = { path = "../../../ufmt/macros" }
+
+[patch.crates-io]
+ufmt = { path = "../../../ufmt" }
+# ufmt-macros = { path = "../../../ufmt/macros" }
+heapless = { path = "../../../heapless" }

@@ -67,6 +67,7 @@ log-serial = []
 log-semihosting = ["cortex-m-semihosting"]
 
 trace-crypto-service-ram = ["crypto-service/deep-semihosting-logs"]
+crypto-service-semihosting = ["crypto-service/semihosting"]
 
 # patch dependencies like so to test local changes
 

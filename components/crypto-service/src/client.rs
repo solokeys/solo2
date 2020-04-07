@@ -290,6 +290,19 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
         Ok(FutureResult::new(self))
     }
 
+    pub fn list_blobs_first<'c>(
+        &'c mut self,
+        prefix: Option<Letters>,
+        location: StorageLocation,
+        user_attribute: Option<UserAttribute>,
+    )
+        -> core::result::Result<FutureResult<'a, 'c, reply::ListBlobsFirst>, ClientError>
+    {
+        self.raw.request(request::ListBlobsFirst { prefix, location, user_attribute } )?;
+        self.syscall.syscall();
+        Ok(FutureResult::new(self))
+    }
+
     pub fn load_blob<'c>(&'c mut self, prefix: Option<Letters>, id: ObjectHandle, location: StorageLocation)
         -> core::result::Result<FutureResult<'a, 'c, reply::LoadBlob>, ClientError>
     {

@@ -58,7 +58,8 @@ default = ["default-mechanisms"]
 verbose-tests = ["littlefs2/ll-assertions"]
 verbose-lfs = ["littlefs2/ll-assertions", "littlefs2/ll-trace"]
 debug-logs = []
-deep-semihosting-logs = ["cortex-m-semihosting"]
+deep-semihosting-logs = ["semihosting"]
+semihosting = ["cortex-m-semihosting"]
 
 # mechanisms
 # default-mechanisms = ["aes256-cbc", "chacha8-poly1305", "ed25519", "hmac-sha256", "p256", "sha256", "trng"]

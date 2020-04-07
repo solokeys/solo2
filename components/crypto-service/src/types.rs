@@ -343,6 +343,27 @@ impl UniqueId {
         format_hex(&self.0, &mut hex);
         hex
     }
+
+    pub fn try_from_hex(hex: &[u8]) -> core::result::Result<Self, ()> {
+        // https://stackoverflow.com/a/52992629
+        // (0..hex.len())
+        // use hex::FromHex;
+        // let maybe_bytes = <[u8; 16]>::from_hex(hex).map_err(|e| ());
+        // maybe_bytes.map(|bytes| Self(Bytes::try_from_slice(&bytes).unwrap()))
+        if (hex.len() & 1) == 1 {
+            return Err(());
+        }
+        if hex.len() > 32 {
+            return Err(());
+        }
+        let hex = core::str::from_utf8(hex).map_err(|e| ())?;
+        // let hex = core::str::from_utf8_unchecked(hex);
+        let mut bytes = [0u8; 16];
+        for i in 0..(hex.len() >> 1) {
+            bytes[i] = u8::from_str_radix(&hex[i..][..2], 16).map_err(|e| ())?;
+        }
+        Ok(UniqueId(Bytes::try_from_slice(&bytes).unwrap()))
+    }
 }
 
 impl core::fmt::Debug for UniqueId {

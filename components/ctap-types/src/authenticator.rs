@@ -13,8 +13,8 @@ pub enum Request {
 }
 
 // see below
-// #[derive(Debug,uDebug)]
-#[derive(Debug)]
+#[derive(Debug,uDebug)]
+// #[derive(Debug)]
 pub enum Response {
     Ctap1(ctap1::Response),
     Ctap2(ctap2::Response),
@@ -30,9 +30,7 @@ pub mod ctap1 {
         Version,
     }
 
-    // Seems ufmt-macros can't hhandle empty enums
-    // #[derive(Debug,uDebug)]
-    #[derive(Debug)]
+    #[derive(Debug,uDebug)]
     pub enum Response {
     }
 
