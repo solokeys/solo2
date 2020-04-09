@@ -319,6 +319,7 @@ pub type Message = Bytes<MAX_MESSAGE_LENGTH>;
 pub enum KeySerialization {
     // Asn1Der,
     Cose,
+    EcdhEsHkdf256,
     Raw,
     Sec1,
 }
@@ -351,16 +352,20 @@ impl UniqueId {
         // let maybe_bytes = <[u8; 16]>::from_hex(hex).map_err(|e| ());
         // maybe_bytes.map(|bytes| Self(Bytes::try_from_slice(&bytes).unwrap()))
         if (hex.len() & 1) == 1 {
+            panic!("hex len & 1 =  {}", hex.len() & 1);
             return Err(());
         }
         if hex.len() > 32 {
+            panic!("hex len {}", hex.len());
             return Err(());
         }
-        let hex = core::str::from_utf8(hex).map_err(|e| ())?;
+        // let hex = core::str::from_utf8(hex).map_err(|e| ())?;
+        let hex = core::str::from_utf8(hex).unwrap();
         // let hex = core::str::from_utf8_unchecked(hex);
         let mut bytes = [0u8; 16];
         for i in 0..(hex.len() >> 1) {
-            bytes[i] = u8::from_str_radix(&hex[i..][..2], 16).map_err(|e| ())?;
+            // bytes[i] = u8::from_str_radix(&hex[i..][..2], 16).map_err(|e| ())?;
+            bytes[i] = u8::from_str_radix(&hex[2*i..][..2], 16).unwrap();
         }
         Ok(UniqueId(Bytes::try_from_slice(&bytes).unwrap()))
     }

@@ -2,6 +2,10 @@
 
 use core::convert::{TryFrom, TryInto};
 
+#[cfg(feature = "semihosting")]
+#[allow(unused_imports)]
+use cortex_m_semihosting::hprintln;
+
 use funnel::info;
 
 use crypto_service::{
@@ -21,6 +25,7 @@ use crypto_service::{
 use ctap_types::{
     Bytes, consts, String, Vec,
     cose::P256PublicKey as CoseP256PublicKey,
+    cose::EcdhEsHkdf256PublicKey as CoseEcdhEsHkdf256PublicKey,
     // cose::PublicKey as CosePublicKey,
     rpc::AuthenticatorEndpoint,
     // authenticator::ctap1,
@@ -179,7 +184,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
     pub fn rotate_key_encryption_key(&mut self) -> Result<ObjectHandle> {
         // TODO: delete old one first
         if let Some(key) = self.state.key_encryption_key.as_ref() {
-            info!("deleted kek during rotation: {}", syscall!(self.crypto.delete(key.clone())).success).ok();
+            // info!("deleted kek during rotation: {}", syscall!(self.crypto.delete(key.clone())).success).ok();
         }
         let key = block!(self.crypto
             .generate_chacha8poly1305_key(StorageLocation::Volatile).map_err(|_| Error::Other)?)
@@ -312,6 +317,8 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                             // 0x6
                             ctap2::Request::ClientPin(parameters) => {
                                 let response = self.client_pin(&parameters);
+                                // #[cfg(feature = "semihosting")]
+                                // hprintln!("{:?}", &response).ok();
                                 self.rpc.send.enqueue(
                                     match response {
                                         Ok(response) => Ok(Response::Ctap2(ctap2::Response::ClientPin(response))),
@@ -340,6 +347,8 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
     fn client_pin(&mut self, parameters: &ctap2::client_pin::Parameters) -> Result<ctap2::client_pin::Response> {
         use ctap2::client_pin::PinV1Subcommand as Subcommand;
         debug!("processing CP").ok();
+        // #[cfg(feature = "semihosting")]
+        // hprintln!("{:?}", parameters).ok();
 
         if parameters.pin_protocol != 1{
             return Err(Error::InvalidParameter);
@@ -363,10 +372,11 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 let private_key = self.key_agreement_key().unwrap();
                 let public_key = syscall!(self.crypto.derive_p256_public_key(&private_key, StorageLocation::Volatile)).key;
                 let serialized_cose_key = syscall!(self.crypto.serialize_key(
-                    Mechanism::P256, public_key, KeySerialization::Cose)).serialized_key;
+                    Mechanism::P256, public_key.clone(), KeySerialization::EcdhEsHkdf256)).serialized_key;
                 let cose_key = crypto_service::cbor_deserialize(&serialized_cose_key).unwrap();
 
                 // TODO: delete public key
+                info!("deleted: {}", syscall!(self.crypto.delete(public_key)).success).ok();
 
                 ctap2::client_pin::Response {
                     key_agreement: cose_key,
@@ -398,11 +408,17 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 // 3. generate shared secret
                 let shared_secret = self.generate_shared_secret(platform_kek)?;
 
+                // TODO: there are moar early returns!!
+                // - implement Drop?
+                // - do garbage collection outside of this?
+
                 // 4. verify pinAuth
                 self.verify_pin_auth(&shared_secret, new_pin_enc, pin_auth)?;
 
                 // 5. decrypt and verify new PIN
                 let new_pin = self.decrypt_pin_check_length(&shared_secret, new_pin_enc)?;
+
+                info!("deleted: {}", syscall!(self.crypto.delete(shared_secret)).success).ok();
 
                 // 6. store LEFT(SHA-256(newPin), 16), set retries to 8
                 self.hash_store_pin(&new_pin)?;
@@ -453,13 +469,21 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 self.decrement_retries().unwrap();
 
                 // 6. decrypt pinHashEnc, compare with stored
-                self.decrypt_pin_hash_and_maybe_escalate(&shared_secret, &pin_hash_enc)?;
+                match self.decrypt_pin_hash_and_maybe_escalate(&shared_secret, &pin_hash_enc) {
+                    Err(e) => {
+                        info!("deleted: {}", syscall!(self.crypto.delete(shared_secret)).success).ok();
+                        return Err(e);
+                    }
+                    Ok(_) => {}
+                }
 
                 // 7. reset retries
                 self.reset_retries()?;
 
                 // 8. decrypt and verify new PIN
                 let new_pin = self.decrypt_pin_check_length(&shared_secret, new_pin_enc)?;
+
+                info!("deleted: {}", syscall!(self.crypto.delete(shared_secret)).success).ok();
 
                 // 9. store hashed PIN
                 self.hash_store_pin(&new_pin)?;
@@ -496,7 +520,14 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 self.decrement_retries().unwrap();
 
                 // 5. decrypt and verify pinHashEnc
-                self.decrypt_pin_hash_and_maybe_escalate(&shared_secret, &pin_hash_enc)?;
+                match self.decrypt_pin_hash_and_maybe_escalate(&shared_secret, &pin_hash_enc) {
+                    Err(e) => {
+                        info!("deleted: {}", syscall!(self.crypto.delete(shared_secret)).success).ok();
+                        return Err(e);
+                    }
+                    Ok(_) => {}
+                }
+                // hprintln!("exists? {}", syscall!(self.crypto.exists(shared_secret)).exists).ok();
 
                 // 6. reset retries
                 self.reset_retries()?;
@@ -504,10 +535,14 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 // 7. return encrypted pinToken
                 let pin_token = self.pin_token().unwrap();
                 debug!("wrapping pin token").ok();
+                // hprintln!("exists? {}", syscall!(self.crypto.exists(shared_secret)).exists).ok();
                 let pin_token_enc = syscall!(self.crypto.wrap_key_aes256cbc(&shared_secret, &pin_token)).wrapped_key;
 
+                debug!("deleting shared secret").ok();
+                info!("deleted: {}", syscall!(self.crypto.delete(shared_secret)).success).ok();
+
                 // ble...
-                if pin_token_enc.len() != 32 {
+                if pin_token_enc.len() != 16 {
                     return Err(Error::Other);
                 }
                 let pin_token_enc_32 = Bytes::<consts::U32>::try_from_slice(&pin_token_enc).unwrap();
@@ -557,15 +592,20 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
     }
 
     fn decrypt_pin_check_length(&mut self, shared_secret: &ObjectHandle, pin_enc: &[u8]) -> Result<Message> {
-        let mut pin = syscall!(self.crypto.decrypt_aes256cbc(
-            &shared_secret, &pin_enc)).plaintext.ok_or(Error::Other)?;
-
-        // it is expected to be filled with null bytes to length at least 64
-        if pin.len() < 64 {
+        // pin is expected to be filled with null bytes to length at least 64
+        if pin_enc.len() < 64 {
             // correct error?
             return Err(Error::PinPolicyViolation);
         }
 
+        let mut pin = syscall!(self.crypto.decrypt_aes256cbc(
+            &shared_secret, &pin_enc)).plaintext.ok_or(Error::Other)?;
+
+        // // temp
+        // let pin_length = pin.iter().position(|&b| b == b'\0').unwrap_or(pin.len());
+        // #[cfg(feature = "semihosting")]
+        // hprintln!("pin.len() = {}, pin_length = {}, = {:?}",
+        //           pin.len(), pin_length, &pin).ok();
         // chop off null bytes
         let pin_length = pin.iter().position(|&b| b == b'\0').unwrap_or(pin.len());
         if pin_length < 4 {
@@ -601,7 +641,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         }
     }
 
-    fn generate_shared_secret(&mut self, platform_key_agreement_key: &CoseP256PublicKey) -> Result<ObjectHandle> {
+    fn generate_shared_secret(&mut self, platform_key_agreement_key: &CoseEcdhEsHkdf256PublicKey) -> Result<ObjectHandle> {
         let private_key = self.key_agreement_key().unwrap();
         let _public_key = syscall!(self.crypto.derive_p256_public_key(&private_key, StorageLocation::Volatile)).key;
 
@@ -614,18 +654,22 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         let serialized_kek = cbor_serialize_message(platform_key_agreement_key).map_err(|_| Error::InvalidParameter)?;
         let platform_kek = syscall!(
             self.crypto.deserialize_key(
-                Mechanism::P256, serialized_kek, KeySerialization::Cose,
+                Mechanism::P256, serialized_kek, KeySerialization::EcdhEsHkdf256,
                 StorageAttributes::new().set_persistence(StorageLocation::Volatile))
             .map_err(|_| Error::InvalidParameter)).key;
 
         let pre_shared_secret = syscall!(self.crypto.agree(
-            Mechanism::P256, private_key.clone(), platform_kek,
+            Mechanism::P256, private_key.clone(), platform_kek.clone(),
             StorageAttributes::new().set_persistence(StorageLocation::Volatile),
         )).shared_secret;
 
+        info!("deleted: {}", syscall!(self.crypto.delete(platform_kek)).success).ok();
+
         let shared_secret = syscall!(self.crypto.derive_key(
-            Mechanism::Sha256, pre_shared_secret, StorageAttributes::new().set_persistence(StorageLocation::Volatile)
+            Mechanism::Sha256, pre_shared_secret.clone(), StorageAttributes::new().set_persistence(StorageLocation::Volatile)
         )).key;
+
+        info!("deleted: {}", syscall!(self.crypto.delete(pre_shared_secret)).success).ok();
 
         Ok(shared_secret)
     }
@@ -804,12 +848,26 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 hash.try_convert_into().map_err(|_| Error::Other)?
             };
 
-            let first = syscall!(self.crypto.list_blobs_first(
-                prefix,
+            // TODO: need them all..
+            let blob_id = syscall!(self.crypto.list_blobs_first(
+                prefix.clone(),
                 StorageLocation::Internal,
                 Some(rp_id_hash.clone()),
-            ));
-            todo!("implement empty allowList");
+            )).id;
+
+            let blob = syscall!(self.crypto.load_blob(
+                prefix.clone(),
+                blob_id,
+                StorageLocation::Internal,
+            )).data;
+
+            let credential = Credential::deserialize(&blob).unwrap();//map_err(|_| Error::
+
+            hprintln!("located credential {:?}", &credential).ok();
+
+            let mut credentials = CredentialList::new();
+            credentials.push(credential).unwrap();
+            credentials
         };
 
         // apply credential protection policy
@@ -874,7 +932,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
         let credential = credentials[0].clone();
         let kek = self.key_encryption_key()?.clone();
-        let _credential_id = credential.id(&mut self.crypto, &kek)?;
+        let credential_id = credential.id(&mut self.crypto, &kek)?;
 
         use ctap2::AuthenticatorDataFlags as Flags;
 
@@ -943,8 +1001,8 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         }
 
         let response = ctap2::get_assertion::Response {
-            // credential: Some(credential),
-            credential: None,
+            credential: Some(credential_id.into()),
+            // credential: None,
             auth_data: Bytes::try_from_slice(&serialized_auth_data).map_err(|_| Error::Other)?,
             signature,
             user: None,
@@ -957,7 +1015,6 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
     fn make_credential(&mut self, parameters: &ctap2::make_credential::Parameters) -> Result<ctap2::make_credential::Response> {
 
-        debug!("info! test: MC").unwrap();
         let rp_id_hash = {
             let hash = syscall!(self.crypto.hash_sha256(&parameters.rp.id.as_ref())).hash;
             // Bytes::try_from_slice(&hash)
@@ -1000,6 +1057,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         let mut _uv_requested = false;
         let _up_requested = true; // can't be toggled
 
+        info!("MC options: {:?}", &parameters.options).ok();
         if let Some(ref options) = &parameters.options {
             if Some(true) == options.rk {
                 rk_requested = true;
@@ -1104,6 +1162,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         }
 
         // 12. if `rk` is set, store or overwrite key pair, if full error KeyStoreFull
+        hprintln!("12").ok();
 
         // 12.a generate credential
         let key_parameter = match rk_requested {
@@ -1360,7 +1419,8 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         options.up = true;
         options.uv = None; // "uv" here refers to "in itself", e.g. biometric
         // options.plat = false;
-        options.client_pin = None; // not capable of PIN
+        // options.client_pin = None; // not capable of PIN
+        options.client_pin = Some(false); // not capable of PIN
         // options.client_pin = Some(true/false); // capable, is set/is not set
 
         ctap2::get_info::Response {

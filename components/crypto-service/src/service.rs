@@ -163,9 +163,11 @@ pub(crate) fn load_serialized_key<'s, S: LfsStorage>(fs: &mut FilesystemWith<'s,
     // hprintln!("sizeof<lfs_config> = {}", core::mem::size_of::<littlefs2::fs::ll::lfs_config>()).ok();
     // hprintln!("sizeof<lfs_file_t> = {}", core::mem::size_of::<littlefs2::fs::ll::lfs_file_t>()).ok();
     // hprintln!("sizeof<lfs_file_config> = {}", core::mem::size_of::<littlefs2::fs::ll::lfs_file_config>()).ok();
+    // hprintln!("opening path = {:?}", &path[..]).ok();
     let mut file = FileWith::open(&path[..], &mut alloc, fs)
         .map_err(|_| Error::FilesystemReadFailure)?;
 
+    // hprintln!("reading it").ok();
     let size = file.read(buf)
         .map_err(|_| Error::FilesystemReadFailure)?;
 
@@ -188,12 +190,12 @@ pub fn create_directories<'s, S: LfsStorage>(
     path: &[u8],
 ) -> Result<(), Error>
 {
-    hprintln!("preparing {:?}", core::str::from_utf8(path).unwrap()).ok();
+    // hprintln!("preparing {:?}", core::str::from_utf8(path).unwrap()).ok();
     for i in 0..path.len() {
         if path[i] == b'/' {
             let dir = &path[..i];
             let dir_str = core::str::from_utf8(dir).unwrap();
-            hprintln!("create dir {:?}", dir_str).ok();
+            // hprintln!("create dir {:?}", dir_str).ok();
             // fs.create_dir(dir).map_err(|_| Error::FilesystemWriteFailure)?;
             match fs.create_dir(dir) {
                 Err(littlefs2::io::Error::EntryAlreadyExisted) => {}
@@ -287,9 +289,7 @@ impl<'s, I: LfsStorage, E: LfsStorage, V: LfsStorage> TriStorage<'s, I, E, V> {
                     Err(_) => {
                         match load_serialized_key(&mut self.efs, path, &mut buf) {
                             Ok(_) => StorageLocation::External,
-                            Err(_) => {
-                                return Err(Error::NoSuchKey);
-                            }
+                            Err(_) => return Err(Error::NoSuchKey),
                         }
                     }
                 }
@@ -308,7 +308,8 @@ impl<'s, I: LfsStorage, E: LfsStorage, V: LfsStorage> TriStorage<'s, I, E, V> {
 
         let (serialized_key, location) = self.load_key_unchecked(path)?;
         if serialized_key.kind != kind {
-            return Err(Error::WrongKeyKind);
+            hprintln!("wrong key kind, expected {:?} got {:?}", &kind, &serialized_key.kind).ok();
+            Err(Error::WrongKeyKind)?;
         }
 
         key_bytes.copy_from_slice(&serialized_key.value);
@@ -415,7 +416,7 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
                 match request.mechanism {
 
                     Mechanism::P256 => mechanisms::P256::agree(self, request),
-                    _ => return Err(Error::MechanismNotAvailable),
+                    _ => Err(Error::MechanismNotAvailable),
 
                 }.map(|reply| Reply::Agree(reply))
             },
@@ -425,7 +426,7 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
 
                     Mechanism::Aes256Cbc => mechanisms::Aes256Cbc::decrypt(self, request),
                     Mechanism::Chacha8Poly1305 => mechanisms::Chacha8Poly1305::decrypt(self, request),
-                    _ => return Err(Error::MechanismNotAvailable),
+                    _ => Err(Error::MechanismNotAvailable),
 
                 }.map(|reply| Reply::Decrypt(reply))
             },
@@ -436,7 +437,7 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
                     Mechanism::Ed25519 => mechanisms::Ed25519::derive_key(self, request),
                     Mechanism::P256 => mechanisms::P256::derive_key(self, request),
                     Mechanism::Sha256 => mechanisms::Sha256::derive_key(self, request),
-                    _ => return Err(Error::MechanismNotAvailable),
+                    _ => Err(Error::MechanismNotAvailable),
 
                 }.map(|reply| Reply::DeriveKey(reply))
             },
@@ -446,7 +447,7 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
 
                     Mechanism::Ed25519 => mechanisms::Ed25519::deserialize_key(self, request),
                     Mechanism::P256 => mechanisms::P256::deserialize_key(self, request),
-                    _ => return Err(Error::MechanismNotAvailable),
+                    _ => Err(Error::MechanismNotAvailable),
 
                 }.map(|reply| Reply::DeserializeKey(reply))
             }
@@ -456,7 +457,7 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
 
                     Mechanism::Aes256Cbc => mechanisms::Aes256Cbc::encrypt(self, request),
                     Mechanism::Chacha8Poly1305 => mechanisms::Chacha8Poly1305::encrypt(self, request),
-                    _ => return Err(Error::MechanismNotAvailable),
+                    _ => Err(Error::MechanismNotAvailable),
 
                 }.map(|reply| Reply::Encrypt(reply))
             },
@@ -486,7 +487,7 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
 
                     Mechanism::Ed25519 => mechanisms::Ed25519::exists(self, request),
                     Mechanism::P256 => mechanisms::P256::exists(self, request),
-                    _ => return Err(Error::MechanismNotAvailable),
+                    _ => Err(Error::MechanismNotAvailable),
 
                 }.map(|reply| Reply::Exists(reply))
             },
@@ -505,7 +506,7 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
                 match request.mechanism {
 
                     Mechanism::Sha256 => mechanisms::Sha256::hash(self, request),
-                    _ => return Err(Error::MechanismNotAvailable),
+                    _ => Err(Error::MechanismNotAvailable),
 
                 }.map(|reply| Reply::Hash(reply))
             },
@@ -517,7 +518,7 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
                 let mut path = Bytes::<MAX_PATH_LENGTH>::new();
                 path.extend_from_slice(b"/").map_err(|_| Error::InternalError)?;
                 path.extend_from_slice(self.currently_serving.as_bytes()).map_err(|_| Error::InternalError)?;
-                if let Some(prefix) = request.prefix {
+                if let Some(prefix) = request.prefix.clone() {
                     path.extend_from_slice(b"/").map_err(|_| Error::InternalError)?;
                     path.extend_from_slice(&prefix.0).map_err(|_| Error::InternalError)?;
                 }
@@ -548,6 +549,40 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
                                     let l = filename_bytes.into_iter().position(|x| *x == b'\0').unwrap();
                                     #[cfg(feature = "semihosting")]
                                     hprintln!("first file found: {:?}", core::str::from_utf8(&filename_bytes[..l]).unwrap()).ok();
+
+                                    // check user attribute
+                                    if let Some(user_attribute) = request.user_attribute.as_ref() {
+                                        let mut path = path.clone();
+                                        path.extend_from_slice(b"/").map_err(|_| littlefs2::io::Error::NoMemory)?;
+                                        #[cfg(feature = "semihosting")]
+                                        path.extend_from_slice(&filename_bytes[..l]).map_err(|_| littlefs2::io::Error::NoMemory)?;
+
+                                        let attribute = fs.attribute(&path[..], crate::config::USER_ATTRIBUTE_NUMBER, storage)
+                                            .map_err(|e| {
+                                                info!("error getting attribute: {:?}", &e).ok();
+                                                littlefs2::io::Error::Io
+                                        })?;
+
+                                        match attribute {
+                                            None => {
+                                                #[cfg(feature = "semihosting")]
+                                                hprintln!("user attribute requested, none attached").ok();
+                                                continue;
+                                            }
+                                            Some(attribute) => {
+                                                // #[cfg(feature = "semihosting")]
+                                                // hprintln!("attribute requested: {:?}", user_attribute).ok();
+                                                // #[cfg(feature = "semihosting")]
+                                                // hprintln!("attribute present: {:?}", attribute.data()).ok();
+                                                if user_attribute != attribute.data() {
+                                                    #[cfg(feature = "semihosting")]
+                                                    hprintln!("not equal").ok();
+                                                    continue;
+                                                }
+                                            }
+                                        }
+                                    }
+
                                     return Ok(entry);
                                 }
                                 None => break,
@@ -555,20 +590,16 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
                         }
                         Err(littlefs2::io::Error::NoSuchEntry)
                     }
-                ).map_err(|_| Error::InternalError)?;
+                ).unwrap();//map_err(|_| Error::InternalError)?;
 
-                // let mut data = Message::new();
-                // data.resize_to_capacity();
-
-                // let size = match request.location {
-                //     StorageLocation::Internal => load_serialized_key(&mut self.tri.ifs, &path, &mut data),
-                //     StorageLocation::External => load_serialized_key(&mut self.tri.efs, &path, &mut data),
-                //     StorageLocation::Volatile => load_serialized_key(&mut self.tri.vfs, &path, &mut data),
-                // }?;
-
-                // data.resize_default(size).map_err(|_| Error::InternalError)?;
-
-                let unique_id = UniqueId::try_from_hex(&entry.file_name().as_bytes()).map_err(|_| Error::InternalError)?;
+                // let unique_id = UniqueId::try_from_hex(&entry.file_name().as_bytes()).map_err(|_| Error::InternalError)?;
+                let filename = entry.file_name();
+                let filename_bytes = filename.as_bytes();
+                let l = filename_bytes.into_iter().position(|x| *x == b'\0').unwrap();
+                let filename_bytes = &filename_bytes[..l];
+                hprintln!("filename bytes: {:?}", filename_bytes).ok();
+                let unique_id = UniqueId::try_from_hex(filename_bytes).unwrap();
+                hprintln!("unique id: {:?}", &unique_id).ok();
 
                 Ok(Reply::ListBlobsFirst(reply::ListBlobsFirst {
                     // maybe return size too?
@@ -598,7 +629,7 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
                         .map_err(|_| Error::EntropyMalfunction)?;
                     Ok(Reply::RandomBytes(reply::RandomBytes { bytes } ))
                 } else {
-                    return Err(Error::MechanismNotAvailable);
+                    Err(Error::MechanismNotAvailable)
                 }
             }
 
@@ -607,7 +638,7 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
 
                     Mechanism::Ed25519 => mechanisms::Ed25519::serialize_key(self, request),
                     Mechanism::P256 => mechanisms::P256::serialize_key(self, request),
-                    _ => return Err(Error::MechanismNotAvailable),
+                    _ => Err(Error::MechanismNotAvailable),
 
                 }.map(|reply| Reply::SerializeKey(reply))
             }
@@ -618,7 +649,7 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
                     Mechanism::Ed25519 => mechanisms::Ed25519::sign(self, request),
                     Mechanism::HmacSha256 => mechanisms::HmacSha256::sign(self, request),
                     Mechanism::P256 => mechanisms::P256::sign(self, request),
-                    _ => return Err(Error::MechanismNotAvailable),
+                    _ => Err(Error::MechanismNotAvailable),
 
                 }.map(|reply| Reply::Sign(reply))
             },
@@ -643,7 +674,7 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
                 match request.mechanism {
 
                     Mechanism::Chacha8Poly1305 => mechanisms::Chacha8Poly1305::unwrap_key(self, request),
-                    _ => return Err(Error::MechanismNotAvailable),
+                    _ => Err(Error::MechanismNotAvailable),
 
                 }.map(|reply| Reply::UnwrapKey(reply))
             }
@@ -653,7 +684,7 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
 
                     Mechanism::Ed25519 => mechanisms::Ed25519::verify(self, request),
                     Mechanism::P256 => mechanisms::P256::verify(self, request),
-                    _ => return Err(Error::MechanismNotAvailable),
+                    _ => Err(Error::MechanismNotAvailable),
 
                 }.map(|reply| Reply::Verify(reply))
             },
@@ -663,7 +694,7 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
 
                     Mechanism::Aes256Cbc => mechanisms::Aes256Cbc::wrap_key(self, request),
                     Mechanism::Chacha8Poly1305 => mechanisms::Chacha8Poly1305::wrap_key(self, request),
-                    _ => return Err(Error::MechanismNotAvailable),
+                    _ => Err(Error::MechanismNotAvailable),
 
                 }.map(|reply| Reply::WrapKey(reply))
             },

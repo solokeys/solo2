@@ -2,7 +2,7 @@ use crate::{Bytes, consts};
 use serde_indexed::{DeserializeIndexed, SerializeIndexed};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
-use crate::cose::P256PublicKey;
+use crate::cose::EcdhEsHkdf256PublicKey;
 
 #[derive(Clone,Debug,uDebug,Eq,PartialEq,Serialize_repr,Deserialize_repr)]
 #[repr(u8)]
@@ -34,7 +34,7 @@ pub struct Parameters {
     // Public key of platformKeyAgreementKey.
     // Must contain "alg" parameter, must not contain any other optional parameters
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub key_agreement: Option<P256PublicKey>,
+    pub key_agreement: Option<EcdhEsHkdf256PublicKey>,
 
     // 0x04
     // First 16 bytes of HMAC-SHA-256 of encrypted contents
@@ -60,7 +60,7 @@ pub struct Parameters {
 pub struct Response {
     // 0x01, like ClientPinParameters::key_agreement
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub key_agreement: Option<P256PublicKey>,
+    pub key_agreement: Option<EcdhEsHkdf256PublicKey>,
 
     // 0x02, encrypted `pinToken` using `sharedSecret`
     #[serde(skip_serializing_if = "Option::is_none")]

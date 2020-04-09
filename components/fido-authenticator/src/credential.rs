@@ -9,11 +9,12 @@ use crypto_service::{
 };
 
 pub(crate) use ctap_types::{
-    Bytes, consts, Vec,
+    Bytes, consts, String, Vec,
     // authenticator::{ctap1, ctap2, Error, Request, Response},
     authenticator::ctap2,
     ctap2::make_credential::CredentialProtectionPolicy,
     sizes::*,
+    webauthn::PublicKeyCredentialDescriptor,
 };
 
 use super::{Error, Result};
@@ -119,6 +120,19 @@ impl core::ops::Deref for Credential {
 }
 
 pub type CredentialList = Vec<Credential, ctap_types::sizes::MAX_CREDENTIAL_COUNT_IN_LIST>;
+
+impl Into<PublicKeyCredentialDescriptor> for CredentialId {
+    fn into(self) -> PublicKeyCredentialDescriptor {
+        PublicKeyCredentialDescriptor {
+            id: self.0,
+            key_type: {
+                let mut key_type = String::new();
+                key_type.push_str("public-key").unwrap();
+                key_type
+            }
+        }
+    }
+}
 
 impl Credential {
     pub fn new(

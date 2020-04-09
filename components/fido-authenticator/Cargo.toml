@@ -9,6 +9,7 @@ edition = "2018"
 [dependencies]
 # cortex-m-funnel = { version = "0.1.0-alpha.1", optional = true }
 cortex-m-funnel = { version = "0.1.0-alpha.1" }
+cortex-m-semihosting = { version = "0.3.5", optional = true }
 ctap-types = { path = "../ctap-types" }
 crypto-service = { path = "../crypto-service" } # , default-features = false }
 # embedded-hal = { version = "0.2", features = ["unproven"] }
@@ -20,3 +21,4 @@ ufmt = "0.1.0"
 
 [features]
 debug-logs = []
+semihosting = ["cortex-m-semihosting"]

@@ -89,6 +89,24 @@ DeserializeKey<'a, 's, R, I, E, V> for super::P256
                 public_key
             }
 
+            KeySerialization::EcdhEsHkdf256 => {
+                // TODO: this should all be done upstream
+                let cose_public_key: ctap_types::cose::EcdhEsHkdf256PublicKey = crate::cbor_deserialize(
+                    &request.serialized_key).map_err(|_| Error::CborError)?;
+                let mut serialized_key = [0u8; 64];
+                if cose_public_key.x.len() != 32 || cose_public_key.y.len() != 32 {
+                    return Err(Error::InvalidSerializedKey);
+                }
+
+                serialized_key[..32].copy_from_slice(&cose_public_key.x);
+                serialized_key[32..].copy_from_slice(&cose_public_key.y);
+
+                let public_key = nisty::PublicKey::try_from(&serialized_key)
+                    .map_err(|_| Error::InvalidSerializedKey)?;
+
+                public_key
+            }
+
             KeySerialization::Raw => {
                 if request.serialized_key.len() != 64 {
                     return Err(Error::InvalidSerializedKey);
@@ -160,6 +178,13 @@ SerializeKey<'a, 's, R, I, E, V> for super::P256
 
         let mut serialized_key = Message::new();
         match request.format {
+            KeySerialization::EcdhEsHkdf256 => {
+                let cose_pk = ctap_types::cose::EcdhEsHkdf256PublicKey {
+                    x: Bytes::try_from_slice(&public_key.x_coordinate()).unwrap(),
+                    y: Bytes::try_from_slice(&public_key.y_coordinate()).unwrap(),
+                };
+                crate::cbor_serialize_bytes(&cose_pk, &mut serialized_key).map_err(|_| Error::CborError)?;
+            }
             KeySerialization::Cose => {
                 let cose_pk = ctap_types::cose::P256PublicKey {
                     x: Bytes::try_from_slice(&public_key.x_coordinate()).unwrap(),

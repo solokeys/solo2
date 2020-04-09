@@ -68,6 +68,8 @@ log-semihosting = ["cortex-m-semihosting"]
 
 trace-crypto-service-ram = ["crypto-service/deep-semihosting-logs"]
 crypto-service-semihosting = ["crypto-service/semihosting"]
+fido-authenticator-semihosting = ["fido-authenticator/semihosting"]
+semihost-raw-responses = ["usbd-ctaphid/semihost-responses"]
 
 # patch dependencies like so to test local changes
 
