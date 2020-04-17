@@ -1,6 +1,3 @@
-#[cfg(feature = "semihosting")]
-use cortex_m_semihosting::hprintln;
-
 use crate::api::*;
 // use crate::config::*;
 use crate::error::Error;
@@ -60,8 +57,6 @@ WrapKey<'a, 's, R, I, E, V> for super::Aes256Cbc
         let path = resources.prepare_path_for_key(KeyType::Secret, &request.key.object_id)?;
         let (serialized_key, _location) = resources.load_key_unchecked(&path)?;
 
-        let mut message = Message::new();
-        // crate::cbor_serialize_bytes(&serialized_key, &mut message).map_err(|_| Error::CborError)?;
         let message: Message = serialized_key.value.try_convert_into().map_err(|_| Error::InternalError)?;
 
         let encryption_request = request::Encrypt {

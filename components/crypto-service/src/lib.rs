@@ -26,6 +26,7 @@ pub mod error;
 pub mod mechanisms;
 pub mod pipe;
 pub mod service;
+pub mod storage;
 pub mod types;
 
 pub use api::Reply;

@@ -23,6 +23,7 @@ impl crypto_service::pipe::Syscall for CryptoSyscall {
     }
 }
 
+const_ram_storage!(InternalStorage2, 8192);
 const_ram_storage!(InternalStorage, 8192);
 const_ram_storage!(ExternalStorage, 8192);
 const_ram_storage!(VolatileStorage, 8192);

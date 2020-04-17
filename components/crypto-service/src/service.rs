@@ -1,107 +1,45 @@
-use core::convert::TryFrom;
-
 #[cfg(feature = "semihosting")]
 use cortex_m_semihosting::hprintln;
+pub use embedded_hal::blocking::rng::Read as RngRead;
 use heapless_bytes::Bytes;
-use serde_indexed::{DeserializeIndexed, SerializeIndexed};
+use littlefs2::path::Path;
+
 
 use crate::api::*;
 use crate::config::*;
 use crate::error::Error;
 use crate::mechanisms;
+use crate::storage::*;
 use crate::types::*;
 
 pub use crate::pipe::ServiceEndpoint;
 
-pub use embedded_hal::blocking::rng::Read as RngRead;
-
 // #[macro_use]
 // mod macros;
 
-pub trait Agree<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> {
-    fn agree(_resources: &mut ServiceResources<'a, 's, R, I, E, V>, _request: request::Agree)
-    -> Result<reply::Agree, Error> { Err(Error::MechanismNotAvailable) }
-}
+macro_rules! rpc_trait { ($($Name:ident, $name:ident,)*) => { $(
 
-pub trait Decrypt<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> {
-    fn decrypt(_resources: &mut ServiceResources<'a, 's, R, I, E, V>, _request: request::Decrypt)
-    -> Result<reply::Decrypt, Error> { Err(Error::MechanismNotAvailable) }
-}
-
-pub trait DeriveKey<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> {
-    fn derive_key(_resources: &mut ServiceResources<'a, 's, R, I, E, V>, _request: request::DeriveKey)
-    -> Result<reply::DeriveKey, Error> { Err(Error::MechanismNotAvailable) }
-}
-
-pub trait DeserializeKey<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> {
-    fn deserialize_key(_resources: &mut ServiceResources<'a, 's, R, I, E, V>, _request: request::DeserializeKey)
-    -> Result<reply::DeserializeKey, Error> { Err(Error::MechanismNotAvailable) }
-}
-
-pub trait Encrypt<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> {
-    fn encrypt(_resources: &mut ServiceResources<'a, 's, R, I, E, V>, _request: request::Encrypt)
-    -> Result<reply::Encrypt, Error> { Err(Error::MechanismNotAvailable) }
-}
-
-pub trait Exists<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> {
-    fn exists(_resources: &mut ServiceResources<'a, 's, R, I, E, V>, _request: request::Exists)
-    -> Result<reply::Exists, Error> { Err(Error::MechanismNotAvailable) }
-}
-
-pub trait GenerateKey<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> {
-    fn generate_key(_resources: &mut ServiceResources<'a, 's, R, I, E, V>, _request: request::GenerateKey)
-    -> Result<reply::GenerateKey, Error> { Err(Error::MechanismNotAvailable) }
-}
-
-pub trait Hash<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> {
-    fn hash(_resources: &mut ServiceResources<'a, 's, R, I, E, V>, _request: request::Hash)
-    -> Result<reply::Hash, Error> { Err(Error::MechanismNotAvailable) }
-}
-
-pub trait SerializeKey<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> {
-    fn serialize_key(_resources: &mut ServiceResources<'a, 's, R, I, E, V>, _request: request::SerializeKey)
-    -> Result<reply::SerializeKey, Error> { Err(Error::MechanismNotAvailable) }
-}
-
-pub trait Sign<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> {
-    fn sign(_resources: &mut ServiceResources<'a, 's, R, I, E, V>, _request: request::Sign)
-    -> Result<reply::Sign, Error> { Err(Error::MechanismNotAvailable) }
-}
-
-pub trait UnwrapKey<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> {
-    fn unwrap_key(_resources: &mut ServiceResources<'a, 's, R, I, E, V>, _request: request::UnwrapKey)
-    -> Result<reply::UnwrapKey, Error> { Err(Error::MechanismNotAvailable) }
-}
-
-pub trait Verify<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> {
-    fn verify(_resources: &mut ServiceResources<'a, 's, R, I, E, V>, _request: request::Verify)
-    -> Result<reply::Verify, Error> { Err(Error::MechanismNotAvailable) }
-}
-
-// TODO: can the default implementation be implemented in terms of Encrypt?
-pub trait WrapKey<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> {
-    fn wrap_key(_resources: &mut ServiceResources<'a, 's, R, I, E, V>, _request: request::WrapKey)
-    -> Result<reply::WrapKey, Error> { Err(Error::MechanismNotAvailable) }
-}
-
-#[derive(Clone,Debug,Eq,PartialEq,SerializeIndexed,DeserializeIndexed)]
-// #[derive(Clone,Debug,Eq,PartialEq,Serialize,Deserialize)]
-// #[serde(rename_all = "camelCase")]
-// #[serde_indexed(offset = 1)]
-pub struct SerializedKey {
-   // r#type: KeyType,
-   pub kind: KeyKind,
-   pub value: Bytes<MAX_SERIALIZED_KEY_LENGTH>,
-}
-
-impl<'a> TryFrom<(KeyKind, &'a [u8])> for SerializedKey {
-    type Error = Error;
-    fn try_from(from: (KeyKind, &'a [u8])) -> Result<Self, Error> {
-        Ok(SerializedKey {
-            kind: from.0,
-            value: Bytes::try_from_slice(from.1).map_err(|_| Error::InternalError)?,
-        })
+    pub trait $Name<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> {
+        fn $name(_resources: &mut ServiceResources<'a, 's, R, I, E, V>, _request: request::$Name)
+        -> Result<reply::$Name, Error> { Err(Error::MechanismNotAvailable) }
     }
+)* } }
+
+rpc_trait! {
+    Agree, agree,
+    Decrypt, decrypt,
+    DeriveKey, derive_key,
+    DeserializeKey, deserialize_key,
+    Encrypt, encrypt,
+    Exists, exists,
+    GenerateKey, generate_key,
+    Hash, hash,
+    SerializeKey, serialize_key,
+    Sign, sign,
+    UnwrapKey, unwrap_key,
+    Verify, verify,
+    // TODO: can the default implementation be implemented in terms of Encrypt?
+    WrapKey, wrap_key,
 }
 
 // pub fn cbor_serialize<T: serde::Serialize>(
@@ -130,15 +68,6 @@ impl<'a> TryFrom<(KeyKind, &'a [u8])> for SerializedKey {
 // let (mut fido_endpoint, mut fido2_client) = Client::new("fido2");
 // let (mut piv_endpoint, mut piv_client) = Client::new("piv");
 
-pub struct TriStorage<'s, I: LfsStorage, E: LfsStorage, V: LfsStorage> {
-    /// internal FLASH storage
-    ifs: FilesystemWith<'s, 's, I>,
-    /// external FLASH storage
-    efs: FilesystemWith<'s, 's, E>,
-    /// volatile RAM storage
-    vfs: FilesystemWith<'s, 's, V>,
-}
-
 pub struct ServiceResources<'a, 's, R, I, E, V>
 where
     R: RngRead,
@@ -151,31 +80,39 @@ where
     currently_serving: &'a str,
 }
 
-pub(crate) fn load_serialized_key<'s, S: LfsStorage>(fs: &mut FilesystemWith<'s, 's, S>, path: &[u8], buf: &mut [u8]) -> Result<usize, Error> {
+impl<'s, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceResources<'_, 's, R, I, E, V> {
 
-    use littlefs2::fs::{File, FileWith};
-    use littlefs2::io::ReadWith;
+    pub fn new(
+        rng: R,
+        ifs: Filesystem<'s, I>,
+        efs: Filesystem<'s, E>,
+        vfs: Filesystem<'s, V>,
+    ) -> Self {
 
-    let mut alloc = File::allocate();
-    // hprintln!("sizeof<FileAllocation> = {}", core::mem::size_of::<littlefs2::fs::FileAllocation<S>>()).ok();
-    // hprintln!("sizeof<FilesystemAllocation> = {}", core::mem::size_of::<littlefs2::fs::FilesystemAllocation<S>>()).ok();
-    // hprintln!("sizeof<lfs_t> = {}", core::mem::size_of::<littlefs2::fs::ll::lfs_t>()).ok();
-    // hprintln!("sizeof<lfs_config> = {}", core::mem::size_of::<littlefs2::fs::ll::lfs_config>()).ok();
-    // hprintln!("sizeof<lfs_file_t> = {}", core::mem::size_of::<littlefs2::fs::ll::lfs_file_t>()).ok();
-    // hprintln!("sizeof<lfs_file_config> = {}", core::mem::size_of::<littlefs2::fs::ll::lfs_file_config>()).ok();
-    // hprintln!("opening path = {:?}", &path[..]).ok();
-    let mut file = FileWith::open(&path[..], &mut alloc, fs)
-        .map_err(|_| Error::FilesystemReadFailure)?;
-
-    // hprintln!("reading it").ok();
-    let size = file.read(buf)
-        .map_err(|_| Error::FilesystemReadFailure)?;
-
-    Ok(size)
+        Self { rng, tri: TriStorage { ifs, efs, vfs }, currently_serving: &"" }
+    }
 }
 
+// pub(crate) fn load_serialized_key<'s, S: LfsStorage>(fs: &mut Filesystem<'s, S>, path: &[u8], buf: &mut [u8]) -> Result<usize, Error> {
+
+//     use littlefs2::fs::File;
+//     use littlefs2::io::Read;
+
+//     let
+//     fs.open_file_and_then(path, |file| {
+//     let mut alloc = File::allocate();
+//     let mut file = File::open(&path[..], &mut alloc, fs)
+//         .map_err(|_| Error::FilesystemReadFailure)?;
+
+//     // hprintln!("reading it").ok();
+//     let size = file.read(buf)
+//         .map_err(|_| Error::FilesystemReadFailure)?;
+
+//     Ok(size)
+// }
+
 // pub fn find_next(
-//     fs: &mut FilesystemWith<'s, 's, S>,
+//     fs: &mut Filesystem<'s, S>,
 //     dir: &[u8],
 //     user_attribute: Option<UserAttribute>,
 //     previous: Option<ObjectHandle>,
@@ -184,167 +121,6 @@ pub(crate) fn load_serialized_key<'s, S: LfsStorage>(fs: &mut FilesystemWith<'s,
 // {
 //     let mut read_dir = fs.read_dir(dir, &mut storage).unwrap();
 // }
-
-pub fn create_directories<'s, S: LfsStorage>(
-    fs: &mut FilesystemWith<'s, 's, S>,
-    path: &[u8],
-) -> Result<(), Error>
-{
-    // hprintln!("preparing {:?}", core::str::from_utf8(path).unwrap()).ok();
-    for i in 0..path.len() {
-        if path[i] == b'/' {
-            let dir = &path[..i];
-            let dir_str = core::str::from_utf8(dir).unwrap();
-            // hprintln!("create dir {:?}", dir_str).ok();
-            // fs.create_dir(dir).map_err(|_| Error::FilesystemWriteFailure)?;
-            match fs.create_dir(dir) {
-                Err(littlefs2::io::Error::EntryAlreadyExisted) => {}
-                Ok(()) => {}
-                error => { panic!("{:?}", &error); }
-            }
-        }
-    }
-    Ok(())
-}
-
-pub fn store_serialized_key<'s, S: LfsStorage>(
-    fs: &mut FilesystemWith<'s, 's, S>,
-    path: &[u8], buf: &[u8],
-    user_attribute: Option<UserAttribute>,
-)
-    -> Result<(), Error>
-{
-    use littlefs2::fs::{Attribute, File, FileWith};
-
-    // create directories if missing
-    create_directories(fs, path)?;
-
-    let mut alloc = File::allocate();
-    {
-        let mut file = FileWith::create(&path[..], &mut alloc, fs)
-            .map_err(|_| Error::FilesystemWriteFailure)?;
-        use littlefs2::io::WriteWith;
-        file.write(&buf)
-            .map_err(|_| Error::FilesystemWriteFailure)?;
-        file.sync()
-            .map_err(|_| Error::FilesystemWriteFailure)?;
-    }
-
-    if let Some(user_attribute) = user_attribute.as_ref() {
-        let mut attribute = Attribute::new(crate::config::USER_ATTRIBUTE_NUMBER);
-        attribute.set_data(user_attribute);
-        fs.set_attribute(path, &attribute).map_err(|e| {
-            info!("error setting attribute: {:?}", &e).ok();
-            Error::FilesystemWriteFailure
-        })?;
-    }
-
-    // file.close()
-    //     .map_err(|_| Error::FilesystemWriteFailure)?;
-    // #[cfg(test)]
-    // println!("closed file");
-
-    Ok(())
-}
-
-pub(crate) fn delete<'s, S: LfsStorage>(fs: &mut FilesystemWith<'s, 's, S>, path: &[u8]) -> bool {
-
-    match fs.remove(path) {
-        Ok(_) => true,
-        Err(_) => false,
-    }
-}
-
-impl<'s, I: LfsStorage, E: LfsStorage, V: LfsStorage> TriStorage<'s, I, E, V> {
-
-    pub fn delete_key(&mut self, path: &[u8]) -> bool {
-
-        // try each storage backend in turn, attempting to locate the key
-        match delete(&mut self.vfs, path) {
-            true => true,
-            false => {
-                match delete(&mut self.ifs, path) {
-                    true => true,
-                    false => {
-                        delete(&mut self.efs, path)
-                    }
-                }
-            }
-        }
-    }
-
-    pub fn load_key_unchecked(&mut self, path: &[u8]) -> Result<(SerializedKey, StorageLocation), Error> {
-        // #[cfg(test)]
-        // // actually safe, as path is ASCII by construction
-        // println!("loading from file {:?}", unsafe { core::str::from_utf8_unchecked(&path[..]) });
-
-        let mut buf = [0u8; 128];
-
-        // try each storage backend in turn, attempting to locate the key
-        let location = match load_serialized_key(&mut self.vfs, path, &mut buf) {
-            Ok(_) => StorageLocation::Volatile,
-            Err(_) => {
-                match load_serialized_key(&mut self.ifs, path, &mut buf) {
-                    Ok(_) => StorageLocation::Internal,
-                    Err(_) => {
-                        match load_serialized_key(&mut self.efs, path, &mut buf) {
-                            Ok(_) => StorageLocation::External,
-                            Err(_) => return Err(Error::NoSuchKey),
-                        }
-                    }
-                }
-            }
-        };
-
-        let serialized_key: SerializedKey = crate::cbor_deserialize(&buf).map_err(|_| Error::CborError)?;
-        Ok((serialized_key, location))
-
-    }
-
-    pub fn load_key(&mut self, path: &[u8], kind: KeyKind, key_bytes: &mut [u8]) -> Result<StorageLocation, Error> {
-        // #[cfg(test)]
-        // // actually safe, as path is ASCII by construction
-        // println!("loading from file {:?}", unsafe { core::str::from_utf8_unchecked(&path[..]) });
-
-        let (serialized_key, location) = self.load_key_unchecked(path)?;
-        if serialized_key.kind != kind {
-            hprintln!("wrong key kind, expected {:?} got {:?}", &kind, &serialized_key.kind).ok();
-            Err(Error::WrongKeyKind)?;
-        }
-
-        key_bytes.copy_from_slice(&serialized_key.value);
-        Ok(location)
-    }
-
-    // TODO: in the case of desktop/ram storage:
-    // - using file.sync (without file.close) leads to an endless loop
-    // - this loop happens inside `lfs_dir_commit`, namely inside its first for loop
-    //   https://github.com/ARMmbed/littlefs/blob/v2.1.4/lfs.c#L1680-L1694
-    // - the `if` condition is never fulfilled, it seems f->next continues "forever"
-    //   through whatever lfs->mlist is.
-    //
-    // see also https://github.com/ARMmbed/littlefs/issues/145
-    //
-    // OUTCOME: either ensure calling `.close()`, or patch the call in a `drop` for FileWith.
-    //
-    pub fn store_key(&mut self, persistence: StorageLocation, path: &[u8], kind: KeyKind, key_bytes: &[u8]) -> Result<(), Error> {
-        // actually safe, as path is ASCII by construction
-        // #[cfg(test)]
-        // println!("storing in file {:?}", unsafe { core::str::from_utf8_unchecked(&path[..]) });
-
-        let serialized_key = SerializedKey::try_from((kind, key_bytes))?;
-        let mut buf = [0u8; 128];
-        crate::cbor_serialize(&serialized_key, &mut buf).map_err(|_| Error::CborError)?;
-
-        match persistence {
-            StorageLocation::Internal => store_serialized_key(&mut self.ifs, path, &buf, None),
-            StorageLocation::External => store_serialized_key(&mut self.efs, path, &buf, None),
-            StorageLocation::Volatile => store_serialized_key(&mut self.vfs, path, &buf, None),
-        }
-
-    }
-
-}
 
 pub struct Service<'a, 's, R, I, E, V>
 where
@@ -360,17 +136,7 @@ where
 // need to be able to send crypto service to an interrupt handler
 unsafe impl<R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> Send for Service<'_, '_, R, I, E, V> {}
 
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceResources<'a, 's, R, I, E, V> {
-
-    pub fn try_new(
-        rng: R,
-        ifs: FilesystemWith<'s, 's, I>,
-        efs: FilesystemWith<'s, 's, E>,
-        vfs: FilesystemWith<'s, 's, V>,
-    ) -> Result<Self, Error> {
-
-        Ok(Self { rng, tri: TriStorage { ifs, efs, vfs }, currently_serving: &"" })
-    }
+impl<'a, 'c, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceResources<'a, 'c, R, I, E, V> {
 
     pub fn load_key_unchecked(&mut self, path: &[u8]) -> Result<(SerializedKey, StorageLocation), Error> {
         self.tri.load_key_unchecked(path)
@@ -512,93 +278,65 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
             },
 
             Request::ListBlobsFirst(request) => {
-                let path = self.blob_path(&request.prefix, None)?;
                 // TODO: ergonooomics
 
-                let mut path = Bytes::<MAX_PATH_LENGTH>::new();
-                path.extend_from_slice(b"/").map_err(|_| Error::InternalError)?;
-                path.extend_from_slice(self.currently_serving.as_bytes()).map_err(|_| Error::InternalError)?;
+                let mut path: Path<I> = Path::new(b"/");//Bytes::<MAX_PATH_LENGTH>::new();
+                hprintln!("current: {:?}", &self.currently_serving);
+                path.push(self.currently_serving);
+
+                hprintln!("prefix: {:?}", &request.prefix);
                 if let Some(prefix) = request.prefix.clone() {
-                    path.extend_from_slice(b"/").map_err(|_| Error::InternalError)?;
-                    path.extend_from_slice(&prefix.0).map_err(|_| Error::InternalError)?;
+                    path.push(&prefix.0[..]);
                 }
 
                 #[cfg(feature = "semihosting")]
                 hprintln!("listing blobs in {:?}", &path).ok();
 
-                let entry = self.tri.ifs.within(
-                    |fs, storage| -> littlefs2::io::Result<littlefs2::fs::DirEntry<I>> {
-                        let mut read_dir = fs.read_dir(&path[..], storage)?;
-                        // "desugared iterator"
-                        loop {
-                            match read_dir.next(fs, storage) {
-                                Some(entry) => {
-                                    let entry = entry?;
-                                    if entry.file_type().is_dir() {
-                                        // no filesystem walking here
-                                        let filename = entry.file_name();
-                                        let filename_bytes = filename.as_bytes();
-                                        let l = filename_bytes.into_iter().position(|x| *x == b'\0').unwrap();
-                                        #[cfg(feature = "semihosting")]
-                                        hprintln!("skipping subdirectory {:?}", core::str::from_utf8(&filename_bytes[..l]).unwrap()).ok();
+                let fs = &self.tri.ifs;
+
+                let entry = fs.read_dir_and_then(&path[..], |dir| {
+                    for entry in dir {
+                        let entry = entry.unwrap();
+                        // let entry = entry?;//.map_err(|_| Error::InternalError)?;
+                        if entry.file_type().is_dir() {
+                            #[cfg(feature = "semihosting")]
+                            hprintln!("a skipping subdirectory {:?}", &entry.file_name()).ok();
+                            continue;
+                        }
+
+                        hprintln!("done skipping");
+
+                        let name = entry.file_name();
+                        #[cfg(feature = "semihosting")]
+                        hprintln!("first file found: {:?}", core::str::from_utf8(&name[..]).unwrap()).ok();
+
+                        if let Some(user_attribute) = request.user_attribute.as_ref() {
+                            let mut path = path.clone();
+                            path.push(&name[..]);
+                            let attribute = fs.attribute(&path[..], crate::config::USER_ATTRIBUTE_NUMBER)
+                                .map_err(|e| {
+                                    info!("error getting attribute: {:?}", &e).ok();
+                                    littlefs2::io::Error::Io
+                                }
+                            )?;
+
+                            match attribute {
+                                None => continue,
+                                Some(attribute) => {
+                                    if user_attribute != attribute.data() {
                                         continue;
                                     }
-
-                                    let filename = entry.file_name();
-                                    let filename_bytes = filename.as_bytes();
-                                    let l = filename_bytes.into_iter().position(|x| *x == b'\0').unwrap();
-                                    #[cfg(feature = "semihosting")]
-                                    hprintln!("first file found: {:?}", core::str::from_utf8(&filename_bytes[..l]).unwrap()).ok();
-
-                                    // check user attribute
-                                    if let Some(user_attribute) = request.user_attribute.as_ref() {
-                                        let mut path = path.clone();
-                                        path.extend_from_slice(b"/").map_err(|_| littlefs2::io::Error::NoMemory)?;
-                                        #[cfg(feature = "semihosting")]
-                                        path.extend_from_slice(&filename_bytes[..l]).map_err(|_| littlefs2::io::Error::NoMemory)?;
-
-                                        let attribute = fs.attribute(&path[..], crate::config::USER_ATTRIBUTE_NUMBER, storage)
-                                            .map_err(|e| {
-                                                info!("error getting attribute: {:?}", &e).ok();
-                                                littlefs2::io::Error::Io
-                                        })?;
-
-                                        match attribute {
-                                            None => {
-                                                #[cfg(feature = "semihosting")]
-                                                hprintln!("user attribute requested, none attached").ok();
-                                                continue;
-                                            }
-                                            Some(attribute) => {
-                                                // #[cfg(feature = "semihosting")]
-                                                // hprintln!("attribute requested: {:?}", user_attribute).ok();
-                                                // #[cfg(feature = "semihosting")]
-                                                // hprintln!("attribute present: {:?}", attribute.data()).ok();
-                                                if user_attribute != attribute.data() {
-                                                    #[cfg(feature = "semihosting")]
-                                                    hprintln!("not equal").ok();
-                                                    continue;
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    return Ok(entry);
                                 }
-                                None => break,
                             }
+                            return Ok(entry)
                         }
-                        Err(littlefs2::io::Error::NoSuchEntry)
                     }
-                ).unwrap();//map_err(|_| Error::InternalError)?;
 
-                // let unique_id = UniqueId::try_from_hex(&entry.file_name().as_bytes()).map_err(|_| Error::InternalError)?;
-                let filename = entry.file_name();
-                let filename_bytes = filename.as_bytes();
-                let l = filename_bytes.into_iter().position(|x| *x == b'\0').unwrap();
-                let filename_bytes = &filename_bytes[..l];
-                hprintln!("filename bytes: {:?}", filename_bytes).ok();
-                let unique_id = UniqueId::try_from_hex(filename_bytes).unwrap();
+                    Err(littlefs2::io::Error::NoSuchEntry)
+
+                }).map_err(|_| Error::InternalError)?;
+
+                let unique_id = UniqueId::try_from_hex(&entry.file_name()).unwrap();
                 hprintln!("unique id: {:?}", &unique_id).ok();
 
                 Ok(Reply::ListBlobsFirst(reply::ListBlobsFirst {
@@ -612,12 +350,12 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
                 let path = self.blob_path(&request.prefix, Some(&request.id.object_id))?;
                 let mut data = Message::new();
                 data.resize_to_capacity();
-                let size = match request.location {
-                    StorageLocation::Internal => load_serialized_key(&mut self.tri.ifs, &path, &mut data),
-                    StorageLocation::External => load_serialized_key(&mut self.tri.efs, &path, &mut data),
-                    StorageLocation::Volatile => load_serialized_key(&mut self.tri.vfs, &path, &mut data),
-                }?;
-                data.resize_default(size).map_err(|_| Error::InternalError)?;
+                let data: Message = match request.location {
+                    StorageLocation::Internal => self.tri.ifs.read(&path[..]),
+                    StorageLocation::External => self.tri.efs.read(&path[..]),
+                    StorageLocation::Volatile => self.tri.vfs.read(&path[..]),
+                }.map_err(|_| Error::InternalError)?.into();
+                // data.resize_default(size).map_err(|_| Error::InternalError)?;
                 Ok(Reply::LoadBlob(reply::LoadBlob { data } ))
             }
 
@@ -736,7 +474,6 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
         -> Result<Bytes<MAX_PATH_LENGTH>, Error> {
         let mut path = Bytes::<MAX_PATH_LENGTH>::new();
 
-        path.extend_from_slice(b"/").map_err(|_| Error::InternalError)?;
         path.extend_from_slice(self.currently_serving.as_bytes()).map_err(|_| Error::InternalError)?;
         path.extend_from_slice(b"/").map_err(|_| Error::InternalError)?;
 
@@ -773,19 +510,22 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
 
 }
 
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> Service<'a, 's, R, I, E, V> {
+impl<'s, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> Service<'_, 's, R, I, E, V> {
 
     pub fn new(
         rng: R,
-        internal_storage: FilesystemWith<'s, 's, I>,
-        external_storage: FilesystemWith<'s, 's, E>,
-        volatile_storage: FilesystemWith<'s, 's, V>,
+        internal_storage: Filesystem<'s, I>,
+        external_storage: Filesystem<'s, E>,
+        volatile_storage: Filesystem<'s, V>,
     )
-        -> Result<Self, Error>
+        -> Self
     {
-        let resources = ServiceResources::try_new(rng, internal_storage, external_storage, volatile_storage)?;
-        Ok(Self { eps: Vec::new(), resources, })
+        let resources = ServiceResources::new(rng, internal_storage, external_storage, volatile_storage);
+        Self { eps: Vec::new(), resources }
     }
+}
+
+impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> Service<'a, 's, R, I, E, V> {
 
     pub fn add_endpoint(&mut self, ep: ServiceEndpoint<'a>) -> Result<(), ServiceEndpoint> {
         self.eps.push(ep)

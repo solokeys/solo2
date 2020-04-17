@@ -11,7 +11,7 @@ pub use heapless::{
 pub use heapless_bytes::Bytes;
 
 pub use littlefs2::{
-    fs::{Filesystem, FilesystemWith},
+    fs::Filesystem,
     driver::Storage as LfsStorage,
     io::Result as LfsResult,
 };
@@ -352,11 +352,11 @@ impl UniqueId {
         // let maybe_bytes = <[u8; 16]>::from_hex(hex).map_err(|e| ());
         // maybe_bytes.map(|bytes| Self(Bytes::try_from_slice(&bytes).unwrap()))
         if (hex.len() & 1) == 1 {
-            panic!("hex len & 1 =  {}", hex.len() & 1);
+            // panic!("hex len & 1 =  {}", hex.len() & 1);
             return Err(());
         }
         if hex.len() > 32 {
-            panic!("hex len {}", hex.len());
+            // panic!("hex len {}", hex.len());
             return Err(());
         }
         // let hex = core::str::from_utf8(hex).map_err(|e| ())?;

@@ -22,7 +22,7 @@ ctap-types = { path = "../ctap-types" }
 embedded-hal = { version = "0.2.3", features = ["unproven"] }
 generic-array = "0.12.3"  # "0.13.2"
 # generic-array = { version = "0.13.2", default-features = false }
-heapless = "0.5.3"
+heapless = "0.5.4"
 hmac = "0.7.1"
 serde = { version = "1.0", default-features = false }
 serde_cbor = { version = "0.11.0", default-features = false }
@@ -79,6 +79,9 @@ hmac-sha256 = []
 p256 = []
 sha256 = []
 trng = []
+
+[patch.crates-io]
+heapless = { path = "../../heapless" }
 
 # [patch."https://github.com/nickray/littlefs2".littlefs2]
 # path = "../../../littlefs2"

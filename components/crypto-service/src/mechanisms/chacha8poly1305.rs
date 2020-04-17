@@ -4,6 +4,7 @@ use crate::api::*;
 // use crate::config::*;
 use crate::error::Error;
 use crate::service::*;
+use crate::storage::*;
 use crate::types::*;
 
 // TODO: The non-detached versions seem better.

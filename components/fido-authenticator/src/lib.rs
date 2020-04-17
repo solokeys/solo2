@@ -52,7 +52,8 @@ macro_rules! syscall {
         let mut future_result = $pre_future_result.expect("no client error");
         loop {
             match future_result.poll() {
-                core::task::Poll::Ready(result) => { break result.expect("no errors"); },
+                // core::task::Poll::Ready(result) => { break result.expect("no errors"); },
+                core::task::Poll::Ready(result) => { break result.unwrap(); },
                 core::task::Poll::Pending => {},
             }
         }
