@@ -7,13 +7,14 @@ use crate::api::*;
 // use crate::config::*;
 use crate::error::Error;
 use crate::service::*;
+use crate::storage::*;
 use crate::types::*;
 
 #[cfg(feature = "hmac-sha256")]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-Sign<'a, 's, R, I, E, V> for super::HmacSha256
+impl<R: RngRead, S: Store>
+Sign<'_, R, S> for super::HmacSha256
 {
-    fn sign(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::Sign)
+    fn sign(resources: &mut ServiceResources<'_, R, S>, request: request::Sign)
         -> Result<reply::Sign, Error>
     {
         use sha2::Sha256;
@@ -53,10 +54,10 @@ Sign<'a, 's, R, I, E, V> for super::HmacSha256
 }
 
 #[cfg(feature = "hmac-sha256")]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-GenerateKey<'a, 's, R, I, E, V> for super::HmacSha256
+impl<R: RngRead, S: Store>
+GenerateKey<'_, R, S> for super::HmacSha256
 {
-    fn generate_key(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::GenerateKey)
+    fn generate_key(resources: &mut ServiceResources<'_, R, S>, request: request::GenerateKey)
         -> Result<reply::GenerateKey, Error>
     {
         let mut seed = [0u8; 16];
@@ -80,5 +81,5 @@ GenerateKey<'a, 's, R, I, E, V> for super::HmacSha256
 
 
 #[cfg(not(feature = "hmac-sha256"))]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-Sign<'a, 's, R, I, E, V> for super::HmacSha256 {}
+impl<R: RngRead, S: Store>
+Sign<'_, R, S> for super::HmacSha256 {}

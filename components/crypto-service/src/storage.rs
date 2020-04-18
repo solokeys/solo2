@@ -8,26 +8,6 @@ use crate::config::*;
 use crate::error::Error;
 use crate::types::*;
 
-// pub struct Efs<S: 'static + LfsStorage> {
-//     fs: &'static mut S,
-// }
-
-// impl<S: 'static + LfsStorage> Efs<S> {
-//     pub fn new(fs: &'static mut S) -> Self {
-//         Self { fs }
-//     }
-// }
-
-// pub struct Vfs<S: 'static + LfsStorage> {
-//     fs: &'static mut S,
-// }
-
-// impl<S: 'static + LfsStorage> Vfs<S> {
-//     pub fn new(fs: &'static mut S) -> Self {
-//         Self { fs }
-//     }
-// }
-
 //#[doc(hidden)]
 //#[derive(Clone, Copy)]
 //pub struct NotSendOrSync {
@@ -49,11 +29,11 @@ use crate::types::*;
 
 pub unsafe trait Store: Copy {
     type I: 'static + LfsStorage;
-    // type E: 'static + LfsStorage;
-    // type V: 'static + LfsStorage;
+    type E: 'static + LfsStorage;
+    type V: 'static + LfsStorage;
     fn ifs(self) -> &'static Fs<Self::I>;
-    // fn efs(self) -> &'static Fs<Self::E>;
-    // fn vfs(self) -> &'static Fs<Self::V>;
+    fn efs(self) -> &'static Fs<Self::E>;
+    fn vfs(self) -> &'static Fs<Self::V>;
 }
 
 pub struct Fs<S: 'static + LfsStorage> {
@@ -76,7 +56,9 @@ impl<S: 'static + LfsStorage> Fs<S> {
 #[macro_export]
 macro_rules! store { (
     $store:ident,
-    $Ifs:ty
+    Internal: $Ifs:ty,
+    External: $Efs:ty,
+    Volatile: $Vfs:ty
 ) => {
     #[derive(Clone, Copy)]
     pub struct $store {
@@ -86,11 +68,17 @@ macro_rules! store { (
 
     unsafe impl $crate::storage::Store for $store {
         type I = $Ifs;
-        // type I = $Efs;
-        // type I = $Ifs;
+        type E = $Efs;
+        type V = $Vfs;
 
         fn ifs(self) -> &'static $crate::storage::Fs<$Ifs> {
             unsafe { &*Self::ifs_ptr() }
+        }
+        fn efs(self) -> &'static $crate::storage::Fs<$Efs> {
+            unsafe { &*Self::efs_ptr() }
+        }
+        fn vfs(self) -> &'static $crate::storage::Fs<$Vfs> {
+            unsafe { &*Self::vfs_ptr() }
         }
     }
 
@@ -119,10 +107,29 @@ macro_rules! store { (
             unsafe { IFS.as_mut_ptr() }
         }
 
+        fn efs_ptr() -> *mut $crate::storage::Fs<$Efs> {
+            use core::{cell::RefCell, mem::MaybeUninit};
+            use $crate::storage::Fs;
+            static mut EFS: MaybeUninit<Fs<$Efs>> = MaybeUninit::uninit();
+            unsafe { EFS.as_mut_ptr() }
+        }
+
+        fn vfs_ptr() -> *mut $crate::storage::Fs<$Vfs> {
+            use core::{cell::RefCell, mem::MaybeUninit};
+            use $crate::storage::Fs;
+            static mut VFS: MaybeUninit<Fs<$Vfs>> = MaybeUninit::uninit();
+            unsafe { VFS.as_mut_ptr() }
+        }
+
         pub fn mount(
             &self,
             ifs_alloc: &'static mut littlefs2::fs::Allocation<$Ifs>,
             ifs_storage: &'static mut $Ifs,
+            efs_alloc: &'static mut littlefs2::fs::Allocation<$Efs>,
+            efs_storage: &'static mut $Efs,
+            vfs_alloc: &'static mut littlefs2::fs::Allocation<$Vfs>,
+            vfs_storage: &'static mut $Vfs,
+            // TODO: flag per backend?
             format: bool,
         ) -> littlefs2::io::Result<()> {
 
@@ -136,30 +143,49 @@ macro_rules! store { (
 
             static mut IFS_ALLOC: MaybeUninit<&'static mut Allocation<$Ifs>> = MaybeUninit::uninit();
             static mut IFS_STORAGE: MaybeUninit<&'static mut $Ifs> = MaybeUninit::uninit();
-            // static mut IFS: MaybeUninit<Filesystem<'static, $Ifs>> = MaybeUninit::uninit();
             static mut IFS: Option<Filesystem<'static, $Ifs>> = None;
 
+            static mut EFS_ALLOC: MaybeUninit<&'static mut Allocation<$Efs>> = MaybeUninit::uninit();
+            static mut EFS_STORAGE: MaybeUninit<&'static mut $Efs> = MaybeUninit::uninit();
+            static mut EFS: Option<Filesystem<'static, $Efs>> = None;
+
+            static mut VFS_ALLOC: MaybeUninit<&'static mut Allocation<$Vfs>> = MaybeUninit::uninit();
+            static mut VFS_STORAGE: MaybeUninit<&'static mut $Vfs> = MaybeUninit::uninit();
+            static mut VFS: Option<Filesystem<'static, $Vfs>> = None;
+
             unsafe {
-                cortex_m_semihosting::hprintln!("trying to format").ok();
                 if format {
                     Filesystem::format(ifs_storage).expect("can format");
+                    Filesystem::format(efs_storage).expect("can format");
+                    Filesystem::format(vfs_storage).expect("can format");
                 }
-                cortex_m_semihosting::hprintln!("formatted").ok();
 
                 IFS_ALLOC.as_mut_ptr().write(ifs_alloc);
                 IFS_STORAGE.as_mut_ptr().write(ifs_storage);
-
-                // let mut ifs = $crate::storage::Ifs::new(&mut littlefs2::fs::Filesystem::mount(
-                //     &mut *IFS_ALLOC.as_mut_ptr(),
-                //     &mut *IFS_STORAGE.as_mut_ptr(),
-                // )?);
-
                 IFS = Some(Filesystem::mount(
                     &mut *IFS_ALLOC.as_mut_ptr(),
                     &mut *IFS_STORAGE.as_mut_ptr(),
                 )?);
                 let mut ifs = $crate::storage::Fs::new(IFS.as_ref().unwrap());
                 Self::ifs_ptr().write(ifs);
+
+                EFS_ALLOC.as_mut_ptr().write(efs_alloc);
+                EFS_STORAGE.as_mut_ptr().write(efs_storage);
+                EFS = Some(Filesystem::mount(
+                    &mut *EFS_ALLOC.as_mut_ptr(),
+                    &mut *EFS_STORAGE.as_mut_ptr(),
+                )?);
+                let mut efs = $crate::storage::Fs::new(EFS.as_ref().unwrap());
+                Self::efs_ptr().write(efs);
+
+                VFS_ALLOC.as_mut_ptr().write(vfs_alloc);
+                VFS_STORAGE.as_mut_ptr().write(vfs_storage);
+                VFS = Some(Filesystem::mount(
+                    &mut *VFS_ALLOC.as_mut_ptr(),
+                    &mut *VFS_STORAGE.as_mut_ptr(),
+                )?);
+                let mut vfs = $crate::storage::Fs::new(VFS.as_ref().unwrap());
+                Self::vfs_ptr().write(vfs);
 
                 Ok(())
 
@@ -170,22 +196,9 @@ macro_rules! store { (
 
 }}
 
-fn store_key(store: impl Store, persistence: StorageLocation, path: &[u8], kind: KeyKind, key_bytes: &[u8]) -> Result<(), Error> {
-    todo!();
-}
-
-pub struct TriStorage<'s, I: LfsStorage, E: LfsStorage, V: LfsStorage> {
-    /// internal FLASH storage
-    pub ifs: Filesystem<'s, I>,
-    /// external FLASH storage
-    pub efs: Filesystem<'s, E>,
-    /// volatile RAM storage
-    pub vfs: Filesystem<'s, V>,
-}
-
 // TODO: replace this with "fs.create_dir_all(path.parent())"
 pub fn create_directories<'s, S: LfsStorage>(
-    fs: &mut Filesystem<'s, S>,
+    fs: &Filesystem<'s, S>,
     path: &[u8],
 ) -> Result<(), Error>
 {
@@ -228,7 +241,7 @@ impl<'a> TryFrom<(KeyKind, &'a [u8])> for SerializedKey {
 
 
 pub fn store_serialized_key<'s, S: LfsStorage>(
-    fs: &mut Filesystem<'s, S>,
+    fs: &Filesystem<'s, S>,
     path: &[u8], buf: &[u8],
     user_attribute: Option<UserAttribute>,
 )
@@ -250,103 +263,93 @@ pub fn store_serialized_key<'s, S: LfsStorage>(
         })?;
     }
 
-    // file.close()
-    //     .map_err(|_| Error::FilesystemWriteFailure)?;
-    // #[cfg(test)]
-    // println!("closed file");
-
     Ok(())
 }
 
-pub(crate) fn delete<'s, S: LfsStorage>(fs: &mut Filesystem<'s, S>, path: &[u8]) -> bool {
-
+pub(crate) fn delete<'s, S: LfsStorage>(fs: &Filesystem<'s, S>, path: &[u8]) -> bool {
     match fs.remove(path) {
         Ok(_) => true,
         Err(_) => false,
     }
 }
 
-impl<'s, I: LfsStorage, E: LfsStorage, V: LfsStorage> TriStorage<'s, I, E, V> {
+pub fn delete_key(store: impl Store, path: &[u8]) -> bool {
 
-    pub fn delete_key(&mut self, path: &[u8]) -> bool {
-
-        // try each storage backend in turn, attempting to locate the key
-        match delete(&mut self.vfs, path) {
-            true => true,
-            false => {
-                match delete(&mut self.ifs, path) {
-                    true => true,
-                    false => {
-                        delete(&mut self.efs, path)
-                    }
+    // try each storage backend in turn, attempting to locate the key
+    match delete(store.vfs(), path) {
+        true => true,
+        false => {
+            match delete(store.ifs(), path) {
+                true => true,
+                false => {
+                    delete(store.efs(), path)
                 }
             }
         }
     }
+}
 
-    pub fn load_key_unchecked(&mut self, path: &[u8]) -> Result<(SerializedKey, StorageLocation), Error> {
+pub fn load_key_unchecked(store: impl Store, path: &[u8]) -> Result<(SerializedKey, StorageLocation), Error> {
 
-        let (location, bytes): (_, Vec<u8, consts::U128>) =
-            match self.vfs.read(path) {
-                Ok(bytes) => (StorageLocation::Volatile, bytes),
-                Err(_) => match self.ifs.read(path) {
-                    Ok(bytes) => (StorageLocation::Internal, bytes),
-                    Err(_) => match self.efs.read(path) {
-                        Ok(bytes) => (StorageLocation::External, bytes),
-                        Err(_) => return Err(Error::NoSuchKey),
-                    }
+    let (location, bytes): (_, Vec<u8, consts::U128>) =
+        match store.vfs().read(path) {
+            Ok(bytes) => (StorageLocation::Volatile, bytes),
+            Err(_) => match store.ifs().read(path) {
+                Ok(bytes) => (StorageLocation::Internal, bytes),
+                Err(_) => match store.efs().read(path) {
+                    Ok(bytes) => (StorageLocation::External, bytes),
+                    Err(_) => return Err(Error::NoSuchKey),
                 }
-            };
+            }
+        };
 
-        let serialized_key: SerializedKey =
-            crate::cbor_deserialize(&bytes)
-            .map_err(|_| Error::CborError)?;
+    let serialized_key: SerializedKey =
+        crate::cbor_deserialize(&bytes)
+        .map_err(|_| Error::CborError)?;
 
-        Ok((serialized_key, location))
+    Ok((serialized_key, location))
 
+}
+
+pub fn load_key(store: impl Store, path: &[u8], kind: KeyKind, key_bytes: &mut [u8]) -> Result<StorageLocation, Error> {
+    // #[cfg(test)]
+    // // actually safe, as path is ASCII by construction
+    // println!("loading from file {:?}", unsafe { core::str::from_utf8_unchecked(&path[..]) });
+
+    let (serialized_key, location) = load_key_unchecked(store, path)?;
+    if serialized_key.kind != kind {
+        hprintln!("wrong key kind, expected {:?} got {:?}", &kind, &serialized_key.kind).ok();
+        Err(Error::WrongKeyKind)?;
     }
 
-    pub fn load_key(&mut self, path: &[u8], kind: KeyKind, key_bytes: &mut [u8]) -> Result<StorageLocation, Error> {
-        // #[cfg(test)]
-        // // actually safe, as path is ASCII by construction
-        // println!("loading from file {:?}", unsafe { core::str::from_utf8_unchecked(&path[..]) });
+    key_bytes.copy_from_slice(&serialized_key.value);
+    Ok(location)
+}
 
-        let (serialized_key, location) = self.load_key_unchecked(path)?;
-        if serialized_key.kind != kind {
-            hprintln!("wrong key kind, expected {:?} got {:?}", &kind, &serialized_key.kind).ok();
-            Err(Error::WrongKeyKind)?;
-        }
+// TODO: in the case of desktop/ram storage:
+// - using file.sync (without file.close) leads to an endless loop
+// - this loop happens inside `lfs_dir_commit`, namely inside its first for loop
+//   https://github.com/ARMmbed/littlefs/blob/v2.1.4/lfs.c#L1680-L1694
+// - the `if` condition is never fulfilled, it seems f->next continues "forever"
+//   through whatever lfs->mlist is.
+//
+// see also https://github.com/ARMmbed/littlefs/issues/145
+//
+// OUTCOME: either ensure calling `.close()`, or patch the call in a `drop` for File.
+//
+pub fn store_key(store: impl Store, persistence: StorageLocation, path: &[u8], kind: KeyKind, key_bytes: &[u8]) -> Result<(), Error> {
+    // actually safe, as path is ASCII by construction
+    // #[cfg(test)]
+    // println!("storing in file {:?}", unsafe { core::str::from_utf8_unchecked(&path[..]) });
 
-        key_bytes.copy_from_slice(&serialized_key.value);
-        Ok(location)
-    }
+    let serialized_key = SerializedKey::try_from((kind, key_bytes))?;
+    let mut buf = [0u8; 128];
+    crate::cbor_serialize(&serialized_key, &mut buf).map_err(|_| Error::CborError)?;
 
-    // TODO: in the case of desktop/ram storage:
-    // - using file.sync (without file.close) leads to an endless loop
-    // - this loop happens inside `lfs_dir_commit`, namely inside its first for loop
-    //   https://github.com/ARMmbed/littlefs/blob/v2.1.4/lfs.c#L1680-L1694
-    // - the `if` condition is never fulfilled, it seems f->next continues "forever"
-    //   through whatever lfs->mlist is.
-    //
-    // see also https://github.com/ARMmbed/littlefs/issues/145
-    //
-    // OUTCOME: either ensure calling `.close()`, or patch the call in a `drop` for File.
-    //
-    pub fn store_key(&mut self, persistence: StorageLocation, path: &[u8], kind: KeyKind, key_bytes: &[u8]) -> Result<(), Error> {
-        // actually safe, as path is ASCII by construction
-        // #[cfg(test)]
-        // println!("storing in file {:?}", unsafe { core::str::from_utf8_unchecked(&path[..]) });
-
-        let serialized_key = SerializedKey::try_from((kind, key_bytes))?;
-        let mut buf = [0u8; 128];
-        crate::cbor_serialize(&serialized_key, &mut buf).map_err(|_| Error::CborError)?;
-
-        match persistence {
-            StorageLocation::Internal => store_serialized_key(&mut self.ifs, path, &buf, None),
-            StorageLocation::External => store_serialized_key(&mut self.efs, path, &buf, None),
-            StorageLocation::Volatile => store_serialized_key(&mut self.vfs, path, &buf, None),
-        }
-
+    match persistence {
+        StorageLocation::Internal => store_serialized_key(store.ifs(), path, &buf, None),
+        StorageLocation::External => store_serialized_key(store.efs(), path, &buf, None),
+        StorageLocation::Volatile => store_serialized_key(store.vfs(), path, &buf, None),
     }
 
 }

@@ -12,10 +12,10 @@ use crate::types::*;
 // Maybe start a discussion on the `aead` crate's GitHub about usability concerns...
 
 #[cfg(feature = "chacha8-poly1305")]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-GenerateKey<'a, 's, R, I, E, V> for super::Chacha8Poly1305 {
+impl<R: RngRead, S: Store>
+GenerateKey<'_, R, S> for super::Chacha8Poly1305 {
 
-    fn generate_key(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::GenerateKey)
+    fn generate_key(resources: &mut ServiceResources<'_, R, S>, request: request::GenerateKey)
         -> Result<reply::GenerateKey, Error>
     {
         // 32 bytes entropy
@@ -52,10 +52,10 @@ fn increment_nonce(nonce: &mut [u8]) -> Result<(), Error> {
 }
 
 #[cfg(feature = "chacha8-poly1305")]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-Decrypt<'a, 's, R, I, E, V> for super::Chacha8Poly1305
+impl<R: RngRead, S: Store>
+Decrypt<'_, R, S> for super::Chacha8Poly1305
 {
-    fn decrypt(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::Decrypt)
+    fn decrypt(resources: &mut ServiceResources<'_, R, S>, request: request::Decrypt)
         -> Result<reply::Decrypt, Error>
     {
         use chacha20poly1305::ChaCha8Poly1305;
@@ -89,10 +89,10 @@ Decrypt<'a, 's, R, I, E, V> for super::Chacha8Poly1305
 }
 
 #[cfg(feature = "chacha8-poly1305")]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-Encrypt<'a, 's, R, I, E, V> for super::Chacha8Poly1305
+impl<R: RngRead, S: Store>
+Encrypt<'_, R, S> for super::Chacha8Poly1305
 {
-    fn encrypt(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::Encrypt)
+    fn encrypt(resources: &mut ServiceResources<'_, R, S>, request: request::Encrypt)
         -> Result<reply::Encrypt, Error>
     {
         use chacha20poly1305::ChaCha8Poly1305;
@@ -136,10 +136,10 @@ Encrypt<'a, 's, R, I, E, V> for super::Chacha8Poly1305
 }
 
 #[cfg(feature = "chacha8-poly1305")]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-WrapKey<'a, 's, R, I, E, V> for super::Chacha8Poly1305
+impl<R: RngRead, S: Store>
+WrapKey<'_, R, S> for super::Chacha8Poly1305
 {
-    fn wrap_key(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::WrapKey)
+    fn wrap_key(resources: &mut ServiceResources<'_, R, S>, request: request::WrapKey)
         -> Result<reply::WrapKey, Error>
     {
         debug!("crypto-service: Chacha8Poly1305::WrapKey").ok();
@@ -169,10 +169,10 @@ WrapKey<'a, 's, R, I, E, V> for super::Chacha8Poly1305
 }
 
 #[cfg(feature = "chacha8-poly1305")]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-UnwrapKey<'a, 's, R, I, E, V> for super::Chacha8Poly1305
+impl<R: RngRead, S: Store>
+UnwrapKey<'_, R, S> for super::Chacha8Poly1305
 {
-    fn unwrap_key(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::UnwrapKey)
+    fn unwrap_key(resources: &mut ServiceResources<'_, R, S>, request: request::UnwrapKey)
         -> Result<reply::UnwrapKey, Error>
     {
         let reply::Encrypt { ciphertext, nonce, tag } = crate::cbor_deserialize(
@@ -248,10 +248,10 @@ UnwrapKey<'a, 's, R, I, E, V> for super::Chacha8Poly1305
 
 
 // #[cfg(feature = "chacha8-poly1305")]
-// impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-// Decrypt<'a, 's, R, I, E, V> for super::Chacha8Poly1305
+// impl<R: RngRead, S: Store>
+// Decrypt<'_, R, S> for super::Chacha8Poly1305
 // {
-//     fn decrypt(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::Decrypt)
+//     fn decrypt(resources: &mut ServiceResources<'_, R, S>, request: request::Decrypt)
 //         -> Result<reply::Decrypt, Error>
 //     {
 // 		use block_modes::{BlockMode, Cbc};
@@ -294,10 +294,10 @@ UnwrapKey<'a, 's, R, I, E, V> for super::Chacha8Poly1305
 //     Ok([42u8; 12])
 // }
 
-// impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-// Encrypt<'a, 's, R, I, E, V> for super::Chacha8Poly1305
+// impl<R: RngRead, S: Store>
+// Encrypt<'_, R, S> for super::Chacha8Poly1305
 // {
-//     fn encrypt(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::Encrypt)
+//     fn encrypt(resources: &mut ServiceResources<'_, R, S>, request: request::Encrypt)
 //         -> Result<reply::Encrypt, Error>
 //     {
 //         use chacha20poly1305::ChaCha8Poly1305;
@@ -369,11 +369,11 @@ UnwrapKey<'a, 's, R, I, E, V> for super::Chacha8Poly1305
 
 
 #[cfg(not(feature = "chacha8-poly1305"))]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-Decrypt<'a, 's, R, I, E, V> for super::Chacha8Poly1305 {}
+impl<R: RngRead, S: Store>
+Decrypt<'_, R, S> for super::Chacha8Poly1305 {}
 #[cfg(not(feature = "chacha8-poly1305"))]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-Encrypt<'a, 's, R, I, E, V> for super::Chacha8Poly1305 {}
+impl<R: RngRead, S: Store>
+Encrypt<'_, R, S> for super::Chacha8Poly1305 {}
 #[cfg(not(feature = "chacha8-poly1305"))]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-GenerateKey<'a, 's, R, I, E, V> for super::Chacha8Poly1305 {}
+impl<R: RngRead, S: Store>
+GenerateKey<'_, R, S> for super::Chacha8Poly1305 {}

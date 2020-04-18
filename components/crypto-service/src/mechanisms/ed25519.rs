@@ -5,13 +5,14 @@ use crate::api::*;
 // use crate::debug;
 use crate::error::Error;
 use crate::service::*;
+use crate::storage::*;
 use crate::types::*;
 
 #[cfg(feature = "ed25519")]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-DeriveKey<'a, 's, R, I, E, V> for super::Ed25519
+impl<R: RngRead, S: Store>
+DeriveKey<'_, R, S> for super::Ed25519
 {
-    fn derive_key(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::DeriveKey)
+    fn derive_key(resources: &mut ServiceResources<'_, R, S>, request: request::DeriveKey)
         -> Result<reply::DeriveKey, Error>
     {
         let base_id = request.base_key.object_id;
@@ -29,10 +30,10 @@ DeriveKey<'a, 's, R, I, E, V> for super::Ed25519
 }
 
 #[cfg(feature = "ed25519")]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-DeserializeKey<'a, 's, R, I, E, V> for super::Ed25519
+impl<R: RngRead, S: Store>
+DeserializeKey<'_, R, S> for super::Ed25519
 {
-    fn deserialize_key(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::DeserializeKey)
+    fn deserialize_key(resources: &mut ServiceResources<'_, R, S>, request: request::DeserializeKey)
         -> Result<reply::DeserializeKey, Error>
     {
           // - mechanism: Mechanism
@@ -62,10 +63,10 @@ DeserializeKey<'a, 's, R, I, E, V> for super::Ed25519
 }
 
 #[cfg(feature = "ed25519")]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-GenerateKey<'a, 's, R, I, E, V> for super::Ed25519
+impl<R: RngRead, S: Store>
+GenerateKey<'_, R, S> for super::Ed25519
 {
-    fn generate_key(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::GenerateKey)
+    fn generate_key(resources: &mut ServiceResources<'_, R, S>, request: request::GenerateKey)
         -> Result<reply::GenerateKey, Error>
     {
         let mut seed = [0u8; 32];
@@ -88,10 +89,10 @@ GenerateKey<'a, 's, R, I, E, V> for super::Ed25519
 }
 
 #[cfg(feature = "ed25519")]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-SerializeKey<'a, 's, R, I, E, V> for super::Ed25519
+impl<R: RngRead, S: Store>
+SerializeKey<'_, R, S> for super::Ed25519
 {
-    fn serialize_key(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::SerializeKey)
+    fn serialize_key(resources: &mut ServiceResources<'_, R, S>, request: request::SerializeKey)
         -> Result<reply::SerializeKey, Error>
     {
         let key_id = request.key.object_id;
@@ -125,10 +126,10 @@ SerializeKey<'a, 's, R, I, E, V> for super::Ed25519
 }
 
 #[cfg(feature = "ed25519")]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-Exists<'a, 's, R, I, E, V> for super::Ed25519
+impl<R: RngRead, S: Store>
+Exists<'_, R, S> for super::Ed25519
 {
-    fn exists(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::Exists)
+    fn exists(resources: &mut ServiceResources<'_, R, S>, request: request::Exists)
         -> Result<reply::Exists, Error>
     {
         let key_id = request.key.object_id;
@@ -142,10 +143,10 @@ Exists<'a, 's, R, I, E, V> for super::Ed25519
 }
 
 #[cfg(feature = "ed25519")]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-Sign<'a, 's, R, I, E, V> for super::Ed25519
+impl<R: RngRead, S: Store>
+Sign<'_, R, S> for super::Ed25519
 {
-    fn sign(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::Sign)
+    fn sign(resources: &mut ServiceResources<'_, R, S>, request: request::Sign)
         -> Result<reply::Sign, Error>
     {
         // Not so nice, expands to
@@ -177,10 +178,10 @@ Sign<'a, 's, R, I, E, V> for super::Ed25519
 }
 
 #[cfg(feature = "ed25519")]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-Verify<'a, 's, R, I, E, V> for super::Ed25519
+impl<R: RngRead, S: Store>
+Verify<'_, R, S> for super::Ed25519
 {
-    fn verify(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::Verify)
+    fn verify(resources: &mut ServiceResources<'_, R, S>, request: request::Verify)
         -> Result<reply::Verify, Error>
     {
         if let SignatureSerialization::Raw = request.format {
@@ -213,14 +214,14 @@ Verify<'a, 's, R, I, E, V> for super::Ed25519
 }
 
 #[cfg(not(feature = "ed25519"))]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-DeriveKey<'a, 's, R, I, E, V> for super::Ed25519 {}
+impl<R: RngRead, S: Store>
+DeriveKey<'_, R, S> for super::Ed25519 {}
 #[cfg(not(feature = "ed25519"))]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-GenerateKey<'a, 's, R, I, E, V> for super::Ed25519 {}
+impl<R: RngRead, S: Store>
+GenerateKey<'_, R, S> for super::Ed25519 {}
 #[cfg(not(feature = "ed25519"))]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-Sign<'a, 's, R, I, E, V> for super::Ed25519 {}
+impl<R: RngRead, S: Store>
+Sign<'_, R, S> for super::Ed25519 {}
 #[cfg(not(feature = "ed25519"))]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-Verify<'a, 's, R, I, E, V> for super::Ed25519 {}
+impl<R: RngRead, S: Store>
+Verify<'_, R, S> for super::Ed25519 {}

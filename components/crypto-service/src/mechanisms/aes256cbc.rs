@@ -2,14 +2,14 @@ use crate::api::*;
 // use crate::config::*;
 use crate::error::Error;
 use crate::service::*;
+use crate::storage::*;
 use crate::types::*;
 
 #[cfg(feature = "aes256-cbc")]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-Encrypt<'a, 's, R, I, E, V> for super::Aes256Cbc
+impl<R: RngRead, S: Store> Encrypt<'_, R, S> for super::Aes256Cbc
 {
     /// Encrypts the input *with zero IV*
-    fn encrypt(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::Encrypt)
+    fn encrypt(resources: &mut ServiceResources<'_, R, S>, request: request::Encrypt)
         -> Result<reply::Encrypt, Error>
     {
 		use block_modes::{BlockMode, Cbc};
@@ -47,10 +47,9 @@ Encrypt<'a, 's, R, I, E, V> for super::Aes256Cbc
 }
 
 #[cfg(feature = "aes256-cbc")]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-WrapKey<'a, 's, R, I, E, V> for super::Aes256Cbc
+impl<R: RngRead, S: Store> WrapKey<'_, R, S> for super::Aes256Cbc
 {
-    fn wrap_key(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::WrapKey)
+    fn wrap_key(resources: &mut ServiceResources<'_, R, S>, request: request::WrapKey)
         -> Result<reply::WrapKey, Error>
     {
         // TODO: need to check both secret and private keys
@@ -75,10 +74,9 @@ WrapKey<'a, 's, R, I, E, V> for super::Aes256Cbc
 }
 
 #[cfg(feature = "aes256-cbc")]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-Decrypt<'a, 's, R, I, E, V> for super::Aes256Cbc
+impl<R: RngRead, S: Store> Decrypt<'_, R, S> for super::Aes256Cbc
 {
-    fn decrypt(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::Decrypt)
+    fn decrypt(resources: &mut ServiceResources<'_, R, S>, request: request::Decrypt)
         -> Result<reply::Decrypt, Error>
     {
 		use block_modes::{BlockMode, Cbc};
@@ -118,8 +116,7 @@ Decrypt<'a, 's, R, I, E, V> for super::Aes256Cbc
 }
 
 #[cfg(not(feature = "aes256-cbc"))]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-Decrypt<'a, 's, R, I, E, V> for super::Aes256Cbc {}
+impl<R: RngRead, S: Store> Decrypt<'_, R, S> for super::Aes256Cbc {}
+
 #[cfg(not(feature = "aes256-cbc"))]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-Encrypt<'a, 's, R, I, E, V> for super::Aes256Cbc {}
+impl<R: RngRead, S: Store> Encrypt<'_, R, S> for super::Aes256Cbc {}

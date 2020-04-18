@@ -2,13 +2,14 @@ use crate::api::*;
 // use crate::config::*;
 use crate::error::Error;
 use crate::service::*;
+use crate::storage::*;
 use crate::types::*;
 
 #[cfg(feature = "trng")]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-GenerateKey<'a, 's, R, I, E, V> for super::Trng
+impl<R: RngRead, S: Store>
+GenerateKey<'_, R, S> for super::Trng
 {
-    fn generate_key(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::GenerateKey)
+    fn generate_key(resources: &mut ServiceResources<'_, R, S>, request: request::GenerateKey)
         -> Result<reply::GenerateKey, Error>
     {
         // generate entropy

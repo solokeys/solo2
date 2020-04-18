@@ -9,7 +9,7 @@ use crate::api::*;
 use crate::config::*;
 use crate::error::Error;
 use crate::mechanisms;
-use crate::storage::*;
+use crate::storage::{self, *};
 use crate::types::*;
 
 pub use crate::pipe::ServiceEndpoint;
@@ -19,8 +19,8 @@ pub use crate::pipe::ServiceEndpoint;
 
 macro_rules! rpc_trait { ($($Name:ident, $name:ident,)*) => { $(
 
-    pub trait $Name<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> {
-        fn $name(_resources: &mut ServiceResources<'a, 's, R, I, E, V>, _request: request::$Name)
+    pub trait $Name<'a, R: RngRead, S: Store> {
+        fn $name(_resources: &mut ServiceResources<'a, R, S>, _request: request::$Name)
         -> Result<reply::$Name, Error> { Err(Error::MechanismNotAvailable) }
     }
 )* } }
@@ -68,28 +68,24 @@ rpc_trait! {
 // let (mut fido_endpoint, mut fido2_client) = Client::new("fido2");
 // let (mut piv_endpoint, mut piv_client) = Client::new("piv");
 
-pub struct ServiceResources<'a, 's, R, I, E, V>
+pub struct ServiceResources<'a, R, S>
 where
     R: RngRead,
-    I: LfsStorage,
-    E: LfsStorage,
-    V: LfsStorage,
+	S: Store,
 {
     pub(crate) rng: R,
-    pub(crate) tri: TriStorage<'s, I, E, V>,
+    pub(crate) store: S,
     currently_serving: &'a str,
 }
 
-impl<'s, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceResources<'_, 's, R, I, E, V> {
+impl<R: RngRead, S: Store> ServiceResources<'_, R, S> {
 
     pub fn new(
         rng: R,
-        ifs: Filesystem<'s, I>,
-        efs: Filesystem<'s, E>,
-        vfs: Filesystem<'s, V>,
+        store: S,
     ) -> Self {
 
-        Self { rng, tri: TriStorage { ifs, efs, vfs }, currently_serving: &"" }
+        Self { rng, store, currently_serving: &"" }
     }
 }
 
@@ -122,36 +118,34 @@ impl<'s, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceResourc
 //     let mut read_dir = fs.read_dir(dir, &mut storage).unwrap();
 // }
 
-pub struct Service<'a, 's, R, I, E, V>
+pub struct Service<'a, R, S>
 where
     R: RngRead,
-    I: LfsStorage,
-    E: LfsStorage,
-    V: LfsStorage,
+    S: Store,
 {
     eps: Vec<ServiceEndpoint<'a>, MAX_SERVICE_CLIENTS>,
-    resources: ServiceResources<'a, 's, R, I, E, V>,
+    resources: ServiceResources<'a, R, S>,
 }
 
 // need to be able to send crypto service to an interrupt handler
-unsafe impl<R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> Send for Service<'_, '_, R, I, E, V> {}
+unsafe impl<R: RngRead, S: Store> Send for Service<'_, R, S> {}
 
-impl<'a, 'c, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceResources<'a, 'c, R, I, E, V> {
+impl<R: RngRead, S: Store> ServiceResources<'_, R, S> {
 
     pub fn load_key_unchecked(&mut self, path: &[u8]) -> Result<(SerializedKey, StorageLocation), Error> {
-        self.tri.load_key_unchecked(path)
+        storage::load_key_unchecked(self.store, path)
     }
 
     pub fn load_key(&mut self, path: &[u8], kind: KeyKind, key_bytes: &mut [u8])
         -> Result<StorageLocation, Error>
     {
-        self.tri.load_key(path, kind, key_bytes)
+        storage::load_key(self.store, path, kind, key_bytes)
     }
 
     pub fn store_key(&mut self, to: StorageLocation, path: &[u8], kind: KeyKind, key_bytes: &[u8])
         -> Result<(), Error>
     {
-        self.tri.store_key(to, path, kind, key_bytes)
+        storage::store_key(self.store, to, path, kind, key_bytes)
     }
 
     pub fn reply_to(&mut self, request: Request) -> Result<Reply, Error> {
@@ -167,9 +161,9 @@ impl<'a, 'c, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
         hprintln!("crypto-service request: {:?}", &request).ok();
         #[cfg(feature = "deep-semihosting-logs")]
         hprintln!("IFS/EFS/VFS available BEFORE: {}/{}/{}",
-              self.tri.ifs.available_blocks().unwrap(),
-              self.tri.efs.available_blocks().unwrap(),
-              self.tri.vfs.available_blocks().unwrap(),
+              self.store.ifs().available_blocks().unwrap(),
+              self.store.efs().available_blocks().unwrap(),
+              self.store.vfs().available_blocks().unwrap(),
         ).ok();
         match request {
             Request::DummyRequest => {
@@ -231,15 +225,15 @@ impl<'a, 'c, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
             Request::Delete(request) => {
                 let success = {
                     let path = self.prepare_path_for_key(KeyType::Private, &request.key.object_id)?;
-                    match self.tri.delete_key(&path) {
+                    match storage::delete_key(self.store, &path) {
                         true => true,
                         false => {
                             let path = self.prepare_path_for_key(KeyType::Public, &request.key.object_id)?;
-                            match self.tri.delete_key(&path) {
+                            match storage::delete_key(self.store, &path) {
                                 true => true,
                                 false => {
                                     let path = self.prepare_path_for_key(KeyType::Secret, &request.key.object_id)?;
-                                    self.tri.delete_key(&path)
+                                    storage::delete_key(self.store, &path)
                                 }
                             }
                         }
@@ -280,7 +274,7 @@ impl<'a, 'c, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
             Request::ListBlobsFirst(request) => {
                 // TODO: ergonooomics
 
-                let mut path: Path<I> = Path::new(b"/");//Bytes::<MAX_PATH_LENGTH>::new();
+                let mut path: Path<S::I> = Path::new(b"/");//Bytes::<MAX_PATH_LENGTH>::new();
                 hprintln!("current: {:?}", &self.currently_serving);
                 path.push(self.currently_serving);
 
@@ -292,7 +286,7 @@ impl<'a, 'c, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
                 #[cfg(feature = "semihosting")]
                 hprintln!("listing blobs in {:?}", &path).ok();
 
-                let fs = &self.tri.ifs;
+                let fs = self.store.ifs();
 
                 let entry = fs.read_dir_and_then(&path[..], |dir| {
                     for entry in dir {
@@ -351,9 +345,9 @@ impl<'a, 'c, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
                 let mut data = Message::new();
                 data.resize_to_capacity();
                 let data: Message = match request.location {
-                    StorageLocation::Internal => self.tri.ifs.read(&path[..]),
-                    StorageLocation::External => self.tri.efs.read(&path[..]),
-                    StorageLocation::Volatile => self.tri.vfs.read(&path[..]),
+                    StorageLocation::Internal => self.store.ifs().read(&path[..]),
+                    StorageLocation::External => self.store.efs().read(&path[..]),
+                    StorageLocation::Volatile => self.store.vfs().read(&path[..]),
                 }.map_err(|_| Error::InternalError)?.into();
                 // data.resize_default(size).map_err(|_| Error::InternalError)?;
                 Ok(Reply::LoadBlob(reply::LoadBlob { data } ))
@@ -399,11 +393,11 @@ impl<'a, 'c, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
                 info!("StoreBlob of size {}", request.data.len()).ok();
                 match request.attributes.persistence {
                     StorageLocation::Internal => store_serialized_key(
-                        &mut self.tri.ifs,& path, &request.data, request.user_attribute),
+                        self.store.ifs(), &path, &request.data, request.user_attribute),
                     StorageLocation::External => store_serialized_key(
-                        &mut self.tri.efs, &path, &request.data, request.user_attribute),
+                        self.store.efs(), &path, &request.data, request.user_attribute),
                     StorageLocation::Volatile => store_serialized_key(
-                        &mut self.tri.vfs, &path, &request.data, request.user_attribute),
+                        self.store.vfs(), &path, &request.data, request.user_attribute),
                 }?;
                 Ok(Reply::StoreBlob(reply::StoreBlob { blob: ObjectHandle { object_id: blob_id } }))
             }
@@ -510,22 +504,20 @@ impl<'a, 'c, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> ServiceRes
 
 }
 
-impl<'s, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> Service<'_, 's, R, I, E, V> {
+impl<R: RngRead, S: Store> Service<'_, R, S> {
 
     pub fn new(
         rng: R,
-        internal_storage: Filesystem<'s, I>,
-        external_storage: Filesystem<'s, E>,
-        volatile_storage: Filesystem<'s, V>,
+        store: S,
     )
         -> Self
     {
-        let resources = ServiceResources::new(rng, internal_storage, external_storage, volatile_storage);
+        let resources = ServiceResources::new(rng, store);
         Self { eps: Vec::new(), resources }
     }
 }
 
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> Service<'a, 's, R, I, E, V> {
+impl<'a, R: RngRead, S: Store> Service<'a, R, S> {
 
     pub fn add_endpoint(&mut self, ep: ServiceEndpoint<'a>) -> Result<(), ServiceEndpoint> {
         self.eps.push(ep)
@@ -559,19 +551,17 @@ impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage> Service<'a
         // ).ok();
         #[cfg(feature = "deep-semihosting-logs")]
         hprintln!("IFS/EFS/VFS available AFTER: {}/{}/{}",
-              self.resources.tri.ifs.available_blocks().unwrap(),
-              self.resources.tri.efs.available_blocks().unwrap(),
-              self.resources.tri.vfs.available_blocks().unwrap(),
+              self.resources.store.ifs().available_blocks().unwrap(),
+              self.resources.store.efs().available_blocks().unwrap(),
+              self.resources.store.vfs().available_blocks().unwrap(),
         ).ok();
     }
 }
 
-impl<'a, 's, R, I, E, V> crate::pipe::Syscall for &mut Service<'a, 's, R, I, E, V>
+impl<R, S> crate::pipe::Syscall for &mut Service<'_, R, S>
 where
     R: RngRead,
-    I: LfsStorage,
-    E: LfsStorage,
-    V: LfsStorage,
+    S: Store,
 {
     fn syscall(&mut self) {
         self.process();

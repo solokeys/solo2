@@ -4,13 +4,14 @@ use crate::api::*;
 // use crate::config::*;
 use crate::error::Error;
 use crate::service::*;
+use crate::storage::*;
 use crate::types::*;
 
 #[cfg(feature = "p256")]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-Agree<'a, 's, R, I, E, V> for super::P256
+impl<R: RngRead, S: Store>
+Agree<'_, R, S> for super::P256
 {
-    fn agree(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::Agree)
+    fn agree(resources: &mut ServiceResources<'_, R, S>, request: request::Agree)
         -> Result<reply::Agree, Error>
     {
         let private_id = request.private_key.object_id;
@@ -39,10 +40,10 @@ Agree<'a, 's, R, I, E, V> for super::P256
 }
 
 #[cfg(feature = "p256")]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-DeriveKey<'a, 's, R, I, E, V> for super::P256
+impl<R: RngRead, S: Store>
+DeriveKey<'_, R, S> for super::P256
 {
-    fn derive_key(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::DeriveKey)
+    fn derive_key(resources: &mut ServiceResources<'_, R, S>, request: request::DeriveKey)
         -> Result<reply::DeriveKey, Error>
     {
         let base_id = request.base_key.object_id;
@@ -60,10 +61,10 @@ DeriveKey<'a, 's, R, I, E, V> for super::P256
 }
 
 #[cfg(feature = "p256")]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-DeserializeKey<'a, 's, R, I, E, V> for super::P256
+impl<R: RngRead, S: Store>
+DeserializeKey<'_, R, S> for super::P256
 {
-    fn deserialize_key(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::DeserializeKey)
+    fn deserialize_key(resources: &mut ServiceResources<'_, R, S>, request: request::DeserializeKey)
         -> Result<reply::DeserializeKey, Error>
     {
           // - mechanism: Mechanism
@@ -134,10 +135,10 @@ DeserializeKey<'a, 's, R, I, E, V> for super::P256
 }
 
 #[cfg(feature = "p256")]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-GenerateKey<'a, 's, R, I, E, V> for super::P256
+impl<R: RngRead, S: Store>
+GenerateKey<'_, R, S> for super::P256
 {
-    fn generate_key(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::GenerateKey)
+    fn generate_key(resources: &mut ServiceResources<'_, R, S>, request: request::GenerateKey)
         -> Result<reply::GenerateKey, Error>
     {
         // generate keypair
@@ -162,10 +163,10 @@ GenerateKey<'a, 's, R, I, E, V> for super::P256
 }
 
 #[cfg(feature = "p256")]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-SerializeKey<'a, 's, R, I, E, V> for super::P256
+impl<R: RngRead, S: Store>
+SerializeKey<'_, R, S> for super::P256
 {
-    fn serialize_key(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::SerializeKey)
+    fn serialize_key(resources: &mut ServiceResources<'_, R, S>, request: request::SerializeKey)
         -> Result<reply::SerializeKey, Error>
     {
 
@@ -210,10 +211,10 @@ SerializeKey<'a, 's, R, I, E, V> for super::P256
 }
 
 #[cfg(feature = "p256")]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-Exists<'a, 's, R, I, E, V> for super::P256
+impl<R: RngRead, S: Store>
+Exists<'_, R, S> for super::P256
 {
-    fn exists(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::Exists)
+    fn exists(resources: &mut ServiceResources<'_, R, S>, request: request::Exists)
         -> Result<reply::Exists, Error>
     {
         let key_id = request.key.object_id;
@@ -227,10 +228,10 @@ Exists<'a, 's, R, I, E, V> for super::P256
 }
 
 #[cfg(feature = "p256")]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-Sign<'a, 's, R, I, E, V> for super::P256
+impl<R: RngRead, S: Store>
+Sign<'_, R, S> for super::P256
 {
-    fn sign(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::Sign)
+    fn sign(resources: &mut ServiceResources<'_, R, S>, request: request::Sign)
         -> Result<reply::Sign, Error>
     {
         let key_id = request.key.object_id;
@@ -263,10 +264,10 @@ Sign<'a, 's, R, I, E, V> for super::P256
 }
 
 #[cfg(feature = "p256")]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-Verify<'a, 's, R, I, E, V> for super::P256
+impl<R: RngRead, S: Store>
+Verify<'_, R, S> for super::P256
 {
-    fn verify(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::Verify)
+    fn verify(resources: &mut ServiceResources<'_, R, S>, request: request::Verify)
         -> Result<reply::Verify, Error>
     {
         let key_id = request.key.object_id;
@@ -303,17 +304,17 @@ Verify<'a, 's, R, I, E, V> for super::P256
 }
 
 #[cfg(not(feature = "p256"))]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-Agree<'a, 's, R, I, E, V> for super::P256 {}
+impl<R: RngRead, S: Store>
+Agree<'_, R, S> for super::P256 {}
 #[cfg(not(feature = "p256"))]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-DeriveKey<'a, 's, R, I, E, V> for super::P256 {}
+impl<R: RngRead, S: Store>
+DeriveKey<'_, R, S> for super::P256 {}
 #[cfg(not(feature = "p256"))]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-GenerateKey<'a, 's, R, I, E, V> for super::P256 {}
+impl<R: RngRead, S: Store>
+GenerateKey<'_, R, S> for super::P256 {}
 #[cfg(not(feature = "p256"))]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-Sign<'a, 's, R, I, E, V> for super::P256 {}
+impl<R: RngRead, S: Store>
+Sign<'_, R, S> for super::P256 {}
 #[cfg(not(feature = "p256"))]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-Verify<'a, 's, R, I, E, V> for super::P256 {}
+impl<R: RngRead, S: Store>
+Verify<'_, R, S> for super::P256 {}

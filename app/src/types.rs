@@ -4,6 +4,7 @@ use littlefs2::{
     const_ram_storage,
 };
 use crypto_service::types::{LfsResult, LfsStorage};
+use crypto_service::store;
 use ctap_types::consts;
 use fido_authenticator::SilentAuthenticator;
 // use usbd_ctaphid::insecure::InsecureRamAuthenticator;
@@ -28,12 +29,16 @@ const_ram_storage!(InternalStorage, 8192);
 const_ram_storage!(ExternalStorage, 8192);
 const_ram_storage!(VolatileStorage, 8192);
 
+store!(Store,
+    Internal: InternalStorage,
+    External: ExternalStorage,
+    Volatile: VolatileStorage
+);
+
 pub type CryptoService = crypto_service::Service<
-    'static, 'static,
+    'static,
     hal::peripherals::rng::Rng<hal::Enabled>,
-    InternalStorage,
-    ExternalStorage,
-    VolatileStorage,
+    Store,
 >;
 
 // pub type CtapHidClass = usbd_ctaphid::CtapHid<'static, InsecureRamAuthenticator, UsbBus>;

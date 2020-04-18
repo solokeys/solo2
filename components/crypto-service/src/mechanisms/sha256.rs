@@ -2,13 +2,14 @@ use crate::api::*;
 // use crate::config::*;
 use crate::error::Error;
 use crate::service::*;
+use crate::storage::*;
 use crate::types::*;
 
 #[cfg(feature = "sha256")]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-DeriveKey<'a, 's, R, I, E, V> for super::Sha256
+impl<R: RngRead, S: Store>
+DeriveKey<'_, R, S> for super::Sha256
 {
-    fn derive_key(resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::DeriveKey)
+    fn derive_key(resources: &mut ServiceResources<'_, R, S>, request: request::DeriveKey)
         -> Result<reply::DeriveKey, Error>
     {
         let base_id = request.base_key.object_id;
@@ -32,10 +33,10 @@ DeriveKey<'a, 's, R, I, E, V> for super::Sha256
 }
 
 #[cfg(feature = "sha256")]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-Hash<'a, 's, R, I, E, V> for super::Sha256
+impl<R: RngRead, S: Store>
+Hash<'_, R, S> for super::Sha256
 {
-    fn hash(_resources: &mut ServiceResources<'a, 's, R, I, E, V>, request: request::Hash)
+    fn hash(_resources: &mut ServiceResources<'_, R, S>, request: request::Hash)
         -> Result<reply::Hash, Error>
     {
         use sha2::digest::Digest;
@@ -49,14 +50,14 @@ Hash<'a, 's, R, I, E, V> for super::Sha256
     }
 }
 
-// impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-// Agree<'a, 's, R, I, E, V> for super::P256 {}
+// impl<R: RngRead, S: Store>
+// Agree<'_, R, S> for super::P256 {}
 #[cfg(not(feature = "sha256"))]
-impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-DeriveKey<'a, 's, R, I, E, V> for super::Sha256 {}
-// impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-// GenerateKey<'a, 's, R, I, E, V> for super::P256 {}
-// impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-// Sign<'a, 's, R, I, E, V> for super::P256 {}
-// impl<'a, 's, R: RngRead, I: LfsStorage, E: LfsStorage, V: LfsStorage>
-// Verify<'a, 's, R, I, E, V> for super::P256 {}
+impl<R: RngRead, S: Store>
+DeriveKey<'_, R, S> for super::Sha256 {}
+// impl<R: RngRead, S: Store>
+// GenerateKey<'_, R, S> for super::P256 {}
+// impl<R: RngRead, S: Store>
+// Sign<'_, R, S> for super::P256 {}
+// impl<R: RngRead, S: Store>
+// Verify<'_, R, S> for super::P256 {}

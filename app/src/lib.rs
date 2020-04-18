@@ -34,10 +34,10 @@ use crypto_service::store;
 
 pub mod types;
 use types::{
-    InternalStorage2,
     InternalStorage,
     ExternalStorage,
     VolatileStorage,
+    Store,
 };
 
 //
@@ -57,8 +57,6 @@ use hal::prelude::*;
 // // filesystem starting at 320KB
 // // this needs to be synchronized with contents of `memory.x`
 // const FS_BASE: usize = 0x50_000;
-
-store!(Store, InternalStorage2);
 
 // TODO: move board-specifics to BSPs
 #[cfg(feature = "board-lpcxpresso")]
@@ -137,30 +135,12 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
     use littlefs2::fs::{Allocation, Filesystem};
 
-    static mut INTERNAL_STORAGE2: InternalStorage2 = InternalStorage2::new();
-    let internal_storage2 = unsafe { &mut INTERNAL_STORAGE2 };
-    static mut INTERNAL_FS_ALLOC2: Option<Allocation<InternalStorage2>> = None;
-    unsafe { INTERNAL_FS_ALLOC2 = Some(Filesystem::allocate()); }
-    let internal_fs_alloc2 = unsafe { INTERNAL_FS_ALLOC2.as_mut().unwrap() };
-
-    let store = Store::claim().unwrap();
-    store.mount(internal_fs_alloc2, internal_storage2, true).unwrap();
-
-    use crypto_service::storage::Store as _;
-    store.ifs().write("tmp.file", b"test data").unwrap();
-    let data: heapless::Vec<_, heapless::consts::U64> = store.ifs().read("tmp.file").unwrap();
-    cortex_m_semihosting::hprintln!("data: {:?}", &data).ok();
-
-
-
     static mut INTERNAL_STORAGE: InternalStorage = InternalStorage::new();
     let internal_storage = unsafe { &mut INTERNAL_STORAGE };
     Filesystem::format(internal_storage).expect("could not format internal storage");
     static mut INTERNAL_FS_ALLOC: Option<Allocation<InternalStorage>> = None;
     unsafe { INTERNAL_FS_ALLOC = Some(Filesystem::allocate()); }
     let internal_fs_alloc = unsafe { INTERNAL_FS_ALLOC.as_mut().unwrap() };
-    let ifs = Filesystem::mount(internal_fs_alloc, internal_storage)
-        .expect("could not mount internal storage");
 
     static mut EXTERNAL_STORAGE: ExternalStorage = ExternalStorage::new();
     let external_storage = unsafe { &mut EXTERNAL_STORAGE };
@@ -168,8 +148,6 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     static mut EXTERNAL_FS_ALLOC: Option<Allocation<ExternalStorage>> = None;
     unsafe { EXTERNAL_FS_ALLOC = Some(Filesystem::allocate()); }
     let external_fs_alloc = unsafe { EXTERNAL_FS_ALLOC.as_mut().unwrap() };
-    let efs = Filesystem::mount(external_fs_alloc, external_storage)
-        .expect("could not mount internal storage");
 
     static mut VOLATILE_STORAGE: VolatileStorage = VolatileStorage::new();
     let volatile_storage = unsafe { &mut VOLATILE_STORAGE };
@@ -177,11 +155,23 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     static mut VOLATILE_FS_ALLOC: Option<Allocation<VolatileStorage>> = None;
     unsafe { VOLATILE_FS_ALLOC = Some(Filesystem::allocate()); }
     let volatile_fs_alloc = unsafe { VOLATILE_FS_ALLOC.as_mut().unwrap() };
-    let vfs = Filesystem::mount(volatile_fs_alloc, volatile_storage)
-        .expect("could not mount volatile storage");
 
-    let mut crypto_service = crypto_service::service::Service::new(
-        rng, ifs, efs, vfs);
+
+    let store = Store::claim().unwrap();
+    store.mount(
+        internal_fs_alloc, internal_storage,
+        external_fs_alloc, external_storage,
+        volatile_fs_alloc, volatile_storage,
+        true
+    ).unwrap();
+
+    use crypto_service::storage::Store as _;
+    store.ifs().write("tmp.file", b"test data").unwrap();
+    let data: heapless::Vec<_, heapless::consts::U64> = store.ifs().read("tmp.file").unwrap();
+    cortex_m_semihosting::hprintln!("data: {:?}", &data).ok();
+
+    let mut crypto_service = crypto_service::service::Service::new(rng, store);
+
     assert!(crypto_service.add_endpoint(service_endpoint).is_ok());
 
     let syscaller = types::CryptoSyscall::default();
