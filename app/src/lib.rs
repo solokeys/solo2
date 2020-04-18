@@ -127,10 +127,12 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
     static mut CRYPTO_REQUESTS: crypto_service::pipe::RequestPipe = heapless::spsc::Queue(heapless::i::Queue::u8());
     static mut CRYPTO_REPLIES: crypto_service::pipe::ReplyPipe = heapless::spsc::Queue(heapless::i::Queue::u8());
+    let mut client_id = heapless::Vec::new();
+    client_id.extend_from_slice(b"fido2").unwrap();
     let (service_endpoint, client_endpoint) = crypto_service::pipe::new_endpoints(
         unsafe { &mut CRYPTO_REQUESTS },
         unsafe { &mut CRYPTO_REPLIES },
-        "fido2",
+        client_id,
     );
 
     use littlefs2::fs::{Allocation, Filesystem};

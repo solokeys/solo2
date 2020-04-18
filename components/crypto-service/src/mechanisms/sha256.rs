@@ -7,9 +7,9 @@ use crate::types::*;
 
 #[cfg(feature = "sha256")]
 impl<R: RngRead, S: Store>
-DeriveKey<'_, R, S> for super::Sha256
+DeriveKey<R, S> for super::Sha256
 {
-    fn derive_key(resources: &mut ServiceResources<'_, R, S>, request: request::DeriveKey)
+    fn derive_key(resources: &mut ServiceResources<R, S>, request: request::DeriveKey)
         -> Result<reply::DeriveKey, Error>
     {
         let base_id = request.base_key.object_id;
@@ -34,9 +34,9 @@ DeriveKey<'_, R, S> for super::Sha256
 
 #[cfg(feature = "sha256")]
 impl<R: RngRead, S: Store>
-Hash<'_, R, S> for super::Sha256
+Hash<R, S> for super::Sha256
 {
-    fn hash(_resources: &mut ServiceResources<'_, R, S>, request: request::Hash)
+    fn hash(_resources: &mut ServiceResources<R, S>, request: request::Hash)
         -> Result<reply::Hash, Error>
     {
         use sha2::digest::Digest;
@@ -51,13 +51,13 @@ Hash<'_, R, S> for super::Sha256
 }
 
 // impl<R: RngRead, S: Store>
-// Agree<'_, R, S> for super::P256 {}
+// Agree<R, S> for super::P256 {}
 #[cfg(not(feature = "sha256"))]
 impl<R: RngRead, S: Store>
-DeriveKey<'_, R, S> for super::Sha256 {}
+DeriveKey<R, S> for super::Sha256 {}
 // impl<R: RngRead, S: Store>
-// GenerateKey<'_, R, S> for super::P256 {}
+// GenerateKey<R, S> for super::P256 {}
 // impl<R: RngRead, S: Store>
-// Sign<'_, R, S> for super::P256 {}
+// Sign<R, S> for super::P256 {}
 // impl<R: RngRead, S: Store>
-// Verify<'_, R, S> for super::P256 {}
+// Verify<R, S> for super::P256 {}

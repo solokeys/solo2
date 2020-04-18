@@ -9,6 +9,7 @@ use heapless::{
 
 use crate::api::{Request, Reply};
 use crate::error::Error;
+use crate::types::ClientId;
 
 // TODO: The request pipe should block if there is an unhandled
 // previous request/reply. As a side effect, the service should always
@@ -24,7 +25,7 @@ pub type ReplyPipe = Queue::<Result<Reply, Error>, U1, u8>;
 pub /*unsafe*/ fn new_endpoints<'a>(
     request_pipe: &'a mut RequestPipe,
     reply_pipe: &'a mut ReplyPipe,
-    client_id: &'a str,
+    client_id: ClientId,
     )
     -> (ServiceEndpoint<'a>, ClientEndpoint<'a>)
 {
@@ -40,7 +41,7 @@ pub struct ServiceEndpoint<'a> {
     pub send: Producer<'a, Result<Reply, Error>, U1, u8>,
     // service (trusted) has this, not client (untrusted)
     // used among other things to namespace cryptographic material
-    pub client_id: &'a str,
+    pub client_id: ClientId,
 }
 
 pub struct ClientEndpoint<'a> {

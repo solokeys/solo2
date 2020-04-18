@@ -39,6 +39,7 @@ pub type AeadKey = [u8; 32];
 pub type AeadNonce = [u8; 12];
 pub type AeadTag = [u8; 16];
 
+pub type ClientId = heapless::Vec<u8, heapless::consts::U32>;
 
 // Object Hierarchy according to Cryptoki
 // - Storage

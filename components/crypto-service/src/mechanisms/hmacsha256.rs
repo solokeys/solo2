@@ -12,9 +12,9 @@ use crate::types::*;
 
 #[cfg(feature = "hmac-sha256")]
 impl<R: RngRead, S: Store>
-Sign<'_, R, S> for super::HmacSha256
+Sign<R, S> for super::HmacSha256
 {
-    fn sign(resources: &mut ServiceResources<'_, R, S>, request: request::Sign)
+    fn sign(resources: &mut ServiceResources<R, S>, request: request::Sign)
         -> Result<reply::Sign, Error>
     {
         use sha2::Sha256;
@@ -55,9 +55,9 @@ Sign<'_, R, S> for super::HmacSha256
 
 #[cfg(feature = "hmac-sha256")]
 impl<R: RngRead, S: Store>
-GenerateKey<'_, R, S> for super::HmacSha256
+GenerateKey<R, S> for super::HmacSha256
 {
-    fn generate_key(resources: &mut ServiceResources<'_, R, S>, request: request::GenerateKey)
+    fn generate_key(resources: &mut ServiceResources<R, S>, request: request::GenerateKey)
         -> Result<reply::GenerateKey, Error>
     {
         let mut seed = [0u8; 16];
@@ -81,5 +81,4 @@ GenerateKey<'_, R, S> for super::HmacSha256
 
 
 #[cfg(not(feature = "hmac-sha256"))]
-impl<R: RngRead, S: Store>
-Sign<'_, R, S> for super::HmacSha256 {}
+impl<R: RngRead, S: Store> Sign<R, S> for super::HmacSha256 {}

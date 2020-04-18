@@ -13,9 +13,9 @@ use crate::types::*;
 
 #[cfg(feature = "chacha8-poly1305")]
 impl<R: RngRead, S: Store>
-GenerateKey<'_, R, S> for super::Chacha8Poly1305 {
+GenerateKey<R, S> for super::Chacha8Poly1305 {
 
-    fn generate_key(resources: &mut ServiceResources<'_, R, S>, request: request::GenerateKey)
+    fn generate_key(resources: &mut ServiceResources<R, S>, request: request::GenerateKey)
         -> Result<reply::GenerateKey, Error>
     {
         // 32 bytes entropy
@@ -53,9 +53,9 @@ fn increment_nonce(nonce: &mut [u8]) -> Result<(), Error> {
 
 #[cfg(feature = "chacha8-poly1305")]
 impl<R: RngRead, S: Store>
-Decrypt<'_, R, S> for super::Chacha8Poly1305
+Decrypt<R, S> for super::Chacha8Poly1305
 {
-    fn decrypt(resources: &mut ServiceResources<'_, R, S>, request: request::Decrypt)
+    fn decrypt(resources: &mut ServiceResources<R, S>, request: request::Decrypt)
         -> Result<reply::Decrypt, Error>
     {
         use chacha20poly1305::ChaCha8Poly1305;
@@ -90,9 +90,9 @@ Decrypt<'_, R, S> for super::Chacha8Poly1305
 
 #[cfg(feature = "chacha8-poly1305")]
 impl<R: RngRead, S: Store>
-Encrypt<'_, R, S> for super::Chacha8Poly1305
+Encrypt<R, S> for super::Chacha8Poly1305
 {
-    fn encrypt(resources: &mut ServiceResources<'_, R, S>, request: request::Encrypt)
+    fn encrypt(resources: &mut ServiceResources<R, S>, request: request::Encrypt)
         -> Result<reply::Encrypt, Error>
     {
         use chacha20poly1305::ChaCha8Poly1305;
@@ -137,9 +137,9 @@ Encrypt<'_, R, S> for super::Chacha8Poly1305
 
 #[cfg(feature = "chacha8-poly1305")]
 impl<R: RngRead, S: Store>
-WrapKey<'_, R, S> for super::Chacha8Poly1305
+WrapKey<R, S> for super::Chacha8Poly1305
 {
-    fn wrap_key(resources: &mut ServiceResources<'_, R, S>, request: request::WrapKey)
+    fn wrap_key(resources: &mut ServiceResources<R, S>, request: request::WrapKey)
         -> Result<reply::WrapKey, Error>
     {
         debug!("crypto-service: Chacha8Poly1305::WrapKey").ok();
@@ -170,9 +170,9 @@ WrapKey<'_, R, S> for super::Chacha8Poly1305
 
 #[cfg(feature = "chacha8-poly1305")]
 impl<R: RngRead, S: Store>
-UnwrapKey<'_, R, S> for super::Chacha8Poly1305
+UnwrapKey<R, S> for super::Chacha8Poly1305
 {
-    fn unwrap_key(resources: &mut ServiceResources<'_, R, S>, request: request::UnwrapKey)
+    fn unwrap_key(resources: &mut ServiceResources<R, S>, request: request::UnwrapKey)
         -> Result<reply::UnwrapKey, Error>
     {
         let reply::Encrypt { ciphertext, nonce, tag } = crate::cbor_deserialize(
@@ -249,9 +249,9 @@ UnwrapKey<'_, R, S> for super::Chacha8Poly1305
 
 // #[cfg(feature = "chacha8-poly1305")]
 // impl<R: RngRead, S: Store>
-// Decrypt<'_, R, S> for super::Chacha8Poly1305
+// Decrypt<R, S> for super::Chacha8Poly1305
 // {
-//     fn decrypt(resources: &mut ServiceResources<'_, R, S>, request: request::Decrypt)
+//     fn decrypt(resources: &mut ServiceResources<R, S>, request: request::Decrypt)
 //         -> Result<reply::Decrypt, Error>
 //     {
 // 		use block_modes::{BlockMode, Cbc};
@@ -295,9 +295,9 @@ UnwrapKey<'_, R, S> for super::Chacha8Poly1305
 // }
 
 // impl<R: RngRead, S: Store>
-// Encrypt<'_, R, S> for super::Chacha8Poly1305
+// Encrypt<R, S> for super::Chacha8Poly1305
 // {
-//     fn encrypt(resources: &mut ServiceResources<'_, R, S>, request: request::Encrypt)
+//     fn encrypt(resources: &mut ServiceResources<R, S>, request: request::Encrypt)
 //         -> Result<reply::Encrypt, Error>
 //     {
 //         use chacha20poly1305::ChaCha8Poly1305;
@@ -370,10 +370,10 @@ UnwrapKey<'_, R, S> for super::Chacha8Poly1305
 
 #[cfg(not(feature = "chacha8-poly1305"))]
 impl<R: RngRead, S: Store>
-Decrypt<'_, R, S> for super::Chacha8Poly1305 {}
+Decrypt<R, S> for super::Chacha8Poly1305 {}
 #[cfg(not(feature = "chacha8-poly1305"))]
 impl<R: RngRead, S: Store>
-Encrypt<'_, R, S> for super::Chacha8Poly1305 {}
+Encrypt<R, S> for super::Chacha8Poly1305 {}
 #[cfg(not(feature = "chacha8-poly1305"))]
 impl<R: RngRead, S: Store>
-GenerateKey<'_, R, S> for super::Chacha8Poly1305 {}
+GenerateKey<R, S> for super::Chacha8Poly1305 {}

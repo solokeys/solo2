@@ -9,9 +9,9 @@ use crate::types::*;
 
 #[cfg(feature = "p256")]
 impl<R: RngRead, S: Store>
-Agree<'_, R, S> for super::P256
+Agree<R, S> for super::P256
 {
-    fn agree(resources: &mut ServiceResources<'_, R, S>, request: request::Agree)
+    fn agree(resources: &mut ServiceResources<R, S>, request: request::Agree)
         -> Result<reply::Agree, Error>
     {
         let private_id = request.private_key.object_id;
@@ -41,9 +41,9 @@ Agree<'_, R, S> for super::P256
 
 #[cfg(feature = "p256")]
 impl<R: RngRead, S: Store>
-DeriveKey<'_, R, S> for super::P256
+DeriveKey<R, S> for super::P256
 {
-    fn derive_key(resources: &mut ServiceResources<'_, R, S>, request: request::DeriveKey)
+    fn derive_key(resources: &mut ServiceResources<R, S>, request: request::DeriveKey)
         -> Result<reply::DeriveKey, Error>
     {
         let base_id = request.base_key.object_id;
@@ -62,9 +62,9 @@ DeriveKey<'_, R, S> for super::P256
 
 #[cfg(feature = "p256")]
 impl<R: RngRead, S: Store>
-DeserializeKey<'_, R, S> for super::P256
+DeserializeKey<R, S> for super::P256
 {
-    fn deserialize_key(resources: &mut ServiceResources<'_, R, S>, request: request::DeserializeKey)
+    fn deserialize_key(resources: &mut ServiceResources<R, S>, request: request::DeserializeKey)
         -> Result<reply::DeserializeKey, Error>
     {
           // - mechanism: Mechanism
@@ -136,9 +136,9 @@ DeserializeKey<'_, R, S> for super::P256
 
 #[cfg(feature = "p256")]
 impl<R: RngRead, S: Store>
-GenerateKey<'_, R, S> for super::P256
+GenerateKey<R, S> for super::P256
 {
-    fn generate_key(resources: &mut ServiceResources<'_, R, S>, request: request::GenerateKey)
+    fn generate_key(resources: &mut ServiceResources<R, S>, request: request::GenerateKey)
         -> Result<reply::GenerateKey, Error>
     {
         // generate keypair
@@ -164,9 +164,9 @@ GenerateKey<'_, R, S> for super::P256
 
 #[cfg(feature = "p256")]
 impl<R: RngRead, S: Store>
-SerializeKey<'_, R, S> for super::P256
+SerializeKey<R, S> for super::P256
 {
-    fn serialize_key(resources: &mut ServiceResources<'_, R, S>, request: request::SerializeKey)
+    fn serialize_key(resources: &mut ServiceResources<R, S>, request: request::SerializeKey)
         -> Result<reply::SerializeKey, Error>
     {
 
@@ -212,9 +212,9 @@ SerializeKey<'_, R, S> for super::P256
 
 #[cfg(feature = "p256")]
 impl<R: RngRead, S: Store>
-Exists<'_, R, S> for super::P256
+Exists<R, S> for super::P256
 {
-    fn exists(resources: &mut ServiceResources<'_, R, S>, request: request::Exists)
+    fn exists(resources: &mut ServiceResources<R, S>, request: request::Exists)
         -> Result<reply::Exists, Error>
     {
         let key_id = request.key.object_id;
@@ -229,9 +229,9 @@ Exists<'_, R, S> for super::P256
 
 #[cfg(feature = "p256")]
 impl<R: RngRead, S: Store>
-Sign<'_, R, S> for super::P256
+Sign<R, S> for super::P256
 {
-    fn sign(resources: &mut ServiceResources<'_, R, S>, request: request::Sign)
+    fn sign(resources: &mut ServiceResources<R, S>, request: request::Sign)
         -> Result<reply::Sign, Error>
     {
         let key_id = request.key.object_id;
@@ -265,9 +265,9 @@ Sign<'_, R, S> for super::P256
 
 #[cfg(feature = "p256")]
 impl<R: RngRead, S: Store>
-Verify<'_, R, S> for super::P256
+Verify<R, S> for super::P256
 {
-    fn verify(resources: &mut ServiceResources<'_, R, S>, request: request::Verify)
+    fn verify(resources: &mut ServiceResources<R, S>, request: request::Verify)
         -> Result<reply::Verify, Error>
     {
         let key_id = request.key.object_id;
@@ -305,16 +305,16 @@ Verify<'_, R, S> for super::P256
 
 #[cfg(not(feature = "p256"))]
 impl<R: RngRead, S: Store>
-Agree<'_, R, S> for super::P256 {}
+Agree<R, S> for super::P256 {}
 #[cfg(not(feature = "p256"))]
 impl<R: RngRead, S: Store>
-DeriveKey<'_, R, S> for super::P256 {}
+DeriveKey<R, S> for super::P256 {}
 #[cfg(not(feature = "p256"))]
 impl<R: RngRead, S: Store>
-GenerateKey<'_, R, S> for super::P256 {}
+GenerateKey<R, S> for super::P256 {}
 #[cfg(not(feature = "p256"))]
 impl<R: RngRead, S: Store>
-Sign<'_, R, S> for super::P256 {}
+Sign<R, S> for super::P256 {}
 #[cfg(not(feature = "p256"))]
 impl<R: RngRead, S: Store>
-Verify<'_, R, S> for super::P256 {}
+Verify<R, S> for super::P256 {}

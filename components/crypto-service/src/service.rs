@@ -19,8 +19,8 @@ pub use crate::pipe::ServiceEndpoint;
 
 macro_rules! rpc_trait { ($($Name:ident, $name:ident,)*) => { $(
 
-    pub trait $Name<'a, R: RngRead, S: Store> {
-        fn $name(_resources: &mut ServiceResources<'a, R, S>, _request: request::$Name)
+    pub trait $Name<R: RngRead, S: Store> {
+        fn $name(_resources: &mut ServiceResources<R, S>, _request: request::$Name)
         -> Result<reply::$Name, Error> { Err(Error::MechanismNotAvailable) }
     }
 )* } }
@@ -68,24 +68,24 @@ rpc_trait! {
 // let (mut fido_endpoint, mut fido2_client) = Client::new("fido2");
 // let (mut piv_endpoint, mut piv_client) = Client::new("piv");
 
-pub struct ServiceResources<'a, R, S>
+pub struct ServiceResources<R, S>
 where
     R: RngRead,
 	S: Store,
 {
     pub(crate) rng: R,
     pub(crate) store: S,
-    currently_serving: &'a str,
+    currently_serving: ClientId,
 }
 
-impl<R: RngRead, S: Store> ServiceResources<'_, R, S> {
+impl<R: RngRead, S: Store> ServiceResources<R, S> {
 
     pub fn new(
         rng: R,
         store: S,
     ) -> Self {
 
-        Self { rng, store, currently_serving: &"" }
+        Self { rng, store, currently_serving: heapless::Vec::new() }
     }
 }
 
@@ -124,13 +124,13 @@ where
     S: Store,
 {
     eps: Vec<ServiceEndpoint<'a>, MAX_SERVICE_CLIENTS>,
-    resources: ServiceResources<'a, R, S>,
+    resources: ServiceResources<R, S>,
 }
 
 // need to be able to send crypto service to an interrupt handler
 unsafe impl<R: RngRead, S: Store> Send for Service<'_, R, S> {}
 
-impl<R: RngRead, S: Store> ServiceResources<'_, R, S> {
+impl<R: RngRead, S: Store> ServiceResources<R, S> {
 
     pub fn load_key_unchecked(&mut self, path: &[u8]) -> Result<(SerializedKey, StorageLocation), Error> {
         storage::load_key_unchecked(self.store, path)
@@ -275,8 +275,8 @@ impl<R: RngRead, S: Store> ServiceResources<'_, R, S> {
                 // TODO: ergonooomics
 
                 let mut path: Path<S::I> = Path::new(b"/");//Bytes::<MAX_PATH_LENGTH>::new();
-                hprintln!("current: {:?}", &self.currently_serving);
-                path.push(self.currently_serving);
+                hprintln!("current: {:?}", &self.currently_serving).ok();
+                path.push(&self.currently_serving[..]);
 
                 hprintln!("prefix: {:?}", &request.prefix);
                 if let Some(prefix) = request.prefix.clone() {
@@ -298,7 +298,7 @@ impl<R: RngRead, S: Store> ServiceResources<'_, R, S> {
                             continue;
                         }
 
-                        hprintln!("done skipping");
+                        // hprintln!("done skipping").ok();
 
                         let name = entry.file_name();
                         #[cfg(feature = "semihosting")]
@@ -444,7 +444,7 @@ impl<R: RngRead, S: Store> ServiceResources<'_, R, S> {
         -> Result<Bytes<MAX_PATH_LENGTH>, Error> {
         let mut path = Bytes::<MAX_PATH_LENGTH>::new();
         path.extend_from_slice(b"/").map_err(|_| Error::InternalError)?;
-        path.extend_from_slice(self.currently_serving.as_bytes()).map_err(|_| Error::InternalError)?;
+        path.extend_from_slice(&self.currently_serving).map_err(|_| Error::InternalError)?;
         // #[cfg(all(test, feature = "verbose-tests"))]
         // #[cfg(test)]
         // println!("creating dir {:?}", &path);
@@ -468,7 +468,7 @@ impl<R: RngRead, S: Store> ServiceResources<'_, R, S> {
         -> Result<Bytes<MAX_PATH_LENGTH>, Error> {
         let mut path = Bytes::<MAX_PATH_LENGTH>::new();
 
-        path.extend_from_slice(self.currently_serving.as_bytes()).map_err(|_| Error::InternalError)?;
+        path.extend_from_slice(&self.currently_serving).map_err(|_| Error::InternalError)?;
         path.extend_from_slice(b"/").map_err(|_| Error::InternalError)?;
 
         if let Some(prefix) = &prefix {
@@ -536,7 +536,9 @@ impl<'a, R: RngRead, S: Store> Service<'a, R, S> {
             if let Some(request) = ep.recv.dequeue() {
                 // #[cfg(test)] println!("service got request: {:?}", &request);
 
-                resources.currently_serving = &ep.client_id;
+                resources.currently_serving.clear();
+                resources.currently_serving.extend_from_slice(&ep.client_id);
+                    // &ep.client_id;
                 let reply_result = resources.reply_to(request);
                 // #[cfg(test)] println!("service made reply: {:?}", &reply_result);
 

@@ -10,9 +10,9 @@ use crate::types::*;
 
 #[cfg(feature = "ed25519")]
 impl<R: RngRead, S: Store>
-DeriveKey<'_, R, S> for super::Ed25519
+DeriveKey<R, S> for super::Ed25519
 {
-    fn derive_key(resources: &mut ServiceResources<'_, R, S>, request: request::DeriveKey)
+    fn derive_key(resources: &mut ServiceResources<R, S>, request: request::DeriveKey)
         -> Result<reply::DeriveKey, Error>
     {
         let base_id = request.base_key.object_id;
@@ -31,9 +31,9 @@ DeriveKey<'_, R, S> for super::Ed25519
 
 #[cfg(feature = "ed25519")]
 impl<R: RngRead, S: Store>
-DeserializeKey<'_, R, S> for super::Ed25519
+DeserializeKey<R, S> for super::Ed25519
 {
-    fn deserialize_key(resources: &mut ServiceResources<'_, R, S>, request: request::DeserializeKey)
+    fn deserialize_key(resources: &mut ServiceResources<R, S>, request: request::DeserializeKey)
         -> Result<reply::DeserializeKey, Error>
     {
           // - mechanism: Mechanism
@@ -64,9 +64,9 @@ DeserializeKey<'_, R, S> for super::Ed25519
 
 #[cfg(feature = "ed25519")]
 impl<R: RngRead, S: Store>
-GenerateKey<'_, R, S> for super::Ed25519
+GenerateKey<R, S> for super::Ed25519
 {
-    fn generate_key(resources: &mut ServiceResources<'_, R, S>, request: request::GenerateKey)
+    fn generate_key(resources: &mut ServiceResources<R, S>, request: request::GenerateKey)
         -> Result<reply::GenerateKey, Error>
     {
         let mut seed = [0u8; 32];
@@ -90,9 +90,9 @@ GenerateKey<'_, R, S> for super::Ed25519
 
 #[cfg(feature = "ed25519")]
 impl<R: RngRead, S: Store>
-SerializeKey<'_, R, S> for super::Ed25519
+SerializeKey<R, S> for super::Ed25519
 {
-    fn serialize_key(resources: &mut ServiceResources<'_, R, S>, request: request::SerializeKey)
+    fn serialize_key(resources: &mut ServiceResources<R, S>, request: request::SerializeKey)
         -> Result<reply::SerializeKey, Error>
     {
         let key_id = request.key.object_id;
@@ -127,9 +127,9 @@ SerializeKey<'_, R, S> for super::Ed25519
 
 #[cfg(feature = "ed25519")]
 impl<R: RngRead, S: Store>
-Exists<'_, R, S> for super::Ed25519
+Exists<R, S> for super::Ed25519
 {
-    fn exists(resources: &mut ServiceResources<'_, R, S>, request: request::Exists)
+    fn exists(resources: &mut ServiceResources<R, S>, request: request::Exists)
         -> Result<reply::Exists, Error>
     {
         let key_id = request.key.object_id;
@@ -144,9 +144,9 @@ Exists<'_, R, S> for super::Ed25519
 
 #[cfg(feature = "ed25519")]
 impl<R: RngRead, S: Store>
-Sign<'_, R, S> for super::Ed25519
+Sign<R, S> for super::Ed25519
 {
-    fn sign(resources: &mut ServiceResources<'_, R, S>, request: request::Sign)
+    fn sign(resources: &mut ServiceResources<R, S>, request: request::Sign)
         -> Result<reply::Sign, Error>
     {
         // Not so nice, expands to
@@ -179,9 +179,9 @@ Sign<'_, R, S> for super::Ed25519
 
 #[cfg(feature = "ed25519")]
 impl<R: RngRead, S: Store>
-Verify<'_, R, S> for super::Ed25519
+Verify<R, S> for super::Ed25519
 {
-    fn verify(resources: &mut ServiceResources<'_, R, S>, request: request::Verify)
+    fn verify(resources: &mut ServiceResources<R, S>, request: request::Verify)
         -> Result<reply::Verify, Error>
     {
         if let SignatureSerialization::Raw = request.format {
@@ -215,13 +215,13 @@ Verify<'_, R, S> for super::Ed25519
 
 #[cfg(not(feature = "ed25519"))]
 impl<R: RngRead, S: Store>
-DeriveKey<'_, R, S> for super::Ed25519 {}
+DeriveKey<R, S> for super::Ed25519 {}
 #[cfg(not(feature = "ed25519"))]
 impl<R: RngRead, S: Store>
-GenerateKey<'_, R, S> for super::Ed25519 {}
+GenerateKey<R, S> for super::Ed25519 {}
 #[cfg(not(feature = "ed25519"))]
 impl<R: RngRead, S: Store>
-Sign<'_, R, S> for super::Ed25519 {}
+Sign<R, S> for super::Ed25519 {}
 #[cfg(not(feature = "ed25519"))]
 impl<R: RngRead, S: Store>
-Verify<'_, R, S> for super::Ed25519 {}
+Verify<R, S> for super::Ed25519 {}
