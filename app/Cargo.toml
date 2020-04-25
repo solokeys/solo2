@@ -44,6 +44,9 @@ littlefs2 = { git = "https://github.com/nickray/littlefs2", branch = "main" }
 
 [features]
 default = ["board-lpcxpresso"]
+# use this to format internal flash filesystem,
+# for instance to hard reset
+format-storage = []
 
 board-lpcxpresso = ["lpcxpresso55"]
 board-prototype = ["prototype-bee"]

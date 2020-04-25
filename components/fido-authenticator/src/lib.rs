@@ -758,6 +758,9 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 };
 
                 let credential = Credential::deserialize(&data).unwrap();
+                if credentials.len() == credentials.capacity() {
+                    panic!("too many credentials! >{}", &credentials.len());
+                }
                 credentials.push(credential).unwrap();
 
             }
@@ -829,8 +832,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
         use ctap2::AuthenticatorDataFlags as Flags;
 
-        // TODO!
-        let sig_count = 124;
+        let sig_count = self.state.persistent.timestamp(&mut self.crypto)?;
 
         let authenticator_data = ctap2::get_assertion::AuthenticatorData {
             // rp_id_hash: rp_id_hash.try_convert_into().map_err(|_| Error::Other)?,
@@ -1090,7 +1092,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
             }
         };
 
-        // this is a bit mehhh..
+        // injecting this is a bit mehhh..
         let nonce = syscall!(self.crypto.random_bytes(12)).bytes.as_ref().try_into().unwrap();
         info!("nonce = {:?}", &nonce).ok();
 
@@ -1099,7 +1101,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
             parameters,
             algorithm as i32,
             key_parameter,
-            123, // todo: get counter
+            self.state.persistent.timestamp(&mut self.crypto)?,
             hmac_secret_requested.clone(),
             cred_protect_requested,
             nonce,
@@ -1145,10 +1147,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 flags
             },
 
-            sign_count: {
-                // TODO!
-                123
-            },
+            sign_count: self.state.persistent.timestamp(&mut self.crypto)?,
 
             attested_credential_data: {
                 // debug!("acd in, cid len {}, pk len {}", credential_id.0.len(), cose_public_key.len()).ok();

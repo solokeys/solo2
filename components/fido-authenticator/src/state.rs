@@ -114,16 +114,35 @@ pub struct RuntimeState {
     shared_secret: Option<Key>,
 }
 
+// TODO: Plan towards future extensibility
+//
+// - if we set all fields as optional, and annotate with `skip_serializing if None`,
+// then, missing fields in older fw versions should not cause problems with newer fw
+// versions that potentially add new fields.
+//
+// - empirically, the implementation of Deserialize doesn't seem to mind moving around
+// the order of fields, which is already nice
+//
+// - adding new non-optional fields definitely doesn't parse (but maybe it could?)
+// - same for removing a field
+// Currently, this causes the entire authnr to reset state. Maybe it should even reformat disk
+//
+// - An alternative would be `heapless::Map`, but I'd prefer something more typed.
 #[derive(Clone, Debug, uDebug, Default, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct PersistentState {
+    #[serde(skip)]
+    // TODO: there has to be a better way than.. this
+    // Pro-tip: it should involve types ^^
+    initialised: bool,
+
     key_encryption_key: Option<Key>,
     key_wrapping_key: Option<Key>,
     consecutive_pin_mismatches: u8,
     pin_hash: Option<[u8; 16]>,
-    counter: Option<Key>,
-
-    // TODO: there has to be a better way than.. this
-    initialised: bool,
+    // Ideally, we'd dogfood a "Monotonic Counter" from crypto-service.
+    // TODO: Add per-key counters for resident keys.
+    // counter: Option<Key>,
+    timestamp: u32,
 }
 
 impl PersistentState {
@@ -152,7 +171,9 @@ impl PersistentState {
             ).unwrap()
         ).map_err(|_| Error::Other)?.data;
 
-        crypto_service::cbor_deserialize(&data).map_err(|_| Error::Other)
+        let previous_state = crypto_service::cbor_deserialize(&data).map_err(|_| Error::Other);
+        cortex_m_semihosting::hprintln!("previously persisted state:\n{:?}", &previous_state).ok();
+        previous_state
     }
 
     pub fn save<S: Syscall>(&self, crypto: &mut CryptoClient<'_, S>) -> Result<()> {
@@ -169,13 +190,6 @@ impl PersistentState {
 
     // pub fn reset
 
-    // key_encryption_key: Option<Key>,
-    // key_wrapping_key: Option<Key>,
-    // retries: Option<u8>,
-    // consecutive_pin_mismatches: u8,
-    // pin_hash: Option<[u8; 16]>,
-    // counter: Option<Key>,
-
     pub fn load_if_not_initialised<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>) {
         if !self.initialised {
             if let Ok(previous_self) = Self::load(crypto) {
@@ -183,6 +197,16 @@ impl PersistentState {
             }
             self.initialised = true;
         }
+    }
+
+    pub fn timestamp<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>) -> Result<u32> {
+        self.load_if_not_initialised(crypto);
+
+        let now = self.timestamp;
+        self.timestamp += 1;
+        self.save(crypto)?;
+        cortex_m_semihosting::hprintln!("https://time.is/{}", now).ok();
+        Ok(now)
     }
 
     pub fn key_encryption_key<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>) -> Result<Key>

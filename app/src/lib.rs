@@ -154,7 +154,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         unsafe { VOLATILE_FS_ALLOC.as_mut().unwrap() },
         unsafe { &mut VOLATILE_STORAGE },
         // to trash existing data, set to true
-        false
+        cfg!(feature = "format-storage")
     ).unwrap();
 
     // // just testing, remove again obviously
