@@ -1,8 +1,10 @@
+use core::convert::TryInto;
+
 use crate::api::*;
 // use crate::config::*;
 use crate::error::Error;
 use crate::service::*;
-use crate::storage::*;
+use crate::store::*;
 use crate::types::*;
 
 #[cfg(feature = "aes256-cbc")]
@@ -21,9 +23,14 @@ impl<R: RngRead, S: Store> Encrypt<R, S> for super::Aes256Cbc
         type Aes256Cbc = Cbc<Aes256, ZeroPadding>;
 
         let key_id = request.key.object_id;
-        let mut symmetric_key = [0u8; 32];
-        let path = resources.prepare_path_for_key(KeyType::Secret, &key_id)?;
-        resources.load_key(&path, KeyKind::SymmetricKey32, &mut symmetric_key)?;
+        // let mut symmetric_key = [0u8; 32];
+        // let path = resources.key_path(KeyType::Secret, &key_id);
+        // resources.load_key(&path, KeyKind::SymmetricKey32, &mut symmetric_key)?;
+
+        let symmetric_key: [u8; 32] = resources
+            .load_key(KeyType::Secret, None, &key_id)?
+            .value.as_ref().try_into()
+            .map_err(|_| Error::InternalError)?;
 
         let zero_iv = [0u8; 16];
 		let cipher = Aes256Cbc::new_var(&symmetric_key, &zero_iv).unwrap();
@@ -53,10 +60,15 @@ impl<R: RngRead, S: Store> WrapKey<R, S> for super::Aes256Cbc
         -> Result<reply::WrapKey, Error>
     {
         // TODO: need to check both secret and private keys
-        let path = resources.prepare_path_for_key(KeyType::Secret, &request.key.object_id)?;
-        let (serialized_key, _location) = resources.load_key_unchecked(&path)?;
+        // let path = resources.key_path(KeyType::Secret, &request.key.object_id)?;
+        // let (serialized_key, _location) = resources.load_key_unchecked(&path)?;
 
-        let message: Message = serialized_key.value.try_convert_into().map_err(|_| Error::InternalError)?;
+        // let message: Message = serialized_key.value.try_convert_into().map_err(|_| Error::InternalError)?;
+
+        let message: Message = resources
+            .load_key(KeyType::Secret, None, &request.key.object_id)?
+            .value.try_convert_into()
+            .map_err(|_| Error::InternalError)?;
 
         let encryption_request = request::Encrypt {
             mechanism: Mechanism::Aes256Cbc,
@@ -88,9 +100,11 @@ impl<R: RngRead, S: Store> Decrypt<R, S> for super::Aes256Cbc
         type Aes256Cbc = Cbc<Aes256, ZeroPadding>;
 
         let key_id = request.key.object_id;
-        let mut symmetric_key = [0u8; 32];
-        let path = resources.prepare_path_for_key(KeyType::Secret, &key_id)?;
-        resources.load_key(&path, KeyKind::SymmetricKey32, &mut symmetric_key)?;
+        let symmetric_key: [u8; 32] = resources
+            .load_key(KeyType::Secret, None, &key_id)?
+            .value.as_ref()
+            .try_into()
+            .map_err(|_| Error::InternalError)?;
 
         let zero_iv = [0u8; 16];
 		let cipher = Aes256Cbc::new_var(&symmetric_key, &zero_iv).unwrap();

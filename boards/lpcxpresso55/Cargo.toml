@@ -11,4 +11,4 @@ cortex-m-rt = "0.6.10"
 [dependencies.lpc55-hal]
 git = "https://github.com/nickray/lpc55-hal"
 branch = "main"
-features = ["rtfm-peripherals"]
+features = ["littlefs", "rtfm-peripherals"]

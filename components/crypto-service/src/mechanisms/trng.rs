@@ -2,7 +2,7 @@ use crate::api::*;
 // use crate::config::*;
 use crate::error::Error;
 use crate::service::*;
-use crate::storage::*;
+use crate::store::*;
 use crate::types::*;
 
 #[cfg(feature = "trng")]
@@ -21,8 +21,11 @@ GenerateKey<R, S> for super::Trng
         let key_id = resources.generate_unique_id()?;
 
         // store keys
-        let path = resources.prepare_path_for_key(KeyType::Private, &key_id)?;
-        resources.store_key(request.attributes.persistence, &path, KeyKind::Entropy32, &entropy)?;
+        let key_id = resources.store_key(
+            request.attributes.persistence,
+            KeyType::Secret,
+            KeyKind::Entropy32,
+            &entropy)?;
 
         Ok(reply::GenerateKey { key: ObjectHandle { object_id: key_id } })
     }

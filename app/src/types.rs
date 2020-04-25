@@ -9,9 +9,7 @@ use ctap_types::consts;
 use fido_authenticator::SilentAuthenticator;
 // use usbd_ctaphid::insecure::InsecureRamAuthenticator;
 
-pub struct FlashStorage {
-    pub driver: hal::drivers::FlashGordon,
-}
+pub type FlashStorage = hal::drivers::FlashGordon;
 
 pub type Authenticator = fido_authenticator::Authenticator<'static, CryptoSyscall, SilentAuthenticator>;
 
@@ -30,7 +28,8 @@ const_ram_storage!(ExternalStorage, 8192);
 const_ram_storage!(VolatileStorage, 8192);
 
 store!(Store,
-    Internal: InternalStorage,
+    // Internal: InternalStorage,
+    Internal: FlashStorage,
     External: ExternalStorage,
     Volatile: VolatileStorage
 );

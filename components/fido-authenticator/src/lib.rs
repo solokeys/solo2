@@ -22,6 +22,7 @@ use crypto_service::{
         StorageAttributes,
     },
 };
+
 use ctap_types::{
     Bytes, consts, String, Vec,
     cose::P256PublicKey as CoseP256PublicKey,
@@ -31,6 +32,8 @@ use ctap_types::{
     // authenticator::ctap1,
     authenticator::{ctap2, Error, Request, Response},
 };
+
+use littlefs2::path::PathBuf;
 
 macro_rules! block {
     ($future_result:expr) => {{
@@ -850,19 +853,22 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
             };
 
             // TODO: need them all..
-            let blob_id = syscall!(self.crypto.list_blobs_first(
-                prefix.clone(),
-                StorageLocation::Internal,
-                Some(rp_id_hash.clone()),
-            )).id;
+            let mut dir = PathBuf::new();
+            dir.push(b"rk\0".try_into().unwrap());
+            dir.push(&PathBuf::from(&rp_id_hash.clone()[..]));
 
-            let blob = syscall!(self.crypto.load_blob(
-                prefix.clone(),
-                blob_id,
+            let data = syscall!(self.crypto.read_dir_files_first(
                 StorageLocation::Internal,
+                dir,
+                Some(rp_id_hash.clone()),
             )).data;
 
-            let credential = Credential::deserialize(&blob).unwrap();//map_err(|_| Error::
+            let data = match data {
+                Some(data) => data,
+                None => return Err(Error::NoCredentials),
+            };
+
+            let credential = Credential::deserialize(&data).unwrap();//map_err(|_| Error::
 
             hprintln!("located credential {:?}", &credential).ok();
 
@@ -1213,18 +1219,18 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         // TODO: overwrite, error handling with KeyStoreFull
 
         let serialized_credential = credential.serialize()?;
-        let mut prefix = crypto_service::types::ShortData::new();
-        prefix.extend_from_slice(b"rk").map_err(|_| Error::Other)?;
-        let prefix = Some(crypto_service::types::Letters::try_from(prefix).map_err(|_| Error::Other)?);
-        let _blob_id = syscall!(self.crypto.store_blob(
-            prefix.clone(),
-            // credential_id.0.clone(),
-            serialized_credential.clone(),
-            StorageLocation::Internal,
 
+        let mut dir = PathBuf::new();
+        dir.push(b"rk\0".try_into().unwrap());
+        dir.push(&PathBuf::from(&rp_id_hash.clone()[..]));
+
+        syscall!(self.crypto.write_file(
+            StorageLocation::Internal,
+            dir,
+            serialized_credential.clone(),
             // user attribute for later easy lookup
             Some(rp_id_hash.clone()),
-        )).blob;
+        ));
 
         // 13. generate and return attestation statement using clientDataHash
 

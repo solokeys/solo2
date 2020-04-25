@@ -290,39 +290,38 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
         Ok(FutureResult::new(self))
     }
 
-    pub fn list_blobs_first<'c>(
+    pub fn read_dir_files_first<'c>(
         &'c mut self,
-        prefix: Option<Letters>,
         location: StorageLocation,
+        dir: PathBuf,
         user_attribute: Option<UserAttribute>,
     )
-        -> core::result::Result<FutureResult<'a, 'c, reply::ListBlobsFirst>, ClientError>
+        -> core::result::Result<FutureResult<'a, 'c, reply::ReadDirFilesFirst>, ClientError>
     {
-        self.raw.request(request::ListBlobsFirst { prefix, location, user_attribute } )?;
+        self.raw.request(request::ReadDirFilesFirst { dir, location, user_attribute } )?;
         self.syscall.syscall();
         Ok(FutureResult::new(self))
     }
 
-    pub fn load_blob<'c>(&'c mut self, prefix: Option<Letters>, id: ObjectHandle, location: StorageLocation)
-        -> core::result::Result<FutureResult<'a, 'c, reply::LoadBlob>, ClientError>
+    pub fn read_file<'c>(&'c mut self, location: StorageLocation, path: PathBuf)
+        -> core::result::Result<FutureResult<'a, 'c, reply::ReadFile>, ClientError>
     {
-        self.raw.request(request::LoadBlob { prefix, id, location } )?;
+        self.raw.request(request::ReadFile { location, path } )?;
         self.syscall.syscall();
         Ok(FutureResult::new(self))
     }
 
-    pub fn store_blob<'c>(
+    pub fn write_file<'c>(
         &'c mut self,
-        prefix: Option<Letters>, /*id: MediumData,*/
-        data: Message,
         location: StorageLocation,
+        path: PathBuf,
+        data: Message,
         user_attribute: Option<UserAttribute>,
         )
-        -> core::result::Result<FutureResult<'a, 'c, reply::StoreBlob>, ClientError>
+        -> core::result::Result<FutureResult<'a, 'c, reply::WriteFile>, ClientError>
     {
-        self.raw.request(request::StoreBlob {
-            prefix, /*id,*/ data,
-            attributes: StorageAttributes { persistence: location },
+        self.raw.request(request::WriteFile {
+            location, path, data,
             user_attribute,
         } )?;
         self.syscall.syscall();

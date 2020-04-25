@@ -32,17 +32,30 @@ generate_enums! {
     GenerateKey: 7
     // GenerateKeypair: 6
     Hash: 8
-    ListBlobsFirst: 19
-    ListBlobsNext: 20
-    LoadBlob: 9
+    // TODO: add ReadDir{First,Next}, not loading data, if needed for efficiency
+    ReadDirFilesFirst: 19
+    ReadDirFilesNext: 20
+    ReadFile: 9
     // ReadCounter: 7
     RandomBytes: 17
     SerializeKey: 10
     Sign: 11
-    StoreBlob: 12
+    WriteFile: 12
     UnwrapKey: 13
     Verify: 14
     WrapKey: 15
+
+    // // CreateDir,    <-- implied by WriteFile
+    // ReadDir: 21 //      <-- gets Option<FileType> to restrict to just dir/file DirEntries,
+    // ReadDirNext: 22 //      <-- gets Option<FileType> to restrict to just dir/file DirEntries,
+    //                   // returns simplified Metadata
+    // // ReadDirFilesFirst: 23 // <-- returns contents
+    // // ReadDirFilesNext: 24 // <-- returns contents
+    // ReadFile: 25
+    // RemoveFile: 26
+    // // RemoveDir,    <-- what for
+    // RemoveDirAll: 27
+    // WriteFile: 28
 }
 
 pub mod request {
@@ -134,18 +147,16 @@ pub mod request {
           - mechanism: Mechanism
           - message: Message
 
-        ListBlobsFirst:
-          - prefix: Option<Letters>
+        ReadDirFilesFirst:
           - location: StorageLocation
+          - dir: PathBuf
           - user_attribute: Option<UserAttribute>
 
-        ListBlobsNext:
+        ReadDirFilesNext:
 
-        LoadBlob:
-          - prefix: Option<Letters>
-          - id: ObjectHandle
-          // - id: MediumData
+        ReadFile:
           - location: StorageLocation
+          - path: PathBuf
 
         // use GetAttribute(value) on counter instead
         // ReadCounter:
@@ -165,11 +176,10 @@ pub mod request {
           - message: Message
           - format: SignatureSerialization
 
-        StoreBlob:
-          - prefix: Option<Letters>
-          // - id: MediumData
+        WriteFile:
+          - location: StorageLocation
+          - path: PathBuf
           - data: Message
-          - attributes: StorageAttributes
           - user_attribute: Option<UserAttribute>
 
         UnwrapKey:
@@ -251,15 +261,13 @@ pub mod reply {
         Hash:
           - hash: ShortData
 
-        ListBlobsFirst:
-          - id: ObjectHandle
-          - data: Message
+        ReadDirFilesFirst:
+          - data: Option<Message>
 
-        ListBlobsNext:
-          - id: ObjectHandle
-          - data: Message
+        ReadDirFilesNext:
+          - data: Option<Message>
 
-        LoadBlob:
+        ReadFile:
           - data: Message
 
         // ReadCounter:
@@ -274,8 +282,7 @@ pub mod reply {
         Sign:
             - signature: Signature
 
-        StoreBlob:
-            - blob: ObjectHandle
+        WriteFile:
 
         Verify:
             - valid: bool

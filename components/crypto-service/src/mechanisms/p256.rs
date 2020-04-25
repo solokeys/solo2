@@ -1,11 +1,48 @@
-use core::convert::{TryFrom};
+use core::convert::{TryFrom, TryInto};
 
 use crate::api::*;
 // use crate::config::*;
 use crate::error::Error;
 use crate::service::*;
-use crate::storage::*;
+use crate::store::*;
 use crate::types::*;
+
+fn load_public_key<R: RngRead, S: Store>(resources: &mut ServiceResources<R, S>, key_id: &UniqueId)
+    -> Result<nisty::PublicKey, Error> {
+
+    let public_bytes = resources
+        .load_key(KeyType::Public, Some(KeyKind::P256), &key_id)?
+        .value;
+
+    let public_bytes = match public_bytes.as_ref().len() {
+        64 => {
+            let mut public_bytes_ = [0u8; 64];
+            public_bytes_.copy_from_slice(&public_bytes.as_ref());
+            public_bytes_
+        }
+        _ => {
+            return Err(Error::InternalError);
+        }
+    };
+
+    let public_key = nisty::PublicKey::try_from(&public_bytes).map_err(|_| Error::InternalError)?;
+
+    Ok(public_key)
+}
+
+fn load_keypair<R: RngRead, S: Store>(resources: &mut ServiceResources<R, S>, key_id: &UniqueId)
+    -> Result<nisty::Keypair, Error> {
+
+    let seed: [u8; 32] = resources
+        .load_key(KeyType::Private, Some(KeyKind::P256), &key_id)?
+        .value.as_ref()
+        .try_into()
+        .map_err(|_| Error::InternalError)?;
+
+    let keypair = nisty::Keypair::generate_patiently(&seed);
+    Ok(keypair)
+}
+
 
 #[cfg(feature = "p256")]
 impl<R: RngRead, S: Store>
@@ -17,22 +54,16 @@ Agree<R, S> for super::P256
         let private_id = request.private_key.object_id;
         let public_id = request.public_key.object_id;
 
-        let mut seed = [0u8; 32];
-        let path = resources.prepare_path_for_key(KeyType::Private, &private_id)?;
-        resources.load_key(&path, KeyKind::P256, &mut seed)?;
-        let keypair = nisty::Keypair::generate_patiently(&seed);
-
-        let mut public_bytes = [0u8; 64];
-        let path = resources.prepare_path_for_key(KeyType::Public, &public_id)?;
-        resources.load_key(&path, KeyKind::P256, &mut public_bytes)?;
-        let public_key = nisty::PublicKey::try_from(&public_bytes).map_err(|_| Error::InternalError)?;
+        let keypair = load_keypair(resources, &private_id)?;
+        let public_key = load_public_key(resources, &public_id)?;
 
         // THIS IS THE CORE
         let shared_secret = keypair.secret.agree(&public_key).map_err(|_| Error::InternalError)?.to_bytes();
 
-        let key_id = resources.generate_unique_id()?;
-        let path = resources.prepare_path_for_key(KeyType::Secret, &key_id)?;
-        resources.store_key(request.attributes.persistence, &path, KeyKind::SharedSecret32, &shared_secret)?;
+        let key_id = resources.store_key(
+            request.attributes.persistence,
+            KeyType::Secret, KeyKind::SharedSecret32,
+            &shared_secret)?;
 
         // return handle
         Ok(reply::Agree { shared_secret: ObjectHandle { object_id: key_id } })
@@ -47,13 +78,14 @@ DeriveKey<R, S> for super::P256
         -> Result<reply::DeriveKey, Error>
     {
         let base_id = request.base_key.object_id;
-        let mut seed = [0u8; 32];
-        let path = resources.prepare_path_for_key(KeyType::Private, &base_id)?;
-        resources.load_key(&path, KeyKind::P256, &mut seed)?;
-        let keypair = nisty::Keypair::generate_patiently(&seed);
-        let public_id = resources.generate_unique_id()?;
-        let public_path = resources.prepare_path_for_key(KeyType::Public, &public_id)?;
-        resources.store_key(request.attributes.persistence, &public_path, KeyKind::P256, keypair.public.as_bytes())?;
+
+        let keypair = load_keypair(resources, &base_id)?;
+
+        let public_id = resources.store_key(
+            request.attributes.persistence,
+            KeyType::Public, KeyKind::P256,
+            &keypair.public.to_bytes())?;
+
         Ok(reply::DeriveKey {
             key: ObjectHandle { object_id: public_id },
         })
@@ -124,9 +156,11 @@ DeserializeKey<R, S> for super::P256
             _ => { return Err(Error::InternalError); }
         };
 
-        let public_id = resources.generate_unique_id()?;
-        let public_path = resources.prepare_path_for_key(KeyType::Public, &public_id)?;
-        resources.store_key(request.attributes.persistence, &public_path, KeyKind::P256, public_key.as_bytes())?;
+        let public_id = resources.store_key(
+            request.attributes.persistence,
+            KeyType::Public, KeyKind::P256,
+            public_key.as_bytes())?;
+
 
         Ok(reply::DeserializeKey {
             key: ObjectHandle { object_id: public_id },
@@ -150,12 +184,11 @@ GenerateKey<R, S> for super::P256
         // #[cfg(all(test, feature = "verbose-tests"))]
         // println!("p256 keypair with public key = {:?}", &keypair.public);
 
-        // generate unique ids
-        let key_id = resources.generate_unique_id()?;
-
         // store keys
-        let path = resources.prepare_path_for_key(KeyType::Private, &key_id)?;
-        resources.store_key(request.attributes.persistence, &path, KeyKind::P256, &seed)?;
+        let key_id = resources.store_key(
+            request.attributes.persistence,
+            KeyType::Private, KeyKind::P256,
+            &seed)?;
 
         // return handle
         Ok(reply::GenerateKey { key: ObjectHandle { object_id: key_id } })
@@ -171,11 +204,8 @@ SerializeKey<R, S> for super::P256
     {
 
         let key_id = request.key.object_id;
-        let path = resources.prepare_path_for_key(KeyType::Public, &key_id)?;
-        let mut buf = [0u8; 64];
-        resources.load_key(&path, KeyKind::P256, &mut buf)?;
 
-        let public_key = nisty::PublicKey::try_from(&buf).map_err(|_| Error::InternalError)?;
+        let public_key = load_public_key(resources, &key_id)?;
 
         let mut serialized_key = Message::new();
         match request.format {
@@ -218,11 +248,7 @@ Exists<R, S> for super::P256
         -> Result<reply::Exists, Error>
     {
         let key_id = request.key.object_id;
-
-        let mut seed = [0u8; 32];
-        let path = resources.prepare_path_for_key(KeyType::Private, &key_id)?;
-
-        let exists = resources.load_key(&path, KeyKind::P256, &mut seed).is_ok();
+        let exists = resources.exists_key(KeyType::Private, Some(KeyKind::P256), &key_id);
         Ok(reply::Exists { exists })
     }
 }
@@ -236,13 +262,7 @@ Sign<R, S> for super::P256
     {
         let key_id = request.key.object_id;
 
-        let mut seed = [0u8; 32];
-        let path = resources.prepare_path_for_key(KeyType::Private, &key_id)?;
-        resources.load_key(&path, KeyKind::P256, &mut seed)?;
-
-        let keypair = nisty::Keypair::generate_patiently(&seed);
-        // #[cfg(all(test, feature = "verbose-tests"))]
-        // println!("p256 keypair with public key = {:?}", &keypair.public);
+        let keypair = load_keypair(resources, &key_id)?;
 
         let native_signature = keypair.sign(&request.message);
 
@@ -272,18 +292,7 @@ Verify<R, S> for super::P256
     {
         let key_id = request.key.object_id;
 
-        let mut serialized_key = [0u8; 64];
-        // #[cfg(all(test, feature = "verbose-tests"))]
-        // println!("attempting path from {:?}", &key_id);
-        let path = resources.prepare_path_for_key(KeyType::Public, &key_id)?;
-        // #[cfg(all(test, feature = "verbose-tests"))]
-        // println!("attempting load from {:?}", &path);
-        resources.load_key(&path, KeyKind::P256, &mut serialized_key)?;
-
-        // println!("p256 serialized public key = {:?}", &serialized_key[..]);
-        let public_key = nisty::PublicKey::try_from(&serialized_key).map_err(|_| Error::InternalError)?;
-        // #[cfg(all(test, feature = "verbose-tests"))]
-        // println!("p256 public key = {:?}", &public_key);
+        let public_key = load_public_key(resources, &key_id)?;
 
         if request.signature.len() != nisty::SIGNATURE_LENGTH {
             return Err(Error::WrongSignatureLength);

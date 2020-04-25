@@ -7,6 +7,8 @@ use panic_semihosting as _;
 // #[cfg(not(debug_assertions))]
 // use panic_halt as _;
 
+use core::convert::TryInto;
+
 // board support package
 #[cfg(not(any(feature = "board-lpcxpresso", feature = "board-prototype")))]
 compile_error!("Please select one of the board support packages.");
@@ -45,6 +47,7 @@ use types::{
 //
 
 use hal::drivers::{
+    flash::FlashGordon,
     pins,
     UsbBus,
 };
@@ -109,10 +112,6 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     unsafe { USB_BUS = Some(hal::drivers::UsbBus::new(usbfsd, usb0_vbus_pin)); }
     let usb_bus = unsafe { USB_BUS.as_ref().unwrap() };
 
-    // let flash = hal.flash.enabled(&mut syscon);
-    // let driver = hal::drivers::flash::FlashGordon::new(flash);
-    // let mut storage = FlashStorage::from(driver);
-
     // use littlefs2::fs::{Filesystem, FilesystemWith};
     // let mut alloc = Filesystem::allocate();
     // let mut fs = match FilesystemWith::mount(&mut alloc, &mut storage) {
@@ -127,49 +126,52 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
     static mut CRYPTO_REQUESTS: crypto_service::pipe::RequestPipe = heapless::spsc::Queue(heapless::i::Queue::u8());
     static mut CRYPTO_REPLIES: crypto_service::pipe::ReplyPipe = heapless::spsc::Queue(heapless::i::Queue::u8());
-    let mut client_id = heapless::Vec::new();
-    client_id.extend_from_slice(b"fido2").unwrap();
+    let mut client_id = littlefs2::path::PathBuf::new();
+    client_id.push(b"fido2\0".try_into().unwrap());
     let (service_endpoint, client_endpoint) = crypto_service::pipe::new_endpoints(
         unsafe { &mut CRYPTO_REQUESTS },
         unsafe { &mut CRYPTO_REPLIES },
         client_id,
     );
 
+    // static mut INTERNAL_STORAGE: InternalStorage = InternalStorage::new();
+    // static mut INTERNAL_FS_ALLOC: Option<Allocation<InternalStorage>> = None;
+    // unsafe { INTERNAL_FS_ALLOC = Some(Filesystem::allocate()); }
+    //
     use littlefs2::fs::{Allocation, Filesystem};
 
-    static mut INTERNAL_STORAGE: InternalStorage = InternalStorage::new();
-    let internal_storage = unsafe { &mut INTERNAL_STORAGE };
-    Filesystem::format(internal_storage).expect("could not format internal storage");
-    static mut INTERNAL_FS_ALLOC: Option<Allocation<InternalStorage>> = None;
+    let flash = hal.flash.enabled(&mut syscon);
+    static mut INTERNAL_STORAGE: Option<FlashGordon> = None;
+    unsafe { INTERNAL_STORAGE = Some(hal::drivers::flash::FlashGordon::new(flash)); }
+    static mut INTERNAL_FS_ALLOC: Option<Allocation<FlashGordon>> = None;
     unsafe { INTERNAL_FS_ALLOC = Some(Filesystem::allocate()); }
-    let internal_fs_alloc = unsafe { INTERNAL_FS_ALLOC.as_mut().unwrap() };
 
     static mut EXTERNAL_STORAGE: ExternalStorage = ExternalStorage::new();
-    let external_storage = unsafe { &mut EXTERNAL_STORAGE };
-    Filesystem::format(external_storage).expect("could not format external storage");
     static mut EXTERNAL_FS_ALLOC: Option<Allocation<ExternalStorage>> = None;
     unsafe { EXTERNAL_FS_ALLOC = Some(Filesystem::allocate()); }
-    let external_fs_alloc = unsafe { EXTERNAL_FS_ALLOC.as_mut().unwrap() };
 
     static mut VOLATILE_STORAGE: VolatileStorage = VolatileStorage::new();
-    let volatile_storage = unsafe { &mut VOLATILE_STORAGE };
-    Filesystem::format(volatile_storage).expect("could not volatile internal storage");
     static mut VOLATILE_FS_ALLOC: Option<Allocation<VolatileStorage>> = None;
     unsafe { VOLATILE_FS_ALLOC = Some(Filesystem::allocate()); }
-    let volatile_fs_alloc = unsafe { VOLATILE_FS_ALLOC.as_mut().unwrap() };
 
 
     let store = Store::claim().unwrap();
     store.mount(
-        internal_fs_alloc, internal_storage,
-        external_fs_alloc, external_storage,
-        volatile_fs_alloc, volatile_storage,
+        unsafe { INTERNAL_FS_ALLOC.as_mut().unwrap() },
+        // unsafe { &mut INTERNAL_STORAGE },
+        unsafe { INTERNAL_STORAGE.as_mut().unwrap() },
+        unsafe { EXTERNAL_FS_ALLOC.as_mut().unwrap() },
+        unsafe { &mut EXTERNAL_STORAGE },
+        unsafe { VOLATILE_FS_ALLOC.as_mut().unwrap() },
+        unsafe { &mut VOLATILE_STORAGE },
         true
     ).unwrap();
 
-    use crypto_service::storage::Store as _;
-    store.ifs().write("tmp.file", b"test data").unwrap();
-    let data: heapless::Vec<_, heapless::consts::U64> = store.ifs().read("tmp.file").unwrap();
+    // just testing, remove again obviously
+    use crypto_service::store::Store as _;
+    let tmp_file = b"tmp.file\0".try_into().unwrap();
+    store.ifs().write(tmp_file, b"test data").unwrap();
+    let data: heapless::Vec<_, heapless::consts::U64> = store.ifs().read(tmp_file).unwrap();
     cortex_m_semihosting::hprintln!("data: {:?}", &data).ok();
 
     let mut crypto_service = crypto_service::service::Service::new(rng, store);

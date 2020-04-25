@@ -4,7 +4,7 @@ use crate::api::*;
 // use crate::config::*;
 use crate::error::Error;
 use crate::service::*;
-use crate::storage::*;
+use crate::store::*;
 use crate::types::*;
 
 // TODO: The non-detached versions seem better.
@@ -26,12 +26,13 @@ GenerateKey<R, S> for super::Chacha8Poly1305 {
         resources.rng.read(entropy)
             .map_err(|_| Error::EntropyMalfunction)?;
 
-        // generate unique ids
-        let key_id = resources.generate_unique_id()?;
-
         // store keys
-        let path = resources.prepare_path_for_key(KeyType::Secret, &key_id)?;
-        resources.store_key(request.attributes.persistence, &path, KeyKind::Symmetric32Nonce12, &serialized)?;
+        let key_id = resources.store_key(
+            request.attributes.persistence,
+            KeyType::Secret,
+            KeyKind::Symmetric32Nonce12,
+            &serialized,
+        )?;
 
         Ok(reply::GenerateKey { key: ObjectHandle { object_id: key_id } })
     }
@@ -61,10 +62,16 @@ Decrypt<R, S> for super::Chacha8Poly1305
         use chacha20poly1305::ChaCha8Poly1305;
         use chacha20poly1305::aead::{Aead, NewAead};
 
-        let key_id = request.key.object_id;
-        let path = resources.prepare_path_for_key(KeyType::Secret, &key_id)?;
-        let mut serialized = [0u8; 44];
-        resources.load_key(&path, KeyKind::Symmetric32Nonce12, &mut serialized)?;
+        let serialized_value = resources
+            .load_key(KeyType::Secret, Some(KeyKind::Symmetric32Nonce12), &request.key.object_id)?
+            .value;
+        let serialized = serialized_value.as_ref();
+
+        // if serialized.len() != 44 {
+        //     return Error::InternalError;
+        // }
+        assert!(serialized.len() == 44);
+
         let symmetric_key = &serialized[..32];
 
         let aead = ChaCha8Poly1305::new(GenericArray::clone_from_slice(&symmetric_key));
@@ -98,24 +105,43 @@ Encrypt<R, S> for super::Chacha8Poly1305
         use chacha20poly1305::ChaCha8Poly1305;
         use chacha20poly1305::aead::{Aead, NewAead};
 
+
         // load key and nonce
-        let key_id = request.key.object_id;
-        let path = resources.prepare_path_for_key(KeyType::Secret, &key_id)?;
-        let mut serialized = [0u8; 44];
+        let key_type = KeyType::Secret;
+        let key_kind = KeyKind::Symmetric32Nonce12;
+        let key_id = &request.key.object_id;
+        let mut serialized_value = resources
+            .load_key(key_type, Some(key_kind), key_id)?
+            .value;
+        let serialized = serialized_value.as_mut();
+
+        assert!(serialized.len() == 44);
+
+        // no panic by above early return
+        let location = resources.key_id_location(key_type, key_id).unwrap();
+
+        // let key_id = request.key.object_id;
+        // let path = resources.prepare_path_for_key(KeyType::Secret, &key_id)?;
+        // let mut serialized = [0u8; 44];
         // debug!("loading encryption key: {:?}", &path).ok();
-        let location: StorageLocation = resources.load_key(&path, KeyKind::Symmetric32Nonce12, &mut serialized)?;
+
         {
             let nonce = &mut serialized[32..];
             // increment nonce
             increment_nonce(nonce)?;
         }
-        resources.store_key(location, &path, KeyKind::Symmetric32Nonce12, &serialized)?;
+        // increment_nonce(&mut serialized[32..])?;
+
+        resources.overwrite_key(location, key_type, key_kind, key_id, &serialized)?;
 
         let (symmetric_key, generated_nonce) = serialized.split_at_mut(32);
+
         let nonce = match request.nonce.as_ref() {
             Some(nonce) => nonce.as_ref(),
             None => generated_nonce,
         };
+
+
 
         // keep in state?
         let aead = ChaCha8Poly1305::new(GenericArray::clone_from_slice(symmetric_key));
@@ -143,13 +169,18 @@ WrapKey<R, S> for super::Chacha8Poly1305
         -> Result<reply::WrapKey, Error>
     {
         debug!("crypto-service: Chacha8Poly1305::WrapKey").ok();
+
         // TODO: need to check both secret and private keys
-        let path = resources.prepare_path_for_key(KeyType::Private, &request.key.object_id)?;
-        // hprintln!("loading key to be wrapped from: {:?}", &path).ok();
-        let (serialized_key, _location) = resources.load_key_unchecked(&path)?;
+        let serialized_key = resources
+            .load_key(KeyType::Secret, Some(KeyKind::Symmetric32Nonce12), &request.key.object_id)?
+            .value;
+
+        // let path = resources.prepare_path_for_key(KeyType::Private, &request.key.object_id)?;
+        // // hprintln!("loading key to be wrapped from: {:?}", &path).ok();
+        // let (serialized_key, _location) = resources.load_key_unchecked(&path)?;
 
         let mut message = Message::new();
-        crate::cbor_serialize_bytes(&serialized_key, &mut message).map_err(|_| Error::CborError)?;
+        crate::cbor_serialize_bytes(&serialized_key.as_ref(), &mut message).map_err(|_| Error::CborError)?;
 
         let encryption_request = request::Encrypt {
             mechanism: Mechanism::Chacha8Poly1305,
@@ -200,12 +231,9 @@ UnwrapKey<R, S> for super::Chacha8Poly1305
         let kind = KeyKind::try_from(kind).map_err(|_| Error::InternalError)?;
 
         // TODO: need to check both secret and private keys
-        let key_id = resources.generate_unique_id()?;
-        let path = resources.prepare_path_for_key(KeyType::Private, &key_id)?;
-
-        resources.store_key(
+        let key_id = resources.store_key(
             request.attributes.persistence,
-            &path,
+            KeyType::Secret,
             kind,
             &value,
         )?;

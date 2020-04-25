@@ -7,7 +7,7 @@ use crate::api::*;
 // use crate::config::*;
 use crate::error::Error;
 use crate::service::*;
-use crate::storage::*;
+use crate::store::*;
 use crate::types::*;
 
 #[cfg(feature = "hmac-sha256")]
@@ -22,12 +22,12 @@ Sign<R, S> for super::HmacSha256
         type HmacSha256 = Hmac<Sha256>;
 
         let key_id = request.key.object_id;
-        // let mut shared_secret = [0u8; 32];
-        let path = resources.prepare_path_for_key(KeyType::Secret, &key_id)?;
-        // let (serialized_key, _) = resources.load_key_unchecked(&path, KeyKind::SymmetricKey32, &mut shared_secret)?;
-        let (serialized_key, _) = resources.load_key_unchecked(&path)?;
-        let shared_secret = &serialized_key.value;
-        let l = shared_secret.len();
+        let shared_secret = resources.load_key(KeyType::Secret, None, &key_id)?.value;
+
+        // let path = resources.prepare_path_for_key(KeyType::Secret, &key_id)?;
+        // let (serialized_key, _) = resources.load_key_unchecked(&path)?;
+        // let shared_secret = &serialized_key.value;
+        let l = shared_secret.as_ref().len();
         if (l & 0xf) != 0 {
             hprintln!("wrong key length, expected multiple of 16, got {}", l).ok();
             Err(Error::WrongKeyKind)?;
@@ -36,7 +36,7 @@ Sign<R, S> for super::HmacSha256
         // resources.load_key(&path, KeyKind::SymmetricKey16, &mut shared_secret)?;
 
         // let mut mac = HmacSha256::new_varkey(&shared_secret)
-        let mut mac = HmacSha256::new_varkey(shared_secret)
+        let mut mac = HmacSha256::new_varkey(&shared_secret.as_ref())
             .expect("HMAC can take key of any size");
 
         mac.input(&request.message);
@@ -67,12 +67,12 @@ GenerateKey<R, S> for super::HmacSha256
         // #[cfg(all(test, feature = "verbose-tests"))]
         // println!("ed25519 keypair with public key = {:?}", &keypair.public);
 
-        // generate unique ids
-        let key_id = resources.generate_unique_id()?;
-
         // store keys
-        let path = resources.prepare_path_for_key(KeyType::Secret, &key_id)?;
-        resources.store_key(request.attributes.persistence, &path, KeyKind::SymmetricKey16, &seed)?;
+        let key_id = resources.store_key(
+            request.attributes.persistence,
+            KeyType::Secret,
+            KeyKind::SymmetricKey16,
+            &seed)?;
 
         // return handle
         Ok(reply::GenerateKey { key: ObjectHandle { object_id: key_id } })

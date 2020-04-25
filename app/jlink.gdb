@@ -4,7 +4,8 @@ set history save on
 set confirm off
 
 # find commit-hash using `rustc -Vv`
-set substitute-path /rustc/b8cedc00407a4c56a3bda1ed605c6fc166655447 /home/nicolas/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust
+# set substitute-path /rustc/b8cedc00407a4c56a3bda1ed605c6fc166655447 /home/nicolas/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust
+set substitute-path /rustc/1572c433eed495d0ade41511ae106b180e02851d /home/nicolas/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust
 
 target extended-remote :2331
 load

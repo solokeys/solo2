@@ -14,6 +14,7 @@ pub use littlefs2::{
     fs::Filesystem,
     driver::Storage as LfsStorage,
     io::Result as LfsResult,
+    path::PathBuf,
 };
 
 use serde::{Deserialize, Serialize};
@@ -39,7 +40,8 @@ pub type AeadKey = [u8; 32];
 pub type AeadNonce = [u8; 12];
 pub type AeadTag = [u8; 16];
 
-pub type ClientId = heapless::Vec<u8, heapless::consts::U32>;
+// pub type ClientId = heapless::Vec<u8, heapless::consts::U32>;
+pub type ClientId = PathBuf;
 
 // Object Hierarchy according to Cryptoki
 // - Storage
@@ -244,7 +246,7 @@ pub struct PrivateKeyAttributes {
     persistent: bool,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, uDebug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, uDebug, Serialize, Deserialize)]
 pub enum StorageLocation {
     Volatile,
     Internal,
