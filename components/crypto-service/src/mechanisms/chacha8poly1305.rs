@@ -1,6 +1,6 @@
 use core::convert::{TryFrom, TryInto};
 
-use cortex_m_semihosting::hprintln;
+// use cortex_m_semihosting::hprintln;
 
 use crate::api::*;
 // use crate::config::*;

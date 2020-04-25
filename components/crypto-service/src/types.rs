@@ -1,4 +1,5 @@
 use core::convert::TryFrom;
+use core::marker::PhantomData;
 
 pub use generic_array::GenericArray;
 
@@ -203,10 +204,51 @@ impl TryFrom<ShortData> for Letters {
 ///
 /// So e.g. users can't get at keys they don't own
 ///
-#[derive(Clone, Eq, PartialEq, Debug, uDebug, Deserialize, Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, uDebug)]//, Deserialize, Serialize)]
 pub struct ObjectHandle{
     pub object_id: UniqueId,
 }
+
+impl serde::Serialize for ObjectHandle {
+    fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_bytes(&self.object_id.0)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for ObjectHandle {
+    fn deserialize<D>(deserializer: D) -> core::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct ValueVisitor<'de>(PhantomData<&'de ()>);
+
+        impl<'de> serde::de::Visitor<'de> for ValueVisitor<'de>
+        {
+            type Value = ObjectHandle;
+
+            fn expecting(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                formatter.write_str("16 bytes")
+            }
+
+            fn visit_bytes<E>(self, v: &[u8]) -> core::result::Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                use core::convert::TryInto;
+                if v.len() != 16 {
+                    return Err(E::invalid_length(v.len(), &self))?;
+                }
+                Ok(ObjectHandle { object_id: UniqueId(v.try_into().unwrap()) } )
+            }
+        }
+
+        deserializer.deserialize_bytes(ValueVisitor(PhantomData))
+    }
+}
+
 
 #[derive(Clone, Eq, PartialEq, Debug, uDebug)]
 pub enum ObjectType {
@@ -337,9 +379,8 @@ pub enum SignatureSerialization {
     // Sec1,
 }
 
-#[derive(Clone, Eq, PartialEq, Deserialize, Serialize)]
-// pub struct UniqueId(pub(crate) [u8; 16]);
-pub struct UniqueId(pub(crate) Bytes<consts::U16>);
+#[derive(Copy, Clone, Eq, PartialEq)]//, Deserialize, Serialize)]
+pub struct UniqueId(pub(crate) [u8; 16]);
 
 impl UniqueId {
     pub fn hex(&self) -> [u8; 32] {
@@ -370,7 +411,7 @@ impl UniqueId {
             // bytes[i] = u8::from_str_radix(&hex[i..][..2], 16).map_err(|e| ())?;
             bytes[i] = u8::from_str_radix(&hex[2*i..][..2], 16).unwrap();
         }
-        Ok(UniqueId(Bytes::try_from_slice(&bytes).unwrap()))
+        Ok(UniqueId(bytes))
     }
 }
 

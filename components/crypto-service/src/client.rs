@@ -303,6 +303,16 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
         Ok(FutureResult::new(self))
     }
 
+    pub fn read_dir_files_next<'c>(
+        &'c mut self,
+    )
+        -> core::result::Result<FutureResult<'a, 'c, reply::ReadDirFilesNext>, ClientError>
+    {
+        self.raw.request(request::ReadDirFilesNext {} )?;
+        self.syscall.syscall();
+        Ok(FutureResult::new(self))
+    }
+
     pub fn read_file<'c>(&'c mut self, location: StorageLocation, path: PathBuf)
         -> core::result::Result<FutureResult<'a, 'c, reply::ReadFile>, ClientError>
     {

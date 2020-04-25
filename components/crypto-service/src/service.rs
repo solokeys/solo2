@@ -49,6 +49,7 @@ rpc_trait! {
 // let (mut fido_endpoint, mut fido2_client) = Client::new("fido2");
 // let (mut piv_endpoint, mut piv_client) = Client::new("piv");
 
+#[derive(Clone)]
 struct ReadDirFilesState {
     request: request::ReadDirFilesFirst,
     last: PathBuf,
@@ -83,24 +84,6 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
     }
 }
 
-// pub(crate) fn load_serialized_key<'s, S: LfsStorage>(fs: &mut Filesystem<'s, S>, path: &[u8], buf: &mut [u8]) -> Result<usize, Error> {
-
-//     use littlefs2::fs::File;
-//     use littlefs2::io::Read;
-
-//     let
-//     fs.open_file_and_then(path, |file| {
-//     let mut alloc = File::allocate();
-//     let mut file = File::open(&path[..], &mut alloc, fs)
-//         .map_err(|_| Error::FilesystemReadFailure)?;
-
-//     // hprintln!("reading it").ok();
-//     let size = file.read(buf)
-//         .map_err(|_| Error::FilesystemReadFailure)?;
-
-//     Ok(size)
-// }
-
 pub struct Service<'a, R, S>
 where
     R: RngRead,
@@ -115,15 +98,107 @@ unsafe impl<R: RngRead, S: Store> Send for Service<'_, R, S> {}
 
 impl<R: RngRead, S: Store> ServiceResources<R, S> {
 
+    // struct ReadDirFilesState {
+    //     request: request::ReadDirFilesFirst,
+    //     last: PathBuf,
+    // }
+
+    // fn next_read_dir_files_first_or_next(&mut self, request: Option<request::ReadDirFilesFirst>) -> littlefs2::fs::DirEntry {
+
+    //     // read_dir_files_state: Option<ReadDirFilesState>,
+    //     let (request, last) = match request {
+    //         Some(request) => {
+    //             self.read_dir_files_state = Some(ReadDirFilesState {
+    //                 request: request,
+    //                 last: PathBuf::new(),
+    //             });
+
+    //             (self.read_dir_files_state.as_ref().unwrap(), None)
+    //         }
+    //         None => {
+    //             match self.read_dir_files_state {
+    //                 Some(state) => {
+    //                     (&state.request, &state.last)
+    //                 }
+    //                 None => {
+    //                     panic!("WOHAHAAA");
+    //                 }
+    //             }
+    //         }
+    //     };
+
+    //     let mut seen_last = !last.is_some();
+
+    //     assert!(request.location == StorageLocation::Internal);
+
+    //     let mut path = self.namespace_path(&request.dir);
+    //     let fs = self.store.ifs();
+
+    //     let entry = fs.read_dir_and_then(&path, |dir| {
+    //         let past_last = false;
+    //         for entry in dir {
+    //             let entry = entry.unwrap();
+
+    //             if entry.file_type().is_dir() {
+    //                 continue;
+    //             }
+
+    //             let name = entry.file_name();
+
+    //             match last {
+    //                 Some(last) => {
+    //                     if last == name {
+    //                         seen_last = true;
+    //                         continue;
+    //                     }
+    //                     if !seen_last {
+    //                         continue;
+    //                     }
+    //                 }
+
+    //                 None =>{}
+    //             }
+
+    //             if let Some(user_attribute) = request.user_attribute.as_ref() {
+    //                 hprintln!("in user_attribute code").ok();
+    //                 let mut path = path.clone();
+    //                 path.push(name);
+    //                 let attribute = fs.attribute(&path, crate::config::USER_ATTRIBUTE_NUMBER)
+    //                     .map_err(|e| {
+    //                         info!("error getting attribute: {:?}", &e).ok();
+    //                         littlefs2::io::Error::Io
+    //                     }
+    //                 )?;
+
+    //                 match attribute {
+    //                     None => continue,
+    //                     Some(attribute) => {
+    //                         if user_attribute != attribute.data() {
+    //                             continue;
+    //                         }
+    //                     }
+    //                 }
+    //             }
+
+    //             return Ok(entry);
+    //         }
+
+    //         Err(littlefs2::io::Error::NoSuchEntry)
+
+    //     }).map_err(|_| Error::InternalError)?;
+
+    //     entry
+    // }
+
     pub fn reply_to(&mut self, request: Request) -> Result<Reply, Error> {
         // TODO: what we want to do here is map an enum to a generic type
         // Is there a nicer way to do this?
         // hprintln!("crypto-service request: {:?}", &request).ok();
-        hprintln!("IFS/EFS/VFS available BEFORE: {}/{}/{}",
-              self.store.ifs().available_blocks().unwrap(),
-              self.store.efs().available_blocks().unwrap(),
-              self.store.vfs().available_blocks().unwrap(),
-        ).ok();
+        // hprintln!("IFS/EFS/VFS available BEFORE: {}/{}/{}",
+        //       self.store.ifs().available_blocks().unwrap(),
+        //       self.store.efs().available_blocks().unwrap(),
+        //       self.store.vfs().available_blocks().unwrap(),
+        // ).ok();
         #[cfg(feature = "deep-semihosting-logs")]
         hprintln!("crypto-service request: {:?}", &request).ok();
         match request {
@@ -235,35 +310,23 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
             },
 
             Request::ReadDirFilesFirst(request) => {
-                // TODO: ergonooomics
-
                 assert!(request.location == StorageLocation::Internal);
 
-                let mut path = self.namespace_path(&request.dir);
-
-                #[cfg(feature = "semihosting")]
-                hprintln!("listing blobs in {:?}", &path).ok();
+                let path = self.namespace_path(&request.dir);
 
                 let fs = self.store.ifs();
 
                 let entry = fs.read_dir_and_then(&path, |dir| {
                     for entry in dir {
-                        let entry = entry.unwrap();
                         // let entry = entry?;//.map_err(|_| Error::InternalError)?;
+                        let entry = entry.unwrap();
                         if entry.file_type().is_dir() {
-                            #[cfg(feature = "semihosting")]
-                            hprintln!("a skipping subdirectory {:?}", &entry.file_name()).ok();
                             continue;
                         }
 
-                        // hprintln!("done skipping").ok();
-
                         let name = entry.file_name();
-                        #[cfg(feature = "semihosting")]
-                        hprintln!("first file found: {:?}", name.as_ref()).ok();
 
                         if let Some(user_attribute) = request.user_attribute.as_ref() {
-                            hprintln!("in user_attribute code").ok();
                             let mut path = path.clone();
                             path.push(name);
                             let attribute = fs.attribute(&path, crate::config::USER_ATTRIBUTE_NUMBER)
@@ -290,10 +353,101 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
 
                 }).map_err(|_| Error::InternalError)?;
 
-                hprintln!("about to reply for entry {:?}", &entry).ok();
                 let data = store::read(self.store, request.location, entry.path())?;
+
+                self.read_dir_files_state = Some(ReadDirFilesState {
+                    request,
+                    last: entry.file_name().into(),
+                });
+
                 Ok(Reply::ReadDirFilesFirst(reply::ReadDirFilesFirst {
                     data: Some(data),
+                } ))
+            }
+
+            Request::ReadDirFilesNext(_request) => {
+                // TODO: ergonooomics
+
+                let ReadDirFilesState { request, last } = match &self.read_dir_files_state {
+                    Some(state) => state.clone(),
+                    None => panic!("call ReadDirFilesFirst before ReadDirFilesNext"),
+                };
+
+                let path = self.namespace_path(&request.dir);
+                let fs = self.store.ifs();
+
+                let mut found_last = false;
+                let entry = fs.read_dir_and_then(&path, |dir| {
+                    for entry in dir {
+
+                        let entry = entry.unwrap();
+
+                        if entry.file_type().is_dir() {
+                            continue;
+                        }
+
+                        let name = entry.file_name();
+
+                        if !found_last {
+                            let name: PathBuf = name.into();
+                            // hprintln!("comparing {:} with last {:?}", &name, &last).ok();
+                            // TODO: This failed when all bytes (including trailing null) were
+                            // compared. It turned out that `last` had a trailing 240 instead.
+                            if last == name {
+                                found_last = true;
+                                // hprintln!("found last").ok();
+                            }
+                            continue;
+                        }
+
+                        // #[cfg(feature = "semihosting")]
+                        // hprintln!("next file found: {:?}", name.as_ref()).ok();
+
+                        if let Some(user_attribute) = request.user_attribute.as_ref() {
+                            let mut path = path.clone();
+                            path.push(name);
+                            let attribute = fs.attribute(&path, crate::config::USER_ATTRIBUTE_NUMBER)
+                                .map_err(|e| {
+                                    info!("error getting attribute: {:?}", &e).ok();
+                                    littlefs2::io::Error::Io
+                                }
+                            )?;
+
+                            match attribute {
+                                None => continue,
+                                Some(attribute) => {
+                                    if user_attribute != attribute.data() {
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+
+                        return Ok(entry);
+                    }
+
+                    Err(littlefs2::io::Error::NoSuchEntry)
+
+                });
+
+                let data = match entry {
+                    Err(littlefs2::io::Error::NoSuchEntry) => None,
+                    Ok(entry) => {
+                        let data = store::read(self.store, request.location, entry.path())?;
+
+                        self.read_dir_files_state = Some(ReadDirFilesState {
+                            request,
+                            last: entry.file_name().into(),
+                        });
+
+                        Some(data)
+
+                    }
+                    Err(_) => return Err(Error::InternalError),
+                };
+
+                Ok(Reply::ReadDirFilesNext(reply::ReadDirFilesNext {
+                    data,
                 } ))
             }
 
@@ -459,7 +613,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
 
     pub fn exists_key(&self, key_type: KeyType, key_kind: Option<KeyKind>, key_id: &UniqueId)
         -> bool  {
-        self.load_key(KeyType::Secret, key_kind, key_id).is_ok()
+        self.load_key(key_type, key_kind, key_id).is_ok()
     }
 
     pub fn load_key(&self, key_type: KeyType, key_kind: Option<KeyKind>, key_id: &UniqueId)
@@ -495,7 +649,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
 
         // #[cfg(all(test, feature = "verbose-tests"))]
         // println!("unique id {:?}", &unique_id);
-        Ok(UniqueId(Bytes::try_from_slice(&unique_id).unwrap()))
+        Ok(UniqueId(unique_id))
     }
 
 }

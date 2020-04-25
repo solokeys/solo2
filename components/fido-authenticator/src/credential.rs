@@ -198,9 +198,18 @@ impl Credential {
         Ok(serialized)
     }
 
+    /// BIG TODO: currently, if the data is invalid (for instance, if we
+    /// rotated our encryption key), then this will crash...
     pub fn deserialize(bytes: &SerializedCredential) -> Result<Self> {
         // ctap_types::serde::cbor_deserialize(bytes).map_err(|_| Error::Other)
-        Ok(ctap_types::serde::cbor_deserialize(bytes).unwrap())
+
+        // Ok(ctap_types::serde::cbor_deserialize(bytes).unwrap())
+        match ctap_types::serde::cbor_deserialize(bytes) {
+            Ok(s) => Ok(s),
+            Err(_) => {
+                panic!("could not deserialize {:?}", bytes);
+            }
+        }
     }
 
     // Does not work, as it would use a new, different nonce!

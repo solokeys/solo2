@@ -35,6 +35,8 @@ use ctap_types::{
 
 use littlefs2::path::PathBuf;
 
+pub mod state;
+
 fn format_hex(data: &[u8], mut buffer: &mut [u8]) {
     const HEX_CHARS: &[u8] = b"0123456789abcdef";
     for byte in data.iter() {
@@ -42,13 +44,6 @@ fn format_hex(data: &[u8], mut buffer: &mut [u8]) {
         buffer[1] = HEX_CHARS[(byte & 0xf) as usize];
         buffer = &mut buffer[2..];
     }
-}
-
-// dir.push(&PathBuf::from(&format_hex_16(&rp_id_hash[..].try_into().unwrap())));
-fn format_hex_16(data: &[u8; 16]) -> [u8; 32] {
-    let mut hex = [0u8; 32];
-    format_hex(data, &mut hex);
-    hex
 }
 
 fn rp_rk_dir(rp_id_hash: &Bytes<consts::U32>) -> PathBuf {
@@ -147,171 +142,33 @@ fn cbor_serialize_message<T: serde::Serialize>(object: &T) -> core::result::Resu
     Ok(message)
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
-pub struct Configuration {
-    aaguid: Bytes<consts::U16>,
-}
-
-#[derive(Clone, Debug, Default, serde::Deserialize, serde::Serialize)]
-pub struct State {
-    attestation_key: Option<ObjectHandle>,
-    counter: Option<ObjectHandle>,
-    key_agreement_key: Option<ObjectHandle>,
-    key_encryption_key: Option<ObjectHandle>,
-    key_wrapping_key: Option<ObjectHandle>,
-    pin_token: Option<ObjectHandle>,
-    retries: Option<u8>,
-    consecutive_pin_mismatches: u8,
-    pin_hash: Option<[u8; 16]>,
-}
-
-// impl State {
-//     pub fn key_agreement_key(crypto: &mut CryptoClient
-// }
-
 pub struct Authenticator<'a, S, UP>
 where
     S: CryptoSyscall,
     UP: UserPresence,
 {
-    config: Configuration,
     crypto: CryptoClient<'a, S>,
     rpc: AuthenticatorEndpoint<'a>,
-    state: State,
+    state: state::State,
     up: UP,
 }
-
-// #[derive(Clone, Debug)]
-// pub enum Error {
-//     Catchall,
-// }
 
 impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
     pub fn new(crypto: CryptoClient<'a, S>, rpc: AuthenticatorEndpoint<'a>, up: UP) -> Self {
 
-        let config = Configuration {
-            aaguid: Bytes::try_from_slice(b"AAGUID0123456789").unwrap(),
-        };
-        let state = State::default();
-        let authenticator = Authenticator { config, crypto, rpc, state, up };
+        let mut crypto = crypto;
+        let state = state::State::new(&mut crypto);
+        let authenticator = Authenticator { crypto, rpc, state, up };
 
         authenticator
     }
-
-    pub fn attestation_key(&mut self) -> Result<ObjectHandle> {
-        match self.state.attestation_key.clone() {
-            Some(key) => Ok(key),
-            None => self.rotate_attestation_key(),
-        }
-    }
-
-    // TODO: How to inject this?
-    pub fn rotate_attestation_key(&mut self) -> Result<ObjectHandle> {
-        // TODO: delete old one first
-        let key = block!(self.crypto
-            .generate_p256_private_key(StorageLocation::Internal).map_err(|_| Error::Other)?)
-            .map_err(|_| Error::Other)?.key;
-        self.state.attestation_key = Some(key.clone());
-        Ok(key)
-    }
-
-    pub fn key_agreement_key(&mut self) -> Result<ObjectHandle> {
-        match self.state.key_agreement_key.clone() {
-            Some(key) => Ok(key),
-            None => self.rotate_key_agreement_key(),
-        }
-    }
-
-    pub fn rotate_key_encryption_key(&mut self) -> Result<ObjectHandle> {
-        // TODO: delete old one first
-        if let Some(key) = self.state.key_encryption_key.as_ref() {
-            // info!("deleted kek during rotation: {}", syscall!(self.crypto.delete(key.clone())).success).ok();
-        }
-        let key = block!(self.crypto
-            .generate_chacha8poly1305_key(StorageLocation::Volatile).map_err(|_| Error::Other)?)
-            .map_err(|_| Error::Other)?.key;
-        self.state.key_encryption_key = Some(key.clone());
-        Ok(key)
-    }
-
-    pub fn key_encryption_key(&mut self) -> Result<ObjectHandle> {
-        match self.state.key_encryption_key.clone() {
-            Some(key) => Ok(key),
-            None => self.rotate_key_encryption_key(),
-        }
-    }
-
-    pub fn rotate_key_agreement_key(&mut self) -> Result<ObjectHandle> {
-        if let Some(key) = self.state.key_agreement_key.as_ref() {
-            info!("deleted kek during rotation: {}", syscall!(self.crypto.delete(key.clone())).success).ok();
-        }
-        let key = block!(self.crypto
-            .generate_p256_private_key(StorageLocation::Volatile).map_err(|_| Error::Other)?)
-            .map_err(|_| Error::Other)?.key;
-        self.state.key_agreement_key = Some(key.clone());
-        Ok(key)
-    }
-
-    pub fn consecutive_pin_mismatches(&mut self) -> u8 {
-        self.state.consecutive_pin_mismatches
-    }
-
-    pub fn retries(&mut self) -> Result<u8> {
-        match self.state.retries {
-            Some(retries) => Ok(retries),
-            None => {
-                self.state.retries = Some(8);
-                Ok(8)
-            }
-        }
-    }
-
-    pub fn reset_retries(&mut self) -> Result<()> {
-        self.state.retries = Some(8);
-        self.state.consecutive_pin_mismatches = 0;
-        Ok(())
-    }
-
-    pub fn decrement_retries(&mut self) -> Result<()> {
-        // error to call before initialization
-        self.state.retries = Some(self.state.retries.unwrap() - 1);
-        self.state.consecutive_pin_mismatches += 1;
-        Ok(())
-    }
-
-    pub fn pin_token(&mut self) -> Result<ObjectHandle> {
-        match self.state.pin_token.clone() {
-            Some(key) => Ok(key),
-            None => self.rotate_pin_token(),
-        }
-    }
-
-    pub fn rotate_pin_token(&mut self) -> Result<ObjectHandle> {
-        if let Some(key) = self.state.pin_token.as_ref() {
-            info!("deleted kek during rotation: {}", syscall!(self.crypto.delete(key.clone())).success).ok();
-        }
-        let key = syscall!(self.crypto.generate_hmacsha256_key(StorageLocation::Volatile)).key;
-        self.state.pin_token = Some(key.clone());
-        Ok(key)
-    }
-
-    pub fn pin_is_set(&self) -> bool {
-        self.state.pin_hash.is_some()
-    }
-
-    // pub(crate) fn config(&mut self) -> Result<C
-    //     Err(Error::Initialisation)
-    // }
 
     fn respond(&mut self, response: Result<Response>) {
         self.rpc.send.enqueue(response).expect("internal error");
     }
 
     pub fn poll(&mut self) {
-        let _kek = self.key_agreement_key().unwrap();
-        // debug!("polling authnr, kek = {:?}", &kek).ok();
-
         match self.rpc.recv.dequeue() {
             None => {},
             Some(request) => {
@@ -404,14 +261,14 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 ctap2::client_pin::Response {
                     key_agreement: None,
                     pin_token: None,
-                    retries: Some(self.retries().unwrap()),
+                    retries: Some(self.state.persistent.retries()),
                 }
             }
 
             Subcommand::GetKeyAgreement => {
                 debug!("processing CP.GKA").ok();
 
-                let private_key = self.key_agreement_key().unwrap();
+                let private_key = self.state.runtime.key_agreement_key(&mut self.crypto);
                 let public_key = syscall!(self.crypto.derive_p256_public_key(&private_key, StorageLocation::Volatile)).key;
                 let serialized_cose_key = syscall!(self.crypto.serialize_key(
                     Mechanism::P256, public_key.clone(), KeySerialization::EcdhEsHkdf256)).serialized_key;
@@ -443,7 +300,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 };
 
                 // 2. is pin already set
-                if self.pin_is_set() {
+                if self.state.persistent.pin_is_set() {
                     return Err(Error::PinAuthInvalid);
                 }
 
@@ -464,7 +321,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
                 // 6. store LEFT(SHA-256(newPin), 16), set retries to 8
                 self.hash_store_pin(&new_pin)?;
-                self.reset_retries().map_err(|_| Error::Other)?;
+                self.state.persistent.reset_retries(&mut self.crypto).map_err(|_| Error::Other)?;
 
                 ctap2::client_pin::Response {
                     key_agreement: None,
@@ -494,7 +351,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 };
 
                 // 2. fail if no retries left
-                if self.retries().unwrap() == 0 {
+                if self.state.persistent.retries() == 0 {
                     return Err(Error::PinBlocked);
                 }
 
@@ -508,7 +365,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 self.verify_pin_auth(&shared_secret, &data, pin_auth)?;
 
                 // 5. decrement retries
-                self.decrement_retries().unwrap();
+                self.state.persistent.decrement_retries(&mut self.crypto).unwrap();
 
                 // 6. decrypt pinHashEnc, compare with stored
                 match self.decrypt_pin_hash_and_maybe_escalate(&shared_secret, &pin_hash_enc) {
@@ -520,7 +377,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 }
 
                 // 7. reset retries
-                self.reset_retries()?;
+                self.state.persistent.reset_retries(&mut self.crypto)?;
 
                 // 8. decrypt and verify new PIN
                 let new_pin = self.decrypt_pin_check_length(&shared_secret, new_pin_enc)?;
@@ -551,7 +408,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 };
 
                 // 2. fail if no retries left
-                if self.retries().unwrap() == 0 {
+                if self.state.persistent.retries() == 0 {
                     return Err(Error::PinBlocked);
                 }
 
@@ -559,7 +416,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 let shared_secret = self.generate_shared_secret(platform_kek)?;
 
                 // 4. decrement retires
-                self.decrement_retries().unwrap();
+                self.state.persistent.decrement_retries(&mut self.crypto).unwrap();
 
                 // 5. decrypt and verify pinHashEnc
                 match self.decrypt_pin_hash_and_maybe_escalate(&shared_secret, &pin_hash_enc) {
@@ -572,10 +429,10 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 // hprintln!("exists? {}", syscall!(self.crypto.exists(shared_secret)).exists).ok();
 
                 // 6. reset retries
-                self.reset_retries()?;
+                self.state.persistent.reset_retries(&mut self.crypto)?;
 
                 // 7. return encrypted pinToken
-                let pin_token = self.pin_token().unwrap();
+                let pin_token = self.state.runtime.pin_token(&mut self.crypto);
                 debug!("wrapping pin token").ok();
                 // hprintln!("exists? {}", syscall!(self.crypto.exists(shared_secret)).exists).ok();
                 let pin_token_enc = syscall!(self.crypto.wrap_key_aes256cbc(&shared_secret, &pin_token)).wrapped_key;
@@ -605,18 +462,18 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         let pin_hash = syscall!(self.crypto.decrypt_aes256cbc(
             &shared_secret, pin_hash_enc)).plaintext.ok_or(Error::Other)?;
 
-        let stored_pin_hash = match self.state.pin_hash {
+        let stored_pin_hash = match self.state.persistent.pin_hash() {
             Some(hash) => hash,
             None => { return Err(Error::InvalidCommand); }
         };
 
         if &pin_hash != &stored_pin_hash {
             // I) generate new KEK
-            self.rotate_key_agreement_key()?;
-            if self.retries().unwrap() == 0 {
+            self.state.runtime.rotate_key_agreement_key(&mut self.crypto);
+            if self.state.persistent.retries() == 0 {
                 return Err(Error::PinBlocked);
             }
-            if self.consecutive_pin_mismatches() >= 3 {
+            if self.state.persistent.pin_blocked() {
                 return Err(Error::PinAuthBlocked);
             }
             return Err(Error::PinInvalid);
@@ -628,7 +485,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
     fn hash_store_pin(&mut self, pin: &Message) -> Result<()> {
         let pin_hash_32 = syscall!(self.crypto.hash_sha256(&pin)).hash;
         let pin_hash: [u8; 16] = pin_hash_32[..16].try_into().unwrap();
-        self.state.pin_hash = Some(pin_hash);
+        self.state.persistent.set_pin_hash(&mut self.crypto, pin_hash).unwrap();
 
         Ok(())
     }
@@ -662,7 +519,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
     // fn verify_pin(&mut self, pin_auth: &Bytes<consts::U16>, client_data_hash: &Bytes<consts::U32>) -> bool {
     fn verify_pin(&mut self, pin_auth: &[u8; 16], data: &[u8]) -> Result<()> {
-        let key = self.pin_token().unwrap();
+        let key = self.state.runtime.pin_token(&mut self.crypto);
         let tag = syscall!(self.crypto.sign_hmacsha256(&key, data)).signature;
         if pin_auth == &tag[..16] {
             Ok(())
@@ -684,15 +541,9 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
     }
 
     fn generate_shared_secret(&mut self, platform_key_agreement_key: &CoseEcdhEsHkdf256PublicKey) -> Result<ObjectHandle> {
-        let private_key = self.key_agreement_key().unwrap();
+        let private_key = self.state.runtime.key_agreement_key(&mut self.crypto);
         let _public_key = syscall!(self.crypto.derive_p256_public_key(&private_key, StorageLocation::Volatile)).key;
 
-        // let platform_kek = match &platform_key_agreement_key {
-        //     Some(kek) => kek,
-        //     None => {
-        //         return Err(Error::MissingParameter);
-        //     }
-        // };
         let serialized_kek = cbor_serialize_message(platform_key_agreement_key).map_err(|_| Error::InvalidParameter)?;
         let platform_kek = syscall!(
             self.crypto.deserialize_key(
@@ -736,7 +587,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 if !self.up.user_present() {
                     return Err(Error::OperationDenied);
                 }
-                if !self.pin_is_set() {
+                if !self.state.persistent.pin_is_set() {
                     return Err(Error::PinNotSet);
                 } else {
                     return Err(Error::PinAuthInvalid);
@@ -754,7 +605,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
         // 3. if no PIN is set (we have no other form of UV),
         // and platform sent `uv` or `pinAuth`, return InvalidOption
-        if !self.pin_is_set() {
+        if !self.state.persistent.pin_is_set() {
             if let Some(ref options) = &options {
                 if Some(true) == options.uv {
                     return Err(Error::InvalidOption);
@@ -769,7 +620,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         //
         // TODO: Should we should fail if `uv` is passed?
         // Current thinking: no
-        if self.pin_is_set() {
+        if self.state.persistent.pin_is_set() {
 
             // let mut uv_performed = false;
             if let Some(ref pin_auth) = pin_auth {
@@ -797,7 +648,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
             } else {
                 // 6. pinAuth not present + clientPin set --> error PinRequired
-                if self.pin_is_set() {
+                if self.state.persistent.pin_is_set() {
                     return Err(Error::PinRequired);
                 }
             }
@@ -813,7 +664,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
     )
         -> Result<CredentialList>
     {
-        let kek = self.key_encryption_key()?;
+        let kek = self.state.persistent.key_encryption_key(&mut self.crypto)?;
 
         // validate allowList
         let allowed_credentials = if let Some(allow_list) = allow_list.as_ref() {
@@ -880,42 +731,38 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
             // locate all credentials that are present on this authenticator
             // and bound to the specified rpId.
 
-            let mut prefix = crypto_service::types::ShortData::new();
-            prefix.extend_from_slice(b"rk").map_err(|_| Error::Other)?;
-            let prefix = Some(crypto_service::types::Letters::try_from(prefix).map_err(|_| Error::Other)?);
+            let rp_id_hash = self.hash(rp_id.as_ref())?;
 
-            let rp_id_hash = {
-                let hash = syscall!(self.crypto.hash_sha256(rp_id.as_ref())).hash;
-                // Bytes::try_from_slice(&hash)
-                hash.try_convert_into().map_err(|_| Error::Other)?
-            };
+            let mut credentials = CredentialList::new();
 
-            // TODO: need them all..
-            // let mut dir = PathBuf::new();
-            // dir.push(b"rk\0".try_into().unwrap());
-            // // dir.push(&PathBuf::from(&format_hex_16(&rp_id_hash[..].try_into().unwrap())));
-            // dir.push(&rp_id_hash_to_filename(&rp_id_hash));
-
-
-            hprintln!("before").ok();
             let data = syscall!(self.crypto.read_dir_files_first(
                 StorageLocation::Internal,
                 rp_rk_dir(&rp_id_hash),
                 None,
                 // Some(rp_id_hash.clone()),
             )).data;
-            hprintln!("after").ok();
 
             let data = match data {
                 Some(data) => data,
                 None => return Err(Error::NoCredentials),
             };
 
-            let credential = Credential::deserialize(&data).unwrap();//map_err(|_| Error::
-
-
-            let mut credentials = CredentialList::new();
+            let credential = Credential::deserialize(&data).unwrap();
             credentials.push(credential).unwrap();
+
+            loop {
+                let data = syscall!(self.crypto.read_dir_files_next()).data;
+                let data = match data {
+                    Some(data) => data,
+                    None => break,
+                };
+
+                let credential = Credential::deserialize(&data).unwrap();
+                credentials.push(credential).unwrap();
+
+            }
+
+            hprintln!("GATHERED {} credentials", credentials.len()).ok();
             credentials
         };
 
@@ -977,7 +824,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         // 9./10. sign clientDataHash || authData with "first" credential
 
         let credential = credentials[0].clone();
-        let kek = self.key_encryption_key()?.clone();
+        let kek = self.state.persistent.key_encryption_key(&mut self.crypto)?;
         let credential_id = credential.id(&mut self.crypto, &kek)?;
 
         use ctap2::AuthenticatorDataFlags as Flags;
@@ -985,7 +832,6 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         // TODO!
         let sig_count = 124;
 
-        hprintln!("gathering AD").ok();
         let authenticator_data = ctap2::get_assertion::AuthenticatorData {
             // rp_id_hash: rp_id_hash.try_convert_into().map_err(|_| Error::Other)?,
             rp_id_hash: rp_id_hash.clone(),
@@ -1009,18 +855,16 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
             // },
         };
 
-        hprintln!("serializing AD").ok();
         let serialized_auth_data = authenticator_data.serialize();
 
         let mut commitment = Bytes::<consts::U1024>::new();
         commitment.extend_from_slice(&serialized_auth_data).map_err(|_| Error::Other)?;
         commitment.extend_from_slice(&parameters.client_data_hash).map_err(|_| Error::Other)?;
 
-        hprintln!("getting (key, gc)").ok();
         let (key, gc) = match credential.key.clone() {
             Key::ResidentKey(key) => (key, false),
             Key::WrappedKey(bytes) => {
-                let wrapping_key = &self.key_encryption_key()?;
+                let wrapping_key = self.state.persistent.key_wrapping_key(&mut self.crypto)?;
                 hprintln!("unwrapping {:?} with wrapping key {:?}", &bytes, &wrapping_key).ok();
                 let key_result = syscall!(self.crypto.unwrap_key_chacha8poly1305(
                     &wrapping_key,
@@ -1044,7 +888,6 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
             _ => { return Err(Error::Other); }
         };
 
-        hprintln!("signing with {:?}, {:?}", &mechanism, &serialization).ok();
         debug!("signing with {:?}, {:?}", &mechanism, &serialization).ok();
         let signature = syscall!(self.crypto.sign(mechanism, key.clone(), &commitment, serialization)).signature
             .try_convert_into().map_err(|_| Error::Other)?;
@@ -1160,7 +1003,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                     }
 
                     false => {
-                        let wrapping_key = &self.key_encryption_key()?;
+                        let wrapping_key = &self.state.persistent.key_wrapping_key(&mut self.crypto)?;
                         info!("wrapping credRandom").ok();
                         let wrapped_key = syscall!(self.crypto.wrap_key_chacha8poly1305(
                             &wrapping_key,
@@ -1220,14 +1063,13 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         }
 
         // 12. if `rk` is set, store or overwrite key pair, if full error KeyStoreFull
-        hprintln!("12").ok();
 
         // 12.a generate credential
         let key_parameter = match rk_requested {
             true => Key::ResidentKey(private_key.clone()),
             false => {
                 // WrappedKey version
-                let wrapping_key = &self.key_encryption_key()?;
+                let wrapping_key = &self.state.persistent.key_wrapping_key(&mut self.crypto)?;
                 debug!("wrapping private key").ok();
                 let wrapped_key = syscall!(self.crypto.wrap_key_chacha8poly1305(
                     &wrapping_key,
@@ -1264,7 +1106,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         );
 
         // 12.b generate credential ID { = AEAD(Serialize(Credential)) }
-        let kek = self.key_encryption_key()?.clone();
+        let kek = &self.state.persistent.key_encryption_key(&mut self.crypto)?;
         let credential_id = credential.id(&mut self.crypto, &kek)?;
         let credential_id_hash = self.hash(&credential_id.0.as_ref())?;
 
@@ -1273,7 +1115,6 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
         let serialized_credential = credential.serialize()?;
 
-        hprintln!("writing RK file").ok();
         syscall!(self.crypto.write_file(
             StorageLocation::Internal,
             rk_path(&rp_id_hash, &credential_id_hash),
@@ -1282,10 +1123,8 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
             // Some(rp_id_hash.clone()),
             None,
         ));
-        hprintln!("wrote RK file").ok();
 
         // 13. generate and return attestation statement using clientDataHash
-        hprintln!("13").ok();
 
         // 13.a AuthenticatorData and its serialization
         use ctap2::AuthenticatorDataFlags as Flags;
@@ -1314,7 +1153,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
             attested_credential_data: {
                 // debug!("acd in, cid len {}, pk len {}", credential_id.0.len(), cose_public_key.len()).ok();
                 let attested_credential_data = ctap2::make_credential::AttestedCredentialData {
-                    aaguid: self.config.aaguid.clone(),
+                    aaguid: self.state.identity.aaguid(),
                     credential_id: credential_id.0.try_convert_into().unwrap(),
                     credential_public_key: cose_public_key.try_convert_into().unwrap(),
                 };
@@ -1366,7 +1205,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 }
             } else {
                 let hash = syscall!(self.crypto.hash_sha256(&commitment.as_ref())).hash;
-                let attestation_key = self.attestation_key()?;
+                let attestation_key = self.state.identity.attestation_key(&mut self.crypto);
                 let signature = syscall!(self.crypto.sign_p256(
                     &attestation_key,
                     &hash,
@@ -1486,7 +1325,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         ctap2::get_info::Response {
             versions,
             extensions: Some(extensions),
-            aaguid: self.config.aaguid.clone(),
+            aaguid: self.state.identity.aaguid(),
             options: Some(options),
             max_msg_size: Some(ctap_types::sizes::MESSAGE_SIZE),
             pin_protocols: Some(pin_protocols),

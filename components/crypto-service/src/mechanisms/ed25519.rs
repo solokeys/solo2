@@ -104,9 +104,6 @@ GenerateKey<R, S> for super::Ed25519
         // #[cfg(all(test, feature = "verbose-tests"))]
         // println!("ed25519 keypair with public key = {:?}", &keypair.public);
 
-        // generate unique ids
-        let key_id = resources.generate_unique_id()?;
-
         // store keys
         let key_id = resources.store_key(
             request.attributes.persistence,
@@ -127,20 +124,6 @@ SerializeKey<R, S> for super::Ed25519
     {
         let key_id = request.key.object_id;
         let public_key = load_public_key(resources, &key_id)?;
-        let public_bytes = public_key.as_bytes();
-
-        // // let path = resources.prepare_path_for_key(KeyType::Public, &key_id)?;
-        // // let mut buf = [0u8; 32];
-        // // resources.load_key(&path, KeyKind::Ed25519, &mut buf)?;
-
-        // let buf: [u8; 32] = resources
-        //     .load_key(KeyType::Public, Some(KeyKind::Ed25519), &key_id)?
-        //     .value.as_ref()
-        //     .try_into()
-        //     .map_err(|_| Error::InternalError)?;
-
-        // // just a test that it's valid
-        // let public_key = salty::PublicKey::try_from(&buf).map_err(|_| Error::InternalError)?;
 
         let mut serialized_key = Message::new();
         match request.format {

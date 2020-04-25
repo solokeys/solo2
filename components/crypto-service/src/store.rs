@@ -292,11 +292,13 @@ macro_rules! store { (
             static mut VFS: Option<Filesystem<'static, $Vfs>> = None;
 
             unsafe {
+                // always need to format RAM
+                Filesystem::format(vfs_storage).expect("can format");
+                // this is currently a RAM fs too...
+                Filesystem::format(efs_storage).expect("can format");
+
                 if format {
                     Filesystem::format(ifs_storage).expect("can format");
-                    Filesystem::format(efs_storage).expect("can format");
-                    Filesystem::format(vfs_storage).expect("can format");
-                    // cortex_m_semihosting::hprintln!(":: filesystems formatted").ok();
                 }
 
                 IFS_ALLOC.as_mut_ptr().write(ifs_alloc);

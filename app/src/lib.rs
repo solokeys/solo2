@@ -23,20 +23,9 @@ pub use prototype_bee as board;
 pub use board::hal;
 pub use board::rt::entry;
 
-use crypto_service::store;
-
-// use fido_authenticator::{
-//     Authenticator,
-//     // OsToAuthnrMessages,
-//     // AuthnrToOsMessages,
-//     // AuthnrChannels,
-//     // OsChannels,
-// };
-
 
 pub mod types;
 use types::{
-    InternalStorage,
     ExternalStorage,
     VolatileStorage,
     Store,
@@ -164,15 +153,16 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         unsafe { &mut EXTERNAL_STORAGE },
         unsafe { VOLATILE_FS_ALLOC.as_mut().unwrap() },
         unsafe { &mut VOLATILE_STORAGE },
-        true
+        // to trash existing data, set to true
+        false
     ).unwrap();
 
-    // just testing, remove again obviously
-    use crypto_service::store::Store as _;
-    let tmp_file = b"tmp.file\0".try_into().unwrap();
-    store.ifs().write(tmp_file, b"test data").unwrap();
-    let data: heapless::Vec<_, heapless::consts::U64> = store.ifs().read(tmp_file).unwrap();
-    cortex_m_semihosting::hprintln!("data: {:?}", &data).ok();
+    // // just testing, remove again obviously
+    // use crypto_service::store::Store as _;
+    // let tmp_file = b"tmp.file\0".try_into().unwrap();
+    // store.ifs().write(tmp_file, b"test data").unwrap();
+    // let data: heapless::Vec<_, heapless::consts::U64> = store.ifs().read(tmp_file).unwrap();
+    // cortex_m_semihosting::hprintln!("data: {:?}", &data).ok();
 
     let mut crypto_service = crypto_service::service::Service::new(rng, store);
 

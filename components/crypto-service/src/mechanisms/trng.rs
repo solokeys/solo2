@@ -17,9 +17,6 @@ GenerateKey<R, S> for super::Trng
         resources.rng.read(&mut entropy)
             .map_err(|_| Error::EntropyMalfunction)?;
 
-        // generate unique ids
-        let key_id = resources.generate_unique_id()?;
-
         // store keys
         let key_id = resources.store_key(
             request.attributes.persistence,
