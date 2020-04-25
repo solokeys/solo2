@@ -1,5 +1,7 @@
 use core::convert::{TryFrom, TryInto};
 
+use cortex_m_semihosting::hprintln;
+
 use crate::api::*;
 // use crate::config::*;
 use crate::error::Error;
@@ -172,15 +174,10 @@ WrapKey<R, S> for super::Chacha8Poly1305
 
         // TODO: need to check both secret and private keys
         let serialized_key = resources
-            .load_key(KeyType::Secret, Some(KeyKind::Symmetric32Nonce12), &request.key.object_id)?
-            .value;
-
-        // let path = resources.prepare_path_for_key(KeyType::Private, &request.key.object_id)?;
-        // // hprintln!("loading key to be wrapped from: {:?}", &path).ok();
-        // let (serialized_key, _location) = resources.load_key_unchecked(&path)?;
+            .load_key(KeyType::Secret, None, &request.key.object_id)?;
 
         let mut message = Message::new();
-        crate::cbor_serialize_bytes(&serialized_key.as_ref(), &mut message).map_err(|_| Error::CborError)?;
+        crate::cbor_serialize_bytes(&serialized_key, &mut message).map_err(|_| Error::CborError)?;
 
         let encryption_request = request::Encrypt {
             mechanism: Mechanism::Chacha8Poly1305,
@@ -190,7 +187,6 @@ WrapKey<R, S> for super::Chacha8Poly1305
             nonce: None,
         };
         let encryption_reply = <super::Chacha8Poly1305>::encrypt(resources, encryption_request)?;
-        // hprintln!("Reply {:?}", &encryption_reply).ok();
 
         let mut wrapped_key = Message::new();
         crate::cbor_serialize_bytes(&encryption_reply, &mut wrapped_key).map_err(|_| Error::CborError)?;
@@ -218,9 +214,8 @@ UnwrapKey<R, S> for super::Chacha8Poly1305
             tag,
         };
 
-        // hprintln!("Request {:?}", &decryption_request).ok();
-
-        let serialized_key = if let Some(serialized_key) = <super::Chacha8Poly1305>::decrypt(resources, decryption_request)?.plaintext {
+        let serialized_key = if let Some(serialized_key) =
+            <super::Chacha8Poly1305>::decrypt(resources, decryption_request)?.plaintext {
             serialized_key
         } else {
             return Ok(reply::UnwrapKey { key: None } );
@@ -233,6 +228,7 @@ UnwrapKey<R, S> for super::Chacha8Poly1305
         // TODO: need to check both secret and private keys
         let key_id = resources.store_key(
             request.attributes.persistence,
+            // using for signing keys... we need to know
             KeyType::Secret,
             kind,
             &value,

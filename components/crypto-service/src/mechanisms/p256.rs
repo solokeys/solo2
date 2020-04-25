@@ -34,7 +34,7 @@ fn load_keypair<R: RngRead, S: Store>(resources: &mut ServiceResources<R, S>, ke
     -> Result<nisty::Keypair, Error> {
 
     let seed: [u8; 32] = resources
-        .load_key(KeyType::Private, Some(KeyKind::P256), &key_id)?
+        .load_key(KeyType::Secret, Some(KeyKind::P256), &key_id)?
         .value.as_ref()
         .try_into()
         .map_err(|_| Error::InternalError)?;
@@ -187,7 +187,7 @@ GenerateKey<R, S> for super::P256
         // store keys
         let key_id = resources.store_key(
             request.attributes.persistence,
-            KeyType::Private, KeyKind::P256,
+            KeyType::Secret, KeyKind::P256,
             &seed)?;
 
         // return handle
@@ -248,7 +248,7 @@ Exists<R, S> for super::P256
         -> Result<reply::Exists, Error>
     {
         let key_id = request.key.object_id;
-        let exists = resources.exists_key(KeyType::Private, Some(KeyKind::P256), &key_id);
+        let exists = resources.exists_key(KeyType::Secret, Some(KeyKind::P256), &key_id);
         Ok(reply::Exists { exists })
     }
 }

@@ -1,4 +1,5 @@
 use core::convert::{TryFrom, TryInto};
+use cortex_m_semihosting::hprintln;
 
 use crypto_service::{
     Client as CryptoClient,
@@ -64,7 +65,8 @@ impl TryFrom<CredentialId> for EncryptedSerializedCredential {
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub enum Key {
     ResidentKey(ObjectHandle),
-    WrappedKey(Bytes<consts::U92>),
+    // THIS USED TO BE 92 NOW IT'S 96 or 97 or so... waddup?
+    WrappedKey(Bytes<consts::U128>),
 }
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
@@ -147,6 +149,7 @@ impl Credential {
     )
         -> Self
     {
+        hprintln!("credential for algorithm {}", algorithm).ok();
         let data = CredentialData {
             rp: parameters.rp.clone(),
             user: parameters.user.clone(),

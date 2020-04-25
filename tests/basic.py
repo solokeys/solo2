@@ -13,17 +13,22 @@ print(dev.get_info())
 # quit()
 # xxx
 
+P256 = -7
+Ed25519 = -8
+
 if True:
     # print(dev.reset())
 
-    for alg in (-7, -8):
+    # for alg in (-7, -8):
+    # for alg in (P256, Ed25519):
+    for alg in (Ed25519, P256):
         att = dev.make_credential(
             b"1234567890ABCDEF1234567890ABCDEF",
             {"id": "https://yamnord.com"},
             {"id": b"nickray"},
             [{"type": "public-key", "alg": alg}],
             extensions={"hmac-secret": True},
-            # options={"rk": True},
+            options={"rk": True},
         )
 
         # basic sanity check - would raise

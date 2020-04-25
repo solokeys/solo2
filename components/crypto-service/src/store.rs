@@ -378,104 +378,13 @@ impl<'a> TryFrom<(KeyKind, &'a [u8])> for SerializedKey {
     }
 }
 
-// pub fn load_key_unchecked(store: impl Store, path: &[u8]) -> Result<(SerializedKey, StorageLocation), Error> {
-
-//     let (location, bytes): (_, Vec<u8, consts::U128>) =
-//         match store.vfs().read(path) {
-//             Ok(bytes) => (StorageLocation::Volatile, bytes),
-//             Err(_) => match store.ifs().read(path) {
-//                 Ok(bytes) => (StorageLocation::Internal, bytes),
-//                 Err(_) => match store.efs().read(path) {
-//                     Ok(bytes) => (StorageLocation::External, bytes),
-//                     Err(_) => return Err(Error::NoSuchKey),
-//                 }
-//             }
-//         };
-
-//     let serialized_key: SerializedKey =
-//         crate::cbor_deserialize(&bytes)
-//         .map_err(|_| Error::CborError)?;
-
-//     Ok((serialized_key, location))
-
-// }
-
-// pub fn load_key(store: impl Store, path: &[u8], kind: KeyKind, key_bytes: &mut [u8]) -> Result<StorageLocation, Error> {
-//     // #[cfg(test)]
-//     // // actually safe, as path is ASCII by construction
-//     // println!("loading from file {:?}", unsafe { core::str::from_utf8_unchecked(&path[..]) });
-
-//     let (serialized_key, location) = load_key_unchecked(store, path)?;
-//     if serialized_key.kind != kind {
-//         hprintln!("wrong key kind, expected {:?} got {:?}", &kind, &serialized_key.kind).ok();
-//         Err(Error::WrongKeyKind)?;
-//     }
-
-//     key_bytes.copy_from_slice(&serialized_key.value);
-//     Ok(location)
-// }
-
-// pub fn store_serialized_key<'s, S: LfsStorage>(
-//     fs: &Filesystem<'s, S>,
-//     path: &[u8], buf: &[u8],
-//     user_attribute: Option<UserAttribute>,
-// )
-//     -> Result<(), Error>
-// {
-//     use littlefs2::fs::Attribute;
-
-//     // create directories if missing
-//     create_directories(fs, path)?;
-
-//     fs.write(path, buf).map_err(|_| Error::FilesystemWriteFailure)?;
-
-//     if let Some(user_attribute) = user_attribute.as_ref() {
-//         let mut attribute = Attribute::new(crate::config::USER_ATTRIBUTE_NUMBER);
-//         attribute.set_data(user_attribute);
-//         fs.set_attribute(path, &attribute).map_err(|e| {
-//             info!("error setting attribute: {:?}", &e).ok();
-//             Error::FilesystemWriteFailure
-//         })?;
-//     }
-
-//     Ok(())
-// }
-
-//// TODO: in the case of desktop/ram storage:
-//// - using file.sync (without file.close) leads to an endless loop
-//// - this loop happens inside `lfs_dir_commit`, namely inside its first for loop
-////   https://github.com/ARMmbed/littlefs/blob/v2.1.4/lfs.c#L1680-L1694
-//// - the `if` condition is never fulfilled, it seems f->next continues "forever"
-////   through whatever lfs->mlist is.
-////
-//// see also https://github.com/ARMmbed/littlefs/issues/145
-////
-//// OUTCOME: either ensure calling `.close()`, or patch the call in a `drop` for File.
-////
-//pub fn store_key(store: impl Store, location: StorageLocation, path: &[u8], kind: KeyKind, key_bytes: &[u8]) -> Result<(), Error> {
-//    // actually safe, as path is ASCII by construction
-//    // #[cfg(test)]
-//    // println!("storing in file {:?}", unsafe { core::str::from_utf8_unchecked(&path[..]) });
-
-//    let serialized_key = SerializedKey::try_from((kind, key_bytes))?;
-//    let mut buf = [0u8; 128];
-//    crate::cbor_serialize(&serialized_key, &mut buf).map_err(|_| Error::CborError)?;
-
-//    match location {
-//        StorageLocation::Internal => store_serialized_key(store.ifs(), path, &buf, None),
-//        StorageLocation::External => store_serialized_key(store.efs(), path, &buf, None),
-//        StorageLocation::Volatile => store_serialized_key(store.vfs(), path, &buf, None),
-//    }
-
-//}
-
 /// Reads contents from path in location of store.
-pub fn read<N: heapless::ArrayLength<u8>>(store: impl Store, location: StorageLocation, path: &Path) -> Result<Vec<u8, N>, Error> {
+pub fn read<N: heapless::ArrayLength<u8>>(store: impl Store, location: StorageLocation, path: &Path) -> Result<Bytes<N>, Error> {
     match location {
         StorageLocation::Internal => store.ifs().read(path),
         StorageLocation::External => store.efs().read(path),
         StorageLocation::Volatile => store.vfs().read(path),
-    }.map_err(|_| Error::FilesystemReadFailure)
+    }.map(|vec| Bytes::from(vec)).map_err(|_| Error::FilesystemReadFailure)
 }
 
 /// Writes contents to path in location of store.
@@ -504,9 +413,5 @@ pub fn delete(store: impl Store, location: StorageLocation, path: &Path) -> bool
         StorageLocation::Volatile => store.vfs().remove(path),
     };
 
-    if outcome.is_ok() {
-        true
-    } else {
-        false
-    }
+    outcome.is_ok()
 }

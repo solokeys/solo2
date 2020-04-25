@@ -175,7 +175,7 @@ impl core::convert::TryFrom<u8> for KeyKind {
 
 #[derive(Copy, Clone, Debug, uDebug, Eq, PartialEq)]
 pub enum KeyType {
-    Private,
+    // Private,
     Public,
     Secret,
 }

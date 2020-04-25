@@ -118,20 +118,14 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
     pub fn reply_to(&mut self, request: Request) -> Result<Reply, Error> {
         // TODO: what we want to do here is map an enum to a generic type
         // Is there a nicer way to do this?
-        // debug!("crypto-service request: {:?}", &request).ok();
-        // debug!("IFS/EFS/VFS available BEFORE: {}/{}/{}",
-        //       self.tri.ifs.available_blocks().unwrap(),
-        //       self.tri.efs.available_blocks().unwrap(),
-        //       self.tri.vfs.available_blocks().unwrap(),
-        // ).ok();
-        #[cfg(feature = "deep-semihosting-logs")]
-        hprintln!("crypto-service request: {:?}", &request).ok();
-        #[cfg(feature = "deep-semihosting-logs")]
+        // hprintln!("crypto-service request: {:?}", &request).ok();
         hprintln!("IFS/EFS/VFS available BEFORE: {}/{}/{}",
               self.store.ifs().available_blocks().unwrap(),
               self.store.efs().available_blocks().unwrap(),
               self.store.vfs().available_blocks().unwrap(),
         ).ok();
+        #[cfg(feature = "deep-semihosting-logs")]
+        hprintln!("crypto-service request: {:?}", &request).ok();
         match request {
             Request::DummyRequest => {
                 // #[cfg(test)]
@@ -191,9 +185,8 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
 
             Request::Delete(request) => {
                 let key_types = [
-                    KeyType::Private,
-                    KeyType::Public,
                     KeyType::Secret,
+                    KeyType::Public,
                 ];
 
                 let locations = [
@@ -270,6 +263,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
                         hprintln!("first file found: {:?}", name.as_ref()).ok();
 
                         if let Some(user_attribute) = request.user_attribute.as_ref() {
+                            hprintln!("in user_attribute code").ok();
                             let mut path = path.clone();
                             path.push(name);
                             let attribute = fs.attribute(&path, crate::config::USER_ATTRIBUTE_NUMBER)
@@ -287,16 +281,19 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
                                     }
                                 }
                             }
-                            return Ok(entry)
                         }
+
+                        return Ok(entry);
                     }
 
                     Err(littlefs2::io::Error::NoSuchEntry)
 
                 }).map_err(|_| Error::InternalError)?;
 
+                hprintln!("about to reply for entry {:?}", &entry).ok();
+                let data = store::read(self.store, request.location, entry.path())?;
                 Ok(Reply::ReadDirFilesFirst(reply::ReadDirFilesFirst {
-                    data: Some(Message::new()),
+                    data: Some(data),
                 } ))
             }
 
@@ -392,22 +389,6 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
         }
     }
 
-    // pub fn load_key_unchecked(&mut self, path: &[u8]) -> Result<(SerializedKey, StorageLocation), Error> {
-    //     store::load_key_unchecked(self.store, path)
-    // }
-
-    // pub fn load_key(&mut self, path: &[u8], kind: KeyKind, key_bytes: &mut [u8])
-    //     -> Result<StorageLocation, Error>
-    // {
-    //     store::load_key(self.store, path, kind, key_bytes)
-    // }
-
-    // pub fn store_key(&mut self, to: StorageLocation, path: &[u8], kind: KeyKind, key_bytes: &[u8])
-    //     -> Result<(), Error>
-    // {
-    //     store::store_key(self.store, to, path, kind, key_bytes)
-    // }
-
     // This and the following method are here, because ServiceResources knows
     // the current "client", while Store does not
     //
@@ -423,7 +404,6 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
     pub fn key_path(&self, key_type: KeyType, key_id: &UniqueId) -> PathBuf {
         let mut path = PathBuf::new();
         path.push(match key_type {
-            KeyType::Private => b"private\0".try_into().unwrap(),
             KeyType::Public => b"public\0".try_into().unwrap(),
             KeyType::Secret => b"secret\0".try_into().unwrap(),
         });
@@ -432,6 +412,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
     }
 
     pub fn store_key(&mut self, location: StorageLocation, key_type: KeyType, key_kind: KeyKind, key_material: &[u8]) -> Result<UniqueId, Error> {
+        // hprintln!("STORING {:?}", &key_kind).ok();
         let serialized_key = SerializedKey::try_from((key_kind, key_material))?;
 
         let mut buf = [0u8; 128];
@@ -478,12 +459,13 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
 
     pub fn exists_key(&self, key_type: KeyType, key_kind: Option<KeyKind>, key_id: &UniqueId)
         -> bool  {
-        self.load_key(KeyType::Private, Some(KeyKind::Ed25519), key_id).is_ok()
+        self.load_key(KeyType::Secret, key_kind, key_id).is_ok()
     }
 
     pub fn load_key(&self, key_type: KeyType, key_kind: Option<KeyKind>, key_id: &UniqueId)
         -> Result<SerializedKey, Error>  {
 
+        // hprintln!("LOADING {:?}", &key_kind).ok();
         let path = self.key_path(key_type, key_id);
 
         let location = match self.key_id_location(key_type, key_id) {
@@ -491,70 +473,19 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
             None => return Err(Error::NoSuchKey),
         };
 
-        let bytes: Vec<u8, consts::U128> = store::read(self.store, location, &path)?;
+        let bytes: Bytes<consts::U128> = store::read(self.store, location, &path)?;
 
         let serialized_key: SerializedKey = crate::cbor_deserialize(&bytes).map_err(|_| Error::CborError)?;
 
         if let Some(kind) = key_kind {
             if serialized_key.kind != kind {
-                hprintln!("wrong key kind, expected {:?} got {:?}", &kind, &serialized_key.kind).ok();
+                // hprintln!("wrong key kind, expected {:?} got {:?}", &kind, &serialized_key.kind).ok();
                 Err(Error::WrongKeyKind)?;
             }
         }
 
         Ok(serialized_key)
     }
-
-    // pub fn prepare_path_for_key(&mut self, key_type: KeyType, id: &UniqueId)
-    //     -> Result<Bytes<MAX_PATH_LENGTH>, Error> {
-    //     let mut path = Bytes::<MAX_PATH_LENGTH>::new();
-    //     path.extend_from_slice(b"/").map_err(|_| Error::InternalError)?;
-    //     path.extend_from_slice(&self.currently_serving).map_err(|_| Error::InternalError)?;
-    //     // #[cfg(all(test, feature = "verbose-tests"))]
-    //     // #[cfg(test)]
-    //     // println!("creating dir {:?}", &path);
-    //     // self.pfs.create_dir(path.as_ref()).map_err(|_| Error::FilesystemWriteFailure)?;
-
-    //     path.extend_from_slice(match key_type {
-    //         KeyType::Private => b"/private",
-    //         KeyType::Public => b"/public",
-    //         KeyType::Secret => b"/secret",
-    //     }).map_err(|_| Error::InternalError)?;
-
-    //     // #[cfg(all(test, feature = "verbose-tests"))]
-    //     // println!("creating dir {:?}", &path);
-    //     // self.pfs.create_dir(path.as_ref()).map_err(|_| Error::FilesystemWriteFailure)?;
-    //     path.extend_from_slice(b"/").map_err(|_| Error::InternalError)?;
-    //     path.extend_from_slice(&id.hex()).map_err(|_| Error::InternalError)?;
-    //     Ok(path)
-    // }
-
-    // pub fn blob_path(&mut self, prefix: &Option<Letters>, id: Option<&UniqueId>)
-    //     -> Result<Bytes<MAX_PATH_LENGTH>, Error> {
-    //     let mut path = Bytes::<MAX_PATH_LENGTH>::new();
-
-    //     path.extend_from_slice(&self.currently_serving).map_err(|_| Error::InternalError)?;
-    //     path.extend_from_slice(b"/").map_err(|_| Error::InternalError)?;
-
-    //     if let Some(prefix) = &prefix {
-    //         if !prefix.0.iter().all(|b| *b >= b'a' && *b <= b'z') {
-    //             return Err(crate::error::Error::NotJustLetters);
-    //         }
-    //         path.extend_from_slice(&prefix.0).map_err(|_| Error::InternalError)?;
-    //         path.extend_from_slice(b"/").map_err(|_| Error::InternalError)?;
-    //     }
-
-    //     // const HEX_CHARS: &[u8] = b"0123456789abcdef";
-    //     // for byte in id.iter() {
-    //     //     hprintln!("{}", &byte).ok();
-    //     //     path.push(HEX_CHARS[(byte >> 4) as usize]).map_err(|_| Error::InternalError)?;
-    //     //     path.push(HEX_CHARS[(byte & 0xf) as usize]).map_err(|_| Error::InternalError)?;
-    //     // }
-    //     if let Some(id) = id {
-    //         path.extend_from_slice(&id.hex()).map_err(|_| Error::InternalError)?;
-    //     }
-    //     Ok(path)
-    // }
 
     pub fn generate_unique_id(&mut self) -> Result<UniqueId, Error> {
         let mut unique_id = [0u8; 16];

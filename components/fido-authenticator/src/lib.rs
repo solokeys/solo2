@@ -35,6 +35,44 @@ use ctap_types::{
 
 use littlefs2::path::PathBuf;
 
+fn format_hex(data: &[u8], mut buffer: &mut [u8]) {
+    const HEX_CHARS: &[u8] = b"0123456789abcdef";
+    for byte in data.iter() {
+        buffer[0] = HEX_CHARS[(byte >> 4) as usize];
+        buffer[1] = HEX_CHARS[(byte & 0xf) as usize];
+        buffer = &mut buffer[2..];
+    }
+}
+
+// dir.push(&PathBuf::from(&format_hex_16(&rp_id_hash[..].try_into().unwrap())));
+fn format_hex_16(data: &[u8; 16]) -> [u8; 32] {
+    let mut hex = [0u8; 32];
+    format_hex(data, &mut hex);
+    hex
+}
+
+fn rp_rk_dir(rp_id_hash: &Bytes<consts::U32>) -> PathBuf {
+    // uses only first 8 bytes of hash, which should be "good enough"
+    let mut hex = [0u8; 16];
+    format_hex(&rp_id_hash[..8], &mut hex);
+
+    let mut dir = PathBuf::new();
+    dir.push(b"rk\0".try_into().unwrap());
+    dir.push(&PathBuf::from(&hex));
+
+    dir
+}
+
+fn rk_path(rp_id_hash: &Bytes<consts::U32>, credential_id_hash: &Bytes<consts::U32>) -> PathBuf {
+    let mut path = rp_rk_dir(rp_id_hash);
+
+    let mut hex = [0u8; 16];
+    format_hex(&credential_id_hash[..8], &mut hex);
+    path.push(&PathBuf::from(&hex));
+
+    path
+}
+
 macro_rules! block {
     ($future_result:expr) => {{
         // evaluate the expression
@@ -853,15 +891,20 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
             };
 
             // TODO: need them all..
-            let mut dir = PathBuf::new();
-            dir.push(b"rk\0".try_into().unwrap());
-            dir.push(&PathBuf::from(&rp_id_hash.clone()[..]));
+            // let mut dir = PathBuf::new();
+            // dir.push(b"rk\0".try_into().unwrap());
+            // // dir.push(&PathBuf::from(&format_hex_16(&rp_id_hash[..].try_into().unwrap())));
+            // dir.push(&rp_id_hash_to_filename(&rp_id_hash));
 
+
+            hprintln!("before").ok();
             let data = syscall!(self.crypto.read_dir_files_first(
                 StorageLocation::Internal,
-                dir,
-                Some(rp_id_hash.clone()),
+                rp_rk_dir(&rp_id_hash),
+                None,
+                // Some(rp_id_hash.clone()),
             )).data;
+            hprintln!("after").ok();
 
             let data = match data {
                 Some(data) => data,
@@ -870,7 +913,6 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
             let credential = Credential::deserialize(&data).unwrap();//map_err(|_| Error::
 
-            hprintln!("located credential {:?}", &credential).ok();
 
             let mut credentials = CredentialList::new();
             credentials.push(credential).unwrap();
@@ -904,11 +946,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
     fn get_assertion(&mut self, parameters: &ctap2::get_assertion::Parameters) -> Result<ctap2::get_assertion::Response> {
 
-        let rp_id_hash = {
-            let hash = syscall!(self.crypto.hash_sha256(&parameters.rp_id.as_ref())).hash;
-            // Bytes::try_from_slice(&hash)
-            hash.try_convert_into().map_err(|_| Error::Other)?
-        };
+        let rp_id_hash = self.hash(&parameters.rp_id.as_ref())?;
 
         // 1-4.
         let uv_performed = self.pin_prechecks(
@@ -920,6 +958,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         let credentials = self.locate_credentials(&parameters.rp_id, &parameters.allow_list, uv_performed)?;
         let num_credentials = credentials.len();
         debug!("found {} applicable credentials", num_credentials).ok();
+        hprintln!("found {} applicable credentials", num_credentials).ok();
 
         assert!(num_credentials > 0);
 
@@ -946,6 +985,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         // TODO!
         let sig_count = 124;
 
+        hprintln!("gathering AD").ok();
         let authenticator_data = ctap2::get_assertion::AuthenticatorData {
             // rp_id_hash: rp_id_hash.try_convert_into().map_err(|_| Error::Other)?,
             rp_id_hash: rp_id_hash.clone(),
@@ -969,16 +1009,19 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
             // },
         };
 
+        hprintln!("serializing AD").ok();
         let serialized_auth_data = authenticator_data.serialize();
 
         let mut commitment = Bytes::<consts::U1024>::new();
         commitment.extend_from_slice(&serialized_auth_data).map_err(|_| Error::Other)?;
         commitment.extend_from_slice(&parameters.client_data_hash).map_err(|_| Error::Other)?;
 
+        hprintln!("getting (key, gc)").ok();
         let (key, gc) = match credential.key.clone() {
             Key::ResidentKey(key) => (key, false),
             Key::WrappedKey(bytes) => {
                 let wrapping_key = &self.key_encryption_key()?;
+                hprintln!("unwrapping {:?} with wrapping key {:?}", &bytes, &wrapping_key).ok();
                 let key_result = syscall!(self.crypto.unwrap_key_chacha8poly1305(
                     &wrapping_key,
                     &bytes.try_convert_into().map_err(|_| Error::Other)?,
@@ -987,6 +1030,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                     StorageLocation::Volatile,
                 )).key;
                 // debug!("key result: {:?}", &key_result).ok();
+                hprintln!("key result: {:?}", &key_result).ok();
                 match key_result {
                     Some(key) => (key, true),
                     None => { return Err(Error::Other); }
@@ -1000,6 +1044,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
             _ => { return Err(Error::Other); }
         };
 
+        hprintln!("signing with {:?}, {:?}", &mechanism, &serialization).ok();
         debug!("signing with {:?}, {:?}", &mechanism, &serialization).ok();
         let signature = syscall!(self.crypto.sign(mechanism, key.clone(), &commitment, serialization)).signature
             .try_convert_into().map_err(|_| Error::Other)?;
@@ -1020,13 +1065,19 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         Ok(response)
     }
 
+    fn hash(&mut self, data: &[u8]) -> Result<Bytes<consts::U32>> {
+        let hash = syscall!(self.crypto.hash_sha256(&data)).hash;
+        hash.try_convert_into().map_err(|_| Error::Other)
+    }
+
     fn make_credential(&mut self, parameters: &ctap2::make_credential::Parameters) -> Result<ctap2::make_credential::Response> {
 
-        let rp_id_hash = {
-            let hash = syscall!(self.crypto.hash_sha256(&parameters.rp.id.as_ref())).hash;
-            // Bytes::try_from_slice(&hash)
-            hash.try_convert_into().map_err(|_| Error::Other)?
-        };
+        let rp_id_hash = self.hash(&parameters.rp.id.as_ref())?;
+        // let rp_id_hash = {
+        //     let hash = syscall!(self.crypto.hash_sha256(&parameters.rp.id.as_ref())).hash;
+        //     // Bytes::try_from_slice(&hash)
+        //     hash.try_convert_into().map_err(|_| Error::Other)?
+        // };
 
         // 1-4.
         let uv_performed = self.pin_prechecks(
@@ -1189,7 +1240,8 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 // Turns out it's size 92 (enum serialization not optimized yet...)
                 // let mut wrapped_key = Bytes::<consts::U60>::new();
                 // wrapped_key.extend_from_slice(&wrapped_key_msg).unwrap();
-                Key::WrappedKey(wrapped_key.try_convert_into().map_err(|_| Error::Other)?)
+                let ret = Key::WrappedKey(wrapped_key.try_convert_into().map_err(|_| Error::Other)?);
+                ret
                 // debug!("len wrapped key = {}", wrapped_key.len()).ok();
                 // Key::WrappedKey(wrapped_key.try_convert_into().unwrap())
 
@@ -1214,25 +1266,26 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         // 12.b generate credential ID { = AEAD(Serialize(Credential)) }
         let kek = self.key_encryption_key()?.clone();
         let credential_id = credential.id(&mut self.crypto, &kek)?;
+        let credential_id_hash = self.hash(&credential_id.0.as_ref())?;
 
         // store it.
         // TODO: overwrite, error handling with KeyStoreFull
 
         let serialized_credential = credential.serialize()?;
 
-        let mut dir = PathBuf::new();
-        dir.push(b"rk\0".try_into().unwrap());
-        dir.push(&PathBuf::from(&rp_id_hash.clone()[..]));
-
+        hprintln!("writing RK file").ok();
         syscall!(self.crypto.write_file(
             StorageLocation::Internal,
-            dir,
+            rk_path(&rp_id_hash, &credential_id_hash),
             serialized_credential.clone(),
             // user attribute for later easy lookup
-            Some(rp_id_hash.clone()),
+            // Some(rp_id_hash.clone()),
+            None,
         ));
+        hprintln!("wrote RK file").ok();
 
         // 13. generate and return attestation statement using clientDataHash
+        hprintln!("13").ok();
 
         // 13.a AuthenticatorData and its serialization
         use ctap2::AuthenticatorDataFlags as Flags;
