@@ -1,5 +1,7 @@
 use core::convert::{TryFrom, TryInto};
 
+use cortex_m_semihosting::hprintln;
+
 use crate::api::*;
 // use crate::config::*;
 use crate::error::Error;
@@ -40,6 +42,7 @@ fn load_keypair<R: RngRead, S: Store>(resources: &mut ServiceResources<R, S>, ke
         .map_err(|_| Error::InternalError)?;
 
     let keypair = nisty::Keypair::generate_patiently(&seed);
+    // hprintln!("seed: {:?}", &seed).ok();
     Ok(keypair)
 }
 
@@ -277,6 +280,10 @@ Sign<R, S> for super::P256
         // #[cfg(all(test, feature = "verbose-tests"))]
         // println!("p256 sig = {:?}", &native_signature);
         // cortex_m_semihosting::hprintln!("p256 sig = {:?}", &our_signature).ok();
+
+        hprintln!("P256 signature:").ok();
+        // hprintln!("msg: {:?}", &request.message).ok();
+        // hprintln!("sig: {:?}", &our_signature).ok();
 
         // return signature
         Ok(reply::Sign { signature: our_signature })

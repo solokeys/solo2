@@ -193,6 +193,19 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                                     .expect("internal error");
                             }
 
+                            // 0x2
+                            ctap2::Request::MakeCredential(parameters) => {
+                                // debug!("MC: {:?}", &parameters).ok();
+                                let response = self.make_credential(&parameters);
+                                self.rpc.send.enqueue(
+                                    match response {
+                                        Ok(response) => Ok(Response::Ctap2(ctap2::Response::MakeCredential(response))),
+                                        Err(error) => Err(error)
+                                    })
+                                    .expect("internal error");
+                                debug!("enqueued MC response").ok();
+                            }
+
                             // 0x1
                             ctap2::Request::GetAssertion(parameters) => {
                                 // debug!("GA: {:?}", &parameters).ok();
@@ -206,17 +219,17 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                                 debug!("enqueued GA response").ok();
                             }
 
-                            // 0x2
-                            ctap2::Request::MakeCredential(parameters) => {
-                                // debug!("MC: {:?}", &parameters).ok();
-                                let response = self.make_credential(&parameters);
+                            // 0x8
+                            ctap2::Request::GetNextAssertion => {
+                                // debug!("GA: {:?}", &parameters).ok();
+                                let response = self.get_next_assertion();
                                 self.rpc.send.enqueue(
                                     match response {
-                                        Ok(response) => Ok(Response::Ctap2(ctap2::Response::MakeCredential(response))),
+                                        Ok(response) => Ok(Response::Ctap2(ctap2::Response::GetNextAssertion(response))),
                                         Err(error) => Err(error)
                                     })
                                     .expect("internal error");
-                                debug!("enqueued MC response").ok();
+                                debug!("enqueued GA response").ok();
                             }
 
                             // 0x6
@@ -893,6 +906,38 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         Ok(allowed_credential)
     }
 
+    fn get_next_assertion(&mut self) -> Result<ctap2::get_assertion::Response> {
+        // 1./2. don't remember / don't have left any credentials
+        if self.state.runtime.credential_heap().is_empty() {
+            return Err(Error::NotAllowed);
+        }
+
+        // 3. previous GA/GNA >30s ago -> discard stat
+        // this is optional over NFC
+        if false {
+            self.state.runtime.credential_heap().clear();
+            return Err(Error::NotAllowed);
+        }
+
+        // 4. select credential
+        let max_heap = self.state.runtime.credential_heap();
+        let timestamp_hash = max_heap.pop().unwrap();
+        hprintln!("{:?} @ {}", &timestamp_hash.path, timestamp_hash.timestamp).ok();
+        let data = syscall!(self.crypto.read_file(
+            StorageLocation::Internal,
+            timestamp_hash.path,
+        )).data;
+        let credential = Credential::deserialize(&data).unwrap();
+
+        // 5. suppress PII if no UV was performed in original GA
+
+        // 6. sign
+        // 7. reset timer
+        // 8. increment credential counter (not applicable)
+
+        self.assert_with_credential(None, credential)
+    }
+
     fn get_assertion(&mut self, parameters: &ctap2::get_assertion::Parameters) -> Result<ctap2::get_assertion::Response> {
 
         let rp_id_hash = self.hash(&parameters.rp_id.as_ref())?;
@@ -911,7 +956,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         let credential = self.locate_credentials(&parameters.rp_id, &parameters.allow_list, uv_performed)?;
 
         let (num_credentials, credential) = match credential {
-            Some(credential) =>  (1, credential),
+            Some(credential) =>  (None, credential),
             None => {
                 let max_heap = self.state.runtime.credential_heap();
                 let timestamp_hash = max_heap.pop().unwrap();
@@ -921,12 +966,38 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                     timestamp_hash.path,
                 )).data;
                 let credential = Credential::deserialize(&data).unwrap();
-                (max_heap.len() + 1, credential)
+                let num_credentials = match max_heap.len() {
+                    0 => None,
+                    n => Some(n as u32 + 1),
+                };
+                (num_credentials, credential)
             }
         };
 
-        debug!("found {} applicable credentials", num_credentials).ok();
-        hprintln!("found {} applicable credentials", num_credentials).ok();
+        debug!("found {:?} applicable credentials", num_credentials).ok();
+        hprintln!("found {:?} applicable credentials", num_credentials).ok();
+
+        self.state.runtime.active_get_assertion = Some(state::ActiveGetAssertionData {
+            rp_id_hash: {
+                let mut buf = [0u8; 32];
+                buf.copy_from_slice(&rp_id_hash);
+                buf
+            },
+            client_data_hash: {
+                let mut buf = [0u8; 32];
+                buf.copy_from_slice(&parameters.client_data_hash);
+                buf
+            },
+            uv_performed,
+        });
+
+        self.assert_with_credential(num_credentials, credential)
+    }
+
+    fn assert_with_credential(&mut self, num_credentials: Option<u32>, credential: Credential)
+        -> Result<ctap2::get_assertion::Response>
+    {
+        let data = self.state.runtime.active_get_assertion.clone().unwrap();
 
         // 6. process any options present
 
@@ -945,12 +1016,11 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         let sig_count = self.state.persistent.timestamp(&mut self.crypto)?;
 
         let authenticator_data = ctap2::get_assertion::AuthenticatorData {
-            // rp_id_hash: rp_id_hash.try_convert_into().map_err(|_| Error::Other)?,
-            rp_id_hash: rp_id_hash.clone(),
+            rp_id_hash: Bytes::try_from_slice(&data.rp_id_hash).unwrap(),
 
             flags: {
                 let mut flags = Flags::USER_PRESENCE;
-                if uv_performed {
+                if data.uv_performed {
                     flags |= Flags::USER_VERIFIED;
                 }
                 // if hmac_secret_requested.is_some() ||  cred_protect_requested != CredentialProtectionPolicy::Optional {
@@ -971,7 +1041,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
         let mut commitment = Bytes::<consts::U1024>::new();
         commitment.extend_from_slice(&serialized_auth_data).map_err(|_| Error::Other)?;
-        commitment.extend_from_slice(&parameters.client_data_hash).map_err(|_| Error::Other)?;
+        commitment.extend_from_slice(&data.client_data_hash).map_err(|_| Error::Other)?;
 
         let (key, gc) = match credential.key.clone() {
             Key::ResidentKey(key) => (key, false),
@@ -1014,7 +1084,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
             signature,
             user: None,
             // number_of_credentials: if num_credentials > 1 { Some(num_credentials as u32) } else { None },
-            number_of_credentials: if num_credentials > 1 { Some(num_credentials as u32) } else { Some(1) },
+            number_of_credentials: num_credentials, //if num_credentials > 1 { Some(num_credentials as u32) } else { Some(1) },
         };
 
         Ok(response)

@@ -1,5 +1,7 @@
 use core::convert::{TryFrom, TryInto};
 
+use cortex_m_semihosting::hprintln;
+
 use crate::api::*;
 // use crate::config::*;
 // use crate::debug;
@@ -32,6 +34,7 @@ fn load_keypair<R: RngRead, S: Store>(resources: &mut ServiceResources<R, S>, ke
         .map_err(|_| Error::InternalError)?;
 
     let keypair = salty::Keypair::from(&seed);
+    // hprintln!("seed: {:?}", &seed).ok();
     Ok(keypair)
 }
 
@@ -185,6 +188,10 @@ Sign<R, S> for super::Ed25519
 
         let native_signature = keypair.sign(&request.message);
         let our_signature = Signature::try_from_slice(&native_signature.to_bytes()).unwrap();
+
+        hprintln!("Ed25519 signature:").ok();
+        // hprintln!("msg: {:?}", &request.message).ok();
+        // hprintln!("sig: {:?}", &our_signature).ok();
 
         // return signature
         Ok(reply::Sign { signature: our_signature })

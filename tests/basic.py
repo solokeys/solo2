@@ -16,39 +16,50 @@ print(dev.get_info())
 P256 = -7
 Ed25519 = -8
 
-if True:
-    # print(dev.reset())
+# print(dev.reset())
 
-    # for alg in (-7, -8):
-    # for alg in (P256, Ed25519):
-    for alg in (Ed25519, P256):
-        att = dev.make_credential(
-            b"1234567890ABCDEF1234567890ABCDEF",
-            {"id": "https://yamnord.com"},
-            {"id": b"nickray"},
-            [{"type": "public-key", "alg": alg}],
-            extensions={"hmac-secret": True},
-            options={"rk": True},
-        )
+# for alg in (-7, -8):
+# for alg in (P256, Ed25519):
 
-        # basic sanity check - would raise
-        assert att.fmt == "packed"
-        verifier = fido2.attestation.Attestation.for_type(att.fmt)()
-        verifier.verify(
-            att.att_statement, att.auth_data, b"1234567890ABCDEF1234567890ABCDEF"
-        )
+credential_ids = []
+public_keys = []
 
-        client_data_hash = b"some_client_data_hash_abcdefghij"
-        assn = dev.get_assertion(
-            "https://yamnord.com",
-            client_data_hash,
-            # allow_list=[
-            #     {
-            #         "type": "public-key",
-            #         "id": att.auth_data.credential_data.credential_id,
-            #     }
-            # ],
-        )
+for alg in (Ed25519, P256):
+    att = dev.make_credential(
+        b"1234567890ABCDEF1234567890ABCDEF",
+        {"id": "https://yamnord.com"},
+        {"id": b"nickray"},
+        [{"type": "public-key", "alg": alg}],
+        extensions={"hmac-secret": True},
+        options={"rk": True},
+    )
 
-        # basic sanity check - would raise
-        assn.verify(client_data_hash, att.auth_data.credential_data.public_key)
+    credential_id = att.auth_data.credential_data.credential_id
+    credential_ids.append(credential_id)
+
+    public_key = att.auth_data.credential_data.public_key
+    public_keys.append(public_key)
+
+    # basic sanity check - would raise
+    assert att.fmt == "packed"
+    verifier = fido2.attestation.Attestation.for_type(att.fmt)()
+    verifier.verify(
+        att.att_statement, att.auth_data, b"1234567890ABCDEF1234567890ABCDEF"
+    )
+
+    client_data_hash = b"some_client_data_hash_abcdefghij"
+    assn = dev.get_assertion(
+        "https://yamnord.com",
+        client_data_hash,
+        allow_list=[{"type": "public-key", "id": credential_id}],
+    )
+
+    # basic sanity check - would raise
+    assn.verify(client_data_hash, public_key)
+
+# GA/GNA combo
+assn = dev.get_assertion("https://yamnord.com", client_data_hash)
+assn.verify(client_data_hash, public_keys[1])
+
+assn = dev.get_next_assertion()
+assn.verify(client_data_hash, public_keys[0])

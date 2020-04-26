@@ -115,12 +115,20 @@ impl Identity {
 }
 
 #[derive(Clone, Debug, /*uDebug,*/ Default, /*PartialEq,*/ serde::Deserialize, serde::Serialize)]
+pub struct ActiveGetAssertionData {
+    pub rp_id_hash: [u8; 32],
+    pub client_data_hash: [u8; 32],
+    pub uv_performed: bool,
+}
+
+#[derive(Clone, Debug, /*uDebug,*/ Default, /*PartialEq,*/ serde::Deserialize, serde::Serialize)]
 pub struct RuntimeState {
     key_agreement_key: Option<Key>,
     pin_token: Option<Key>,
     // TODO: why is this field not used?
     shared_secret: Option<Key>,
     credentials: Option<MaxCredentialHeap>,
+    pub active_get_assertion: Option<ActiveGetAssertionData>,
 }
 
 // TODO: Plan towards future extensibility
