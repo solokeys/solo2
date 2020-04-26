@@ -1,3 +1,5 @@
+use core::cmp::Ordering;
+
 use crypto_service::{
     Client as CryptoClient,
     pipe::Syscall,
@@ -9,11 +11,17 @@ use crypto_service::{
 use ctap_types::{
     Bytes, consts, String, Vec,
     authenticator::Error,
+    sizes::MAX_CREDENTIAL_COUNT_IN_LIST, // U8 currently
 };
+
+use heapless::binary_heap::{BinaryHeap, Max, Min};
 use littlefs2::path::PathBuf;
 use ufmt::derive::uDebug;
 
 use crate::Result;
+
+pub type MaxCredentialHeap = BinaryHeap<TimestampPath, MAX_CREDENTIAL_COUNT_IN_LIST, Max>;
+pub type MinCredentialHeap = BinaryHeap<TimestampPath, MAX_CREDENTIAL_COUNT_IN_LIST, Min>;
 
 #[macro_use]
 macro_rules! block {
@@ -44,7 +52,7 @@ macro_rules! syscall {
     }}
 }
 
-#[derive(Clone, Debug, uDebug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, /*uDebug, Eq, PartialEq,*/ serde::Deserialize, serde::Serialize)]
 pub struct State {
     pub identity: Identity,
     pub persistent: PersistentState,
@@ -106,12 +114,13 @@ impl Identity {
 
 }
 
-#[derive(Clone, Debug, uDebug, Default, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, /*uDebug,*/ Default, /*PartialEq,*/ serde::Deserialize, serde::Serialize)]
 pub struct RuntimeState {
     key_agreement_key: Option<Key>,
     pin_token: Option<Key>,
     // TODO: why is this field not used?
     shared_secret: Option<Key>,
+    credentials: Option<MaxCredentialHeap>,
 }
 
 // TODO: Plan towards future extensibility
@@ -291,6 +300,20 @@ impl PersistentState {
 }
 
 impl RuntimeState {
+
+    pub fn credential_heap(&mut self) -> &mut MaxCredentialHeap {
+        if self.credentials.is_none() {
+            self.create_credential_heap()
+        } else {
+            self.credentials.as_mut().unwrap()
+        }
+    }
+
+    fn create_credential_heap(&mut self) -> &mut MaxCredentialHeap {
+        self.credentials = Some(MaxCredentialHeap::new());
+        self.credentials.as_mut().unwrap()
+    }
+
     pub fn key_agreement_key<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>) -> Key {
         match self.key_agreement_key {
             Some(key) => key,
@@ -323,3 +346,22 @@ impl RuntimeState {
     }
 
 }
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+pub struct TimestampPath {
+    pub timestamp: u32,
+    pub path: PathBuf,
+}
+
+impl Ord for TimestampPath {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.timestamp.cmp(&other.timestamp)
+    }
+}
+
+impl PartialOrd for TimestampPath {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+

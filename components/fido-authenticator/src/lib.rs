@@ -37,6 +37,12 @@ use littlefs2::path::PathBuf;
 
 pub mod state;
 
+use state::{
+    MaxCredentialHeap,
+    MinCredentialHeap,
+    TimestampPath,
+};
+
 fn format_hex(data: &[u8], mut buffer: &mut [u8]) {
     const HEX_CHARS: &[u8] = b"0123456789abcdef";
     for byte in data.iter() {
@@ -657,12 +663,17 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         Ok(false)
     }
 
+    /// If allow_list is some, select the first one that is usable,
+    /// and return some(it).
+    ///
+    /// If allow_list is none, pull applicable credentials, store
+    /// in state's credential_heap, and return none
     fn locate_credentials(
         &mut self, rp_id: &String<consts::U64>,
         allow_list: &Option<ctap2::get_assertion::AllowList>,
         uv_performed: bool,
     )
-        -> Result<CredentialList>
+        -> Result<Option<Credential>>
     {
         let kek = self.state.persistent.key_encryption_key(&mut self.crypto)?;
 
@@ -707,11 +718,11 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
         let allowed_credentials_passed = allowed_credentials.len() > 0;
 
-        let applicable_credentials: CredentialList = if allowed_credentials_passed {
+        let allowed_credential = if allowed_credentials_passed {
             // "If an allowList is present and is non-empty,
             // locate all denoted credentials present on this authenticator
             // and bound to the specified rpId."
-            allowed_credentials
+            let mut applicable_credentials: CredentialList = allowed_credentials
                 .into_iter()
                 .filter(|credential| match credential.key.clone() {
                     // TODO: should check if wrapped key is valid AEAD
@@ -736,7 +747,11 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
                     }
                 })
-                .collect()
+                .collect();
+            while applicable_credentials.len() > 1 {
+                applicable_credentials.pop().unwrap();
+            }
+            Some(applicable_credentials.pop().unwrap())
         } else {
             // If an allowList is not present,
             // locate all credentials that are present on this authenticator
@@ -760,32 +775,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
             // - (we don't need to keep that around even)
             //
 
-            use heapless::binary_heap::{BinaryHeap, Max, Min};
-            use ctap_types::sizes::MAX_CREDENTIAL_COUNT_IN_LIST; // U8 currently
-
-            // fn rk_path(rp_id_hash: &Bytes<consts::U32>, credential_id_hash: &Bytes<consts::U32>) -> PathBuf {
-            #[derive(PartialEq, Eq)]
-            struct TimestampPath {
-                timestamp: u32,
-                path: PathBuf,
-            }
-
-            use core::cmp::Ordering;
-
-            impl Ord for TimestampPath {
-                fn cmp(&self, other: &Self) -> Ordering {
-                    self.timestamp.cmp(&other.timestamp)
-                }
-            }
-
-            impl PartialOrd for TimestampPath {
-                fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-                    Some(self.cmp(other))
-                }
-            }
-
-            let mut min_heap: BinaryHeap<TimestampPath, MAX_CREDENTIAL_COUNT_IN_LIST, Min> =
-                Default::default();
+            let mut min_heap = MinCredentialHeap::new();
 
             // let mut credentials = CredentialList::new();
 
@@ -868,48 +858,14 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 }
             }
 
-            let mut max_heap: BinaryHeap<TimestampPath, MAX_CREDENTIAL_COUNT_IN_LIST, Max> =
-                Default::default();
-
             // now sort them
+            let max_heap = self.state.runtime.credential_heap();
+            max_heap.clear();
             while !min_heap.is_empty() {
                 max_heap.push(min_heap.pop().unwrap()).map_err(drop).unwrap();
             }
 
-            let mut credentials = CredentialList::new();
-            hprintln!("reverse sorting of credentials:").ok();
-            while credentials.len() < credentials.capacity() && !max_heap.is_empty() {
-                let timestamp_hash = max_heap.pop().unwrap();
-                hprintln!("{:?} @ {}", &timestamp_hash.path, timestamp_hash.timestamp).ok();
-                let data = syscall!(self.crypto.read_file(
-                    StorageLocation::Internal,
-                    timestamp_hash.path,
-                )).data;
-                let credential = Credential::deserialize(&data).unwrap();
-                credentials.push(credential).unwrap();
-            }
-
-            credentials
-
-            // this is REALLY not very efficient (and may be incorrect) :)
-            // it depends on the implementation detail of directory files
-            // being a linked list, where "later" files are appended at the
-            // end. but i'm not sure how strongly this property holds when
-            // data is reorganized during filesystem operations.
-            //
-            // plan: use `heapless::BinaryHeap<timestamp, credential_id_hash>`,
-            // then pick out by latest (also good for caching to GetNextAssertion)
-            //
-            // let mut reversed_credentials = CredentialList::new();
-            // for credential in credentials.iter().rev() {
-            //     let id = credential.id(&mut self.crypto, &kek)?;
-            //     // hprintln!("rev next: {:?}", &self.hash(&id.0)).ok();
-            //     reversed_credentials.push(credential.clone()).unwrap();
-            // }
-
-            // hprintln!("GATHERED {} credentials", reversed_credentials.len()).ok();
-            // reversed_credentials
-            // // credentials
+            None
         };
 
         //// apply credential protection policy
@@ -930,11 +886,11 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         ////
 
         // "If no applicable credentials were found, return CTAP2_ERR_NO_CREDENTIALS"
-        if applicable_credentials.len() == 0 {
+        if allowed_credential.is_none() && self.state.runtime.credential_heap().is_empty() {
             return Err(Error::NoCredentials);
         }
 
-        Ok(applicable_credentials)
+        Ok(allowed_credential)
     }
 
     fn get_assertion(&mut self, parameters: &ctap2::get_assertion::Parameters) -> Result<ctap2::get_assertion::Response> {
@@ -948,18 +904,29 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         )?;
 
         // 5. Locate eligible credentials
-        let credentials = self.locate_credentials(&parameters.rp_id, &parameters.allow_list, uv_performed)?;
-        let num_credentials = credentials.len();
+        //
+        // Note: If allowList is passed, credential is Some(credential)
+        // If no allowList is passed, credential is None and the retrieved credentials
+        // are stored in state.runtime.credential_heap
+        let credential = self.locate_credentials(&parameters.rp_id, &parameters.allow_list, uv_performed)?;
+
+        let (num_credentials, credential) = match credential {
+            Some(credential) =>  (1, credential),
+            None => {
+                let max_heap = self.state.runtime.credential_heap();
+                let timestamp_hash = max_heap.pop().unwrap();
+                hprintln!("{:?} @ {}", &timestamp_hash.path, timestamp_hash.timestamp).ok();
+                let data = syscall!(self.crypto.read_file(
+                    StorageLocation::Internal,
+                    timestamp_hash.path,
+                )).data;
+                let credential = Credential::deserialize(&data).unwrap();
+                (max_heap.len() + 1, credential)
+            }
+        };
+
         debug!("found {} applicable credentials", num_credentials).ok();
         hprintln!("found {} applicable credentials", num_credentials).ok();
-
-        assert!(num_credentials > 0);
-
-        if num_credentials > 1 {
-            // TODO: cache credentials[1..] for following GetNextAssertion calls.
-            // Also add channel ID!
-            info!("caching credentials not implemented yet").ok();
-        }
 
         // 6. process any options present
 
@@ -969,7 +936,6 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
         // 9./10. sign clientDataHash || authData with "first" credential
 
-        let credential = credentials[0].clone();
         hprintln!("signing with credential {:?}", &credential).ok();
         let kek = self.state.persistent.key_encryption_key(&mut self.crypto)?;
         let credential_id = credential.id(&mut self.crypto, &kek)?;
@@ -1263,14 +1229,14 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
         let serialized_credential = credential.serialize()?;
 
-        syscall!(self.crypto.write_file(
+        block!(self.crypto.write_file(
             StorageLocation::Internal,
             rk_path(&rp_id_hash, &credential_id_hash),
             serialized_credential.clone(),
             // user attribute for later easy lookup
             // Some(rp_id_hash.clone()),
             None,
-        ));
+        ).unwrap()).map_err(|_| Error::KeyStoreFull)?;
 
         // 13. generate and return attestation statement using clientDataHash
 
