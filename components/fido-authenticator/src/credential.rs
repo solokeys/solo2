@@ -83,7 +83,7 @@ pub struct CredentialData {
     user: ctap_types::webauthn::PublicKeyCredentialUserEntity,
 
     // can be just a counter, need to be able to determine "latest"
-    creation_time: u32,
+    pub creation_time: u32,
     // for stateless deterministic keys, it seems CTAP2 (but not CTAP1) makes signature counters optional
     use_counter: bool,
     // P256 or Ed25519

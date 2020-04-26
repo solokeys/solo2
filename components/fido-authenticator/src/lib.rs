@@ -668,6 +668,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
         // validate allowList
         let allowed_credentials = if let Some(allow_list) = allow_list.as_ref() {
+        // let allowed_credentials = if let Some(allow_list) = allow_list.as_ref() {
             let valid_allowed_credentials: CredentialList = allow_list.into_iter()
                 // discard not properly serialized encrypted credentials
                 .filter_map(|credential_descriptor| {
@@ -706,7 +707,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
         let allowed_credentials_passed = allowed_credentials.len() > 0;
 
-        let existing_credentials: CredentialList = if allowed_credentials_passed {
+        let applicable_credentials: CredentialList = if allowed_credentials_passed {
             // "If an allowList is present and is non-empty,
             // locate all denoted credentials present on this authenticator
             // and bound to the specified rpId."
@@ -725,21 +726,73 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                         }
                     }
                 })
+                .filter(|credential| {
+                    use credential::CredentialProtectionPolicy as Policy;
+                    debug!("CredentialProtectionPolicy {:?}", &credential.cred_protect).ok();
+                    match credential.cred_protect {
+                        Policy::Optional => true,
+                        Policy::OptionalWithCredentialIdList => allowed_credentials_passed || uv_performed,
+                        Policy::Required => uv_performed,
+
+                    }
+                })
                 .collect()
         } else {
             // If an allowList is not present,
             // locate all credentials that are present on this authenticator
-            // and bound to the specified rpId.
+            // and bound to the specified rpId; sorted by reverse creation time
 
             let rp_id_hash = self.hash(rp_id.as_ref())?;
 
-            let mut credentials = CredentialList::new();
+            //
+            // So here's the idea:
+            //
+            // - credentials can be pretty big
+            // - we declare N := MAX_CREDENTIAL_COUNT_IN_LIST in GetInfo
+            // - potentially there are more RKs for a given RP (a bit academic ofc)
+            //
+            // - first, we use a min-heap to keep only the topN credentials:
+            //   if our "next" one is larger/later than the min of the heap,
+            //   pop this min and push ours
+            //
+            // - then, we use a max-heap to sort the remaining <=N credentials
+            // - these then go into a CredentialList
+            // - (we don't need to keep that around even)
+            //
+
+            use heapless::binary_heap::{BinaryHeap, Max, Min};
+            use ctap_types::sizes::MAX_CREDENTIAL_COUNT_IN_LIST; // U8 currently
+
+            // fn rk_path(rp_id_hash: &Bytes<consts::U32>, credential_id_hash: &Bytes<consts::U32>) -> PathBuf {
+            #[derive(PartialEq, Eq)]
+            struct TimestampPath {
+                timestamp: u32,
+                path: PathBuf,
+            }
+
+            use core::cmp::Ordering;
+
+            impl Ord for TimestampPath {
+                fn cmp(&self, other: &Self) -> Ordering {
+                    self.timestamp.cmp(&other.timestamp)
+                }
+            }
+
+            impl PartialOrd for TimestampPath {
+                fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+                    Some(self.cmp(other))
+                }
+            }
+
+            let mut min_heap: BinaryHeap<TimestampPath, MAX_CREDENTIAL_COUNT_IN_LIST, Min> =
+                Default::default();
+
+            // let mut credentials = CredentialList::new();
 
             let data = syscall!(self.crypto.read_dir_files_first(
                 StorageLocation::Internal,
                 rp_rk_dir(&rp_id_hash),
                 None,
-                // Some(rp_id_hash.clone()),
             )).data;
 
             let data = match data {
@@ -748,7 +801,28 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
             };
 
             let credential = Credential::deserialize(&data).unwrap();
-            credentials.push(credential).unwrap();
+
+            use credential::CredentialProtectionPolicy as Policy;
+            let keep = match credential.cred_protect {
+                Policy::Optional => true,
+                Policy::OptionalWithCredentialIdList => allowed_credentials_passed || uv_performed,
+                Policy::Required => uv_performed,
+            };
+
+            let kek = self.state.persistent.key_encryption_key(&mut self.crypto)?;
+
+            if keep {
+                let id = credential.id(&mut self.crypto, &kek)?;
+                let credential_id_hash = self.hash(&id.0.as_ref())?;
+
+                let timestamp_path = TimestampPath {
+                    timestamp: credential.creation_time,
+                    path: rk_path(&rp_id_hash, &credential_id_hash),
+                };
+
+                min_heap.push(timestamp_path).map_err(drop).unwrap();
+                // hprintln!("first: {:?}", &self.hash(&id.0)).ok();
+            }
 
             loop {
                 let data = syscall!(self.crypto.read_dir_files_next()).data;
@@ -758,33 +832,102 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 };
 
                 let credential = Credential::deserialize(&data).unwrap();
-                if credentials.len() == credentials.capacity() {
-                    panic!("too many credentials! >{}", &credentials.len());
-                }
-                credentials.push(credential).unwrap();
 
-            }
-
-            hprintln!("GATHERED {} credentials", credentials.len()).ok();
-            credentials
-        };
-
-        // apply credential protection policy
-        let applicable_credentials: CredentialList = existing_credentials
-            .into_iter()
-            .filter(|credential| {
                 use credential::CredentialProtectionPolicy as Policy;
-                debug!("CredentialProtectionPolicy {:?}", &credential.cred_protect).ok();
-                match credential.cred_protect {
+                let keep = match credential.cred_protect {
                     Policy::Optional => true,
                     Policy::OptionalWithCredentialIdList => allowed_credentials_passed || uv_performed,
                     Policy::Required => uv_performed,
+                };
 
+                if keep {
+
+                    let id = credential.id(&mut self.crypto, &kek)?;
+                    let credential_id_hash = self.hash(&id.0.as_ref())?;
+
+                    let timestamp_path = TimestampPath {
+                        timestamp: credential.creation_time,
+                        path: rk_path(&rp_id_hash, &credential_id_hash),
+                    };
+
+                    // if credentials.len() == credentials.capacity() {
+                    //     panic!("too many credentials! >{}", &credentials.len());
+                    // }
+                    // let id = credential.id(&mut self.crypto, &kek)?;
+                    // credentials.push(credential).unwrap();
+                    // hprintln!("next: {:?}", &self.hash(&id.0)).ok();
+
+                    if min_heap.capacity() > min_heap.len() {
+                        min_heap.push(timestamp_path).map_err(drop).unwrap();
+                    } else {
+                        if timestamp_path.timestamp > min_heap.peek().unwrap().timestamp {
+                            min_heap.pop().unwrap();
+                            min_heap.push(timestamp_path).map_err(drop).unwrap();
+                        }
+                    }
                 }
-            })
-            .collect()
-            ;
-        //
+            }
+
+            let mut max_heap: BinaryHeap<TimestampPath, MAX_CREDENTIAL_COUNT_IN_LIST, Max> =
+                Default::default();
+
+            // now sort them
+            while !min_heap.is_empty() {
+                max_heap.push(min_heap.pop().unwrap()).map_err(drop).unwrap();
+            }
+
+            let mut credentials = CredentialList::new();
+            hprintln!("reverse sorting of credentials:").ok();
+            while credentials.len() < credentials.capacity() && !max_heap.is_empty() {
+                let timestamp_hash = max_heap.pop().unwrap();
+                hprintln!("{:?} @ {}", &timestamp_hash.path, timestamp_hash.timestamp).ok();
+                let data = syscall!(self.crypto.read_file(
+                    StorageLocation::Internal,
+                    timestamp_hash.path,
+                )).data;
+                let credential = Credential::deserialize(&data).unwrap();
+                credentials.push(credential).unwrap();
+            }
+
+            credentials
+
+            // this is REALLY not very efficient (and may be incorrect) :)
+            // it depends on the implementation detail of directory files
+            // being a linked list, where "later" files are appended at the
+            // end. but i'm not sure how strongly this property holds when
+            // data is reorganized during filesystem operations.
+            //
+            // plan: use `heapless::BinaryHeap<timestamp, credential_id_hash>`,
+            // then pick out by latest (also good for caching to GetNextAssertion)
+            //
+            // let mut reversed_credentials = CredentialList::new();
+            // for credential in credentials.iter().rev() {
+            //     let id = credential.id(&mut self.crypto, &kek)?;
+            //     // hprintln!("rev next: {:?}", &self.hash(&id.0)).ok();
+            //     reversed_credentials.push(credential.clone()).unwrap();
+            // }
+
+            // hprintln!("GATHERED {} credentials", reversed_credentials.len()).ok();
+            // reversed_credentials
+            // // credentials
+        };
+
+        //// apply credential protection policy
+        //let applicable_credentials: CredentialList = existing_credentials
+        //    .into_iter()
+        //    .filter(|credential| {
+        //        use credential::CredentialProtectionPolicy as Policy;
+        //        debug!("CredentialProtectionPolicy {:?}", &credential.cred_protect).ok();
+        //        match credential.cred_protect {
+        //            Policy::Optional => true,
+        //            Policy::OptionalWithCredentialIdList => allowed_credentials_passed || uv_performed,
+        //            Policy::Required => uv_performed,
+
+        //        }
+        //    })
+        //    .collect()
+        //    ;
+        ////
 
         // "If no applicable credentials were found, return CTAP2_ERR_NO_CREDENTIALS"
         if applicable_credentials.len() == 0 {
@@ -827,6 +970,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         // 9./10. sign clientDataHash || authData with "first" credential
 
         let credential = credentials[0].clone();
+        hprintln!("signing with credential {:?}", &credential).ok();
         let kek = self.state.persistent.key_encryption_key(&mut self.crypto)?;
         let credential_id = credential.id(&mut self.crypto, &kek)?;
 
@@ -1106,6 +1250,8 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
             cred_protect_requested,
             nonce,
         );
+
+        hprintln!("made credential {:?}", &credential).ok();
 
         // 12.b generate credential ID { = AEAD(Serialize(Credential)) }
         let kek = &self.state.persistent.key_encryption_key(&mut self.crypto)?;
