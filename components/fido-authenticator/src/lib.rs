@@ -57,8 +57,7 @@ fn rp_rk_dir(rp_id_hash: &Bytes<consts::U32>) -> PathBuf {
     let mut hex = [0u8; 16];
     format_hex(&rp_id_hash[..8], &mut hex);
 
-    let mut dir = PathBuf::new();
-    dir.push(b"rk\0".try_into().unwrap());
+    let mut dir = PathBuf::from(b"rk");
     dir.push(&PathBuf::from(&hex));
 
     dir
@@ -1062,7 +1061,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
             Key::ResidentKey(key) => (key, false),
             Key::WrappedKey(bytes) => {
                 let wrapping_key = self.state.persistent.key_wrapping_key(&mut self.crypto)?;
-                hprintln!("unwrapping {:?} with wrapping key {:?}", &bytes, &wrapping_key).ok();
+                // hprintln!("unwrapping {:?} with wrapping key {:?}", &bytes, &wrapping_key).ok();
                 let key_result = syscall!(self.crypto.unwrap_key_chacha8poly1305(
                     &wrapping_key,
                     &bytes.try_convert_into().map_err(|_| Error::Other)?,
@@ -1130,8 +1129,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         // may revisit the dir-walking API, but currently
         // we can only traverse one directory at once.
         loop {
-            let mut dir = PathBuf::new();
-            dir.push(b"rk\0".try_into().unwrap());
+            let mut dir = PathBuf::from(b"rk");
 
             hprintln!("reset start: reading {:?}", &dir).ok();
             let entry = syscall!(self.crypto.read_dir_first(
@@ -1173,7 +1171,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                     rk_path.clone(),
                 )).data;
                 let credential = Credential::deserialize(&credential_data).unwrap();
-                hprintln!("deleting credential {:?}", &credential).ok();
+                // hprintln!("deleting credential {:?}", &credential).ok();
 
                 match credential.key {
                     credential::Key::ResidentKey(key) => {
