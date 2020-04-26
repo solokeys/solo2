@@ -46,16 +46,16 @@ generate_enums! {
     WrapKey: 15
 
     // // CreateDir,    <-- implied by WriteFile
-    // ReadDir: 21 //      <-- gets Option<FileType> to restrict to just dir/file DirEntries,
-    // ReadDirNext: 22 //      <-- gets Option<FileType> to restrict to just dir/file DirEntries,
+    ReadDirFirst: 21 //      <-- gets Option<FileType> to restrict to just dir/file DirEntries,
+    ReadDirNext: 22 //      <-- gets Option<FileType> to restrict to just dir/file DirEntries,
     //                   // returns simplified Metadata
     // // ReadDirFilesFirst: 23 // <-- returns contents
     // // ReadDirFilesNext: 24 // <-- returns contents
     // ReadFile: 25
-    // RemoveFile: 26
-    // // RemoveDir,    <-- what for
-    // RemoveDirAll: 27
-    // WriteFile: 28
+    RemoveFile: 26
+    RemoveDir: 27 //   <-- what for
+    // RemoveDirAll: 28
+    // WriteFile: 29
 }
 
 pub mod request {
@@ -154,7 +154,21 @@ pub mod request {
 
         ReadDirFilesNext:
 
+        ReadDirFirst:
+          - location: StorageLocation
+          - dir: PathBuf
+
+        ReadDirNext:
+
         ReadFile:
+          - location: StorageLocation
+          - path: PathBuf
+
+        RemoveFile:
+          - location: StorageLocation
+          - path: PathBuf
+
+        RemoveDir:
           - location: StorageLocation
           - path: PathBuf
 
@@ -267,8 +281,18 @@ pub mod reply {
         ReadDirFilesNext:
           - data: Option<Message>
 
+        ReadDirFirst:
+          - entry: Option<DirEntry>
+
+        ReadDirNext:
+          - entry: Option<DirEntry>
+
         ReadFile:
           - data: Message
+
+        RemoveDir:
+
+        RemoveFile:
 
         // ReadCounter:
         //     - counter: u32

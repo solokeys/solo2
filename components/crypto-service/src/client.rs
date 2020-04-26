@@ -290,6 +290,28 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
         Ok(FutureResult::new(self))
     }
 
+    pub fn read_dir_first<'c>(
+        &'c mut self,
+        location: StorageLocation,
+        dir: PathBuf,
+    )
+        -> core::result::Result<FutureResult<'a, 'c, reply::ReadDirFirst>, ClientError>
+    {
+        self.raw.request(request::ReadDirFirst { dir, location } )?;
+        self.syscall.syscall();
+        Ok(FutureResult::new(self))
+    }
+
+    pub fn read_dir_next<'c>(
+        &'c mut self,
+    )
+        -> core::result::Result<FutureResult<'a, 'c, reply::ReadDirNext>, ClientError>
+    {
+        self.raw.request(request::ReadDirNext {} )?;
+        self.syscall.syscall();
+        Ok(FutureResult::new(self))
+    }
+
     pub fn read_dir_files_first<'c>(
         &'c mut self,
         location: StorageLocation,
@@ -309,6 +331,22 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
         -> core::result::Result<FutureResult<'a, 'c, reply::ReadDirFilesNext>, ClientError>
     {
         self.raw.request(request::ReadDirFilesNext {} )?;
+        self.syscall.syscall();
+        Ok(FutureResult::new(self))
+    }
+
+    pub fn remove_dir<'c>(&'c mut self, location: StorageLocation, path: PathBuf)
+        -> core::result::Result<FutureResult<'a, 'c, reply::RemoveDir>, ClientError>
+    {
+        self.raw.request(request::RemoveDir { location, path } )?;
+        self.syscall.syscall();
+        Ok(FutureResult::new(self))
+    }
+
+    pub fn remove_file<'c>(&'c mut self, location: StorageLocation, path: PathBuf)
+        -> core::result::Result<FutureResult<'a, 'c, reply::RemoveFile>, ClientError>
+    {
+        self.raw.request(request::RemoveFile { location, path } )?;
         self.syscall.syscall();
         Ok(FutureResult::new(self))
     }

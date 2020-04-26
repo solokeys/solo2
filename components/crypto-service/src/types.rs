@@ -12,7 +12,7 @@ pub use heapless::{
 pub use heapless_bytes::Bytes;
 
 pub use littlefs2::{
-    fs::Filesystem,
+    fs::{DirEntry, Filesystem},
     driver::Storage as LfsStorage,
     io::Result as LfsResult,
     path::PathBuf,

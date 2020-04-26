@@ -150,6 +150,8 @@ pub struct PersistentState {
     #[serde(skip)]
     // TODO: there has to be a better way than.. this
     // Pro-tip: it should involve types ^^
+    //
+    // We could alternatively make all methods take a CryptoClient as parameter
     initialised: bool,
 
     key_encryption_key: Option<Key>,
@@ -167,17 +169,6 @@ impl PersistentState {
     const POWERCYCLE_RETRIES: u8 = 3;
     const RESET_RETRIES: u8 = 8;
     const FILENAME: &'static [u8] = b"persistent-state";
-
-    // pub fn load_reset<S: Syscall>(crypto: &mut CryptoClient<'_, S>) -> Self {
-    //     match Self::load(crypto) {
-    //         Ok(state) => state,
-    //         _ => {
-    //             let new_self: Self = Default::default();
-    //             new_self.save(crypto).unwrap();
-    //             new_self
-    //         }
-    //     }
-    // }
 
     pub fn load<S: Syscall>(crypto: &mut CryptoClient<'_, S>) -> Result<Self> {
 
@@ -205,7 +196,14 @@ impl PersistentState {
         Ok(())
     }
 
-    // pub fn reset
+    pub fn reset<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>) -> Result<()> {
+        self.key_encryption_key = None;
+        self.key_wrapping_key = None;
+        self.consecutive_pin_mismatches = 0;
+        self.pin_hash = None;
+        self.timestamp = 0;
+        self.save(crypto)
+    }
 
     pub fn load_if_not_initialised<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>) {
         if !self.initialised {
@@ -351,6 +349,14 @@ impl RuntimeState {
         let token = syscall!(crypto.generate_hmacsha256_key(StorageLocation::Volatile)).key;
         self.pin_token = Some(token);
         token
+    }
+
+    pub fn reset<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>) {
+        self.rotate_key_agreement_key(crypto);
+        self.rotate_pin_token(crypto);
+        // self.drop_shared_secret(crypto);
+        self.credentials = None;
+        self.active_get_assertion = None;
     }
 
 }

@@ -55,6 +55,12 @@ struct ReadDirFilesState {
     last: PathBuf,
 }
 
+#[derive(Clone)]
+struct ReadDirState {
+    request: request::ReadDirFirst,
+    last: usize,
+}
+
 pub struct ServiceResources<R, S>
 where
     R: RngRead,
@@ -66,6 +72,7 @@ where
     currently_serving: ClientId,
     // TODO: how/when to clear
     read_dir_files_state: Option<ReadDirFilesState>,
+    read_dir_state: Option<ReadDirState>,
 }
 
 impl<R: RngRead, S: Store> ServiceResources<R, S> {
@@ -80,6 +87,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
             store,
             currently_serving: PathBuf::new(),
             read_dir_files_state: None,
+            read_dir_state: None,
         }
     }
 }
@@ -97,98 +105,6 @@ where
 unsafe impl<R: RngRead, S: Store> Send for Service<'_, R, S> {}
 
 impl<R: RngRead, S: Store> ServiceResources<R, S> {
-
-    // struct ReadDirFilesState {
-    //     request: request::ReadDirFilesFirst,
-    //     last: PathBuf,
-    // }
-
-    // fn next_read_dir_files_first_or_next(&mut self, request: Option<request::ReadDirFilesFirst>) -> littlefs2::fs::DirEntry {
-
-    //     // read_dir_files_state: Option<ReadDirFilesState>,
-    //     let (request, last) = match request {
-    //         Some(request) => {
-    //             self.read_dir_files_state = Some(ReadDirFilesState {
-    //                 request: request,
-    //                 last: PathBuf::new(),
-    //             });
-
-    //             (self.read_dir_files_state.as_ref().unwrap(), None)
-    //         }
-    //         None => {
-    //             match self.read_dir_files_state {
-    //                 Some(state) => {
-    //                     (&state.request, &state.last)
-    //                 }
-    //                 None => {
-    //                     panic!("WOHAHAAA");
-    //                 }
-    //             }
-    //         }
-    //     };
-
-    //     let mut seen_last = !last.is_some();
-
-    //     assert!(request.location == StorageLocation::Internal);
-
-    //     let mut path = self.namespace_path(&request.dir);
-    //     let fs = self.store.ifs();
-
-    //     let entry = fs.read_dir_and_then(&path, |dir| {
-    //         let past_last = false;
-    //         for entry in dir {
-    //             let entry = entry.unwrap();
-
-    //             if entry.file_type().is_dir() {
-    //                 continue;
-    //             }
-
-    //             let name = entry.file_name();
-
-    //             match last {
-    //                 Some(last) => {
-    //                     if last == name {
-    //                         seen_last = true;
-    //                         continue;
-    //                     }
-    //                     if !seen_last {
-    //                         continue;
-    //                     }
-    //                 }
-
-    //                 None =>{}
-    //             }
-
-    //             if let Some(user_attribute) = request.user_attribute.as_ref() {
-    //                 hprintln!("in user_attribute code").ok();
-    //                 let mut path = path.clone();
-    //                 path.push(name);
-    //                 let attribute = fs.attribute(&path, crate::config::USER_ATTRIBUTE_NUMBER)
-    //                     .map_err(|e| {
-    //                         info!("error getting attribute: {:?}", &e).ok();
-    //                         littlefs2::io::Error::Io
-    //                     }
-    //                 )?;
-
-    //                 match attribute {
-    //                     None => continue,
-    //                     Some(attribute) => {
-    //                         if user_attribute != attribute.data() {
-    //                             continue;
-    //                         }
-    //                     }
-    //                 }
-    //             }
-
-    //             return Ok(entry);
-    //         }
-
-    //         Err(littlefs2::io::Error::NoSuchEntry)
-
-    //     }).map_err(|_| Error::InternalError)?;
-
-    //     entry
-    // }
 
     pub fn reply_to(&mut self, request: Request) -> Result<Reply, Error> {
         // TODO: what we want to do here is map an enum to a generic type
@@ -308,6 +224,95 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
 
                 }.map(|reply| Reply::Hash(reply))
             },
+
+            Request::ReadDirFirst(request) => {
+                assert!(request.location == StorageLocation::Internal);
+
+                let path = self.namespace_path(&request.dir);
+                let fs = self.store.ifs();
+
+                // let (i, entry) = fs.read_dir_and_then(&path, |dir| {
+                let outcome = fs.read_dir_and_then(&path, |dir| {
+                    for (i, entry) in dir.enumerate() {
+                        if i < 2 {
+                            continue;
+                        }
+
+                        let entry = entry.unwrap();
+                        return Ok((i, entry));
+                    }
+
+                    Err(littlefs2::io::Error::Io)
+                });
+
+                // we want an option, really
+                // but let's abuse a result instead
+                let maybe_entry = match outcome {
+                    Ok((i, mut entry)) => {
+                        self.read_dir_state = Some(ReadDirState {
+                            request,
+                            last: i,
+                        });
+                        *unsafe { entry.path_buf_mut() } = self.denamespace_path(&entry.path());
+                        Some(entry)
+                    }
+
+                    Err(_) => {
+                        self.read_dir_files_state = None;
+                        None
+                    }
+                };
+                Ok(Reply::ReadDirFirst(reply::ReadDirFirst {
+                    entry: maybe_entry,
+                } ))
+
+            }
+
+            Request::ReadDirNext(request) => {
+                let ReadDirState { request, last } = match &self.read_dir_state {
+                    Some(state) => state.clone(),
+                    None => panic!("call ReadDirFirst before ReadDirNext"),
+                };
+
+                assert!(request.location == StorageLocation::Internal);
+
+                let path = self.namespace_path(&request.dir);
+                let fs = self.store.ifs();
+
+                // let (i, entry) = fs.read_dir_and_then(&path, |dir| {
+                let outcome = fs.read_dir_and_then(&path, |dir| {
+                    for (i, entry) in dir.enumerate() {
+                        if i <= last {
+                            continue;
+                        }
+
+                        let entry = entry.unwrap();
+                        return Ok((i, entry));
+                    }
+
+                    Err(littlefs2::io::Error::Io)
+                });
+
+                let maybe_entry = match outcome {
+                    Ok((i, mut entry)) => {
+                        self.read_dir_state = Some(ReadDirState {
+                            request,
+                            last: i,
+                        });
+                        *unsafe { entry.path_buf_mut() } = self.denamespace_path(&entry.path());
+                        Some(entry)
+                    }
+
+                    Err(_) => {
+                        self.read_dir_state = None;
+                        None
+                    }
+                };
+                Ok(Reply::ReadDirNext(reply::ReadDirNext {
+                    entry: maybe_entry,
+                } ))
+
+            }
 
             Request::ReadDirFilesFirst(request) => {
                 assert!(request.location == StorageLocation::Internal);
@@ -451,6 +456,34 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
                 } ))
             }
 
+            Request::RemoveDir(request) => {
+                // let path = self.blob_path(&request.path, Some(&request.id.object_id))?;
+                let path = self.namespace_path(&request.path);
+                let mut data = Message::new();
+                data.resize_to_capacity();
+                match request.location {
+                    StorageLocation::Internal => self.store.ifs().remove_dir(&path),
+                    StorageLocation::External => self.store.efs().remove_dir(&path),
+                    StorageLocation::Volatile => self.store.vfs().remove_dir(&path),
+                }.map_err(|_| Error::InternalError)?;
+                // data.resize_default(size).map_err(|_| Error::InternalError)?;
+                Ok(Reply::RemoveDir(reply::RemoveDir {} ))
+            }
+
+            Request::RemoveFile(request) => {
+                // let path = self.blob_path(&request.path, Some(&request.id.object_id))?;
+                let path = self.namespace_path(&request.path);
+                let mut data = Message::new();
+                data.resize_to_capacity();
+                match request.location {
+                    StorageLocation::Internal => self.store.ifs().remove(&path),
+                    StorageLocation::External => self.store.efs().remove(&path),
+                    StorageLocation::Volatile => self.store.vfs().remove(&path),
+                }.map_err(|_| Error::InternalError)?;
+                // data.resize_default(size).map_err(|_| Error::InternalError)?;
+                Ok(Reply::RemoveFile(reply::RemoveFile {} ))
+            }
+
             Request::ReadFile(request) => {
                 // let path = self.blob_path(&request.path, Some(&request.id.object_id))?;
                 let path = self.namespace_path(&request.path);
@@ -553,6 +586,17 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
         namespaced_path.push(&self.currently_serving);
         namespaced_path.push(path);
         namespaced_path
+    }
+
+    pub fn denamespace_path(&self, path: &Path) -> PathBuf {
+        // hprintln!("path in: {:?}", path).ok();
+        let bytes = path.as_ref().as_bytes();
+        let end_of_namespace = bytes.iter().position(|&x| x == b'/')
+            // oh oh oh
+            .unwrap();
+        let buf = PathBuf::from(&bytes[end_of_namespace + 1..]);
+        // hprintln!("buf out: {:?}", &buf).ok();
+        buf
     }
 
     pub fn key_path(&self, key_type: KeyType, key_id: &UniqueId) -> PathBuf {

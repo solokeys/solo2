@@ -57,9 +57,12 @@ for alg in (Ed25519, P256):
     # basic sanity check - would raise
     assn.verify(client_data_hash, public_key)
 
-# GA/GNA combo
-assn = dev.get_assertion("https://yamnord.com", client_data_hash)
-assn.verify(client_data_hash, public_keys[1])
+# # GA/GNA combo
+# assn = dev.get_assertion("https://yamnord.com", client_data_hash)
+# assn.verify(client_data_hash, public_keys[1])
 
-assn = dev.get_next_assertion()
-assn.verify(client_data_hash, public_keys[0])
+# assn = dev.get_next_assertion()
+# assn.verify(client_data_hash, public_keys[0])
+
+print(":: RESET ::")
+dev.reset()

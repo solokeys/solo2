@@ -221,7 +221,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
                             // 0x8
                             ctap2::Request::GetNextAssertion => {
-                                // debug!("GA: {:?}", &parameters).ok();
+                                // debug!("GNA: {:?}", &parameters).ok();
                                 let response = self.get_next_assertion();
                                 self.rpc.send.enqueue(
                                     match response {
@@ -231,6 +231,20 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                                     .expect("internal error");
                                 debug!("enqueued GA response").ok();
                             }
+
+                            // 0x7
+                            ctap2::Request::Reset => {
+                                // debug!("RESET: {:?}", &parameters).ok();
+                                let response = self.reset();
+                                self.rpc.send.enqueue(
+                                    match response {
+                                        Ok(()) => Ok(Response::Ctap2(ctap2::Response::Reset)),
+                                        Err(error) => Err(error)
+                                    })
+                                    .expect("internal error");
+                                debug!("enqueued GA response").ok();
+                            }
+
 
                             // 0x6
                             ctap2::Request::ClientPin(parameters) => {
@@ -974,6 +988,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
             }
         };
 
+        // NB: misleading, if we have "1" we return "None"
         debug!("found {:?} applicable credentials", num_credentials).ok();
         hprintln!("found {:?} applicable credentials", num_credentials).ok();
 
@@ -1007,7 +1022,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
         // 9./10. sign clientDataHash || authData with "first" credential
 
-        hprintln!("signing with credential {:?}", &credential).ok();
+        // hprintln!("signing with credential {:?}", &credential).ok();
         let kek = self.state.persistent.key_encryption_key(&mut self.crypto)?;
         let credential_id = credential.id(&mut self.crypto, &kek)?;
 
@@ -1088,6 +1103,121 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         };
 
         Ok(response)
+    }
+
+    // SECURITY considerations:
+    // - we should "shred" the key material in crypto-service, not just delete it
+    // - how to handle aborted/failed resets
+    //
+    // RELIABILITY/COMPLEXITY considerations:
+    // - if it were just us, we could reformat (with shredding overwrite) the entire FS
+    // - still, we could tell crypto-service to delete all our stuff,
+    //   send our response,
+    //   and then trigger a reboot
+    fn reset(&mut self) -> Result<()> {
+        // 1. >10s after bootup -> NotAllowed
+
+        // 2. check for user presence
+        // denied -> OperationDenied
+        // timeout -> UserActionTimeout
+
+
+        // DO IT
+
+        // a. iterate over RKs, delete them
+        // (can't just `remove_dir_all` as we need to delete all keys too!
+
+        // may revisit the dir-walking API, but currently
+        // we can only traverse one directory at once.
+        loop {
+            let mut dir = PathBuf::new();
+            dir.push(b"rk\0".try_into().unwrap());
+
+            hprintln!("reset start: reading {:?}", &dir).ok();
+            let entry = syscall!(self.crypto.read_dir_first(
+                StorageLocation::Internal,
+                dir,
+            )).entry;
+
+            let rp_path = match entry {
+                // no more RPs left
+                None => break,
+                Some(entry) => PathBuf::from(entry.path()),
+            };
+            hprintln!("got RP {:?}, looking for its RKs", &rp_path).ok();
+
+            // delete all RKs for given RP
+
+            let mut entry = syscall!(self.crypto.read_dir_first(
+                StorageLocation::Internal,
+                rp_path.clone(),
+            )).entry;
+
+            loop {
+                // hprintln!("this may be an RK: {:?}", &entry).ok();
+                let rk_path = match entry {
+                    // no more RKs left
+                    // break breaks inner loop here
+                    None => break,
+                    Some(entry) => PathBuf::from(entry.path()),
+                };
+
+                // prepare for next loop iteration
+                entry = syscall!(self.crypto.read_dir_next(
+                )).entry;
+
+                // got a RK, now delete its keys and then itself
+                hprintln!("handle RK {:?}", &rk_path).ok();
+                let credential_data = syscall!(self.crypto.read_file(
+                    StorageLocation::Internal,
+                    rk_path.clone(),
+                )).data;
+                let credential = Credential::deserialize(&credential_data).unwrap();
+                hprintln!("deleting credential {:?}", &credential).ok();
+
+                match credential.key {
+                    credential::Key::ResidentKey(key) => {
+                        hprintln!("deleting resident key {:?}", &key).ok();
+                        syscall!(self.crypto.delete(key));
+                    }
+                    credential::Key::WrappedKey(_) => {}
+                }
+
+                if let Some(secret) = credential.hmac_secret.clone() {
+                    match secret {
+                        credential::CredRandom::Resident(secret) => {
+                            hprintln!("deleting hmac secret {:?}", &secret).ok();
+                            syscall!(self.crypto.delete(secret));
+                        }
+                        credential::CredRandom::Wrapped(secret) => {}
+                    }
+                }
+
+                hprintln!("deleting RK file {:?}", &rk_path).ok();
+                syscall!(self.crypto.remove_file(
+                    StorageLocation::Internal,
+                    rk_path,
+                ));
+
+            }
+
+            hprintln!("deleting RP dir {:?}", &rp_path).ok();
+            syscall!(self.crypto.remove_dir(
+                StorageLocation::Internal,
+                rp_path,
+            ));
+
+        }
+
+        // b. delete persistent state
+        self.state.persistent.reset(&mut self.crypto)?;
+
+        // c. delete runtime state
+        self.state.runtime.reset(&mut self.crypto);
+
+        // Missed anything?
+
+        Ok(())
     }
 
     fn hash(&mut self, data: &[u8]) -> Result<Bytes<consts::U32>> {
@@ -1287,7 +1417,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
             nonce,
         );
 
-        hprintln!("made credential {:?}", &credential).ok();
+        // hprintln!("made credential {:?}", &credential).ok();
 
         // 12.b generate credential ID { = AEAD(Serialize(Credential)) }
         let kek = &self.state.persistent.key_encryption_key(&mut self.crypto)?;

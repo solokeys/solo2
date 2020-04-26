@@ -96,7 +96,7 @@ pub struct CredentialData {
     pub key: Key,
 
     // extensions
-    hmac_secret: Option<CredRandom>,
+    pub hmac_secret: Option<CredRandom>,
     pub cred_protect: CredentialProtectionPolicy,
 
     // TODO: add `sig_counter: Option<ObjectHandle>`,
