@@ -1,16 +1,20 @@
 use core::cmp::Ordering;
 
+use cortex_m_semihosting::hprintln;
+
 use crypto_service::{
     Client as CryptoClient,
     pipe::Syscall,
     types::{
+        self,
         ObjectHandle as Key,
         StorageLocation,
     },
 };
 use ctap_types::{
-    Bytes, consts, String, Vec,
+    Bytes, consts,
     authenticator::Error,
+    cose::EcdhEsHkdf256PublicKey as CoseEcdhEsHkdf256PublicKey,
     sizes::MAX_CREDENTIAL_COUNT_IN_LIST, // U8 currently
 };
 
@@ -19,6 +23,7 @@ use littlefs2::path::PathBuf;
 use ufmt::derive::uDebug;
 
 use crate::Result;
+use crate::cbor_serialize_message;
 
 pub type MaxCredentialHeap = BinaryHeap<TimestampPath, MAX_CREDENTIAL_COUNT_IN_LIST, Max>;
 pub type MinCredentialHeap = BinaryHeap<TimestampPath, MAX_CREDENTIAL_COUNT_IN_LIST, Min>;
@@ -60,7 +65,8 @@ pub struct State {
 }
 
 impl State {
-    pub fn new<S: Syscall>(crypto: &mut CryptoClient<'_, S>) -> Self {
+    // pub fn new<S: Syscall>(crypto: &mut CryptoClient<'_, S>) -> Self {
+    pub fn new() -> Self {
         // let identity = Identity::get(crypto);
         let identity = Default::default();
         let runtime: RuntimeState = Default::default();
@@ -357,6 +363,44 @@ impl RuntimeState {
         // self.drop_shared_secret(crypto);
         self.credentials = None;
         self.active_get_assertion = None;
+    }
+
+    // TODO: don't recalculate constantly
+    pub fn generate_shared_secret<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>, platform_key_agreement_key: &CoseEcdhEsHkdf256PublicKey) -> Result<Key> {
+        hprintln!("gen shared-secret").ok();
+        let private_key = self.key_agreement_key(crypto);
+
+        let serialized_pkak = cbor_serialize_message(platform_key_agreement_key).map_err(|_| Error::InvalidParameter)?;
+        hprintln!("deserialize platform kak").ok();
+        let platform_kak = block!(
+            crypto.deserialize_key(
+                types::Mechanism::P256, serialized_pkak, types::KeySerialization::EcdhEsHkdf256,
+                types::StorageAttributes::new().set_persistence(types::StorageLocation::Volatile)
+            ).unwrap()).map_err(|_| Error::InvalidParameter)?.key;
+
+        hprintln!("agree").ok();
+        let pre_shared_secret = syscall!(crypto.agree(
+            types::Mechanism::P256, private_key.clone(), platform_kak.clone(),
+            types::StorageAttributes::new().set_persistence(types::StorageLocation::Volatile),
+        )).shared_secret;
+
+        hprintln!("delete p_kak.pub").ok();
+        info!("deleted: {}", syscall!(crypto.delete(platform_kak)).success).ok();
+
+        hprintln!("derive shared secret").ok();
+        if let Some(previous_shared_secret) = self.shared_secret {
+            syscall!(crypto.delete(previous_shared_secret));
+        }
+
+        let shared_secret = syscall!(crypto.derive_key(
+            types::Mechanism::Sha256, pre_shared_secret.clone(), types::StorageAttributes::new().set_persistence(types::StorageLocation::Volatile)
+        )).key;
+        self.shared_secret = Some(shared_secret);
+
+        hprintln!("delete agreement").ok();
+        info!("deleted: {}", syscall!(crypto.delete(pre_shared_secret)).success).ok();
+
+        Ok(shared_secret)
     }
 
 }

@@ -25,7 +25,6 @@ use crypto_service::{
 
 use ctap_types::{
     Bytes, consts, String, Vec,
-    cose::P256PublicKey as CoseP256PublicKey,
     cose::EcdhEsHkdf256PublicKey as CoseEcdhEsHkdf256PublicKey,
     // cose::PublicKey as CosePublicKey,
     rpc::AuthenticatorEndpoint,
@@ -163,7 +162,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
     pub fn new(crypto: CryptoClient<'a, S>, rpc: AuthenticatorEndpoint<'a>, up: UP) -> Self {
 
         let mut crypto = crypto;
-        let state = state::State::new(&mut crypto);
+        let state = state::State::new();
         let authenticator = Authenticator { crypto, rpc, state, up };
 
         authenticator
@@ -337,7 +336,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 }
 
                 // 3. generate shared secret
-                let shared_secret = self.generate_shared_secret(platform_kek)?;
+                let shared_secret = self.state.runtime.generate_shared_secret(&mut self.crypto, platform_kek)?;
 
                 // TODO: there are moar early returns!!
                 // - implement Drop?
@@ -388,7 +387,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 }
 
                 // 3. generate shared secret
-                let shared_secret = self.generate_shared_secret(platform_kek)?;
+                let shared_secret = self.state.runtime.generate_shared_secret(&mut self.crypto, platform_kek)?;
 
                 // 4. verify pinAuth
                 let mut data = MediumData::new();
@@ -445,7 +444,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 }
 
                 // 3. generate shared secret
-                let shared_secret = self.generate_shared_secret(platform_kek)?;
+                let shared_secret = self.state.runtime.generate_shared_secret(&mut self.crypto, platform_kek)?;
 
                 // 4. decrement retires
                 self.state.persistent.decrement_retries(&mut self.crypto).unwrap();
@@ -572,32 +571,41 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         }
     }
 
-    fn generate_shared_secret(&mut self, platform_key_agreement_key: &CoseEcdhEsHkdf256PublicKey) -> Result<ObjectHandle> {
-        let private_key = self.state.runtime.key_agreement_key(&mut self.crypto);
-        let _public_key = syscall!(self.crypto.derive_p256_public_key(&private_key, StorageLocation::Volatile)).key;
+    // fn generate_shared_secret(&mut self, platform_key_agreement_key: &CoseEcdhEsHkdf256PublicKey) -> Result<ObjectHandle> {
+    //     hprintln!("gen shared-secret").ok();
+    //     let private_key = self.state.runtime.key_agreement_key(&mut self.crypto);
 
-        let serialized_kek = cbor_serialize_message(platform_key_agreement_key).map_err(|_| Error::InvalidParameter)?;
-        let platform_kek = syscall!(
-            self.crypto.deserialize_key(
-                Mechanism::P256, serialized_kek, KeySerialization::EcdhEsHkdf256,
-                StorageAttributes::new().set_persistence(StorageLocation::Volatile))
-            .map_err(|_| Error::InvalidParameter)).key;
+    //     let serialized_pkak = cbor_serialize_message(platform_key_agreement_key).map_err(|_| Error::InvalidParameter)?;
+    //     hprintln!("deserialize platform kak").ok();
+    //     let platform_kak = syscall!(
+    //         self.crypto.deserialize_key(
+    //             Mechanism::P256, serialized_pkak, KeySerialization::EcdhEsHkdf256,
+    //             StorageAttributes::new().set_persistence(StorageLocation::Volatile))
+    //         .map_err(|_| Error::InvalidParameter)).key;
 
-        let pre_shared_secret = syscall!(self.crypto.agree(
-            Mechanism::P256, private_key.clone(), platform_kek.clone(),
-            StorageAttributes::new().set_persistence(StorageLocation::Volatile),
-        )).shared_secret;
+    //     hprintln!("agree").ok();
+    //     let pre_shared_secret = DetectLeak::new(block!(self.crypto.agree(
+    //         Mechanism::P256, private_key.clone(), platform_kak.clone(),
+    //         StorageAttributes::new().set_persistence(StorageLocation::Volatile),
+    //     ).unwrap()).unwrap().shared_secret);
 
-        info!("deleted: {}", syscall!(self.crypto.delete(platform_kek)).success).ok();
+    //     hprintln!("delete p_kak.pub").ok();
+    //     info!("deleted: {}", syscall!(self.crypto.delete(platform_kak)).success).ok();
 
-        let shared_secret = syscall!(self.crypto.derive_key(
-            Mechanism::Sha256, pre_shared_secret.clone(), StorageAttributes::new().set_persistence(StorageLocation::Volatile)
-        )).key;
+    //     hprintln!("derive shared secret").ok();
+    //     if let Some(previous_shared_secret) = self.state.runtime.shared_secret {
+    //         syscall!(self.crypto.delete(*pre_shared_secret));
+    //     }
 
-        info!("deleted: {}", syscall!(self.crypto.delete(pre_shared_secret)).success).ok();
+    //     self.state.runtime.shared_secret = Some(syscall!(self.crypto.derive_key(
+    //         Mechanism::Sha256, *pre_shared_secret.clone(), StorageAttributes::new().set_persistence(StorageLocation::Volatile)
+    //     )).key);
 
-        Ok(shared_secret)
-    }
+    //     hprintln!("delete agreement").ok();
+    //     info!("deleted: {}", syscall!(self.crypto.delete(*pre_shared_secret)).success).ok();
+
+    //     Ok(shared_secret)
+    // }
 
 
     /// Returns whether UV was performed.
@@ -849,7 +857,6 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
                 let credential = Credential::deserialize(&data).unwrap();
 
-                use credential::CredentialProtectionPolicy as Policy;
                 let keep = match credential.cred_protect {
                     Policy::Optional => true,
                     Policy::OptionalWithCredentialIdList => allowed_credentials_passed || uv_performed,
@@ -1187,7 +1194,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                             hprintln!("deleting hmac secret {:?}", &secret).ok();
                             syscall!(self.crypto.delete(secret));
                         }
-                        credential::CredRandom::Wrapped(secret) => {}
+                        credential::CredRandom::Wrapped(_) => {}
                     }
                 }
 
@@ -1628,7 +1635,10 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         options.uv = None; // "uv" here refers to "in itself", e.g. biometric
         // options.plat = false;
         // options.client_pin = None; // not capable of PIN
-        options.client_pin = Some(false); // not capable of PIN
+        options.client_pin = match self.state.persistent.pin_is_set() {
+            true => Some(true),
+            false => None,
+        };
         // options.client_pin = Some(true/false); // capable, is set/is not set
 
         ctap2::get_info::Response {

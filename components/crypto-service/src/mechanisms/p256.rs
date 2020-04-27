@@ -61,6 +61,10 @@ Agree<R, S> for super::P256
         let public_key = load_public_key(resources, &public_id)?;
 
         // THIS IS THE CORE
+        hprintln!("free/total RAMFS blocks: {:?}/{:?}",
+            resources.store.vfs().available_blocks(),
+            resources.store.vfs().total_blocks(),
+        ).ok();
         let shared_secret = keypair.secret.agree(&public_key).map_err(|_| Error::InternalError)?.to_bytes();
 
         let key_id = resources.store_key(

@@ -175,6 +175,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
             },
 
             Request::Delete(request) => {
+                // let success = store::delete_anywhere(&request.key.object_id);
                 let key_types = [
                     KeyType::Secret,
                     KeyType::Public,
@@ -268,7 +269,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
 
             }
 
-            Request::ReadDirNext(request) => {
+            Request::ReadDirNext(_request) => {
                 let ReadDirState { request, last } = match &self.read_dir_state {
                     Some(state) => state.clone(),
                     None => panic!("call ReadDirFirst before ReadDirNext"),

@@ -209,6 +209,37 @@ pub struct ObjectHandle{
     pub object_id: UniqueId,
 }
 
+// #[derive(Clone, Eq, PartialEq, Debug, uDebug)]//, Deserialize, Serialize)]
+// pub struct AutoDrop<STORE: crate::store::Store> {
+//     handle: ObjectHandle,
+//     store:  STORE,
+// }
+
+// impl<S: crate::store::Store> core::ops::Deref for AutoDrop<_> {
+//     type Target = ObjectHandle;
+//     fn deref(&self) -> &Self::Target {
+//         &self.handle
+//     }
+// }
+
+// impl<S: crate::store::Store> core::ops::DerefMut for AutoDrop {
+//     fn deref_mut(&mut self) -> &mut Self::Target {
+//         &mut self.handle
+//     }
+// }
+
+// impl<S: crate::store::Store> core::ops::Drop for AutoDrop {
+//     fn drop(&mut self) {
+//         // crate::store::delete_volatile(self.store, &self.handle);
+//     }
+// }
+
+// impl AutoDrop {
+//     pub fn new(handle: ObjectHandle) -> Self {
+//         Self(handle)
+//     }
+// }
+
 impl serde::Serialize for ObjectHandle {
     fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
     where

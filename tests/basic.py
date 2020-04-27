@@ -4,9 +4,21 @@ import fido2.ctap2
 import fido2.hid
 import IPython
 
+pin = "1234"
+
 dev = fido2.ctap2.CTAP2(next(fido2.hid.CtapHidDevice.list_devices()))
 
-print(dev.get_info())
+PP = fido2.ctap2.PinProtocolV1
+pp = PP(dev)
+
+dev_info = dev.get_info()
+
+print(dev_info)
+if dev_info.options.get('clientPin', False):
+    pin_token = pp.get_pin_token(pin)
+    print(f"PIN set, token = {pin_token}")
+    print("resetting device to clear PIN")
+    dev.reset()
 
 # IPython.embed()
 
@@ -64,5 +76,23 @@ for alg in (Ed25519, P256):
 # assn = dev.get_next_assertion()
 # assn.verify(client_data_hash, public_keys[0])
 
-print(":: RESET ::")
-dev.reset()
+# print(":: RESET ::")
+# dev.reset()
+
+PP = fido2.ctap2.PinProtocolV1
+pp = PP(dev)
+try:
+    pp.set_pin(pin)
+except e:
+    print("pin already set")
+    pass
+
+print(pp.get_shared_secret())
+pin_token = pp.get_pin_token(pin)
+print(pin_token)
+
+
+# CM = fido2.ctap2.CredentialManagement
+# cm = CM(dev, pp.VERSION, pin_token)
+# rp0 = dev.credential_mgmt(CM.CMD.ENUMERATE_RPS_BEGIN)
+# print(rp0)

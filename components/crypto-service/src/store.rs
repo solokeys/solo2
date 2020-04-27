@@ -417,3 +417,40 @@ pub fn delete(store: impl Store, location: StorageLocation, path: &Path) -> bool
 
     outcome.is_ok()
 }
+
+// pub fn delete_volatile(store: impl Store, handle: &ObjectHandle) -> bool {
+//     let key_types = [
+//         KeyType::Secret,
+//         KeyType::Public,
+//     ];
+
+//     let success = key_types.iter().any(|key_type| {
+//         let path = self.key_path(*key_type, handle);
+//         store::delete(store, StorageLocation::Volatile, &path)
+//     });
+
+//     success
+// }
+
+// pub fn delete_anywhere(store: impl Store, handle: &ObjectHandle) -> bool {
+//     let key_types = [
+//         KeyType::Secret,
+//         KeyType::Public,
+//     ];
+
+//     let locations = [
+//         StorageLocation::Internal,
+//         StorageLocation::External,
+//         StorageLocation::Volatile,
+//     ];
+
+//     let success = key_types.iter().any(|key_type| {
+//         let path = self.key_path(*key_type, handle);
+//         locations.iter().any(|location| {
+//             store::delete(store, *location, &path)
+//         })
+//     });
+
+//     success
+// }
+
