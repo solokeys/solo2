@@ -415,7 +415,7 @@ pub struct UniqueId(pub(crate) [u8; 16]);
 
 impl UniqueId {
     pub fn hex(&self) -> [u8; 32] {
-        let mut hex = [0u8; 32];
+        let mut hex = [b'0'; 32];
         format_hex(&self.0, &mut hex);
         hex
     }
@@ -468,6 +468,8 @@ impl ufmt::uDebug for UniqueId {
 pub type UserAttribute = Bytes<MAX_USER_ATTRIBUTE_LENGTH>;
 
 // PANICS
+// Also assumes buffer is initialised with b'0',
+// not b'\0' if 2*data.len() < buffer.len()
 const HEX_CHARS: &[u8] = b"0123456789abcdef";
 fn format_hex(data: &[u8], mut buffer: &mut [u8]) {
     for byte in data.iter() {

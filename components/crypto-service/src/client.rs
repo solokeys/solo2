@@ -264,6 +264,16 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
         Ok(FutureResult::new(self))
     }
 
+    pub fn debug_dump_store<'c>(
+        &'c mut self,
+    )
+        -> core::result::Result<FutureResult<'a, 'c, reply::DebugDumpStore>, ClientError>
+    {
+        self.raw.request(request::DebugDumpStore {})?;
+        self.syscall.syscall();
+        Ok(FutureResult::new(self))
+    }
+
     pub fn exists<'c>(
         &'c mut self,
         mechanism: Mechanism,
@@ -294,10 +304,11 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
         &'c mut self,
         location: StorageLocation,
         dir: PathBuf,
+        not_before_filename: Option<PathBuf>,
     )
         -> core::result::Result<FutureResult<'a, 'c, reply::ReadDirFirst>, ClientError>
     {
-        self.raw.request(request::ReadDirFirst { dir, location } )?;
+        self.raw.request(request::ReadDirFirst { location, dir, not_before_filename } )?;
         self.syscall.syscall();
         Ok(FutureResult::new(self))
     }
@@ -336,9 +347,9 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
     }
 
     pub fn remove_dir<'c>(&'c mut self, location: StorageLocation, path: PathBuf)
-        -> core::result::Result<FutureResult<'a, 'c, reply::RemoveDir>, ClientError>
+        -> core::result::Result<FutureResult<'a, 'c, reply::RemoveFile>, ClientError>
     {
-        self.raw.request(request::RemoveDir { location, path } )?;
+        self.raw.request(request::RemoveFile { location, path } )?;
         self.syscall.syscall();
         Ok(FutureResult::new(self))
     }
@@ -355,6 +366,17 @@ impl<'a, Syscall: crate::pipe::Syscall> Client<'a, Syscall> {
         -> core::result::Result<FutureResult<'a, 'c, reply::ReadFile>, ClientError>
     {
         self.raw.request(request::ReadFile { location, path } )?;
+        self.syscall.syscall();
+        Ok(FutureResult::new(self))
+    }
+
+    pub fn locate_file<'c>(&'c mut self, location: StorageLocation,
+                           dir: Option<PathBuf>,
+                           filename: PathBuf,
+                           )
+        -> core::result::Result<FutureResult<'a, 'c, reply::LocateFile>, ClientError>
+    {
+        self.raw.request(request::LocateFile { location, dir, filename } )?;
         self.syscall.syscall();
         Ok(FutureResult::new(self))
     }

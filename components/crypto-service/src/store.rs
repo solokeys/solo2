@@ -118,6 +118,7 @@
 
 use core::convert::TryFrom;
 
+#[allow(unused_imports)]
 #[cfg(feature = "semihosting")]
 use cortex_m_semihosting::hprintln;
 use littlefs2::path::Path;

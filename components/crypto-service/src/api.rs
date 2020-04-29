@@ -56,6 +56,9 @@ generate_enums! {
     RemoveDir: 27 //   <-- what for
     // RemoveDirAll: 28
     // WriteFile: 29
+    LocateFile: 30
+    //
+    DebugDumpStore: 0x79
 }
 
 pub mod request {
@@ -73,6 +76,8 @@ pub mod request {
         // - store certificates
         CreateObject:
             - attributes: Attributes
+
+        DebugDumpStore:
 
         Decrypt:
           - mechanism: Mechanism
@@ -147,6 +152,11 @@ pub mod request {
           - mechanism: Mechanism
           - message: Message
 
+        LocateFile:
+          - location: StorageLocation
+          - dir: Option<PathBuf>
+          - filename: PathBuf
+
         ReadDirFilesFirst:
           - location: StorageLocation
           - dir: PathBuf
@@ -157,6 +167,7 @@ pub mod request {
         ReadDirFirst:
           - location: StorageLocation
           - dir: PathBuf
+          - not_before_filename: Option<PathBuf>
 
         ReadDirNext:
 
@@ -241,6 +252,8 @@ pub mod reply {
             // can be higher than capacity of vector
             - num_objects: usize
 
+        DebugDumpStore:
+
 		Decrypt:
             - plaintext: Option<Message>
 
@@ -274,6 +287,9 @@ pub mod reply {
 
         Hash:
           - hash: ShortData
+
+        LocateFile:
+          - path: Option<PathBuf>
 
         ReadDirFilesFirst:
           - data: Option<Message>

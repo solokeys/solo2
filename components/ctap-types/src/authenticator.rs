@@ -54,6 +54,9 @@ pub mod ctap2 {
         Reset,
         // 0xA
         CredentialManagement(credential_management::Parameters),
+        // vendor, to be embellished
+        // Q: how to handle the associated CBOR structures
+        Vendor(crate::ctaphid::VendorOperation),
     }
 
     #[derive(Debug,uDebug)]
@@ -65,6 +68,8 @@ pub mod ctap2 {
         ClientPin(client_pin::Response),
         Reset,
         CredentialManagement(credential_management::Response),
+        // Q: how to handle the associated CBOR structures
+        Vendor,
     }
 
 }

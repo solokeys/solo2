@@ -84,3 +84,4 @@ littlefs2 = { path = "../../littlefs2" }
 cortex-m-funnel = { git = "https://github.com/conorpp/cortex-m-funnel" }
 heapless = { path = "../../heapless" }
 ufmt = { path = "../../ufmt" }
+# lpc55s6x-pac = { path = "../../lpc55-pacs" }

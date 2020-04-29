@@ -226,13 +226,122 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
                 }.map(|reply| Reply::Hash(reply))
             },
 
+            Request::LocateFile(request) => {
+
+                let user_dir = match request.dir {
+                    Some(dir) => dir,
+                    None => PathBuf::from(b"/"),
+                };
+                let base_path = self.dataspace_path(&user_dir);
+                let base_path = self.namespace_path(&base_path);
+                hprintln!("base path {:?}", &base_path).ok();
+
+                fn recursively_locate<S: 'static + crate::types::LfsStorage>(
+                    fs: &'static crate::store::Fs<S>,
+                    path: PathBuf,
+                    filename: &Path
+                )
+                    -> Result<Option<PathBuf>, littlefs2::io::Error>
+                {
+                    // hprintln!("entering `rec-loc` with path {:?} and filename {:?}",
+                              // &path, filename).ok();
+                    // let fs = store.vfs();
+                    fs.read_dir_and_then(&path, |dir| {
+                        // hprintln!("looking in {:?}", &path).ok();
+                        for (i, entry) in dir.enumerate() {
+                            let entry = entry.unwrap();
+                            let mut is_special_dir = PathBuf::from(entry.file_name()) == PathBuf::from(b".");
+                            is_special_dir |= PathBuf::from(entry.file_name()) == PathBuf::from(b"..");
+                            if (i < 2) != is_special_dir {
+                                // hprintln!("i = {}, is_special_dir = {:?}", i, is_special_dir).ok();
+                                panic!("i = {}, is_special_dir = {:?}, filename = {:?}",
+                                    i,
+                                    is_special_dir,
+                                    entry.file_name(),
+                                );
+
+                            }
+                            if i < 2 {
+                                // hprintln!(":: skipping {:?}", &entry.path()).ok();
+                                continue;
+                            }
+                            if entry.file_type().is_file() {
+                                // hprintln!(":: comparing with {:?}", entry.file_name()).ok();
+                                if PathBuf::from(entry.file_name()) == PathBuf::from(filename) {
+                                    hprintln!("found it").ok();
+                                    return Ok(Some(PathBuf::from(entry.path())));
+                                }
+                                continue;
+                            }
+                            if entry.file_type().is_dir() {
+                                // hprintln!("recursing into {:?} with path {:?}",
+                                //           &entry.file_name(),
+                                //           &entry.path(),
+                                //           ).ok();
+                                if let Some(path) = recursively_locate(fs, PathBuf::from(entry.path()), filename)? {
+                                    return Ok(Some(path));
+                                };
+                            }
+                        }
+                        Ok(None)
+                    })
+                }
+
+                assert!(request.location == StorageLocation::Internal);
+                let path = recursively_locate(self.store.ifs(), base_path, &request.filename).unwrap();
+                let path = match path.as_ref() {
+                    Some(path) => Some(self.denamedataspace_path(path)),
+                    None => None,
+                };
+                    // .map_err(|_| Error::InternalError)?;
+
+                Ok(Reply::LocateFile(reply::LocateFile { path }) )
+
+            }
+
+            Request::DebugDumpStore(_request) => {
+
+                hprintln!(":: PERSISTENT").ok();
+                recursively_list(self.store.ifs(), PathBuf::from(b"/"));
+
+                hprintln!(":: VOLATILE").ok();
+                recursively_list(self.store.vfs(), PathBuf::from(b"/"));
+
+                fn recursively_list<S: 'static + crate::types::LfsStorage>(fs: &'static crate::store::Fs<S>, path: PathBuf) {
+                    // let fs = store.vfs();
+                    fs.read_dir_and_then(&path, |dir| {
+                        for (i, entry) in dir.enumerate() {
+                            let entry = entry.unwrap();
+                            if i < 2 {
+                                // hprintln!("skipping {:?}", &entry.path()).ok();
+                                continue;
+                            }
+                            hprintln!("{:?}", entry.path()).ok();
+                            if entry.file_type().is_dir() {
+                                recursively_list(fs, PathBuf::from(entry.path()));
+                            }
+                            if entry.file_type().is_file() {
+                                let _contents: Vec<u8, consts::U256> = fs.read(entry.path()).unwrap();
+                                // hprintln!("{} ?= {}", entry.metadata().len(), contents.len()).ok();
+                                // hprintln!("{:?}", &contents).ok();
+                            }
+                        }
+                        Ok(())
+                    }).unwrap();
+                }
+
+                Ok(Reply::DebugDumpStore(reply::DebugDumpStore {}) )
+
+            }
+
             Request::ReadDirFirst(request) => {
                 assert!(request.location == StorageLocation::Internal);
 
-                let path = self.namespace_path(&request.dir);
+                let path = self.dataspace_path(&request.dir);
+                let path = self.namespace_path(&path);
                 let fs = self.store.ifs();
 
-                // let (i, entry) = fs.read_dir_and_then(&path, |dir| {
+                let mut found_not_before = request.not_before_filename.is_none();
                 let outcome = fs.read_dir_and_then(&path, |dir| {
                     for (i, entry) in dir.enumerate() {
                         if i < 2 {
@@ -240,7 +349,17 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
                         }
 
                         let entry = entry.unwrap();
-                        return Ok((i, entry));
+                        if found_not_before {
+                            return Ok((i, entry));
+                        } else {
+                            found_not_before =
+                                entry.file_name() ==
+                                    request
+                                        .not_before_filename.as_ref()
+                                        .unwrap().as_ref()
+                            ;
+                            continue;
+                        }
                     }
 
                     Err(littlefs2::io::Error::Io)
@@ -254,7 +373,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
                             request,
                             last: i,
                         });
-                        *unsafe { entry.path_buf_mut() } = self.denamespace_path(&entry.path());
+                        *unsafe { entry.path_buf_mut() } = self.denamedataspace_path(&entry.path());
                         Some(entry)
                     }
 
@@ -277,7 +396,9 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
 
                 assert!(request.location == StorageLocation::Internal);
 
-                let path = self.namespace_path(&request.dir);
+                // let path = self.namespace_path(&request.dir);
+                let path = self.dataspace_path(&request.dir);
+                let path = self.namespace_path(&path);
                 let fs = self.store.ifs();
 
                 // let (i, entry) = fs.read_dir_and_then(&path, |dir| {
@@ -300,7 +421,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
                             request,
                             last: i,
                         });
-                        *unsafe { entry.path_buf_mut() } = self.denamespace_path(&entry.path());
+                        *unsafe { entry.path_buf_mut() } = self.denamedataspace_path(&entry.path());
                         Some(entry)
                     }
 
@@ -318,7 +439,9 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
             Request::ReadDirFilesFirst(request) => {
                 assert!(request.location == StorageLocation::Internal);
 
-                let path = self.namespace_path(&request.dir);
+                // let path = self.namespace_path(&request.dir);
+                let path = self.dataspace_path(&request.dir);
+                let path = self.namespace_path(&path);
 
                 let fs = self.store.ifs();
 
@@ -379,7 +502,9 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
                     None => panic!("call ReadDirFilesFirst before ReadDirFilesNext"),
                 };
 
-                let path = self.namespace_path(&request.dir);
+                // let path = self.namespace_path(&request.dir);
+                let path = self.dataspace_path(&request.dir);
+                let path = self.namespace_path(&path);
                 let fs = self.store.ifs();
 
                 let mut found_last = false;
@@ -459,7 +584,9 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
 
             Request::RemoveDir(request) => {
                 // let path = self.blob_path(&request.path, Some(&request.id.object_id))?;
-                let path = self.namespace_path(&request.path);
+                // let path = self.namespace_path(&request.path);
+                let path = self.dataspace_path(&request.path);
+                let path = self.namespace_path(&path);
                 let mut data = Message::new();
                 data.resize_to_capacity();
                 match request.location {
@@ -473,7 +600,9 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
 
             Request::RemoveFile(request) => {
                 // let path = self.blob_path(&request.path, Some(&request.id.object_id))?;
-                let path = self.namespace_path(&request.path);
+                // let path = self.namespace_path(&request.path);
+                let path = self.dataspace_path(&request.path);
+                let path = self.namespace_path(&path);
                 let mut data = Message::new();
                 data.resize_to_capacity();
                 match request.location {
@@ -487,7 +616,8 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
 
             Request::ReadFile(request) => {
                 // let path = self.blob_path(&request.path, Some(&request.id.object_id))?;
-                let path = self.namespace_path(&request.path);
+                let path = self.dataspace_path(&request.path);
+                let path = self.namespace_path(&path);
                 let mut data = Message::new();
                 data.resize_to_capacity();
                 let data: Message = match request.location {
@@ -533,7 +663,8 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
             },
 
             Request::WriteFile(request) => {
-                let path = self.namespace_path(&request.path);
+                let path = self.dataspace_path(&request.path);
+                let path = self.namespace_path(&path);
                 info!("WriteFile of size {}", request.data.len()).ok();
                 store::store(self.store, request.location, &path, &request.data)?;
                 Ok(Reply::WriteFile(reply::WriteFile {}))
@@ -589,24 +720,57 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
         namespaced_path
     }
 
+    pub fn dataspace_path(&self, path: &Path) -> PathBuf {
+        // TODO: check no escapes!
+        let mut dataspaced_path = PathBuf::new();
+        dataspaced_path.push(b"dat\0".try_into().unwrap());
+        dataspaced_path.push(path);
+        dataspaced_path
+    }
+
     pub fn denamespace_path(&self, path: &Path) -> PathBuf {
-        // hprintln!("path in: {:?}", path).ok();
+        // hprintln!("denamespacing {:?}", path).ok();
         let bytes = path.as_ref().as_bytes();
-        let end_of_namespace = bytes.iter().position(|&x| x == b'/')
+        let absolute = bytes[0] == b'/';
+        let offset = if absolute { 1 } else { 0 };
+
+        let end_of_namespace = bytes[1..].iter().position(|&x| x == b'/')
             // oh oh oh
             .unwrap();
-        let buf = PathBuf::from(&bytes[end_of_namespace + 1..]);
+        let buf = PathBuf::from(&bytes[end_of_namespace + 1 + offset..]);
         // hprintln!("buf out: {:?}", &buf).ok();
         buf
     }
 
+    pub fn dedataspace_path(&self, path: &Path) -> PathBuf {
+        // hprintln!("dedataspacing {:?}", path).ok();
+        let bytes = path.as_ref().as_bytes();
+        let absolute = bytes[0] == b'/';
+        let offset = if absolute { 1 } else { 0 };
+
+        let end_of_dataspace = bytes[1..].iter().position(|&x| x == b'/')
+            // oh oh oh
+            .unwrap();
+        let buf = PathBuf::from(&bytes[end_of_dataspace + 1 + offset..]);
+        // hprintln!("buf out: {:?}", &buf).ok();
+        buf
+    }
+
+    pub fn denamedataspace_path(&self, path: &Path) -> PathBuf {
+        self.dedataspace_path(&self.denamespace_path(path))
+    }
+
     pub fn key_path(&self, key_type: KeyType, key_id: &UniqueId) -> PathBuf {
         let mut path = PathBuf::new();
+        // TODO: huh?!?!
+        // If I change these prefixes to shorter,
+        // DebugDumpStore skips the directory contents
         path.push(match key_type {
-            KeyType::Public => b"public\0".try_into().unwrap(),
-            KeyType::Secret => b"secret\0".try_into().unwrap(),
+            KeyType::Public => b"pub\0".try_into().unwrap(),
+            KeyType::Secret => b"sec\0".try_into().unwrap(),
         });
         path.push(&PathBuf::from(&key_id.hex()));
+        // no dataspacing
         self.namespace_path(&path)
     }
 
@@ -615,12 +779,12 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
         let serialized_key = SerializedKey::try_from((key_kind, key_material))?;
 
         let mut buf = [0u8; 128];
-        crate::cbor_serialize(&serialized_key, &mut buf).map_err(|_| Error::CborError)?;
+        let serialized_bytes = crate::cbor_serialize(&serialized_key, &mut buf).map_err(|_| Error::CborError)?;
 
         let key_id = self.generate_unique_id()?;
         let path = self.key_path(key_type, &key_id);
 
-        store::store(self.store, location, &path, &buf)?;
+        store::store(self.store, location, &path, &serialized_bytes)?;
 
         Ok(key_id)
     }
@@ -629,11 +793,11 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
         let serialized_key = SerializedKey::try_from((key_kind, key_material))?;
 
         let mut buf = [0u8; 128];
-        crate::cbor_serialize(&serialized_key, &mut buf).map_err(|_| Error::CborError)?;
+        let serialized_bytes = crate::cbor_serialize(&serialized_key, &mut buf).map_err(|_| Error::CborError)?;
 
         let path = self.key_path(key_type, key_id);
 
-        store::store(self.store, location, &path, &buf)?;
+        store::store(self.store, location, &path, &serialized_bytes)?;
 
         Ok(())
     }

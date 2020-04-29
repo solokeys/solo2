@@ -2,6 +2,7 @@ import cbor
 import fido2.attestation
 import fido2.ctap2
 import fido2.hid
+import fido2.webauthn
 import IPython
 
 pin = "1234"
@@ -37,6 +38,7 @@ credential_ids = []
 public_keys = []
 
 for alg in (Ed25519, P256):
+    print(f"MC for {alg}")
     att = dev.make_credential(
         b"1234567890ABCDEF1234567890ABCDEF",
         {"id": "https://yamnord.com"},
@@ -47,6 +49,7 @@ for alg in (Ed25519, P256):
     )
 
     credential_id = att.auth_data.credential_data.credential_id
+    print(att.auth_data.credential_data)
     credential_ids.append(credential_id)
 
     public_key = att.auth_data.credential_data.public_key
@@ -63,36 +66,61 @@ for alg in (Ed25519, P256):
     assn = dev.get_assertion(
         "https://yamnord.com",
         client_data_hash,
-        allow_list=[{"type": "public-key", "id": credential_id}],
+        # allow_list=[{"type": "public-key", "id": credential_id}],
     )
 
     # basic sanity check - would raise
     assn.verify(client_data_hash, public_key)
 
-# # GA/GNA combo
-# assn = dev.get_assertion("https://yamnord.com", client_data_hash)
-# assn.verify(client_data_hash, public_keys[1])
+# GA/GNA combo
+assn = dev.get_assertion("https://yamnord.com", client_data_hash)
+assn.verify(client_data_hash, public_keys[1])
 
-# assn = dev.get_next_assertion()
-# assn.verify(client_data_hash, public_keys[0])
+assn = dev.get_next_assertion()
+assn.verify(client_data_hash, public_keys[0])
+
+
+# make another RP
+dev.make_credential(
+    b"1234567890ABCDEF1234567890ABCDEF",
+    {"id": "https://solokeys.com"},
+    {"id": b"nickray"},
+    [{"type": "public-key", "alg": alg}],
+    extensions={"hmac-secret": True},
+    options={"rk": True},
+)
 
 # print(":: RESET ::")
 # dev.reset()
 
-PP = fido2.ctap2.PinProtocolV1
-pp = PP(dev)
+# PP = fido2.ctap2.PinProtocolV1
+# pp = PP(dev)
 try:
     pp.set_pin(pin)
-except e:
+except Exception as e:
     print("pin already set")
     pass
 
-print(pp.get_shared_secret())
+try:
+    pp.set_pin(pin)
+except Exception as e:
+    print("pin already set")
+    pass
+
+# print(pp.get_shared_secret())
+# pin_token = pp.get_pin_token(pin)
+# print(pin_token)
+
+
+# we reset, so need new pin token!!
 pin_token = pp.get_pin_token(pin)
-print(pin_token)
+CM = fido2.ctap2.CredentialManagement
 
-
-# CM = fido2.ctap2.CredentialManagement
-# cm = CM(dev, pp.VERSION, pin_token)
+cm = CM(dev, pp.VERSION, pin_token)
 # rp0 = dev.credential_mgmt(CM.CMD.ENUMERATE_RPS_BEGIN)
 # print(rp0)
+
+# import fido2.webauthn
+cd = fido2.webauthn.PublicKeyCredentialDescriptor("public-key", credential_ids[0])
+cd1 = fido2.webauthn.PublicKeyCredentialDescriptor("public-key", credential_ids[1])
+# cm.delete_cred(cd)

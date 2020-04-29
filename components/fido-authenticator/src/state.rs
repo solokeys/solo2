@@ -12,7 +12,7 @@ use crypto_service::{
     },
 };
 use ctap_types::{
-    Bytes, consts,
+    Bytes, Bytes32, consts,
     authenticator::Error,
     cose::EcdhEsHkdf256PublicKey as CoseEcdhEsHkdf256PublicKey,
     sizes::MAX_CREDENTIAL_COUNT_IN_LIST, // U8 currently
@@ -65,6 +65,7 @@ pub struct State {
 }
 
 impl State {
+
     // pub fn new<S: Syscall>(crypto: &mut CryptoClient<'_, S>) -> Self {
     pub fn new() -> Self {
         // let identity = Identity::get(crypto);
@@ -75,6 +76,32 @@ impl State {
 
         Self { identity, persistent, runtime }
     }
+
+    pub fn decrement_retries<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>) -> Result<()> {
+        self.persistent.decrement_retries(crypto)?;
+        self.runtime.decrement_retries();
+        Ok(())
+    }
+
+    pub fn reset_retries<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>) -> Result<()> {
+        self.persistent.reset_retries(crypto)?;
+        self.runtime.reset_retries();
+        Ok(())
+    }
+
+
+    pub fn pin_blocked(&self) -> Result<()> {
+
+        if self.persistent.pin_blocked() {
+            return Err(Error::PinBlocked);
+        }
+        if self.runtime.pin_blocked() {
+            return Err(Error::PinAuthBlocked);
+        }
+
+        Ok(())
+    }
+
 }
 
 #[derive(Clone, Debug, uDebug, Default, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
@@ -120,6 +147,11 @@ impl Identity {
 
 }
 
+#[derive(Clone, Debug, uDebug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+pub enum CommandCache {
+    CredentialManagementEnumerateRps(u32, Bytes32),
+}
+
 #[derive(Clone, Debug, /*uDebug,*/ Default, /*PartialEq,*/ serde::Deserialize, serde::Serialize)]
 pub struct ActiveGetAssertionData {
     pub rp_id_hash: [u8; 32],
@@ -133,8 +165,13 @@ pub struct RuntimeState {
     pin_token: Option<Key>,
     // TODO: why is this field not used?
     shared_secret: Option<Key>,
+    consecutive_pin_mismatches: u8,
+
+    // both of these are a cache for previous Get{Next,}Assertion call
     credentials: Option<MaxCredentialHeap>,
     pub active_get_assertion: Option<ActiveGetAssertionData>,
+    channel: Option<u32>,
+    pub cache: Option<CommandCache>,
 }
 
 // TODO: Plan towards future extensibility
@@ -172,9 +209,13 @@ pub struct PersistentState {
 
 impl PersistentState {
 
-    const POWERCYCLE_RETRIES: u8 = 3;
     const RESET_RETRIES: u8 = 8;
-    const FILENAME: &'static [u8] = b"persistent-state";
+    const FILENAME: &'static [u8] = b"persistent-state.cbor";
+    const MAX_RESIDENT_CREDENTIALS_GUESSTIMATE: u32 = 100;
+
+    pub fn max_resident_credentials_guesstimate(&self) -> u32 {
+        Self::MAX_RESIDENT_CREDENTIALS_GUESSTIMATE
+    }
 
     pub fn load<S: Syscall>(crypto: &mut CryptoClient<'_, S>) -> Result<Self> {
 
@@ -226,7 +267,7 @@ impl PersistentState {
         let now = self.timestamp;
         self.timestamp += 1;
         self.save(crypto)?;
-        cortex_m_semihosting::hprintln!("https://time.is/{}", now).ok();
+        // cortex_m_semihosting::hprintln!("https://time.is/{}", now).ok();
         Ok(now)
     }
 
@@ -275,10 +316,10 @@ impl PersistentState {
     }
 
     pub fn pin_blocked(&self) -> bool {
-        self.consecutive_pin_mismatches >= Self::POWERCYCLE_RETRIES
+        self.consecutive_pin_mismatches >= Self::RESET_RETRIES
     }
 
-    pub fn reset_retries<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>) -> Result<()> {
+     fn reset_retries<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>) -> Result<()> {
         self.load_if_not_initialised(crypto);
         if self.consecutive_pin_mismatches > 0 {
             self.consecutive_pin_mismatches = 0;
@@ -287,7 +328,7 @@ impl PersistentState {
         Ok(())
     }
 
-    pub fn decrement_retries<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>) -> Result<()> {
+    fn decrement_retries<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>) -> Result<()> {
         self.load_if_not_initialised(crypto);
         // error to call before initialization
         if self.consecutive_pin_mismatches < Self::RESET_RETRIES {
@@ -312,6 +353,23 @@ impl PersistentState {
 }
 
 impl RuntimeState {
+
+    const POWERCYCLE_RETRIES: u8 = 3;
+
+    fn decrement_retries(&mut self) {
+        if self.consecutive_pin_mismatches < Self::POWERCYCLE_RETRIES {
+            self.consecutive_pin_mismatches += 1;
+        }
+    }
+
+    fn reset_retries(&mut self) {
+        self.consecutive_pin_mismatches = 0;
+    }
+
+
+    pub fn pin_blocked(&self) -> bool {
+        self.consecutive_pin_mismatches >= Self::POWERCYCLE_RETRIES
+    }
 
     pub fn credential_heap(&mut self) -> &mut MaxCredentialHeap {
         if self.credentials.is_none() {
@@ -351,6 +409,7 @@ impl RuntimeState {
 
     pub fn rotate_pin_token<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>) -> Key {
         // TODO: need to rotate key agreement key?
+        hprintln!("rotatating pin token!!").ok();
         if let Some(token) = self.pin_token { syscall!(crypto.delete(token)); }
         let token = syscall!(crypto.generate_hmacsha256_key(StorageLocation::Volatile)).key;
         self.pin_token = Some(token);
@@ -367,27 +426,21 @@ impl RuntimeState {
 
     // TODO: don't recalculate constantly
     pub fn generate_shared_secret<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>, platform_key_agreement_key: &CoseEcdhEsHkdf256PublicKey) -> Result<Key> {
-        hprintln!("gen shared-secret").ok();
         let private_key = self.key_agreement_key(crypto);
 
         let serialized_pkak = cbor_serialize_message(platform_key_agreement_key).map_err(|_| Error::InvalidParameter)?;
-        hprintln!("deserialize platform kak").ok();
         let platform_kak = block!(
             crypto.deserialize_key(
                 types::Mechanism::P256, serialized_pkak, types::KeySerialization::EcdhEsHkdf256,
                 types::StorageAttributes::new().set_persistence(types::StorageLocation::Volatile)
             ).unwrap()).map_err(|_| Error::InvalidParameter)?.key;
 
-        hprintln!("agree").ok();
         let pre_shared_secret = syscall!(crypto.agree(
             types::Mechanism::P256, private_key.clone(), platform_kak.clone(),
             types::StorageAttributes::new().set_persistence(types::StorageLocation::Volatile),
         )).shared_secret;
+        syscall!(crypto.delete(platform_kak));
 
-        hprintln!("delete p_kak.pub").ok();
-        info!("deleted: {}", syscall!(crypto.delete(platform_kak)).success).ok();
-
-        hprintln!("derive shared secret").ok();
         if let Some(previous_shared_secret) = self.shared_secret {
             syscall!(crypto.delete(previous_shared_secret));
         }
@@ -397,8 +450,7 @@ impl RuntimeState {
         )).key;
         self.shared_secret = Some(shared_secret);
 
-        hprintln!("delete agreement").ok();
-        info!("deleted: {}", syscall!(crypto.delete(pre_shared_secret)).success).ok();
+        syscall!(crypto.delete(pre_shared_secret));
 
         Ok(shared_secret)
     }

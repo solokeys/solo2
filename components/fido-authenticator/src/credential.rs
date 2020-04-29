@@ -10,7 +10,7 @@ use crypto_service::{
 };
 
 pub(crate) use ctap_types::{
-    Bytes, consts, String, Vec,
+    Bytes, Bytes32, consts, String, Vec,
     // authenticator::{ctap1, ctap2, Error, Request, Response},
     authenticator::ctap2,
     ctap2::make_credential::CredentialProtectionPolicy,
@@ -18,7 +18,26 @@ pub(crate) use ctap_types::{
     webauthn::PublicKeyCredentialDescriptor,
 };
 
-use super::{Error, Result};
+use crate::{
+    Authenticator,
+    Error,
+    Result,
+};
+
+#[macro_use]
+macro_rules! block {
+    ($future_result:expr) => {{
+        // evaluate the expression
+        let mut future_result = $future_result;
+        loop {
+            match future_result.poll() {
+                core::task::Poll::Ready(result) => { break result; },
+                core::task::Poll::Pending => {},
+            }
+        }
+    }}
+}
+
 
 #[derive(Copy, Clone, Debug, serde::Deserialize, serde::Serialize)]
 // #[derive(Copy, Clone, Debug, serde_indexed::DeserializeIndexed, serde_indexed::SerializeIndexed)]
@@ -78,7 +97,7 @@ pub enum CredRandom {
 #[derive(Clone, Debug, serde_indexed::DeserializeIndexed, serde_indexed::SerializeIndexed)]
 pub struct CredentialData {
     // id, name, url
-    rp: ctap_types::webauthn::PublicKeyCredentialRpEntity,
+    pub rp: ctap_types::webauthn::PublicKeyCredentialRpEntity,
     // id, name, display_name
     user: ctap_types::webauthn::PublicKeyCredentialUserEntity,
 
@@ -109,7 +128,7 @@ pub struct CredentialData {
 // #[serde_indexed(offset = 1)]
 pub struct Credential {
     ctap: CtapVersion,
-    data: CredentialData,
+    pub data: CredentialData,
     nonce: Bytes<consts::U12>,
 }
 
@@ -182,7 +201,12 @@ impl Credential {
         let serialized_credential = self.serialize()?;
         let message = &serialized_credential;
         // info!("ser cred = {:?}", message).ok();
-        let associated_data = self.rp.id.as_bytes();
+
+        let rp_id_hash: Bytes32 = syscall!(crypto.hash_sha256(&self.rp.id.as_ref()))
+            .hash
+            .try_convert_into().map_err(|_| Error::Other)?;
+
+        let associated_data = &rp_id_hash[..];
         let nonce: [u8; 12] = self.nonce.as_ref().try_into().unwrap();
         let encrypted_serialized_credential = EncryptedSerializedCredential(
             syscall!(crypto.encrypt_chacha8poly1305(
@@ -210,6 +234,39 @@ impl Credential {
                 panic!("could not deserialize {:?}", bytes);
             }
         }
+    }
+
+    pub fn try_from<S, UP>(
+        authnr: &mut Authenticator<'_, S, UP>,
+        rp_id_hash: &Bytes<consts::U32>,
+        descriptor: &PublicKeyCredentialDescriptor,
+    )
+        -> Result<Self>
+    where
+        S: CryptoSyscall,
+        UP: crate::UserPresence
+    {
+        let encrypted_serialized = EncryptedSerializedCredential::try_from(
+            CredentialId(descriptor.id.clone())
+        )?;
+
+        let kek = authnr.state.persistent.key_encryption_key(&mut authnr.crypto)?;
+
+        let serialized = block!(authnr.crypto.decrypt_chacha8poly1305(
+            // TODO: use RpId as associated data here?
+            &kek,
+            &encrypted_serialized.0.ciphertext,
+            &rp_id_hash[..],
+            &encrypted_serialized.0.nonce,
+            &encrypted_serialized.0.tag,
+        ).unwrap())
+            .map_err(|_| Error::InvalidCredential)?.plaintext
+            .ok_or(Error::InvalidCredential)?;
+
+        let credential = Credential::deserialize(&serialized)
+            .map_err(|_| Error::InvalidCredential)?;
+
+        Ok(credential)
     }
 
     // Does not work, as it would use a new, different nonce!
