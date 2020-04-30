@@ -1008,6 +1008,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         use ctap2::credential_management::Subcommand;
         use crate::credential_management as cm;
 
+        // TODO: I see "failed pinauth" output, but then still continuation...
         self.verify_pin_auth_using_token(&parameters)?;
 
         let mut cred_mgmt = cm::CredentialManagement::new(self);

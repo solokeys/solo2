@@ -8,6 +8,7 @@ use crypto_service::{
     // Client as CryptoClient,
     pipe::Syscall as CryptoSyscall,
     types::{
+        DirEntry,
         StorageLocation,
     },
 };
@@ -100,13 +101,51 @@ where
         let mut response: ctap2::credential_management::Response =
             Default::default();
 
+        let guesstimate = self.state.persistent
+            .max_resident_credentials_guesstimate();
+        response.existing_resident_credentials_count = Some(0);
         response.max_possible_remaining_residential_credentials_count =
-            Some(self.state.persistent.max_resident_credentials_guesstimate());
+            Some(guesstimate);
 
-        // count number of existing RKs
-        todo!();
+        let dir = PathBuf::from(b"rk");
+        let maybe_first_rp = syscall!(self.crypto.read_dir_first(
+            StorageLocation::Internal, dir.clone(), None)).entry;
 
-        Ok(response)
+        let first_rp = match maybe_first_rp{
+            None => return Ok(response),
+            Some(rp) => rp,
+        };
+
+        let (mut num_rks, _) = self.count_rp_rks(PathBuf::from(first_rp.path()))?;
+        let mut last_rp = PathBuf::from(first_rp.file_name());
+
+        loop {
+            let maybe_next_rp = syscall!(self.crypto.read_dir_first(
+                StorageLocation::Internal,
+                dir.clone(),
+                Some(last_rp),
+            )).entry;
+
+            match maybe_next_rp {
+                None => {
+                    response.existing_resident_credentials_count =
+                        Some(num_rks);
+                    response.max_possible_remaining_residential_credentials_count =
+                        Some(if num_rks >= guesstimate {
+                            0
+                        } else {
+                            guesstimate - num_rks
+                        });
+                    return Ok(response);
+                }
+                Some(rp) => {
+                    last_rp = PathBuf::from(rp.file_name());
+                    let (mut this_rp_rk_count, _) =
+                        self.count_rp_rks(PathBuf::from(rp.path()))?;
+                    num_rks += this_rp_rk_count;
+                }
+            }
+        }
     }
 
     pub fn first_relying_party(&mut self) -> Result<Response> {
@@ -246,15 +285,7 @@ where
         Ok(response)
     }
 
-    pub fn first_credential(&mut self, rp_id_hash: &Bytes32) -> Result<Response> {
-
-        self.state.runtime.cache = None;
-
-        let mut hex = [b'0'; 16];
-        super::format_hex(&rp_id_hash[..8], &mut hex);
-
-        let rp_dir = PathBuf::from(b"rk").join(&PathBuf::from(&hex));
-
+    fn count_rp_rks(&mut self, rp_dir: PathBuf) -> Result<(u32, DirEntry)> {
         let maybe_first_rk = syscall!(self.crypto.read_dir_first(
             StorageLocation::Internal,
             rp_dir,
@@ -264,18 +295,27 @@ where
         let first_rk = maybe_first_rk.ok_or(Error::NoCredentials)?;
 
         // count the rest of them
-        let num_rks = {
-            let mut num_rps = 1;
-            while syscall!(self.crypto.read_dir_next()).entry.is_some() {
-                num_rps += 1;
-            }
-            Some(num_rps)
-        };
+        let mut num_rks = 1;
+        while syscall!(self.crypto.read_dir_next()).entry.is_some() {
+            num_rks += 1;
+        }
+        Ok((num_rks, first_rk))
+    }
+
+    pub fn first_credential(&mut self, rp_id_hash: &Bytes32) -> Result<Response> {
+
+        self.state.runtime.cache = None;
+
+        let mut hex = [b'0'; 16];
+        super::format_hex(&rp_id_hash[..8], &mut hex);
+
+        let rp_dir = PathBuf::from(b"rk").join(&PathBuf::from(&hex));
+        let (num_rks, first_rk) = self.count_rp_rks(rp_dir)?;
 
         // extract data required into response
         let mut response = self.extract_response_from_credential_file(
             first_rk.path())?;
-        response.total_credentials = num_rks;
+        response.total_credentials = Some(num_rks);
 
         // cache state for next call
         if let Some(num_rks) = response.total_credentials {
