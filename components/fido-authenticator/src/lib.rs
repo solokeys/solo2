@@ -121,9 +121,20 @@ pub type Result<T> = core::result::Result<T, Error>;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 #[repr(i32)]
-enum SupportedAlgorithm {
+pub enum SupportedAlgorithm {
     P256 = -7,
     Ed25519 = -8,
+}
+
+impl core::convert::TryFrom<i32> for SupportedAlgorithm {
+    type Error = Error;
+    fn try_from(alg: i32) -> Result<Self> {
+        Ok(match alg {
+            -7 => SupportedAlgorithm::P256,
+            -8 => SupportedAlgorithm::Ed25519,
+            _ => return Err(Error::UnsupportedAlgorithm),
+        })
+    }
 }
 
 /// Idea is to maybe send a request over a queue,
@@ -997,57 +1008,49 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         use ctap2::credential_management::Subcommand;
         use crate::credential_management as cm;
 
+        self.verify_pin_auth_using_token(&parameters)?;
+
+        let mut cred_mgmt = cm::CredentialManagement::new(self);
         let sub_parameters = &parameters.sub_command_params;
         match parameters.sub_command {
 
             // 0x1
-            Subcommand::GetCredsMetadata => {
-                self.verify_pin_auth_using_token(&parameters)?;
-                cm::get_creds_metadata(self)
-            }
+            Subcommand::GetCredsMetadata =>
+                cred_mgmt.get_creds_metadata(),
 
             // 0x2
-            Subcommand::EnumerateRpsBegin => {
-                self.verify_pin_auth_using_token(&parameters)?;
-                cm::enumerate_rps_begin(self)
-            }
+            Subcommand::EnumerateRpsBegin =>
+                cred_mgmt.first_relying_party(),
 
             // 0x3
-            Subcommand::EnumerateRpsGetNextRp => {
+            Subcommand::EnumerateRpsGetNextRp =>
+                cred_mgmt.next_relying_party(),
 
-                cm::enumerate_rps_get_next_rp(self)
-            }
-
-            // // 0x4
-            // Subcommand::EnumerateCredentialsBegin => {
-
-            //     self.verify_pin_auth_using_token(self, &parameters);
-            //     cm::get_creds_metadata(
-            //         self,
-            //     )
-            // }
-
-            // // 0x5
-            // Subcommand::EnumerateCredentialsGetNextCredential => {
-
-            //     cm::get_creds_metadata(
-            //         self,
-            //     )
-            // }
-
-            // 0x6
-            Subcommand::DeleteCredential => {
-                self.verify_pin_auth_using_token(&parameters)?;
+            // 0x4
+            Subcommand::EnumerateCredentialsBegin => {
                 let sub_parameters = sub_parameters.as_ref()
                     .ok_or(Error::MissingParameter)?;
 
-                cm::delete_credential(
-                    self,
-                    // sub_parameters
-                    //     .rp_id_hash.as_ref().ok_or(Error::MissingParameter)?,
+                cred_mgmt.first_credential(
                     sub_parameters
-                        .credential_id.as_ref().ok_or(Error::MissingParameter)?,
+                        .rp_id_hash.as_ref()
+                        .ok_or(Error::MissingParameter)?,
                 )
+            }
+
+            // 0x5
+            Subcommand::EnumerateCredentialsGetNextCredential =>
+                cred_mgmt.next_credential(),
+
+            // 0x6
+            Subcommand::DeleteCredential => {
+                let sub_parameters = sub_parameters.as_ref()
+                    .ok_or(Error::MissingParameter)?;
+
+                cred_mgmt.delete_credential(sub_parameters
+                        .credential_id.as_ref()
+                        .ok_or(Error::MissingParameter)?,
+                    )
             }
 
             _ => todo!("not implemented yet"),

@@ -99,7 +99,7 @@ pub struct CredentialData {
     // id, name, url
     pub rp: ctap_types::webauthn::PublicKeyCredentialRpEntity,
     // id, name, display_name
-    user: ctap_types::webauthn::PublicKeyCredentialUserEntity,
+    pub user: ctap_types::webauthn::PublicKeyCredentialUserEntity,
 
     // can be just a counter, need to be able to determine "latest"
     pub creation_time: u32,

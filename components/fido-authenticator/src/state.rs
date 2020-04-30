@@ -150,6 +150,7 @@ impl Identity {
 #[derive(Clone, Debug, uDebug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum CommandCache {
     CredentialManagementEnumerateRps(u32, Bytes32),
+    CredentialManagementEnumerateCredentials(u32, PathBuf, PathBuf),
 }
 
 #[derive(Clone, Debug, /*uDebug,*/ Default, /*PartialEq,*/ serde::Deserialize, serde::Serialize)]
