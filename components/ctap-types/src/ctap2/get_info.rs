@@ -90,6 +90,8 @@ pub struct CtapOptions {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plat: Option<bool>, // default false
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub cred_mgmt: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub client_pin: Option<bool>,
 }
 
@@ -100,6 +102,7 @@ impl Default for CtapOptions {
             up: true,
             uv: None,
             plat: None,
+            cred_mgmt: None,
             client_pin: None,
         }
     }

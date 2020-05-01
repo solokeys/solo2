@@ -276,7 +276,11 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                                 let response = self.credential_management(&parameters);
                                 self.rpc.send.enqueue(
                                     match response {
-                                        Ok(response) => Ok(Response::Ctap2(ctap2::Response::CredentialManagement(response))),
+                                        Ok(response) => {
+                                            let mut buf = [0u8; 512];
+                                            hprintln!("{:?}", ctap_types::serde::cbor_serialize(&response, &mut buf)).ok();
+                                            Ok(Response::Ctap2(ctap2::Response::CredentialManagement(response)))
+                                        }
                                         Err(error) => Err(error)
                                     })
                                     .expect("internal error");
@@ -1756,10 +1760,11 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
         options.up = true;
         options.uv = None; // "uv" here refers to "in itself", e.g. biometric
         // options.plat = false;
+        options.cred_mgmt = Some(true);
         // options.client_pin = None; // not capable of PIN
         options.client_pin = match self.state.persistent.pin_is_set() {
             true => Some(true),
-            false => None,
+            false => Some(false),
         };
         // options.client_pin = Some(true/false); // capable, is set/is not set
 

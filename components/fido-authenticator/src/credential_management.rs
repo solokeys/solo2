@@ -98,6 +98,7 @@ where
     UP: UserPresence
 {
     pub fn get_creds_metadata(&mut self) -> Result<Response> {
+        hprintln!("get metadata");
         let mut response: ctap2::credential_management::Response =
             Default::default();
 
@@ -149,6 +150,7 @@ where
     }
 
     pub fn first_relying_party(&mut self) -> Result<Response> {
+        hprintln!("first rp");
 
         // rp (0x03): PublicKeyCredentialRpEntity
         // rpIDHash (0x04) : RP ID SHA-256 hash.
@@ -221,6 +223,8 @@ where
     }
 
     pub fn next_relying_party(&mut self) -> Result<Response> {
+        hprintln!("next rp");
+
         let (remaining, last_rp_id_hash) = match self.state.runtime.cache {
             Some(CommandCache::CredentialManagementEnumerateRps(
                     remaining, ref rp_id_hash)) =>
@@ -303,6 +307,7 @@ where
     }
 
     pub fn first_credential(&mut self, rp_id_hash: &Bytes32) -> Result<Response> {
+        hprintln!("first credential");
 
         self.state.runtime.cache = None;
 
@@ -336,6 +341,7 @@ where
     }
 
     pub fn next_credential(&mut self) -> Result<Response> {
+        hprintln!("next credential");
 
         let (remaining, rp_dir, prev_filename) = match self.state.runtime.cache {
             Some(CommandCache::CredentialManagementEnumerateCredentials(
@@ -449,6 +455,7 @@ where
     )
         -> Result<Response>
     {
+        hprintln!("delete credential");
         let credential_id_hash = self.hash(&credential_descriptor.id[..])?;
         let mut hex = [b'0'; 16];
         super::format_hex(&credential_id_hash[..8], &mut hex);
