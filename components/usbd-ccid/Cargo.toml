@@ -1,0 +1,18 @@
+[package]
+name = "usbd-ccid"
+version = "0.0.0-unreleased"
+authors = ["Nicolas Stalder <n@stalder.io>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+cortex-m-semihosting = { version = "0.3.5", optional = true}
+usb-device = { version = "0.2.3", features = ["control-buffer-256"] }
+
+[features]
+default = [
+  "cortex-m-semihosting",
+]
+highspeed-usb = []
+

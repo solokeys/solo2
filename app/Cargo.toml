@@ -26,6 +26,7 @@ usb-device = "0.2.3"
 usbd-serial = "0.1.0"
 
 # board
+lpc55-hal = { git = "https://github.com/nickray/lpc55-hal", branch = "main" }
 lpcxpresso55 = { path = "../boards/lpcxpresso55", optional = true }
 prototype-bee = { path = "../boards/prototype-bee", optional = true }
 
@@ -33,6 +34,7 @@ prototype-bee = { path = "../boards/prototype-bee", optional = true }
 crypto-service = { path = "../components/crypto-service" }
 ctap-types = { path = "../components/ctap-types" }
 fido-authenticator = { path = "../components/fido-authenticator" }
+usbd-ccid = { path = "../components/usbd-ccid" }
 usbd-ctaphid = { path = "../components/usbd-ctaphid" }
 
 # panic
@@ -50,6 +52,8 @@ format-storage = []
 
 board-lpcxpresso = ["lpcxpresso55"]
 board-prototype = ["prototype-bee"]
+
+highspeed = ["lpc55-hal/highspeed-usb"]
 
 # log debug! level of app itself?
 debug-app = []

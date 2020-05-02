@@ -37,12 +37,18 @@ Ed25519 = -8
 credential_ids = []
 public_keys = []
 
-for alg in (Ed25519, P256):
+# for alg in (Ed25519, P256):
+for alg in (P256,):
     print(f"MC for {alg}")
     att = dev.make_credential(
         b"1234567890ABCDEF1234567890ABCDEF",
-        {"id": "https://yamnord.com"},
-        {"id": b"nickray"},
+        {"id": "yamnord.com", "name": "Yamnord"},
+        {
+            "id": b"nickray",
+            "icon": "https://yamnord.com/favicon/favicon-32x32.png",
+            "name": "nickray",
+            "displayName": "nickray",
+        },
         [{"type": "public-key", "alg": alg}],
         extensions={"hmac-secret": True},
         options={"rk": True},
@@ -64,7 +70,7 @@ for alg in (Ed25519, P256):
 
     client_data_hash = b"some_client_data_hash_abcdefghij"
     assn = dev.get_assertion(
-        "https://yamnord.com",
+        "yamnord.com",
         client_data_hash,
         # allow_list=[{"type": "public-key", "id": credential_id}],
     )
@@ -73,18 +79,18 @@ for alg in (Ed25519, P256):
     assn.verify(client_data_hash, public_key)
 
 # GA/GNA combo
-assn = dev.get_assertion("https://yamnord.com", client_data_hash)
-assn.verify(client_data_hash, public_keys[1])
+assn = dev.get_assertion("yamnord.com", client_data_hash)
+# assn.verify(client_data_hash, public_keys[1])
 
-assn = dev.get_next_assertion()
-assn.verify(client_data_hash, public_keys[0])
+# assn = dev.get_next_assertion()
+# assn.verify(client_data_hash, public_keys[0])
 
 
 # make another RP
 dev.make_credential(
     b"1234567890ABCDEF1234567890ABCDEF",
-    {"id": "https://solokeys.com"},
-    {"id": b"nickray"},
+    {"id": "yamnord.com", "name": "Yamnord"},
+    {"id": b"nickray", "name": "nickray", "displayName": "nickray"},
     [{"type": "public-key", "alg": alg}],
     extensions={"hmac-secret": True},
     options={"rk": True},
@@ -122,5 +128,5 @@ cm = CM(dev, pp.VERSION, pin_token)
 
 # import fido2.webauthn
 cd = fido2.webauthn.PublicKeyCredentialDescriptor("public-key", credential_ids[0])
-cd1 = fido2.webauthn.PublicKeyCredentialDescriptor("public-key", credential_ids[1])
+# cd1 = fido2.webauthn.PublicKeyCredentialDescriptor("public-key", credential_ids[1])
 # cm.delete_cred(cd)

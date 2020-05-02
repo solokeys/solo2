@@ -169,6 +169,19 @@ pub struct X25519PublicKey {
     pub pub_key: Bytes<consts::U32>,
 }
 
+// impl serde::Serialize for PublicKey {
+//     fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
+//     where
+//         S: serde::Serializer,
+//     {
+//         match self {
+//             PublicKey::P256Key(key) => key.serialize(serializer),
+//             PublicKey::EcdhEsHkdf256Key(key) => key.serialize(serializer),
+//             PublicKey::Ed25519Key(key) => key.serialize(serializer),
+//         }
+//     }
+// }
+
 impl serde::Serialize for P256PublicKey {
     fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
     where

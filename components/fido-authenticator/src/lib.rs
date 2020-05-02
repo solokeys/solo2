@@ -277,8 +277,8 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                                 self.rpc.send.enqueue(
                                     match response {
                                         Ok(response) => {
-                                            let mut buf = [0u8; 512];
-                                            hprintln!("{:?}", ctap_types::serde::cbor_serialize(&response, &mut buf)).ok();
+                                            // let mut buf = [0u8; 512];
+                                            // hprintln!("{:?}", ctap_types::serde::cbor_serialize(&response, &mut buf)).ok();
                                             Ok(Response::Ctap2(ctap2::Response::CredentialManagement(response)))
                                         }
                                         Err(error) => Err(error)
@@ -618,12 +618,13 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
     ) -> Result<()> {
 
         // hprintln!("CM params: {:?}", parameters).ok();
-        match parameters.sub_command as u8 {
+        use ctap2::credential_management::Subcommand;
+        match parameters.sub_command {
             // are we Haskell yet lol
-            sub_command @ 1 |
-            sub_command @ 2 |
-            sub_command @ 4 |
-            sub_command @ 6 => {
+            sub_command @ Subcommand::GetCredsMetadata |
+            sub_command @ Subcommand::EnumerateRpsBegin |
+            sub_command @ Subcommand::EnumerateCredentialsBegin |
+            sub_command @ Subcommand::DeleteCredential => {
 
                 // check pinProtocol
                 let pin_protocol = parameters
@@ -635,9 +636,11 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
                 // check pinAuth
                 let pin_token = self.state.runtime.pin_token(&mut self.crypto);
-                let mut data: Bytes<consts::U256> = Bytes::try_from_slice(&[sub_command]).unwrap();
+                let mut data: Bytes<consts::U256> =
+                    Bytes::try_from_slice(&[sub_command as u8]).unwrap();
                 let len = 1 + match sub_command {
-                    4 | 6 => {
+                    Subcommand::EnumerateCredentialsBegin |
+                    Subcommand::DeleteCredential => {
                         data.resize_to_capacity();
                         // ble, need to reserialize
                         ctap_types::serde::cbor_serialize(

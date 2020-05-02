@@ -57,10 +57,16 @@ pub type CryptoService = crypto_service::Service<
     Store,
 >;
 
-// pub type CtapHidClass = usbd_ctaphid::CtapHid<'static, InsecureRamAuthenticator, UsbBus>;
-pub type CtapHidClass = usbd_ctaphid::CtapHid<'static, 'static, UsbBus>;
+#[cfg(feature = "highspeed")]
+pub type EnabledUsbPeripheral = hal::peripherals::usbhs::EnabledUsbhsDevice;
+#[cfg(not(feature = "highspeed"))]
+pub type EnabledUsbPeripheral = hal::peripherals::usbfs::EnabledUsbfsDevice;
 
-pub type SerialClass = usbd_serial::SerialPort<'static, UsbBus>;
+pub type CcidClass = usbd_ccid::Ccid<UsbBus<EnabledUsbPeripheral>>;
+// pub type CtapHidClass = usbd_ctaphid::CtapHid<'static, InsecureRamAuthenticator, UsbBus>;
+pub type CtapHidClass = usbd_ctaphid::CtapHid<'static, 'static, UsbBus<EnabledUsbPeripheral>>;
+
+pub type SerialClass = usbd_serial::SerialPort<'static, UsbBus<EnabledUsbPeripheral>>;
 // pub type SerialClass = usbd_serial::CdcAcmClass<'static, UsbBus>;
-pub type Usbd = usb_device::device::UsbDevice<'static, UsbBus>;
+pub type Usbd = usb_device::device::UsbDevice<'static, UsbBus<EnabledUsbPeripheral>>;
 

@@ -29,6 +29,7 @@ const APP: () = {
 
     struct Resources {
         authnr: app::types::Authenticator,
+        ccid: app::types::CcidClass,
         crypto: app::types::CryptoService,
         ctaphid: app::types::CtapHidClass,
         rgb: board::led::Rgb,
@@ -40,12 +41,13 @@ const APP: () = {
     #[init(schedule = [toggle_red])]
     fn init(c: init::Context) -> init::LateResources {
 
-        let (authnr, crypto, ctaphid, rgb, serial, usbd) = app::init_board(c.device, c.core);
+        let (authnr, ccid, crypto, ctaphid, rgb, serial, usbd) = app::init_board(c.device, c.core);
 
         c.schedule.toggle_red(Instant::now() + PERIOD.cycles()).unwrap();
 
         init::LateResources {
             authnr,
+            ccid,
             crypto,
             ctaphid,
             rgb,
@@ -54,9 +56,10 @@ const APP: () = {
         }
     }
 
-    #[idle(resources = [authnr, ctaphid, serial, usbd])]
+    #[idle(resources = [authnr, ccid, ctaphid, serial, usbd])]
     fn idle(c: idle::Context) -> ! {
-        let idle::Resources { authnr, mut ctaphid, mut serial, mut usbd } = c.resources;
+        let idle::Resources { authnr, mut ccid, mut ctaphid, mut serial, mut usbd }
+            = c.resources;
 
         loop {
             // not sure why we can't use `Exclusive` here, should we? how?
@@ -68,12 +71,13 @@ const APP: () = {
             #[cfg(feature = "log-semihosting")]
             app::drain_log_to_semihosting();
 
-            usbd.lock(|usbd| ctaphid.lock(|ctaphid| serial.lock(|serial| {
+            usbd.lock(|usbd| ccid.lock(|ccid| ctaphid.lock(|ctaphid| serial.lock(|serial| {
                 ctaphid.check_for_responses();
-                usbd.poll(&mut [ctaphid, serial])
-            } )));
+                usbd.poll(&mut [ccid, ctaphid, serial])
+            } ))));
 
             authnr.poll();
+            // piv.poll();
 
 
             // // NEW
@@ -86,12 +90,12 @@ const APP: () = {
         }
     }
 
-    #[task(binds = USB0_NEEDCLK, resources = [ctaphid, serial, usbd])]
+    #[task(binds = USB0_NEEDCLK, resources = [ccid, ctaphid, serial, usbd])]
     fn usb0_needclk(c: usb0_needclk::Context) {
-        c.resources.usbd.poll(&mut [c.resources.ctaphid, c.resources.serial]);
+        c.resources.usbd.poll(&mut [c.resources.ccid, c.resources.ctaphid, c.resources.serial]);
     }
 
-    #[task(binds = USB0, resources = [ctaphid, serial, usbd])]
+    #[task(binds = USB0, resources = [ccid, ctaphid, serial, usbd])]
     fn usb0(c: usb0::Context) {
         let usb = unsafe { hal::raw::Peripherals::steal().USB0 } ;
         // cortex_m_semihosting::hprintln!("handler intstat = {:x}", usb0.intstat.read().bits()).ok();
@@ -100,7 +104,7 @@ const APP: () = {
         let before = Instant::now();
 
         //////////////
-        c.resources.usbd.poll(&mut [c.resources.ctaphid, c.resources.serial]);
+        c.resources.usbd.poll(&mut [c.resources.ccid, c.resources.ctaphid, c.resources.serial]);
         //////////////
 
         let after = Instant::now();

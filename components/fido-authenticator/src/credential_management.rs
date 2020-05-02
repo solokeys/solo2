@@ -22,6 +22,11 @@ use ctap_types::{
             credential_management::*,
         },
     },
+    cose::{
+        P256PublicKey,
+        Ed25519PublicKey,
+        PublicKey,
+    },
     webauthn::{
         PublicKeyCredentialDescriptor,
     },
@@ -430,10 +435,14 @@ where
             SupportedAlgorithm::P256 => {
                 let public_key = syscall!(self.crypto.derive_p256_public_key(&private_key, StorageLocation::Volatile)).key;
                 let cose_public_key = syscall!(self.crypto.serialize_key(
-                    Mechanism::P256, public_key.clone(), KeySerialization::Cose
+                    Mechanism::P256, public_key.clone(),
+                    // KeySerialization::EcdhEsHkdf256
+                    KeySerialization::Cose,
                 )).serialized_key;
                 syscall!(self.crypto.delete(public_key));
-                cose_public_key
+                PublicKey::P256Key(
+                    ctap_types::serde::cbor_deserialize(&cose_public_key)
+                    .unwrap())
             }
             SupportedAlgorithm::Ed25519 => {
                 let public_key = syscall!(self.crypto.derive_ed25519_public_key(&private_key, StorageLocation::Volatile)).key;
@@ -441,11 +450,13 @@ where
                     Mechanism::Ed25519, public_key.clone(), KeySerialization::Cose
                 )).serialized_key;
                 syscall!(self.crypto.delete(public_key));
-                cose_public_key
+                PublicKey::Ed25519Key(
+                    ctap_types::serde::cbor_deserialize(&cose_public_key)
+                    .unwrap())
             }
-        }.try_convert_into().unwrap();
+        };
         response.public_key = Some(cose_public_key);
-        response.cred_protect = Some(credential.data.cred_protect as u8);
+        // response.cred_protect = Some(credential.data.cred_protect as u8);
 
         Ok(response)
     }
@@ -484,12 +495,17 @@ where
         )).entry;
 
         if maybe_first_remaining_rk.is_none() {
-            // hprintln!("deleting parent {:?} as this was its last RK",
-            //           &rp_path).ok();
+            hprintln!("deleting parent {:?} as this was its last RK",
+                      &rp_path).ok();
             syscall!(self.crypto.remove_dir(
                 StorageLocation::Internal,
                 rp_path,
             ));
+        } else {
+            hprintln!("not deleting deleting parent {:?} as there is {:?}",
+                      &rp_path,
+                      &maybe_first_remaining_rk.unwrap().path(),
+                      ).ok();
         }
         // just return OK
         let response: ctap2::credential_management::Response = Default::default();

@@ -26,6 +26,7 @@ pub use board::rt::entry;
 
 pub mod types;
 use types::{
+    EnabledUsbPeripheral,
     ExternalStorage,
     VolatileStorage,
     Store,
@@ -38,8 +39,10 @@ use types::{
 use hal::drivers::{
     flash::FlashGordon,
     pins,
+    Timer,
     UsbBus,
 };
+use usbd_ccid::Ccid;
 use usbd_ctaphid::CtapHid;
 // use usbd_ctaphid::insecure::InsecureRamAuthenticator;
 use usb_device::device::{UsbDeviceBuilder, UsbVidPid};
@@ -54,6 +57,7 @@ use hal::prelude::*;
 #[cfg(feature = "board-lpcxpresso")]
 pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: rtfm::Peripherals) -> (
     types::Authenticator,
+    types::CcidClass,
     types::CryptoService,
     types::CtapHidClass,
     board::led::Rgb,
@@ -81,24 +85,53 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
     iocon.disabled(&mut syscon).release(); // save the environment :)
 
+    // let clocks = hal::ClockRequirements::default()
+    //     #[cfg(not(feature = "highspeed"))]
+    //     .support_usbfs()
+    //     #[cfg(feature = "highspeed")]
+    //     .support_usbhs()
+    //     .system_frequency(96.mhz())
+    //     .configure(&mut anactrl, &mut pmc, &mut syscon)
+    //     .expect("Clock configuration failed");
+
+    #[cfg(not(feature = "highspeed"))]
     let clocks = hal::ClockRequirements::default()
         .support_usbfs()
         .system_frequency(96.mhz())
         .configure(&mut anactrl, &mut pmc, &mut syscon)
         .expect("Clock configuration failed");
 
-    let token = clocks.support_usbfs_token().unwrap();
+    #[cfg(feature = "highspeed")]
+    let clocks = hal::ClockRequirements::default()
+        .support_usbhs()
+        .system_frequency(96.mhz())
+        .configure(&mut anactrl, &mut pmc, &mut syscon)
+        .expect("Clock configuration failed");
 
-    let usbfsd = hal.usbfs.enabled_as_device(
+    #[cfg(feature = "highspeed")]
+    let mut delay_timer = Timer::new(hal.ctimer.0.enabled(&mut syscon));
+
+    #[cfg(feature = "highspeed")]
+    let usbd = hal.usbhs.enabled_as_device(
         &mut anactrl,
         &mut pmc,
         &mut syscon,
-        token,
+        &mut delay_timer,
+        clocks.support_usbhs_token().unwrap(),
     );
 
+    #[cfg(not(feature = "highspeed"))]
+    let usbd = hal.usbfs.enabled_as_device(
+        &mut anactrl,
+        &mut pmc,
+        &mut syscon,
+        clocks.support_usbfs_token().unwrap(),
+    );
+
+    let _: EnabledUsbPeripheral = usbd;
     // ugh, what's the nice way?
-    static mut USB_BUS: Option<usb_device::bus::UsbBusAllocator<UsbBus>> = None;
-    unsafe { USB_BUS = Some(hal::drivers::UsbBus::new(usbfsd, usb0_vbus_pin)); }
+    static mut USB_BUS: Option<usb_device::bus::UsbBusAllocator<UsbBus<EnabledUsbPeripheral>>> = None;
+    unsafe { USB_BUS = Some(hal::drivers::UsbBus::new(usbd, usb0_vbus_pin)); }
     let usb_bus = unsafe { USB_BUS.as_ref().unwrap() };
 
     // use littlefs2::fs::{Filesystem, FilesystemWith};
@@ -178,6 +211,13 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         unsafe { &mut AUTHNR_RESPONSES },
     );
 
+    // static mut PIV_REQUESTS: ctap_types::rpc::RequestPipe = heapless::spsc::Queue(heapless::i::Queue::u8());
+    // static mut PIV_RESPONSES: ctap_types::rpc::ResponsePipe = heapless::spsc::Queue(heapless::i::Queue::u8());
+    // let (ccid_pipe, piv_pipe) = ctap_types::rpc::new_endpoints(
+    //     unsafe { &mut PIV_REQUESTS },
+    //     unsafe { &mut PIV_RESPONSES },
+    // );
+
     let authnr = fido_authenticator::Authenticator::new(
         crypto_client, authenticator_pipe,
         fido_authenticator::SilentAuthenticator {},
@@ -185,17 +225,21 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
     // our USB classes
     let ctaphid = CtapHid::new(usb_bus, transport_pipe);
+    let ccid = Ccid::new(usb_bus);//, ccid_pipe);
     let serial = usbd_serial::SerialPort::new(usb_bus);
 
     // our composite USB device
-    let usbd = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0x1209, 0xBEEE))
+    // let usbd = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0x1209, 0xBEEE))
+    let usbd = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0x072f, 0x90cc))
         .manufacturer("SoloKeys")
-        .product("🐝")
+        .product("Solo 🐝")
         .serial_number("20/20")
         .device_release(0x0123)
+        // #[cfg(feature = "highspeed")]
+        .max_packet_size_0(64)
         .build();
 
-    (authnr, crypto_service, ctaphid, rgb, serial, usbd)
+    (authnr, ccid, crypto_service, ctaphid, rgb, serial, usbd)
 }
 
 //

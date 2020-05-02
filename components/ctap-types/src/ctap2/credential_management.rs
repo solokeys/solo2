@@ -3,7 +3,7 @@ use serde_indexed::{DeserializeIndexed, SerializeIndexed};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
 use crate::{
-    cose::P256PublicKey,
+    cose::PublicKey,
     sizes::*,
     webauthn::{
         PublicKeyCredentialDescriptor,
@@ -51,8 +51,9 @@ pub struct Parameters {
     pub pin_auth: Option<Bytes16>,
 }
 
-#[derive(Clone,Debug,uDebug,Default,Eq,PartialEq,SerializeIndexed,DeserializeIndexed)]
+#[derive(Clone,Debug,uDebug,Default,Eq,PartialEq,SerializeIndexed)]
 #[serde_indexed(offset = 1)]
+// #[derive(Clone,Debug,uDebug,Default,Eq,PartialEq,Serialize,Deserialize)]
 pub struct Response {
 
     // Metadata
@@ -86,8 +87,8 @@ pub struct Response {
     pub credential_id: Option<PublicKeyCredentialDescriptor>,
     // 0x08
     #[serde(skip_serializing_if = "Option::is_none")]
-    // pub public_key: Option<P256PublicKey>,
-    pub public_key: Option<Bytes<COSE_KEY_LENGTH>>,
+    pub public_key: Option<PublicKey>,
+    // pub public_key: Option<Bytes<COSE_KEY_LENGTH>>,  // <-- AAAAHH. no Bytes, just COSE_Key
     // 0x09
     #[serde(skip_serializing_if = "Option::is_none")]
     pub total_credentials: Option<u32>,

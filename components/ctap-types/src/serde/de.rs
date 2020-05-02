@@ -703,6 +703,8 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     {
         // TODO: ORLY?
         // Will not support
+        use cortex_m_semihosting::hprintln;
+        hprintln!("ignored any").ok();// {:?}", &_visitor).ok();
         Err(Error::WontImplement)
     }
 }
