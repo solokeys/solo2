@@ -4,11 +4,11 @@ use cortex_m_semihosting::hprintln;
 
 use crate::{
     constants::*,
+    types::*,
     pipe::Pipe,
 };
 
 use usb_device::class_prelude::*;
-
 type Result<T> = core::result::Result<T, UsbError>;
 
 pub struct Ccid<Bus>
@@ -16,8 +16,8 @@ where
     Bus: 'static + UsbBus,
 {
     interface_number: InterfaceNumber,
+    read: EndpointOut<'static, Bus>,
     pipe: Pipe<Bus>,
-    must_send_zlp: bool,
 }
 
 impl<Bus> Ccid<Bus>
@@ -25,15 +25,12 @@ where
     Bus: 'static + UsbBus,
 {
     pub fn new(allocator: &'static UsbBusAllocator<Bus>) -> Self {
-        let read_endpoint = allocator.bulk(PACKET_SIZE as _);
-        let write_endpoint = allocator.bulk(PACKET_SIZE as _);
-        let pipe = Pipe::new(read_endpoint, write_endpoint);
+        let read = allocator.bulk(PACKET_SIZE as _);
+        let write = allocator.bulk(PACKET_SIZE as _);
+        let pipe = Pipe::new(write);
         let interface_number = allocator.interface();
-        Self { interface_number, pipe, must_send_zlp: false }
+        Self { interface_number, read, pipe }
     }
-}
-
-pub enum ClassRequests {
 }
 
 impl<Bus> UsbClass<Bus> for Ccid<Bus>
@@ -53,37 +50,39 @@ where
             FUNCTIONAL_INTERFACE,
             &FUNCTIONAL_INTERFACE_DESCRIPTOR,
         )?;
-        writer.endpoint(&self.pipe.write);
-        writer.endpoint(&self.pipe.read);
+        writer.endpoint(&self.pipe.write).unwrap();
+        writer.endpoint(&self.read).unwrap();
         Ok(())
     }
 
     fn poll(&mut self) {
-        self.pipe.maybe_write_packet();
+        self.pipe.poll_app();
+        self.pipe.maybe_send_packet();
     }
 
     fn endpoint_in_complete(&mut self, addr: EndpointAddress) {
         if addr != self.pipe.write.address() { return; }
 
-        if self.must_send_zlp {
-            self.pipe.write.write(&[]).ok();
-            self.must_send_zlp = false;
-        } else {
-            self.pipe.maybe_write_packet();
-        }
+        self.pipe.maybe_send_packet();
     }
 
     fn endpoint_out(&mut self, addr: EndpointAddress) {
-        if addr != self.pipe.read.address() { return; }
+        if addr != self.read.address() { return; }
 
-        self.pipe.read_and_handle_packet();
+        let maybe_packet = RawPacket::try_from(
+            |packet| self.read.read(packet));
+
+        // not much we can do in error cases
+        if let Ok(packet) = maybe_packet {
+            self.pipe.handle_packet(packet);
+        }
+
     }
 
     fn control_in(&mut self, transfer: ControlIn<Bus>) {
         use usb_device::control::*;
-
-        let Request { request_type, recipient, index, request, .. } = *transfer.request();
-
+        let Request { request_type, recipient, index, request, .. }
+            = *transfer.request();
         if index as u8 != u8::from(self.interface_number) {
             return;
         }
@@ -92,12 +91,6 @@ where
             match ClassRequest::try_from(request) {
                 Ok(request) => {
                     match request {
-                        ClassRequest::Abort => {
-                            // oh yeah?
-                            transfer.reject().ok();
-                            todo!();
-                        }
-
                         // not strictly needed, as our bNumClockSupported = 0
                         ClassRequest::GetClockFrequencies => {
                             transfer.accept(|data| {
@@ -113,6 +106,7 @@ where
                                 Ok(4)
                             }).ok();
                         },
+                        _ => panic!("unexpected direction for {:?}", &request),
                     }
                 }
 
@@ -124,7 +118,36 @@ where
     }
 
     fn control_out(&mut self, transfer: ControlOut<Bus>) {
-        // todo!();
+        use usb_device::control::*;
+        let Request { request_type, recipient, index, request, value, .. }
+            = *transfer.request();
+        if index as u8 != u8::from(self.interface_number) {
+            return;
+        }
+
+        if (request_type, recipient) == (RequestType::Class, Recipient::Interface) {
+            match ClassRequest::try_from(request) {
+                Ok(request) => {
+                    match request {
+                        ClassRequest::Abort => {
+                            // spec: "slot in low, seq in high byte"
+                            let [slot, seq] = value.to_le_bytes();
+                            self.pipe.expect_abort(slot, seq);
+                            transfer.accept().ok();
+
+                            // // old behaviour
+                            // transfer.reject().ok();
+                            // todo!();
+                        }
+                        _ => panic!("unexpected direction for {:?}", &request),
+                    }
+                }
+
+                Err(()) => {
+                    hprintln!("unexpected request: {}", request).ok();
+                }
+            }
+        }
     }
 
 }

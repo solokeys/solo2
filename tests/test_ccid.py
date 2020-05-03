@@ -9,8 +9,10 @@ import psutil
 import pytest
 import usb.core
 
-VID = 0x1209
-PID = 0xBEEE
+# VID = 0x1209
+# PID = 0xBEEE
+VID = 0x072F
+PID = 0x90CC
 
 CCID_CLASS = 0xB
 CCID_SUBCLASS = 0

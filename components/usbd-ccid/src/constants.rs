@@ -1,8 +1,17 @@
+#![allow(non_camel_case_types)]
+use heapless_bytes::{
+    Bytes,
+    consts,
+    Unsigned as _
+};
+
 // can be 8, 16, 32, 64 or 512
 #[cfg(feature = "highspeed-usb")]
-pub const PACKET_SIZE: usize = 512;
+pub type PACKET_SIZE_TYPE = consts::U512;
 #[cfg(not(feature = "highspeed-usb"))]
-pub const PACKET_SIZE: usize = 64;
+pub type PACKET_SIZE_TYPE = consts::U64;
+
+pub const PACKET_SIZE: usize = PACKET_SIZE_TYPE::USIZE;
 
 pub const CLASS_CCID: u8 = 0x0B;
 pub const SUBCLASS_NONE: u8 = 0x0;
@@ -19,38 +28,31 @@ pub enum TransferMode {
 
 pub const FUNCTIONAL_INTERFACE: u8 = 0x21;
 
-pub enum ClassRequest {
-    Abort = 1,
-    GetClockFrequencies = 2,
-    GetDataRates = 3,
-}
-
-impl core::convert::TryFrom<u8> for ClassRequest {
-    type Error = ();
-    fn try_from(request: u8) -> core::result::Result<Self, ()> {
-        Ok(match request {
-            1 => Self::Abort,
-            2 => Self::GetClockFrequencies,
-            3 => Self::GetDataRates,
-            _ => return Err(()),
-        })
-    }
-}
-
 // NB: all numbers are little-endian
 
-// 4000 KHz = 4MHz
+// 3580 KHz (as per ICCD spec) = 3.58 MHz
+// (not relevant, fixed fixed for legacy reasonse
+// Yubico: 4000 KHz = 4MHz
 // pub const CLOCK_FREQUENCY: [u8; 4] = 4000u32.to_le_bytes();
 // instead, use Python: `import struct; struct.pack("<I", 4000)`
-pub const CLOCK_FREQUENCY_KHZ: [u8; 4] = [0xa0, 0x0f, 0x00, 0x00];
-// 307200 bps (gnuk: 9600)
-pub const DATA_RATE_BPS: [u8; 4] = [0x00, 0xb0, 0x04, 0x00];
-// 2038 (gnuk: 254)
-pub const MAX_IFSD: [u8; 4] = [0xf6, 0x07, 0x00, 0x00];
+// pub const CLOCK_FREQUENCY_KHZ: [u8; 4] = [0xa0, 0x0f, 0x00, 0x00];
+pub const CLOCK_FREQUENCY_KHZ: [u8; 4] = [0xfc, 0x0d, 0x00, 0x00];
+// 9600 bps (as per ICCD spec)
+// (not relevant, fixed fixed for legacy reasonse
+// Yubico: 307200 bps, gnuk: 9600
+// pub const DATA_RATE_BPS: [u8; 4] = [0x00, 0xb0, 0x04, 0x00];
+pub const DATA_RATE_BPS: [u8; 4] = [0x80, 0x25, 0x00, 0x00];
+// 254 (as per ICCD spec)
+// Yubico: 2038, gnuk: 254
+// pub const MAX_IFSD: [u8; 4] = [0xf6, 0x07, 0x00, 0x00];
+pub const MAX_IFSD: [u8; 4] = [0xfe, 0x00, 0x00, 0x00];
 
-//
+// "The value shall be between 261 + 10 and 65544 + 10
 // dwMaxCCIDMsgLen 3072 (gnuk: 271)
-pub const MAX_MSG_LENGTH: usize = 3072;
+// pub const MAX_MSG_LENGTH_TYPE: consts::U3072;
+pub type MAX_MSG_LENGTH_TYPE = <consts::U2048 as core::ops::Add<consts::U1024>>::Output;
+pub type MessageBuffer = Bytes<MAX_MSG_LENGTH_TYPE>;
+pub const MAX_MSG_LENGTH: usize = MAX_MSG_LENGTH_TYPE::USIZE;
 pub const MAX_MSG_LENGTH_LE: [u8; 4] = [0x00, 0x0C, 0x00, 0x00];
 pub const NUM_SLOTS: u8 = 1;
 pub const MAX_BUSY_SLOTS: u8 = 1;
@@ -59,11 +61,8 @@ pub const PIN_SUPPORT: u8 = 0;
 
 // cf. Sec. 5.1 in: https://www.usb.org/sites/default/files/DWG_Smart-Card_CCID_Rev110.pdf
 pub const FUNCTIONAL_INTERFACE_DESCRIPTOR: [u8; 52] = [
-    // bcdCCID rev1.10 <-- Linux doesn't know about this
-    // 0x10, 0x01,
-
-    // bcdCCID rev1.00
-    0x00, 0x01,
+    // bcdCCID rev1.10
+    0x10, 0x01,
     // bMaxSlotIndex
     NUM_SLOTS - 1,
     // bVoltageSupport (5.0V + 3.0V + 1.8V)
@@ -124,9 +123,9 @@ pub const FUNCTIONAL_INTERFACE_DESCRIPTOR: [u8; 52] = [
     MAX_MSG_LENGTH_LE[2],
     MAX_MSG_LENGTH_LE[3],
 
-    // bClassGetResponse ("echo")
+    // bClassGetResponse ("echo"), as per ICCD spec
     0xFF,
-    // bClassEnvelope ("echo"), gnuk: 0
+    // bClassEnvelope ("echo"), as per ICCD spec, gnuk: 0
     0xFF,
     // wlcdLayout (none)
     0x00, 0x00,

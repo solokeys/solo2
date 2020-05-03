@@ -32,12 +32,14 @@ ufmt = "0.1.0"
 
 [dependencies.heapless-bytes]
 # version = "0.1.0"
-path = "../../../heapless-bytes"
-# git = "https://github.com/ycrypto/heapless-bytes"
-# branch = "main"
+# path = "../../../heapless-bytes"
+git = "https://github.com/ycrypto/heapless-bytes"
+branch = "main"
 
 [dependencies.littlefs2]
-path = "../../../littlefs2"
+# path = "../../../littlefs2"
+git = "https://github.com/nickray/littlefs2"
+branch = "closures-instead-of-ub"
 # git = "https://github.com/nickray/littlefs2"
 # branch = "main"
 

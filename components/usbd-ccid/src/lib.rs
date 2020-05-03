@@ -6,5 +6,6 @@
 pub mod constants;
 pub mod class;
 pub mod pipe;
+pub mod types;
 
 pub use class::Ccid;

@@ -229,8 +229,8 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     let serial = usbd_serial::SerialPort::new(usb_bus);
 
     // our composite USB device
-    // let usbd = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0x1209, 0xBEEE))
-    let usbd = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0x072f, 0x90cc))
+    let usbd = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0x1209, 0xBEEE))
+    // let usbd = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0x072f, 0x90cc))
         .manufacturer("SoloKeys")
         .product("Solo 🐝")
         .serial_number("20/20")

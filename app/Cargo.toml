@@ -26,6 +26,7 @@ usb-device = "0.2.3"
 usbd-serial = "0.1.0"
 
 # board
+# lpc55-hal = { git = "https://github.com/nickray/lpc55-hal", branch = "main" }
 lpc55-hal = { git = "https://github.com/nickray/lpc55-hal", branch = "main" }
 lpcxpresso55 = { path = "../boards/lpcxpresso55", optional = true }
 prototype-bee = { path = "../boards/prototype-bee", optional = true }
@@ -42,7 +43,8 @@ panic-halt = "0.2.0"
 panic-semihosting = { version = "0.5.3", features = ["jlink-quirks"] }
 
 # storage
-littlefs2 = { git = "https://github.com/nickray/littlefs2", branch = "main" }
+# littlefs2 = { git = "https://github.com/nickray/littlefs2", branch = "main" }
+littlefs2 = { git = "https://github.com/nickray/littlefs2", branch = "closures-instead-of-ub" }
 
 [features]
 default = ["board-lpcxpresso"]
@@ -80,12 +82,16 @@ semihost-raw-responses = ["usbd-ctaphid/semihost-responses"]
 
 # patch dependencies like so to test local changes
 
-[patch."https://github.com/nickray/lpc55-hal"]
-lpc55-hal = { path = "../../lpc55-hal" }
-[patch."https://github.com/nickray/littlefs2"]
-littlefs2 = { path = "../../littlefs2" }
+# [patch."https://github.com/nickray/lpc55-hal"]
+# lpc55-hal = { path = "../../lpc55-hal" }
+# [patch."https://github.com/nickray/littlefs2"]
+# littlefs2 = { path = "../../littlefs2" }
 [patch.crates-io]
 cortex-m-funnel = { git = "https://github.com/conorpp/cortex-m-funnel" }
-heapless = { path = "../../heapless" }
-ufmt = { path = "../../ufmt" }
+# heapless = { path = "../../heapless" }
+heapless = { git = "https://github.com/nickray/heapless", branch = "nickray-udebug" }
+# ufmt = { path = "../../ufmt" }
+ufmt = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty-enums" }
+ufmt-macros = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty-enums" }
+# ufmt-macros = { git = "https://github.com/nickray/ufmt/macros", branch = "nickray-derive-empty-enums" }
 # lpc55s6x-pac = { path = "../../lpc55-pacs" }

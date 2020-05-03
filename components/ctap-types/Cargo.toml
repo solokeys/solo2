@@ -12,13 +12,19 @@ cortex-m-semihosting = "0.3.5"
 cosey = "0.1.0-alpha.0" # { git = "https://github.com/ycrypto/cosey", branch = "main" }
 heapless = { version = "0.5.1", default-features = false, features = ["serde"] }
 # heapless-bytes = "0.1.0" # { git = "https://github.com/ycrypto/heapless-bytes", branch = "main" } #, features = ["cbor"] }
-heapless-bytes = { path = "../../../heapless-bytes" }
+# heapless-bytes = { path = "../../../heapless-bytes" }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 serde-indexed = "0.0.3"
 serde_repr = "0.1"
 ufmt = "0.1.0"
-# ufmt-macros = "0.1.0"
-ufmt-macros = { path = "../../../ufmt/macros" }
+ufmt-macros = "0.1.0"
+# ufmt-macros = { path = "../../../ufmt/macros" }
+
+[dependencies.heapless-bytes]
+# version = "0.1.0"
+# path = "../../../heapless-bytes"
+git = "https://github.com/ycrypto/heapless-bytes"
+branch = "main"
 
 [patch.crates-io]
 ufmt = { path = "../../../ufmt" }
