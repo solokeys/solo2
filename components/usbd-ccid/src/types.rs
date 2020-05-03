@@ -4,6 +4,14 @@ use cortex_m_semihosting::hprintln;
 
 use crate::constants::*;
 
+use heapless_bytes::{
+    Bytes,
+    consts,
+};
+
+pub type MessageBuffer = Bytes<MAX_MSG_LENGTH_TYPE>;
+pub mod apdu;
+pub use apdu::*;
 
 pub type RawPacket = heapless_bytes::Bytes<PACKET_SIZE_TYPE>;
 
@@ -39,7 +47,7 @@ pub trait PacketWithData: Packet {
         let declared_len =
             u32::from_le_bytes(self[1..5].try_into().unwrap()) as usize;
         let len = core::cmp::min(PACKET_SIZE - 10, declared_len);
-        hprintln!("delcared = {}, len = {}", declared_len, len).ok();
+        // hprintln!("delcared = {}, len = {}", declared_len, len).ok();
         &self[10..][..len]
     }
 }

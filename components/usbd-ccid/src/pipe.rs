@@ -168,6 +168,10 @@ where
 
     fn fake_poll_app(&mut self) {
         if let State::Processing = self.state {
+
+            let apdu = Apdu::try_from(self.message.as_ref()).unwrap();
+            hprintln!(":: {:?}", &apdu).ok();
+
             // we should have an open XfrBlock allowance
             self.state = State::ReadyToSend;
             // fake some data
@@ -244,11 +248,11 @@ where
             let needs_zlp = packet.len() == PACKET_SIZE;
             match self.write.write(packet) {
                 Ok(n) if n == packet.len() => {
-                    if packet.len() > 8 {
-                        hprintln!("--> sent {:?}... successfully", &packet[..8]).ok();
-                    } else {
-                        hprintln!("--> sent {:?} successfully", packet).ok();
-                    }
+                    // if packet.len() > 8 {
+                    //     hprintln!("--> sent {:?}... successfully", &packet[..8]).ok();
+                    // } else {
+                    //     hprintln!("--> sent {:?} successfully", packet).ok();
+                    // }
 
                     if needs_zlp {
                         hprintln!("sending ZLP").ok();

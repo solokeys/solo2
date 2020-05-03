@@ -51,7 +51,6 @@ pub const MAX_IFSD: [u8; 4] = [0xfe, 0x00, 0x00, 0x00];
 // dwMaxCCIDMsgLen 3072 (gnuk: 271)
 // pub const MAX_MSG_LENGTH_TYPE: consts::U3072;
 pub type MAX_MSG_LENGTH_TYPE = <consts::U2048 as core::ops::Add<consts::U1024>>::Output;
-pub type MessageBuffer = Bytes<MAX_MSG_LENGTH_TYPE>;
 pub const MAX_MSG_LENGTH: usize = MAX_MSG_LENGTH_TYPE::USIZE;
 pub const MAX_MSG_LENGTH_LE: [u8; 4] = [0x00, 0x0C, 0x00, 0x00];
 pub const NUM_SLOTS: u8 = 1;
