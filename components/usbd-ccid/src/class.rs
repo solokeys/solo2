@@ -4,7 +4,15 @@ use cortex_m_semihosting::hprintln;
 
 use crate::{
     constants::*,
-    types::*,
+    types::{
+        apdu,
+        ClassRequest,
+        packet::{
+            self,
+            RawPacket,
+        },
+        tlv,
+    },
     pipe::Pipe,
 };
 
@@ -17,6 +25,7 @@ where
 {
     interface_number: InterfaceNumber,
     read: EndpointOut<'static, Bus>,
+    // interrupt: EndpointIn<'static, Bus>,
     pipe: Pipe<Bus>,
 }
 
@@ -27,9 +36,15 @@ where
     pub fn new(allocator: &'static UsbBusAllocator<Bus>) -> Self {
         let read = allocator.bulk(PACKET_SIZE as _);
         let write = allocator.bulk(PACKET_SIZE as _);
+        // TODO: Add interrupt endpoint, so PC/SC does not
+        // constantly poll us with GetSlotStatus
+        //
+        // PROBLEM: We don't have enough endpoints on the peripheral :/
+        // (USBHS should have one more)
+        // let interrupt = allocator.interrupt(8 as _, 32);
         let pipe = Pipe::new(write);
         let interface_number = allocator.interface();
-        Self { interface_number, read, pipe }
+        Self { interface_number, read, /* interrupt, */ pipe }
     }
 }
 
@@ -52,6 +67,7 @@ where
         )?;
         writer.endpoint(&self.pipe.write).unwrap();
         writer.endpoint(&self.read).unwrap();
+        // writer.endpoint(&self.interrupt).unwrap();
         Ok(())
     }
 
@@ -72,7 +88,8 @@ where
         let maybe_packet = RawPacket::try_from(
             |packet| self.read.read(packet));
 
-        // not much we can do in error cases
+        // should we return an error message
+        // if the raw packet is invalid?
         if let Ok(packet) = maybe_packet {
             self.pipe.handle_packet(packet);
         }

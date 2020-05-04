@@ -7,8 +7,9 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+asn1derpy = "0.1.0"
 cortex-m-semihosting = { version = "0.3.5", optional = true}
-heapless = "0.5.4"
+heapless = "0.5.5"
 heapless-bytes = { git = "https://github.com/ycrypto/heapless-bytes", branch = "main" }
 # heapless-bytes = { path = "../../../heapless-bytes" }
 usb-device = { version = "0.2.3", features = ["control-buffer-256"] }

@@ -19,7 +19,7 @@ path = "src/app_rtfm.rs"
 cortex-m-funnel = { version = "0.1.0-alpha.1" }
 cortex-m-rtfm = "0.5.1"
 cortex-m-semihosting = { version = "0.3.5", optional = true }
-heapless = "0.5.3"
+heapless = "0.5.5"
 ufmt = "0.1.0"
 usb-device = "0.2.3"
 # usbd-ctaphid = { git = "https://github.com/nickray/usbd-ctaphid", branch = "main", features = ["logging"] }
@@ -56,6 +56,7 @@ board-lpcxpresso = ["lpcxpresso55"]
 board-prototype = ["prototype-bee"]
 
 highspeed = ["lpc55-hal/highspeed-usb"]
+serial = []
 
 # log debug! level of app itself?
 debug-app = []
@@ -88,10 +89,9 @@ semihost-raw-responses = ["usbd-ctaphid/semihost-responses"]
 # littlefs2 = { path = "../../littlefs2" }
 [patch.crates-io]
 cortex-m-funnel = { git = "https://github.com/conorpp/cortex-m-funnel" }
-# heapless = { path = "../../heapless" }
-heapless = { git = "https://github.com/nickray/heapless", branch = "nickray-udebug" }
 # ufmt = { path = "../../ufmt" }
 ufmt = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty-enums" }
 ufmt-macros = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty-enums" }
 # ufmt-macros = { git = "https://github.com/nickray/ufmt/macros", branch = "nickray-derive-empty-enums" }
 # lpc55s6x-pac = { path = "../../lpc55-pacs" }
+heapless = { git = "https://github.com/nickray/heapless", branch = "nickray-udebug" }
