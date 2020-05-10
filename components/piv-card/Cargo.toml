@@ -1,6 +1,6 @@
 [package]
 name = "piv-card"
-version = "0.1.0"
+version = "0.0.0-unreleased"
 authors = ["Nicolas Stalder <n@stalder.io>"]
 edition = "2018"
 
