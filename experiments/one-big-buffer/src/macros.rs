@@ -1,4 +1,4 @@
-/// Use this macro to generate a pair of RESPONSEC pipes for any pair
+/// Use this macro to generate a pair of RPC pipes for any pair
 /// of Request/Response enums you wish to implement.
 ///
 /// ```
@@ -17,7 +17,7 @@
 /// }
 ///
 /// one_big_buffer::interchange! {
-///     MyInterchange: (Request, Response)
+///     ThisThatHereThisInterchange: (Request, Response)
 /// }
 /// ```
 #[macro_export]
@@ -35,28 +35,31 @@ macro_rules! interchange {
 
         impl $Name {
             fn split() -> ($crate::RequestPipe<Self>, $crate::ResponsePipe<Self>) {
+                pub use core::sync::atomic::AtomicU8;
                 static mut INTERCHANGE: $Name = $Name::None;
-                static mut STATE: $crate::State = $crate::State::Idle;
+                static STATE: AtomicU8 = AtomicU8::new($crate::State::Idle as u8);
 
                 unsafe {
                     let mut interchange_cell: core::mem::MaybeUninit<core::cell::UnsafeCell<&'static mut $Name>> = core::mem::MaybeUninit::uninit();
-                    let mut state_cell: core::mem::MaybeUninit<core::cell::UnsafeCell<&'static mut $crate::State>> = core::mem::MaybeUninit::uninit();
+                    // let mut state_cell: core::mem::MaybeUninit<core::cell::UnsafeCell<&'static mut $crate::State>> = core::mem::MaybeUninit::uninit();
 
                     // need to pipe everything through an core::cell::UnsafeCell to get past Rust's aliasing rules
                     // (aka the borrow checker) - note that $crate::RequestPipe and $crate::ResponsePipe both get `&'static mut`
                     // to the same underlying memory allocation.
                     interchange_cell.as_mut_ptr().write(core::cell::UnsafeCell::new(&mut INTERCHANGE));
-                    state_cell.as_mut_ptr().write(core::cell::UnsafeCell::new(&mut STATE));
+                    // state_cell.as_mut_ptr().write(core::cell::UnsafeCell::new(&mut STATE));
 
                     (
                         $crate::RequestPipe {
                             interchange: *(*interchange_cell.as_mut_ptr()).get(),
-                            state: *(*state_cell.as_mut_ptr()).get(),
+                            // state: *(*state_cell.as_mut_ptr()).get(),
+                            state_byte: &STATE,
                         },
 
                         $crate::ResponsePipe {
                             interchange: *(*interchange_cell.as_mut_ptr()).get(),
-                            state: *(*state_cell.as_mut_ptr()).get(),
+                            // state: *(*state_cell.as_mut_ptr()).get(),
+                            state_byte: &STATE,
                         },
 
                     )

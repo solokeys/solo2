@@ -40,7 +40,6 @@
 
 
 use one_big_buffer::Interchange as _;
-// use one_big_buffer::interchange;
 
 #[derive(Clone, Debug, PartialEq)]
 // More serious examples: "perform HMAC-SHA256 with given key handle
@@ -59,12 +58,12 @@ pub enum Response {
 }
 
 one_big_buffer::interchange! {
-    MyInterchange: (Request, Response)
+    ThisThatHereThisInterchange: (Request, Response)
 }
 
 fn main() {
 
-    let (mut requester, mut responder) = MyInterchange::claim().unwrap();
+    let (mut requester, mut responder) = ThisThatHereThisInterchange::claim().unwrap();
 
     let request = Request::This(1, 2);
     assert!(requester.peek().is_none());
