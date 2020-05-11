@@ -42,6 +42,7 @@ use hal::drivers::{
     Timer,
     UsbBus,
 };
+use interchange::Interchange;
 use usbd_ccid::Ccid;
 use usbd_ctaphid::CtapHid;
 // use usbd_ctaphid::insecure::InsecureRamAuthenticator;
@@ -60,6 +61,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     types::CcidClass,
     types::CryptoService,
     types::CtapHidClass,
+    types::Piv,
     board::led::Rgb,
     types::SerialClass,
     types::Usbd,
@@ -223,13 +225,42 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         fido_authenticator::SilentAuthenticator {},
         );
 
+    // setup PIV
+    let (requester, responder) =
+        usbd_ccid::types::apdu::ApduInterchange::claim()
+        .expect("could not setup ApduInterchange");
+
+    static mut PIV_TRUSSED_REQUESTS: crypto_service::pipe::RequestPipe = heapless::spsc::Queue(heapless::i::Queue::u8());
+    static mut PIV_TRUSSED_REPLIES: crypto_service::pipe::ReplyPipe = heapless::spsc::Queue(heapless::i::Queue::u8());
+    let mut client_id = littlefs2::path::PathBuf::new();
+    client_id.push(b"piv\0".try_into().unwrap());
+    let (piv_service_endpoint, piv_client_endpoint) = crypto_service::pipe::new_endpoints(
+        unsafe { &mut PIV_TRUSSED_REQUESTS },
+        unsafe { &mut PIV_TRUSSED_REPLIES },
+        client_id,
+    );
+    assert!(crypto_service.add_endpoint(piv_service_endpoint).is_ok());
+
+    let syscaller = types::CryptoSyscall::default();
+    let piv_trussed = crypto_service::client::Client::new(
+        piv_client_endpoint,
+        syscaller,
+    );
+
+    let piv = piv_card::App::new(
+        piv_trussed,
+        responder,
+    );
+
     // our USB classes
     let ctaphid = CtapHid::new(usb_bus, transport_pipe);
-    let ccid = Ccid::new(usb_bus);//, ccid_pipe);
+    let ccid = Ccid::new(usb_bus, requester);//, ccid_pipe);
     let serial = usbd_serial::SerialPort::new(usb_bus);
 
     // our composite USB device
     let usbd = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0x1209, 0xBEEE))
+    // no longer need to fake it, see README.md for how to get PCSC
+    // to identify us as a smartcard.
     // let usbd = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0x072f, 0x90cc))
         .manufacturer("SoloKeys")
         .product("Solo 🐝")
@@ -239,7 +270,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         .max_packet_size_0(64)
         .build();
 
-    (authnr, ccid, crypto_service, ctaphid, rgb, serial, usbd)
+    (authnr, ccid, crypto_service, ctaphid, piv, rgb, serial, usbd)
 }
 
 //

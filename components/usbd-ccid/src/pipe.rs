@@ -1,11 +1,15 @@
 use core::convert::TryFrom;
 
 use cortex_m_semihosting::hprintln;
+use interchange::RequestPipe;
 
 use crate::{
     constants::*,
     types::{
-        apdu,
+        apdu::{
+            self,
+            ApduInterchange,
+        },
         MessageBuffer,
         packet::{
             self,
@@ -41,7 +45,9 @@ where
     // pub(crate) rpc: TransportEndpoint<'rpc>,
     seq: u8,
     state: State,
+    // TODO: remove, use interchange
     message: MessageBuffer,
+    interchange: RequestPipe<ApduInterchange>,
     sent: usize,
     outbox: Option<RawPacket>,
 }
@@ -50,7 +56,10 @@ impl<Bus> Pipe<Bus>
 where
     Bus: 'static + UsbBus,
 {
-    pub(crate) fn new(write: EndpointIn<'static, Bus>) -> Self {
+    pub(crate) fn new(
+        write: EndpointIn<'static, Bus>,
+        request_pipe: RequestPipe<ApduInterchange>,
+    ) -> Self {
 
         assert!(MAX_MSG_LENGTH >= PACKET_SIZE);
 
@@ -61,6 +70,7 @@ where
             sent: 0,
             outbox: None,
             message: MessageBuffer::new(),
+            interchange: request_pipe,
         }
     }
 
@@ -148,7 +158,6 @@ where
                         assert!(command.data().len() + self.message.len() <= MAX_MSG_LENGTH);
                         self.message.extend_from_slice(command.data()).unwrap();
                         self.call_app();
-                        self.state = State::Processing;
                     }
                     _ =>  panic!("{:?} unexpected in receiving state"),
                 }
@@ -174,18 +183,38 @@ where
     }
 
     fn call_app(&mut self) {
+        hprintln!("called piv app").ok();
+        self.interchange.try_request(
+            apdu::Command::try_from(&self.message).unwrap()
+        ).expect("could not deposit command");
+        hprintln!("set ccid state to processing").ok();
+        self.state = State::Processing;
         // todo!("have message of length {} to dispatch", self.message.len());
     }
 
     pub fn poll_app(&mut self) {
+        // static mut i: usize = 0;
+        // unsafe {
+        //     if i < 100 {
+        //         i += 1;
+        //     } else {
+        //         hprintln!(".").ok();
+        //     }
+        // }
         if let State::Processing = self.state {
+            hprintln!("processing, checking for response, interchange state {:?}",
+                      self.interchange.state_byte).ok();
 
-            crate::piv::fake_piv(&mut self.message);
+            if let Some(response) = self.interchange.take_response() {
+                self.message = response.into_message();
 
-            // we should have an open XfrBlock allowance
-            self.state = State::ReadyToSend;
-            self.sent = 0;
-            self.prime_outbox();
+                // crate::piv::fake_piv(&mut self.message);
+
+                // we should have an open XfrBlock allowance
+                self.state = State::ReadyToSend;
+                self.sent = 0;
+                self.prime_outbox();
+            }
         }
     }
 

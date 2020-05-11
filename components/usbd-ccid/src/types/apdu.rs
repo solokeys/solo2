@@ -1,10 +1,58 @@
 use super::*;
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct Command {
+    pub cla: u8,
+    pub ins: u8,
+    pub p1: u8,
+    pub p2: u8,
+    pub lc: usize,
+    pub le: usize,
+    pub data: MessageBuffer,
+}
+
+impl core::convert::TryFrom<&MessageBuffer> for Command {
+    type Error = ();
+    fn try_from(message: &MessageBuffer) -> core::result::Result<Self, Self::Error> {
+        let apdu = Apdu::try_from(message.as_ref())?;
+        Ok(Self {
+            cla: apdu.cla(),
+            ins: apdu.ins(),
+            p1: apdu.p1(),
+            p2: apdu.p2(),
+            lc: apdu.lc(),
+            le: apdu.le(),
+            data: MessageBuffer::try_from_slice(apdu.data()).unwrap(),
+        })
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Response {
+    pub sw1: u8,
+    pub sw2: u8,
+    pub data: MessageBuffer,
+}
+
+impl Response {
+    pub fn into_message(self) -> MessageBuffer {
+        let mut message = MessageBuffer::new();
+        message.extend_from_slice(&self.data).unwrap();
+        message.push(self.sw1).unwrap();
+        message.push(self.sw2).unwrap();
+        message
+    }
+}
+
+interchange::interchange! {
+    ApduInterchange: (Command, Response)
+}
+
 pub struct Apdu<'a> {
     lc: usize,
     le: usize,
     offset: usize,
-    apdu: &'a mut [u8]
+    apdu: &'a [u8]
 }
 
 impl<'a> core::ops::Deref for Apdu<'a> {
@@ -16,9 +64,9 @@ impl<'a> core::ops::Deref for Apdu<'a> {
     }
 }
 
-impl<'a> core::convert::TryFrom<&'a mut  [u8]> for Apdu<'a> {
+impl<'a> core::convert::TryFrom<&'a [u8]> for Apdu<'a> {
     type Error = ();
-    fn try_from(apdu: &'a mut [u8]) -> core::result::Result<Self, Self::Error> {
+    fn try_from(apdu: &'a [u8]) -> core::result::Result<Self, Self::Error> {
         let (lc, le, offset) = calculate_lengths(apdu)?;
         Ok(Self { lc, le, offset, apdu })
     }

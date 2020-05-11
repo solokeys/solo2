@@ -44,7 +44,7 @@ pub const PIV_AID: [u8; 11]
 pub const YUBICO_OTP_PIX: &[u8; 3] = &[0x20, 0x01, 0x01];
 pub const YUBICO_OTP_AID: &[u8; 8] = &[0xa0, 0x00, 0x00, 0x05, 0x27, 0x20, 0x01, 0x01];
 // they use it to "deauthenticate user PIN and mgmt key": https://git.io/JfWgN
-pub const YUBICO_MGMT_PIX: [u8; 3] = &[0x47, 0x11, 0x17];
+pub const YUBICO_MGMT_PIX: &[u8; 3] = &[0x47, 0x11, 0x17];
 pub const YUBICO_MGMT_AID: &[u8; 8] = &[0xa0, 0x00, 0x00, 0x05, 0x27, 0x20, 0x01, 0x01];
 
 // https://git.io/JfW28
@@ -146,7 +146,7 @@ pub const GET_DATA: (u8, u8, u8, u8) = (
 // == == == == == == == == == == ==
 
 pub fn fake_piv(command: &mut MessageBuffer) {
-    let apdu = match apdu::Apdu::try_from(command.as_mut()) {
+    let apdu = match apdu::Apdu::try_from(command.as_ref()) {
         Ok(apdu) => apdu,
         Err(_) => {
             invalid_apdu(command);
@@ -170,11 +170,11 @@ pub fn fake_piv(command: &mut MessageBuffer) {
             //
             // 05808693 APDU: 00 A4 04 00 05 A0 00 00 03 08
             hprintln!("got SELECT").ok();
-            let is_nist_rid = apdu.data() == &NIST_RID;
+            let is_nist_rid = apdu.data() == &NIST_RID[..];
             let is_piv = apdu.data() == &PIV_AID;
             let is_trunc_piv = apdu.data() == &PIV_TRUNCATED_AID;
             let is_pivish = is_piv || is_trunc_piv || is_nist_rid;
-            let is_yubico = apdu.data() == YUBICO_AID;
+            let is_yubico = apdu.data() == YUBICO_OTP_AID;
 
             if is_pivish {
                 hprintln!("for PIV").ok();
@@ -381,7 +381,7 @@ fn select(command: &mut MessageBuffer) {
         // Coexistent tag allocation authority
         der.nested(0x79, |der| {
             // Application identifier
-            der.raw_tlv(0x4f, &NIST_RID)
+            der.raw_tlv(0x4f, &NIST_RID[..])
         // })?;
         })
 

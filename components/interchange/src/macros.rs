@@ -2,8 +2,8 @@
 /// of Request/Response enums you wish to implement.
 ///
 /// ```
-/// use one_big_buffer::Interchange as _;
-/// use one_big_buffer::interchange;
+/// use interchange::Interchange as _;
+/// use interchange::interchange;
 /// #[derive(Clone, Debug, PartialEq)]
 /// pub enum Request {
 ///     This(u8, u32),
@@ -16,7 +16,7 @@
 ///     There(i16),
 /// }
 ///
-/// one_big_buffer::interchange! {
+/// interchange::interchange! {
 ///     ThisThatHereThisInterchange: (Request, Response)
 /// }
 /// ```

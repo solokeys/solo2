@@ -1,11 +1,15 @@
 use core::convert::TryFrom;
 
 use cortex_m_semihosting::hprintln;
+use interchange::RequestPipe;
 
 use crate::{
     constants::*,
     types::{
-        apdu,
+        apdu::{
+            self,
+            ApduInterchange,
+        },
         ClassRequest,
         packet::{
             self,
@@ -33,7 +37,10 @@ impl<Bus> Ccid<Bus>
 where
     Bus: 'static + UsbBus,
 {
-    pub fn new(allocator: &'static UsbBusAllocator<Bus>) -> Self {
+    pub fn new(
+        allocator: &'static UsbBusAllocator<Bus>,
+        request_pipe: RequestPipe<ApduInterchange>,
+    ) -> Self {
         let read = allocator.bulk(PACKET_SIZE as _);
         let write = allocator.bulk(PACKET_SIZE as _);
         // TODO: Add interrupt endpoint, so PC/SC does not
@@ -42,9 +49,14 @@ where
         // PROBLEM: We don't have enough endpoints on the peripheral :/
         // (USBHS should have one more)
         // let interrupt = allocator.interrupt(8 as _, 32);
-        let pipe = Pipe::new(write);
+        let pipe = Pipe::new(write, request_pipe);
         let interface_number = allocator.interface();
         Self { interface_number, read, /* interrupt, */ pipe }
+    }
+
+    // needs better name, maybe call directly
+    pub fn sneaky_poll(&mut self) {
+        self.poll();
     }
 }
 
@@ -72,6 +84,7 @@ where
     }
 
     fn poll(&mut self) {
+        // hprintln!("poll of ccid").ok();
         self.pipe.poll_app();
         self.pipe.maybe_send_packet();
     }

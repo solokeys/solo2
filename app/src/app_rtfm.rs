@@ -32,6 +32,7 @@ const APP: () = {
         ccid: app::types::CcidClass,
         crypto: app::types::CryptoService,
         ctaphid: app::types::CtapHidClass,
+        piv: app::types::Piv,
         rgb: board::led::Rgb,
         serial: app::types::SerialClass,
         usbd: app::types::Usbd,
@@ -41,7 +42,7 @@ const APP: () = {
     #[init(schedule = [toggle_red])]
     fn init(c: init::Context) -> init::LateResources {
 
-        let (authnr, ccid, crypto, ctaphid, rgb, serial, usbd) = app::init_board(c.device, c.core);
+        let (authnr, ccid, crypto, ctaphid, piv, rgb, serial, usbd) = app::init_board(c.device, c.core);
 
         c.schedule.toggle_red(Instant::now() + PERIOD.cycles()).unwrap();
 
@@ -50,15 +51,16 @@ const APP: () = {
             ccid,
             crypto,
             ctaphid,
+            piv,
             rgb,
             serial,
             usbd,
         }
     }
 
-    #[idle(resources = [authnr, ccid, ctaphid, serial, usbd])]
+    #[idle(resources = [authnr, ccid, ctaphid, piv, serial, usbd])]
     fn idle(c: idle::Context) -> ! {
-        let idle::Resources { authnr, mut ccid, mut ctaphid, mut serial, mut usbd }
+        let idle::Resources { authnr, mut ccid, mut ctaphid, mut piv, mut serial, mut usbd }
             = c.resources;
 
         loop {
@@ -73,11 +75,15 @@ const APP: () = {
 
             usbd.lock(|usbd| ccid.lock(|ccid| ctaphid.lock(|ctaphid| serial.lock(|serial| {
                 ctaphid.check_for_responses();
+                // the `usbd.poll` only calls its classes if
+                // there is activity on the bus. hence we need
+                // to kick ccid to pick up responses...
+                ccid.sneaky_poll();
                 usbd.poll(&mut [ccid, ctaphid, serial])
             } ))));
 
             authnr.poll();
-            // piv.poll();
+            piv.poll();
 
 
             // // NEW

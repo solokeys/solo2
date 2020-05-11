@@ -39,7 +39,7 @@
 //! or handling of impossible errrors.
 
 
-use one_big_buffer::Interchange as _;
+use interchange::Interchange as _;
 
 #[derive(Clone, Debug, PartialEq)]
 // More serious examples: "perform HMAC-SHA256 with given key handle
@@ -57,7 +57,7 @@ pub enum Response {
     There(i16),
 }
 
-one_big_buffer::interchange! {
+interchange::interchange! {
     ThisThatHereThisInterchange: (Request, Response)
 }
 

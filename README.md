@@ -4,6 +4,8 @@
 
 SoloKeys reimagined.
 
+To make pcsclite on Linux work with the Bee, on Debian copy `Info.plist` to `/etc/libccid_Info.plist`.
+
 [docs-image]: https://img.shields.io/badge/docs-book-green?style=flat-square
 [docs-link]: https://solo-bee.netlify.com
 

@@ -13,6 +13,8 @@ pub type FlashStorage = hal::drivers::FlashGordon;
 
 pub type Authenticator = fido_authenticator::Authenticator<'static, CryptoSyscall, SilentAuthenticator>;
 
+pub type Piv = piv_card::App<'static, CryptoSyscall>;
+
 #[derive(Default)]
 pub struct CryptoSyscall {}
 
