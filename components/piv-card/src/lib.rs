@@ -8,7 +8,7 @@ use crypto_service::{
     pipe::Syscall as CryptoSyscall,
 };
 use heapless_bytes::consts;
-use interchange::ResponsePipe;
+use interchange::Responder;
 
 use usbd_ccid::{
     constants::*,
@@ -29,7 +29,7 @@ pub struct App<'a, S>
 where
     S: CryptoSyscall,
 {
-    interchange: ResponsePipe<ApduInterchange>,
+    interchange: Responder<ApduInterchange>,
     trussed: CryptoClient<'a, S>,
 }
 
@@ -39,7 +39,7 @@ where
 {
     pub fn new(
         trussed: CryptoClient<'a, S>,
-        interchange: ResponsePipe<ApduInterchange>,
+        interchange: Responder<ApduInterchange>,
     )
         -> Self
     {
@@ -68,7 +68,7 @@ where
                 //
                 // 05808693 APDU: 00 A4 04 00 05 A0 00 00 03 08
                 hprintln!("got SELECT").ok();
-                let is_nist_rid = &request.data == &NIST_RID[..];
+                let is_nist_rid = &request.data == NIST_RID;
                 let is_piv = &request.data == &PIV_AID;
                 let is_trunc_piv = &request.data == &PIV_TRUNCATED_AID;
                 let is_pivish = is_piv || is_trunc_piv || is_nist_rid;
@@ -77,8 +77,8 @@ where
                 if is_pivish {
                     hprintln!("for PIV").ok();
                     let response = select_piv();
-                    self.interchange.try_respond(response).unwrap();
-                    hprintln!("interchange state: {:?}", &self.interchange.state_byte)
+                    self.interchange.respond(response).unwrap();
+                    hprintln!("interchange state: {:?}", &self.interchange.state())
                         .ok();
                     // todo!("put back in queue");
                 // } else if is_yubico {
@@ -252,7 +252,7 @@ pub fn fake_piv(command: &mut MessageBuffer) {
             //
             // 05808693 APDU: 00 A4 04 00 05 A0 00 00 03 08
             hprintln!("got SELECT").ok();
-            let is_nist_rid = apdu.data() == &NIST_RID[..];
+            let is_nist_rid = apdu.data() == NIST_RID;
             let is_piv = apdu.data() == &PIV_AID;
             let is_trunc_piv = apdu.data() == &PIV_TRUNCATED_AID;
             let is_pivish = is_piv || is_trunc_piv || is_nist_rid;
@@ -463,7 +463,7 @@ fn select(command: &mut MessageBuffer) {
         // Coexistent tag allocation authority
         der.nested(0x79, |der| {
             // Application identifier
-            der.raw_tlv(0x4f, &NIST_RID[..])
+            der.raw_tlv(0x4f, NIST_RID)
         // })?;
         })
 
@@ -536,7 +536,7 @@ fn select_piv() -> Response {
         // Coexistent tag allocation authority
         der.nested(0x79, |der| {
             // Application identifier
-            der.raw_tlv(0x4f, &NIST_RID[..])
+            der.raw_tlv(0x4f, NIST_RID)
         // })?;
         })
 

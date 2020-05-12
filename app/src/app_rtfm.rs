@@ -60,7 +60,7 @@ const APP: () = {
 
     #[idle(resources = [authnr, ccid, ctaphid, piv, serial, usbd])]
     fn idle(c: idle::Context) -> ! {
-        let idle::Resources { authnr, mut ccid, mut ctaphid, mut piv, mut serial, mut usbd }
+        let idle::Resources { authnr, mut ccid, mut ctaphid, piv, mut serial, mut usbd }
             = c.resources;
 
         loop {

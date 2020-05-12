@@ -1,7 +1,7 @@
 use core::convert::TryFrom;
 
 use cortex_m_semihosting::hprintln;
-use interchange::RequestPipe;
+use interchange::Requester;
 
 use crate::{
     constants::*,
@@ -47,7 +47,7 @@ where
     state: State,
     // TODO: remove, use interchange
     message: MessageBuffer,
-    interchange: RequestPipe<ApduInterchange>,
+    interchange: Requester<ApduInterchange>,
     sent: usize,
     outbox: Option<RawPacket>,
 }
@@ -58,7 +58,7 @@ where
 {
     pub(crate) fn new(
         write: EndpointIn<'static, Bus>,
-        request_pipe: RequestPipe<ApduInterchange>,
+        request_pipe: Requester<ApduInterchange>,
     ) -> Self {
 
         assert!(MAX_MSG_LENGTH >= PACKET_SIZE);
@@ -184,7 +184,7 @@ where
 
     fn call_app(&mut self) {
         hprintln!("called piv app").ok();
-        self.interchange.try_request(
+        self.interchange.request(
             apdu::Command::try_from(&self.message).unwrap()
         ).expect("could not deposit command");
         hprintln!("set ccid state to processing").ok();
@@ -203,7 +203,7 @@ where
         // }
         if let State::Processing = self.state {
             hprintln!("processing, checking for response, interchange state {:?}",
-                      self.interchange.state_byte).ok();
+                      self.interchange.state()).ok();
 
             if let Some(response) = self.interchange.take_response() {
                 self.message = response.into_message();

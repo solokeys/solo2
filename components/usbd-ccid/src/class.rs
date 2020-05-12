@@ -1,7 +1,7 @@
 use core::convert::TryFrom;
 
 use cortex_m_semihosting::hprintln;
-use interchange::RequestPipe;
+use interchange::Requester;
 
 use crate::{
     constants::*,
@@ -39,7 +39,7 @@ where
 {
     pub fn new(
         allocator: &'static UsbBusAllocator<Bus>,
-        request_pipe: RequestPipe<ApduInterchange>,
+        request_pipe: Requester<ApduInterchange>,
     ) -> Self {
         let read = allocator.bulk(PACKET_SIZE as _);
         let write = allocator.bulk(PACKET_SIZE as _);

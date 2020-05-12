@@ -106,7 +106,7 @@ mod macros;
 // pub mod scratch;
 
 #[repr(u8)]
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 /// State of the RPC interchange
 pub enum State {
     /// The requester may send a new request.
