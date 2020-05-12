@@ -13,4 +13,8 @@ path = "src/lib.rs"
 name = "main"
 path = "src/main.rs"
 
+# [[bin]]
+# name = "main2"
+# path = "src/main2.rs"
+
 [dependencies]

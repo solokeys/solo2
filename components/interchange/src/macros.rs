@@ -17,51 +17,48 @@
 /// }
 ///
 /// interchange::interchange! {
-///     ThisThatHereThisInterchange: (Request, Response)
+///     ExampleInterchange: (Request, Response)
 /// }
 /// ```
 #[macro_export]
 macro_rules! interchange {
     ($Name:ident: ($REQUEST:ty, $RESPONSE:ty)) => {
 
+        // TODO: figure out how to implement, e.g., Clone iff REQUEST
+        // and RESPONSE are clone (do not introduce Clone, Debug, etc. trait bounds).
         #[derive(Clone, Debug, PartialEq)]
         pub enum $Name {
-            // no previous response during initialisation, need a dummy entry
-            #[doc(hidden)]
-            None,
             Request($REQUEST),
             Response($RESPONSE),
         }
 
         impl $Name {
-            fn split() -> ($crate::RequestPipe<Self>, $crate::ResponsePipe<Self>) {
-                pub use core::sync::atomic::AtomicU8;
-                static mut INTERCHANGE: $Name = $Name::None;
+            fn split() -> ($crate::Requester<Self>, $crate::Responder<Self>) {
+                use core::sync::atomic::AtomicU8;
+                use core::mem::MaybeUninit;
+                use core::cell::UnsafeCell;
+
+                static mut INTERCHANGE: Option<$Name> = None;
                 static STATE: AtomicU8 = AtomicU8::new($crate::State::Idle as u8);
 
                 unsafe {
-                    let mut interchange_cell: core::mem::MaybeUninit<core::cell::UnsafeCell<&'static mut $Name>> = core::mem::MaybeUninit::uninit();
-                    // let mut state_cell: core::mem::MaybeUninit<core::cell::UnsafeCell<&'static mut $crate::State>> = core::mem::MaybeUninit::uninit();
+                    let mut cell: MaybeUninit<UnsafeCell<&'static mut Option<$Name>>> = MaybeUninit::uninit();
 
-                    // need to pipe everything through an core::cell::UnsafeCell to get past Rust's aliasing rules
-                    // (aka the borrow checker) - note that $crate::RequestPipe and $crate::ResponsePipe both get `&'static mut`
-                    // to the same underlying memory allocation.
-                    interchange_cell.as_mut_ptr().write(core::cell::UnsafeCell::new(&mut INTERCHANGE));
-                    // state_cell.as_mut_ptr().write(core::cell::UnsafeCell::new(&mut STATE));
+                    // need to pipe everything through an core::cell::UnsafeCell to get past Rust's
+                    // aliasing rules (aka the borrow checker) - note that Requester and Responder
+                    // both get a &'static mut to the same underlying memory allocation.
+                    cell.as_mut_ptr().write(UnsafeCell::new(&mut INTERCHANGE));
 
                     (
-                        $crate::RequestPipe {
-                            interchange: *(*interchange_cell.as_mut_ptr()).get(),
-                            // state: *(*state_cell.as_mut_ptr()).get(),
-                            state_byte: &STATE,
+                        $crate::Requester {
+                            interchange: *(*cell.as_mut_ptr()).get(),
+                            state: &STATE,
                         },
 
-                        $crate::ResponsePipe {
-                            interchange: *(*interchange_cell.as_mut_ptr()).get(),
-                            // state: *(*state_cell.as_mut_ptr()).get(),
-                            state_byte: &STATE,
+                        $crate::Responder {
+                            interchange: *(*cell.as_mut_ptr()).get(),
+                            state: &STATE,
                         },
-
                     )
                 }
             }
@@ -72,7 +69,7 @@ macro_rules! interchange {
             type RESPONSE = $RESPONSE;
 
             // needs to be a global singleton
-            fn claim() -> Option<($crate::RequestPipe<Self>, $crate::ResponsePipe<Self>)> {
+            fn claim() -> Option<($crate::Requester<Self>, $crate::Responder<Self>)> {
                 use core::sync::atomic::{AtomicBool, Ordering};
                 static CLAIMED: AtomicBool = AtomicBool::new(false);
                 if CLAIMED
@@ -82,6 +79,15 @@ macro_rules! interchange {
                     Some(Self::split())
                 } else {
                     None
+                }
+            }
+
+            unsafe fn rq(self) -> Self::REQUEST {
+                match self {
+                    Self::Request(request) => {
+                        request
+                    }
+                    _ => unreachable!(),
                 }
             }
 
@@ -98,6 +104,15 @@ macro_rules! interchange {
                 match *self {
                     Self::Request(ref mut request) => {
                         request
+                    }
+                    _ => unreachable!(),
+                }
+            }
+
+            unsafe fn rp(self) -> Self::RESPONSE {
+                match self {
+                    Self::Response(response) => {
+                        response
                     }
                     _ => unreachable!(),
                 }

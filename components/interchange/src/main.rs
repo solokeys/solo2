@@ -39,7 +39,7 @@
 //! or handling of impossible errrors.
 
 
-use interchange::Interchange as _;
+use interchange::{Requester, Responder, State, Interchange as _};
 
 #[derive(Clone, Debug, PartialEq)]
 // More serious examples: "perform HMAC-SHA256 with given key handle
@@ -58,30 +58,94 @@ pub enum Response {
 }
 
 interchange::interchange! {
-    ThisThatHereThisInterchange: (Request, Response)
+    ExampleInterchange: (Request, Response)
 }
 
-fn main() {
+// fn main() {
 
-    let (mut requester, mut responder) = ThisThatHereThisInterchange::claim().unwrap();
+//     let (mut requester, mut responder) = ExampleInterchange::claim().unwrap();
+
+//     let request = Request::This(1, 2);
+//     assert!(requester.peek().is_none());
+//     assert!(requester.may_request());
+//     assert!(responder.peek().is_none());
+//     requester.try_request(request).expect("could not request");
+
+//     assert!(responder.has_request());
+//     println!("responder received request: {:?}",
+//         &responder.take_request().unwrap());
+
+//     let response = Response::There(-1);
+
+//     assert!(responder.must_respond());
+//     responder.try_respond(response).expect("could not respond");
+
+//     assert!(requester.has_response());
+//     println!("requester received response: {:?}",
+//         &requester.take_response().unwrap());
+
+// }
+
+pub fn test_happy_path(
+    rq: &mut Requester<ExampleInterchange>,
+    rp: &mut Responder<ExampleInterchange>,
+) {
+    assert!(rq.state() == State::Idle);
 
     let request = Request::This(1, 2);
-    assert!(requester.peek().is_none());
-    assert!(requester.may_request());
-    assert!(responder.peek().is_none());
-    requester.try_request(request).expect("could not request");
+    assert!(rq.request(request).is_ok());
 
-    assert!(responder.has_request());
-    println!("responder received request: {:?}",
-        &responder.take_request().unwrap());
+    let request = rp.take_request().unwrap();
+    println!("rp got request: {:?}", &request);
 
     let response = Response::There(-1);
+    assert!(!rp.is_canceled());
+    assert!(rp.respond(response).is_ok());
 
-    assert!(responder.must_respond());
-    responder.try_respond(response).expect("could not respond");
+    let response = rq.take_response().unwrap();
+    println!("rq got response: {:?}", &response);
 
-    assert!(requester.has_response());
-    println!("requester received response: {:?}",
-        &requester.take_response().unwrap());
+}
+
+pub fn test_early_cancel(
+    rq: &mut Requester<ExampleInterchange>,
+    rp: &mut Responder<ExampleInterchange>,
+) {
+    assert!(rq.state() == State::Idle);
+
+    let request = Request::This(1, 2);
+    assert!(rq.request(request).is_ok());
+
+    println!("responder could cancel: {:?}", &rq.cancel().unwrap().unwrap());
+
+    assert!(rp.take_request().is_none());
+    assert!(State::Idle == rq.state());
+}
+
+pub fn test_later_cancel(
+    rq: &mut Requester<ExampleInterchange>,
+    rp: &mut Responder<ExampleInterchange>,
+) {
+    assert!(rq.state() == State::Idle);
+
+    let request = Request::This(1, 2);
+    assert!(rq.request(request).is_ok());
+
+    let request = rp.take_request().unwrap();
+    println!("rp got request: {:?}", &request);
+
+    println!("responder could cancel: {:?}", &rq.cancel().unwrap().is_none());
+
+    assert!(rp.is_canceled());
+    assert!(rp.acknowledge_cancel().is_ok());
+    assert!(State::Idle == rq.state());
+}
+
+pub fn main() {
+    let (mut requester, mut responder) = ExampleInterchange::claim().unwrap();
+
+    test_happy_path(&mut requester, &mut responder);
+    test_early_cancel(&mut requester, &mut responder);
+    test_later_cancel(&mut requester, &mut responder);
 
 }
