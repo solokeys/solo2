@@ -31,22 +31,22 @@ use usbd_ccid::{
 
 use constants::*;
 
-pub struct App<'a, S>
+pub struct App<S>
 where
     S: Syscall,
 {
     interchange: Responder<ApduInterchange>,
     state: state::State,
-    // trussed: RefCell<Trussed<'a, S>>,
-    trussed: Trussed<'a, S>,
+    // trussed: RefCell<Trussed<S>>,
+    trussed: Trussed<S>,
 }
 
-impl<'a, S> App<'a, S>
+impl<S> App<S>
 where
     S: Syscall,
 {
     pub fn new(
-        trussed: Trussed<'a, S>,
+        trussed: Trussed<S>,
         interchange: Responder<ApduInterchange>,
     )
         -> Self

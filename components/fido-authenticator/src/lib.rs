@@ -163,7 +163,7 @@ where
     S: CryptoSyscall,
     UP: UserPresence,
 {
-    crypto: CryptoClient<'a, S>,
+    crypto: CryptoClient<S>,
     rpc: AuthenticatorEndpoint<'a>,
     state: state::State,
     up: UP,
@@ -171,7 +171,7 @@ where
 
 impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
 
-    pub fn new(crypto: CryptoClient<'a, S>, rpc: AuthenticatorEndpoint<'a>, up: UP) -> Self {
+    pub fn new(crypto: CryptoClient<S>, rpc: AuthenticatorEndpoint<'a>, up: UP) -> Self {
 
         let crypto = crypto;
         let state = state::State::new();

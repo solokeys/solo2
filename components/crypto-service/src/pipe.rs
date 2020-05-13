@@ -22,12 +22,12 @@ use crate::types::ClientId;
 pub type RequestPipe = Queue::<Request, U1, u8>;
 pub type ReplyPipe = Queue::<Result<Reply, Error>, U1, u8>;
 
-pub /*unsafe*/ fn new_endpoints<'a>(
-    request_pipe: &'a mut RequestPipe,
-    reply_pipe: &'a mut ReplyPipe,
+pub /*unsafe*/ fn new_endpoints(
+    request_pipe: &'static mut RequestPipe,
+    reply_pipe: &'static mut ReplyPipe,
     client_id: ClientId,
     )
-    -> (ServiceEndpoint<'a>, ClientEndpoint<'a>)
+    -> (ServiceEndpoint, ClientEndpoint)
 {
     let (req_send, req_recv) = request_pipe.split();
     let (rep_send, rep_recv) = reply_pipe.split();
@@ -36,17 +36,17 @@ pub /*unsafe*/ fn new_endpoints<'a>(
     (service_endpoint, client_endpoint)
 }
 
-pub struct ServiceEndpoint<'a> {
-    pub recv: Consumer<'a, Request, U1, u8>,
-    pub send: Producer<'a, Result<Reply, Error>, U1, u8>,
+pub struct ServiceEndpoint {
+    pub recv: Consumer<'static, Request, U1, u8>,
+    pub send: Producer<'static, Result<Reply, Error>, U1, u8>,
     // service (trusted) has this, not client (untrusted)
     // used among other things to namespace cryptographic material
     pub client_id: ClientId,
 }
 
-pub struct ClientEndpoint<'a> {
-    pub recv: Consumer<'a, Result<Reply, Error>, U1, u8>,
-    pub send: Producer<'a, Request, U1, u8>,
+pub struct ClientEndpoint {
+    pub recv: Consumer<'static, Result<Reply, Error>, U1, u8>,
+    pub send: Producer<'static, Request, U1, u8>,
 }
 
 // in testing, this just directly calls service.process()

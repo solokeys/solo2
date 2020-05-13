@@ -191,7 +191,7 @@ impl Credential {
 
     pub fn id<'a, S>(
         &self,
-        crypto: &mut CryptoClient<'a, S>,
+        crypto: &mut CryptoClient<S>,
         key_encryption_key: &ObjectHandle,
     )
         -> Result<CredentialId>

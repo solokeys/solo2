@@ -92,17 +92,17 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
     }
 }
 
-pub struct Service<'a, R, S>
+pub struct Service<R, S>
 where
     R: RngRead,
     S: Store,
 {
-    eps: Vec<ServiceEndpoint<'a>, MAX_SERVICE_CLIENTS>,
+    eps: Vec<ServiceEndpoint, MAX_SERVICE_CLIENTS>,
     resources: ServiceResources<R, S>,
 }
 
 // need to be able to send crypto service to an interrupt handler
-unsafe impl<R: RngRead, S: Store> Send for Service<'_, R, S> {}
+unsafe impl<R: RngRead, S: Store> Send for Service<R, S> {}
 
 impl<R: RngRead, S: Store> ServiceResources<R, S> {
 
@@ -863,7 +863,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
 
 }
 
-impl<R: RngRead, S: Store> Service<'_, R, S> {
+impl<R: RngRead, S: Store> Service<R, S> {
 
     pub fn new(
         rng: R,
@@ -874,11 +874,8 @@ impl<R: RngRead, S: Store> Service<'_, R, S> {
         let resources = ServiceResources::new(rng, store);
         Self { eps: Vec::new(), resources }
     }
-}
 
-impl<'a, R: RngRead, S: Store> Service<'a, R, S> {
-
-    pub fn add_endpoint(&mut self, ep: ServiceEndpoint<'a>) -> Result<(), ServiceEndpoint> {
+    pub fn add_endpoint(&mut self, ep: ServiceEndpoint) -> Result<(), ServiceEndpoint> {
         self.eps.push(ep)
     }
 
@@ -910,7 +907,7 @@ impl<'a, R: RngRead, S: Store> Service<'a, R, S> {
     }
 }
 
-impl<R, S> crate::pipe::Syscall for &mut Service<'_, R, S>
+impl<R, S> crate::pipe::Syscall for &mut Service<R, S>
 where
     R: RngRead,
     S: Store,

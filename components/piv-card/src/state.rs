@@ -43,7 +43,7 @@ pub struct State {
     pub runtime: Runtime,
     // temporary "state", to be removed again
     // pub hack: Hack,
-    // trussed: RefCell<Trussed<'a, S>>,
+    // trussed: RefCell<Trussed<S>>,
 }
 
 impl State {
@@ -52,7 +52,7 @@ impl State {
     }
 
     // it would be nicer to do this during "board bringup", by using TrussedService as Syscall
-    pub fn persistent<S: Syscall>(&mut self, trussed: &mut Trussed<'_, S>) -> &mut Persistent {
+    pub fn persistent<S: Syscall>(&mut self, trussed: &mut Trussed<S>) -> &mut Persistent {
         if self.persistent.is_none() {
             self.persistent = Some(match Persistent::load(trussed) {
                 Ok(previous_self) => previous_self,
@@ -93,7 +93,7 @@ impl Persistent {
     const PIN_RETRIES_DEFAULT: u8 = 3;
     const FILENAME: &'static [u8] = b"persistent-state.cbor";
 
-    pub fn load<S: Syscall>(trussed: &mut Trussed<'_, S>) -> Result<Self> {
+    pub fn load<S: Syscall>(trussed: &mut Trussed<S>) -> Result<Self> {
         let data = block!(trussed.read_file(
                 StorageLocation::Internal,
                 PathBuf::from(Self::FILENAME),
@@ -105,7 +105,7 @@ impl Persistent {
         previous_state
     }
 
-    pub fn save<S: Syscall>(&self, trussed: &mut Trussed<'_, S>) {
+    pub fn save<S: Syscall>(&self, trussed: &mut Trussed<S>) {
         let data: trussed::types::Message = trussed::cbor_serialize_bytebuf(self).unwrap();
 
         syscall!(trussed.write_file(
@@ -116,7 +116,7 @@ impl Persistent {
         ));
     }
 
-    pub fn timestamp<S: Syscall>(&mut self, trussed: &mut Trussed<'_, S>) -> u32 {
+    pub fn timestamp<S: Syscall>(&mut self, trussed: &mut Trussed<S>) -> u32 {
         self.timestamp += 1;
         self.save(trussed);
         self.timestamp

@@ -66,7 +66,7 @@ pub struct State {
 
 impl State {
 
-    // pub fn new<S: Syscall>(crypto: &mut CryptoClient<'_, S>) -> Self {
+    // pub fn new<S: Syscall>(crypto: &mut CryptoClient<S>) -> Self {
     pub fn new() -> Self {
         // let identity = Identity::get(crypto);
         let identity = Default::default();
@@ -77,13 +77,13 @@ impl State {
         Self { identity, persistent, runtime }
     }
 
-    pub fn decrement_retries<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>) -> Result<()> {
+    pub fn decrement_retries<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) -> Result<()> {
         self.persistent.decrement_retries(crypto)?;
         self.runtime.decrement_retries();
         Ok(())
     }
 
-    pub fn reset_retries<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>) -> Result<()> {
+    pub fn reset_retries<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) -> Result<()> {
         self.persistent.reset_retries(crypto)?;
         self.runtime.reset_retries();
         Ok(())
@@ -112,7 +112,7 @@ pub struct Identity {
 }
 
 impl Identity {
-    // pub fn get<S: Syscall>(crypto: &mut CryptoClient<'_, S>) -> Self {
+    // pub fn get<S: Syscall>(crypto: &mut CryptoClient<S>) -> Self {
 
     //     // TODO: inject properly
     //     let attestation_key = syscall!(crypto
@@ -129,7 +129,7 @@ impl Identity {
         Bytes::try_from_slice(b"AAGUID0123456789").unwrap()
     }
 
-    pub fn attestation_key<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>) -> Key
+    pub fn attestation_key<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) -> Key
     {
         match self.attestation_key {
             Some(key) => key,
@@ -137,7 +137,7 @@ impl Identity {
         }
     }
 
-    fn load_attestation_key<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>) -> Key {
+    fn load_attestation_key<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) -> Key {
         let key = syscall!(crypto
             .generate_p256_private_key(StorageLocation::Internal))
             .key;
@@ -218,7 +218,7 @@ impl PersistentState {
         Self::MAX_RESIDENT_CREDENTIALS_GUESSTIMATE
     }
 
-    pub fn load<S: Syscall>(crypto: &mut CryptoClient<'_, S>) -> Result<Self> {
+    pub fn load<S: Syscall>(crypto: &mut CryptoClient<S>) -> Result<Self> {
 
         // TODO: add "exists_file" method instead?
         let data = block!(crypto.read_file(
@@ -232,7 +232,7 @@ impl PersistentState {
         previous_state
     }
 
-    pub fn save<S: Syscall>(&self, crypto: &mut CryptoClient<'_, S>) -> Result<()> {
+    pub fn save<S: Syscall>(&self, crypto: &mut CryptoClient<S>) -> Result<()> {
         let data = crate::cbor_serialize_message(self).unwrap();
 
         syscall!(crypto.write_file(
@@ -244,7 +244,7 @@ impl PersistentState {
         Ok(())
     }
 
-    pub fn reset<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>) -> Result<()> {
+    pub fn reset<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) -> Result<()> {
         self.key_encryption_key = None;
         self.key_wrapping_key = None;
         self.consecutive_pin_mismatches = 0;
@@ -253,7 +253,7 @@ impl PersistentState {
         self.save(crypto)
     }
 
-    pub fn load_if_not_initialised<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>) {
+    pub fn load_if_not_initialised<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) {
         if !self.initialised {
             if let Ok(previous_self) = Self::load(crypto) {
                 *self = previous_self
@@ -262,7 +262,7 @@ impl PersistentState {
         }
     }
 
-    pub fn timestamp<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>) -> Result<u32> {
+    pub fn timestamp<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) -> Result<u32> {
         self.load_if_not_initialised(crypto);
 
         let now = self.timestamp;
@@ -272,7 +272,7 @@ impl PersistentState {
         Ok(now)
     }
 
-    pub fn key_encryption_key<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>) -> Result<Key>
+    pub fn key_encryption_key<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) -> Result<Key>
     {
         self.load_if_not_initialised(crypto);
         match self.key_encryption_key {
@@ -281,7 +281,7 @@ impl PersistentState {
         }
     }
 
-    pub fn rotate_key_encryption_key<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>) -> Result<Key> {
+    pub fn rotate_key_encryption_key<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) -> Result<Key> {
         self.load_if_not_initialised(crypto);
         if let Some(key) = self.key_encryption_key { syscall!(crypto.delete(key)); }
         let key = syscall!(crypto.generate_chacha8poly1305_key(StorageLocation::Internal)).key;
@@ -290,7 +290,7 @@ impl PersistentState {
         Ok(key)
     }
 
-    pub fn key_wrapping_key<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>) -> Result<Key>
+    pub fn key_wrapping_key<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) -> Result<Key>
     {
         self.load_if_not_initialised(crypto);
         match self.key_wrapping_key {
@@ -299,7 +299,7 @@ impl PersistentState {
         }
     }
 
-    pub fn rotate_key_wrapping_key<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>) -> Result<Key> {
+    pub fn rotate_key_wrapping_key<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) -> Result<Key> {
         self.load_if_not_initialised(crypto);
         if let Some(key) = self.key_wrapping_key { syscall!(crypto.delete(key)); }
         let key = syscall!(crypto.generate_chacha8poly1305_key(StorageLocation::Internal)).key;
@@ -320,7 +320,7 @@ impl PersistentState {
         self.consecutive_pin_mismatches >= Self::RESET_RETRIES
     }
 
-     fn reset_retries<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>) -> Result<()> {
+     fn reset_retries<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) -> Result<()> {
         self.load_if_not_initialised(crypto);
         if self.consecutive_pin_mismatches > 0 {
             self.consecutive_pin_mismatches = 0;
@@ -329,7 +329,7 @@ impl PersistentState {
         Ok(())
     }
 
-    fn decrement_retries<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>) -> Result<()> {
+    fn decrement_retries<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) -> Result<()> {
         self.load_if_not_initialised(crypto);
         // error to call before initialization
         if self.consecutive_pin_mismatches < Self::RESET_RETRIES {
@@ -343,7 +343,7 @@ impl PersistentState {
         self.pin_hash
     }
 
-    pub fn set_pin_hash<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>, pin_hash: [u8; 16]) -> Result<()> {
+    pub fn set_pin_hash<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>, pin_hash: [u8; 16]) -> Result<()> {
         self.load_if_not_initialised(crypto);
         self.pin_hash = Some(pin_hash);
         self.save(crypto)?;
@@ -385,14 +385,14 @@ impl RuntimeState {
         self.credentials.as_mut().unwrap()
     }
 
-    pub fn key_agreement_key<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>) -> Key {
+    pub fn key_agreement_key<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) -> Key {
         match self.key_agreement_key {
             Some(key) => key,
             None => self.rotate_key_agreement_key(crypto),
         }
     }
 
-    pub fn rotate_key_agreement_key<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>) -> Key {
+    pub fn rotate_key_agreement_key<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) -> Key {
         // TODO: need to rotate pin token?
         if let Some(key) = self.key_agreement_key { syscall!(crypto.delete(key)); }
 
@@ -401,14 +401,14 @@ impl RuntimeState {
         key
     }
 
-    pub fn pin_token<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>) -> Key {
+    pub fn pin_token<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) -> Key {
         match self.pin_token {
             Some(token) => token,
             None => self.rotate_pin_token(crypto),
         }
     }
 
-    pub fn rotate_pin_token<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>) -> Key {
+    pub fn rotate_pin_token<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) -> Key {
         // TODO: need to rotate key agreement key?
         hprintln!("rotatating pin token!!").ok();
         if let Some(token) = self.pin_token { syscall!(crypto.delete(token)); }
@@ -417,7 +417,7 @@ impl RuntimeState {
         token
     }
 
-    pub fn reset<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>) {
+    pub fn reset<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) {
         self.rotate_key_agreement_key(crypto);
         self.rotate_pin_token(crypto);
         // self.drop_shared_secret(crypto);
@@ -426,7 +426,7 @@ impl RuntimeState {
     }
 
     // TODO: don't recalculate constantly
-    pub fn generate_shared_secret<S: Syscall>(&mut self, crypto: &mut CryptoClient<'_, S>, platform_key_agreement_key: &CoseEcdhEsHkdf256PublicKey) -> Result<Key> {
+    pub fn generate_shared_secret<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>, platform_key_agreement_key: &CoseEcdhEsHkdf256PublicKey) -> Result<Key> {
         let private_key = self.key_agreement_key(crypto);
 
         let serialized_pkak = cbor_serialize_message(platform_key_agreement_key).map_err(|_| Error::InvalidParameter)?;
