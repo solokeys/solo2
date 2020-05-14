@@ -38,4 +38,6 @@ def get_data(object_tag):
         tag = list(object_tag.to_bytes(3, byteorder='big'))
 
     GET_DATA = [0x00, 0xCB, 0x3F, 0xFF]
-    return c.transmit(GET_DATA + [len(tag) + 2] + [0x5C, 1] + tag + [0])
+    apdu = GET_DATA + [len(tag) + 2] + [0x5C, len(tag)] + tag + [0]
+    print(f"apdu = {apdu}")
+    return c.transmit(apdu)

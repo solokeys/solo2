@@ -3,33 +3,23 @@
 pub mod constants;
 pub mod state;
 
-use core::cell::RefCell;
 use core::convert::TryFrom;
 
 use cortex_m_semihosting::{dbg, hprintln};
-use trussed::{
-    Client as Trussed,
-    pipe::Syscall,
-};
 use heapless_bytes::consts;
 use interchange::Responder;
-
 use iso7816::{
-    Command, Instruction, Response, Status,
+    Command, Instruction, Status,
     response::{
         Result as ResponseResult,
         Data as ResponseData,
     },
 };
-
+use trussed::Client as Trussed;
 use usbd_ccid::{
-    constants::*,
+    // constants::*,
     der::Der,
-    types::{
-        ApduInterchange,
-        MessageBuffer,
-        packet,
-    },
+    types::ApduInterchange,
 };
 
 use constants::*;
@@ -74,7 +64,7 @@ impl App
         self.interchange.respond(result.into()).expect("can respond");
     }
 
-    fn try_handle(&mut self, request: &Command) -> ResponseResult {
+    fn try_handle(&mut self, command: &Command) -> ResponseResult {
 
         // TEMP
         dbg!(self.state.persistent(&mut self.trussed).timestamp(&mut self.trussed));
@@ -85,7 +75,7 @@ impl App
         // - only channel zero supported
         // - ensure INS known to us
 
-        let class = request.class();
+        let class = command.class();
 
         if !class.chain().last_or_only() {
             return Err(Status::CommandChainingNotSupported);
@@ -99,19 +89,189 @@ impl App
             return Err(Status::LogicalChannelNotSupported);
         }
 
-        match request.instruction() {
-            Instruction::Select => self.select(request),
+        hprintln!("CLA = {:?}", &command.class()).ok();
+        hprintln!("INS = {:?}", &command.instruction()).ok();
+        hprintln!("P1 = {:X}, P2 = {:X}", command.p1, command.p2).ok();
+        hprintln!("extended = {:?}", command.extended).ok();
+
+        // hprintln!("INS = {:?}" &command.instruction()).ok();
+        match command.instruction() {
+            Instruction::Select => self.select(command),
+            Instruction::GetData => self.get_data(command),
+            Instruction::Verify => self.verify(command),
+
+            Instruction::Unknown(ins) => {
+
+                // see if it's a Yubico thing
+                if let Ok(instruction) = YubicoPivExtension::try_from(ins) {
+                    self.yubico_piv_extension(command, instruction)
+                } else {
+                    Err(Status::FunctionNotSupported)
+                }
+            }
+
             _ => Err(Status::FunctionNotSupported),
         }
     }
 
-    fn select(&mut self, request: &Command) -> ResponseResult {
+    fn yubico_piv_extension(&mut self, command: &Command, instruction: YubicoPivExtension) -> ResponseResult {
+        hprintln!("yubico extension: {:?}", &instruction).ok();
+        match instruction {
+            YubicoPivExtension::GetSerial => {
+                // make up a 4-byte serial
+                let data = ResponseData::try_from_slice(
+                    &[0x00, 0x52, 0xf7, 0x43]).unwrap();
+                Ok(data)
+            }
+
+            YubicoPivExtension::GetVersion => {
+                // make up a version, be >= 5.0.0
+                let data = ResponseData::try_from_slice(
+                    &[0x06, 0x06, 0x06]).unwrap();
+                Ok(data)
+            }
+
+            YubicoPivExtension::Attest => {
+                if command.p2 != 0x00 {
+                    return Err(Status::IncorrectP1OrP2Parameter);
+                }
+
+                let slot = command.p1;
+
+                if slot == 0x9a {
+                    let data = ResponseData::try_from_slice(YUBICO_ATTESTATION_CERTIFICATE_FOR_9A).unwrap();
+                    return Ok(data);
+                }
+
+                Err(Status::FunctionNotSupported)
+            }
+
+            _ => Err(Status::FunctionNotSupported),
+        }
+    }
+
+    fn verify(&mut self, command: &Command) -> ResponseResult {
+        // we only implement our own PIN, not global Pin, not OCC data, not pairing code
+        if command.p2 != 0x80 {
+            return Err(Status::KeyReferenceNotFound);
+        }
+
+        let p1 = command.p1;
+        if p1 != 0x00 && p1 != 0xFF {
+            return Err(Status::IncorrectP1OrP2Parameter);
+        }
+
+        // all above failures shall not change security status or retry counter
+
+        // 1) If p1 is FF, "log out" of PIN
+        if p1 == 0xFF {
+            if command.data().len() != 0 {
+                return Err(Status::IncorrectDataParameter);
+            } else {
+                self.state.runtime.app_security_status.pin_verified = false;
+                return Ok(Default::default());
+            }
+        }
+
+        // 2) Get retries (or whether verification is even needed) by passing no data
+        if p1 == 0x00 && command.data().len() == 0 {
+            if self.state.runtime.app_security_status.pin_verified {
+                return Ok(Default::default());
+            } else {
+                let retries = self.state.persistent(&mut self.trussed).remaining_pin_retries();
+                return Err(Status::RemainingRetries(retries));
+            }
+        }
+
+        // if malformed PIN is sent, no security implication
+        if command.data().len() != 8 {
+            return Err(Status::IncorrectDataParameter);
+        }
+
+        let sent_pin = match state::Pin::try_new(&command.data()) {
+            Ok(pin) => pin,
+            _ => return Err(Status::IncorrectDataParameter),
+        };
+
+        // 3) Verify le PIN!
+        let remaining_retries = self.state.persistent(&mut self.trussed).remaining_pin_retries();
+        if remaining_retries == 0 {
+            return Err(Status::OperationBlocked);
+        }
+
+        if self.state.persistent(&mut self.trussed).verify_pin(&sent_pin) {
+            self.state.persistent(&mut self.trussed).reset_consecutive_pin_mismatches(&mut self.trussed);
+            self.state.runtime.app_security_status.pin_verified = true;
+            Ok(Default::default())
+
+        } else {
+            let remaining = self.state.persistent(&mut self.trussed).increment_consecutive_pin_mismatches(&mut self.trussed);
+            Err(Status::RemainingRetries(remaining))
+        }
+    }
+
+    fn get_data(&mut self, command: &Command) -> ResponseResult {
+        if command.p1 != 0x3f || command.p2 != 0xff {
+            return Err(Status::IncorrectP1OrP2Parameter);
+        }
+
+        // TODO: adapt `derp` and use a proper DER parser
+
+        let data = command.data();
+
+        if data.len() < 3 {
+            return Err(Status::IncorrectDataParameter);
+        }
+
+        let tag = data[0];
+        if tag != 0x5c {
+            return Err(Status::IncorrectDataParameter);
+        }
+
+        let len = data[1] as usize;
+        let data = &data[2..];
+        if data.len() != len {
+            return Err(Status::IncorrectDataParameter);
+        }
+
+        if data.len() == 0 || data.len() > 3 {
+            return Err(Status::IncorrectDataParameter);
+        }
+
+        // lookup what is asked for
+        hprintln!("looking up {:?}", data).ok();
+
+        // TODO: check security status, else return Status::SecurityStatusNotSatisfied
+
+        // Table 3, Part 1, SP 800-73-4
+        // https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-73-4.pdf#page=30
+        match data {
+            DataObjects::DiscoveryObject => todo!("discovery object"),
+            DataObjects::BiometricInformationTemplate => todo!("biometric information template"),
+
+            // '5FC1 05' (351B)
+            DataObjects::X509CertificateForPivAuthentication => {
+                let data = ResponseData::try_from_slice(YUBICO_PIV_AUTHENTICATION_CERTIFICATE).unwrap();
+                Ok(data)
+            }
+
+            // '5F FF01' (754B)
+            YubicoObjects::AttestationCertificate => {
+                let data = ResponseData::try_from_slice(YUBICO_ATTESTATION_CERTIFICATE).unwrap();
+                Ok(data)
+            }
+
+            _ => return Err(Status::NotFound),
+        }
+    }
+
+    fn select(&mut self, command: &Command) -> ResponseResult {
         use state::Aid;
 
-        if request.data().starts_with(state::PivAid::rid()) {
+        if command.data().starts_with(state::PivAid::rid()) {
             hprintln!("got PIV!").ok();
 
-            if request.p1 != 0x04 || request.p2 != 0x00 {
+            if command.p1 != 0x04 || command.p2 != 0x00 {
                 return Err(Status::IncorrectP1OrP2Parameter);
             }
 
@@ -131,114 +291,18 @@ impl App
 
 
             let response_data: ResponseData = der.try_convert_into().unwrap();
-            hprintln!("reponse data: {:?}", &response_data).ok();
-            Ok(response_data)
-        } else {
-            hprintln!("got not PIV: {:?}", &request.data()).ok();
-            Err(Status::NotFound)
+            // hprintln!("reponse data: {:?}", &response_data).ok();
+            return Ok(response_data);
         }
+
+        // if command.data().starts_with(
+        hprintln!("got not PIV: {:?}", &command.data()).ok();
+        Err(Status::NotFound)
     }
 }
 
-        //// handle INS
-        //// - do what we can
-        //// - else unsupported instruction
-        //let (cla, ins, p1, p2) = (request.cla, request.ins, request.p1, request.p2);
-
-        //match (cla, ins, p1, p2) {
-        //    // `piv-tool -n` sends SELECT for 'A0 00 00 00 01 01', with Le = 0 (?!)
-        //    // we need to handle this one
-        //    SELECT => {
-        //        // pub const PIV_AID: [u8; 11]
-        //        //     = [0xa0, 0x00, 0x00, 0x03, 0x08, // 0x00, 0x00, 0x10, 0x00, 0x01, 0x00];
-        //        //
-        //        // 05808693 APDU: 00 A4 04 00 05 A0 00 00 03 08
-        //        hprintln!("got SELECT").ok();
-        //        let is_nist_rid = &request.data == NIST_RID;
-        //        let is_piv = &request.data == &PIV_AID;
-        //        let is_trunc_piv = &request.data == &PIV_TRUNCATED_AID;
-        //        let is_pivish = is_piv || is_trunc_piv || is_nist_rid;
-        //        let is_yubico = &request.data == &YUBICO_OTP_AID;
-
-        //        if is_pivish {
-        //            hprintln!("for PIV").ok();
-        //            let response = select_piv();
-        //            self.interchange.respond(response).unwrap();
-        //            hprintln!("interchange state: {:?}", &self.interchange.state())
-        //                .ok();
-        //            // todo!("put back in queue");
-        //        // } else if is_yubico {
-        //        //     hprintln!("for Yubico").ok();
-        //        //     command.clear();
-        //        //     command.extend_from_slice(&[0x04, 0x03, 0x04, 0x01, 0x05, 0x00, 0x05, 0x0F, 0x00, 0x00]);
-        //        //     command.extend_from_slice(OK);
-        //        } else {
-        //            panic!("unknown AID {:?}", &request.data);
-        //        }
-        //    }
-        //    _ => todo!(),
-        //}
-
-fn write_apdu(sw1: u8, sw2: u8, data: &[u8], buffer: &mut MessageBuffer) {
-    let l = data.len();
-    buffer.clear();
-
-    buffer.extend_from_slice(data).unwrap();
-    buffer.push(sw1).unwrap();
-    buffer.push(sw2).unwrap();
-}
 
 //pub fn fake_piv(command: &mut MessageBuffer) {
-//    let apdu = match apdu::Apdu::try_from(command.as_ref()) {
-//        Ok(apdu) => apdu,
-//        Err(_) => {
-//            invalid_apdu(command);
-//            return;
-//        }
-//    };
-//    if apdu.ins() != packet::CommandType::GetSlotStatus as u8 {
-//        hprintln!("{}, {}", packet::CommandType::GetSlotStatus as u8, apdu.ins()).ok();
-//        hprintln!(":: {:?}", &apdu).ok();
-//    }
-
-//    let (cla, ins, p1, p2, le) = (*&apdu.cla(), apdu.ins(), apdu.p1(), apdu.p2(), apdu.le());
-
-//    // match (cla, ins, p1, p2, le) {
-//    match (cla, ins, p1, p2) {
-//        // `piv-tool -n` sends SELECT for 'A0 00 00 00 01 01', with Le = 0 (?!)
-//        // we need to handle this one
-//        SELECT => {
-//            // pub const PIV_AID: [u8; 11]
-//            //     = [0xa0, 0x00, 0x00, 0x03, 0x08, // 0x00, 0x00, 0x10, 0x00, 0x01, 0x00];
-//            //
-//            // 05808693 APDU: 00 A4 04 00 05 A0 00 00 03 08
-//            hprintln!("got SELECT").ok();
-//            let is_nist_rid = apdu.data() == NIST_RID;
-//            let is_piv = apdu.data() == &PIV_AID;
-//            let is_trunc_piv = apdu.data() == &PIV_TRUNCATED_AID;
-//            let is_pivish = is_piv || is_trunc_piv || is_nist_rid;
-//            let is_yubico = apdu.data() == YUBICO_OTP_AID;
-
-//            if is_pivish {
-//                hprintln!("for PIV").ok();
-//                select(command);
-//            } else if is_yubico {
-//                hprintln!("for Yubico").ok();
-//                command.clear();
-//                command.extend_from_slice(&[0x04, 0x03, 0x04, 0x01, 0x05, 0x00, 0x05, 0x0F, 0x00, 0x00]);
-//                command.extend_from_slice(OK);
-//            } else {
-//                panic!("unknown AID {:?}", &apdu.data());
-//            }
-//        }
-
-//        // https://git.io/JfWaX
-//        // YKPIV_OBJ_AUTHENTICATION 0x5fc105 /* cert for 9a key */
-//        // YKPIV_OBJ_ATTESTATION 0x5fff01 <-- custom Yubico thing
-//        GET_DATA => {
-//            todo!();
-//        }
-
 //        // This is what we get from `piv-agent`
 //        // raw APDU: 00 87 11 9A 26 7C 24 82 00 81 20 E6 57 78 FC E5 C5 D8 03 4F EA C9 17 27 D5 8A 40 54 5F BC 05 BC 6A CD 37 85 3B F5 E4 E2 A9 33 F2
 //        //
@@ -259,33 +323,6 @@ fn write_apdu(sw1: u8, sw2: u8, data: &[u8], buffer: &mut MessageBuffer) {
 //            // P2 = key = 0x9a = authentication (w/PIN)
 
 //        }
-
-//        // getVersion in Yubico's AID
-//        (0x00, 0xfd, 0x00, 0x00) => {
-//            command.clear();
-//            // command.extend_from_slice(&[0x04, 0x03, 0x04]);
-//            command.extend_from_slice(&[0x06, 0x06, 0x06]);
-//            command.extend(OK);
-//        }
-//        // getSerial in Yubico's AID
-//        (0x00, 0x01, 0x10, 0x00) => {
-//            command.clear();
-//            // make one up :)
-//            command.extend_from_slice(&[0x00, 0x52, 0xf7, 0x43]);
-//            command.extend(OK);
-//        }
-//        // getSerial in Yubico's AID (alternate version)
-//        (0x00, 0xf8, 0x00, 0x00) => {
-//            command.clear();
-//            // make one up :)
-//            command.extend_from_slice(&[0x00, 0x52, 0xf7, 0x43]);
-//            command.extend(OK);
-//        }
-//        // Yubico getAttestation command (attn for, here,
-//        (0x00, 0xf9, 0x9a, 0x00) => {
-//            todo!();
-//        }
-
 //        // VERIFY => {
 //        (0x00, 0x20, 0x00, 0x80) => {
 //            // P2 = 0x80 = PIV  card application PIN
@@ -348,13 +385,6 @@ fn write_apdu(sw1: u8, sw2: u8, data: &[u8], buffer: &mut MessageBuffer) {
 //        }
 //    }
 //}
-
-fn invalid_apdu(command: &mut MessageBuffer) {
-    command.clear();
-    // figure out what the correct error status words are
-    command.extend_from_slice(&[0x6a, 0x82]);
-
-}
 
 // calling `yubikey readers`, response from NEO OTP+U2F+CCID
 // 05808693 APDU: 00 A4 04 00 05 A0 00 00 03 08

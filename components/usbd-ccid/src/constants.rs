@@ -1,6 +1,5 @@
 #![allow(non_camel_case_types)]
 use heapless_bytes::{
-    Bytes,
     consts,
     Unsigned as _
 };

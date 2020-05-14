@@ -135,6 +135,7 @@ fn parse_lengths(body: &[u8]) -> Result<ParsedLengths, FromSliceError> {
         // B1 encodes Lc valued from 1 to 255
         parsed.lc = b1;
         parsed.le = 0;
+        parsed.offset = 1;
         return Ok(parsed);
     }
 

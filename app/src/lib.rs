@@ -41,7 +41,6 @@ use types::{
 use hal::drivers::{
     flash::FlashGordon,
     pins,
-    Timer,
     UsbBus,
 };
 use interchange::Interchange;

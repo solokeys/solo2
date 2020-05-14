@@ -1,6 +1,8 @@
+use core::convert::TryInto;
+
+use cortex_m_semihosting::dbg;
 use trussed::{
     Client as Trussed,
-    pipe::Syscall,
     types::{PathBuf, StorageLocation},
 };
 
@@ -65,9 +67,50 @@ impl State {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+pub struct Pin {
+    padded_pin: [u8; 8]
+}
+
+impl Default for Pin {
+    /// Default is "202020"
+    fn default() -> Self {
+        Self::try_new(b"202020\xff\xff").unwrap()
+    }
+}
+
+impl Pin {
+    pub fn try_new(padded_pin: &[u8]) -> Result<Self> {
+        if padded_pin.len() != 8 {
+            return Err(());
+        }
+        let first_pad_byte = padded_pin.iter().position(|&b| b == 0xff);
+        let unpadded_pin = match first_pad_byte {
+            Some(l) => &padded_pin[..l],
+            None => padded_pin,
+        };
+        if unpadded_pin.len() < 6 {
+            return Err(());
+        }
+        dbg!(unpadded_pin);
+        let valid_bytes = unpadded_pin.iter().all(|&b| b >= b'0' && b <= b'9');
+        if valid_bytes {
+            Ok(Self {
+                padded_pin: padded_pin.try_into().unwrap(),
+            })
+        } else {
+            Err(())
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct Persistent {
     consecutive_pin_mismatches: u8,
+    // the PIN can be 6-8 digits, padded with 0xFF if <8
+    // we just store all of them for now. this implies that
+    // the default pin is "00000000"
+    pin: Pin,
     // pin_hash: Option<[u8; 16]>,
     // Ideally, we'd dogfood a "Monotonic Counter" from `trussed`.
     timestamp: u32,
@@ -143,6 +186,7 @@ pub struct GlobalSecurityStatus {
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct AppSecurityStatus {
+    pub pin_verified: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -156,8 +200,39 @@ pub struct GetData {
 }
 
 impl Persistent {
-    const PIN_RETRIES_DEFAULT: u8 = 3;
+    pub const PIN_RETRIES_DEFAULT: u8 = 3;
     const FILENAME: &'static [u8] = b"persistent-state.cbor";
+
+    pub fn remaining_pin_retries(&self) -> u8 {
+        if self.consecutive_pin_mismatches >= Self::PIN_RETRIES_DEFAULT {
+            0
+        } else {
+            Self::PIN_RETRIES_DEFAULT - self.consecutive_pin_mismatches
+        }
+    }
+
+    pub fn verify_pin(&self, other_pin: &Pin) -> bool {
+        self.pin == *other_pin
+    }
+
+    pub fn increment_consecutive_pin_mismatches(&mut self, trussed: &mut Trussed) -> u8 {
+        if self.consecutive_pin_mismatches >= Self::PIN_RETRIES_DEFAULT {
+            return 0;
+        }
+
+        self.consecutive_pin_mismatches += 1;
+        self.save(trussed);
+        Self::PIN_RETRIES_DEFAULT - self.consecutive_pin_mismatches
+    }
+
+    pub fn reset_consecutive_pin_mismatches(&mut self, trussed: &mut Trussed) -> u8 {
+        if self.consecutive_pin_mismatches != 0 {
+            self.consecutive_pin_mismatches = 0;
+            self.save(trussed);
+        }
+
+        Self::PIN_RETRIES_DEFAULT
+    }
 
     pub fn load(trussed: &mut Trussed) -> Result<Self> {
         let data = block!(trussed.read_file(

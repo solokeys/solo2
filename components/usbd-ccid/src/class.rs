@@ -8,11 +8,7 @@ use crate::{
     types::{
         ApduInterchange,
         ClassRequest,
-        packet::{
-            self,
-            RawPacket,
-        },
-        tlv,
+        packet::RawPacket,
     },
     pipe::Pipe,
 };

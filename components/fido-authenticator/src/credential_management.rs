@@ -1,12 +1,10 @@
 //! TODO: There is potential need for `fsck`
 
-use core::convert::{TryFrom, TryInto};
+use core::convert::TryFrom;
 
 use cortex_m_semihosting::hprintln;
 
 use trussed::{
-    // Client as CryptoClient,
-    pipe::Syscall as CryptoSyscall,
     types::{
         DirEntry,
         StorageLocation,
@@ -22,11 +20,7 @@ use ctap_types::{
             credential_management::*,
         },
     },
-    cose::{
-        P256PublicKey,
-        Ed25519PublicKey,
-        PublicKey,
-    },
+    cose::PublicKey,
     webauthn::{
         PublicKeyCredentialDescriptor,
     },
@@ -140,7 +134,7 @@ where
                 }
                 Some(rp) => {
                     last_rp = PathBuf::from(rp.file_name());
-                    let (mut this_rp_rk_count, _) =
+                    let (this_rp_rk_count, _) =
                         self.count_rp_rks(PathBuf::from(rp.path()))?;
                     num_rks += this_rp_rk_count;
                 }
@@ -364,7 +358,7 @@ where
         match maybe_next_rk {
             Some(rk) => {
                 // extract data required into response
-                let mut response = self.extract_response_from_credential_file(
+                let response = self.extract_response_from_credential_file(
                     rk.path())?;
 
                 // cache state for next call

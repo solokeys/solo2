@@ -9,7 +9,6 @@ use crate::{
         ApduInterchange,
         MessageBuffer,
         packet::{
-            self,
             Chain,
             Command,
             DataBlock,
@@ -183,7 +182,7 @@ where
         hprintln!("called piv app").ok();
         let command = match iso7816::Command::try_from(&self.message) {
             Ok(command) => command,
-            Err(error) => {
+            Err(_error) => {
                 hprintln!("could not parse command from APDU, ignoring {:?}", &self.message).ok();
                 return;
             }

@@ -26,7 +26,7 @@ pub enum Status {
 
     // 63XX: state of non-volatile memory changed (cf. SW2)
     VerificationFailed,
-    FailedRetries(u8),
+    RemainingRetries(u8),
 
 ////////////////////////////////
 // Execution error (64, 65, 66)
@@ -78,7 +78,7 @@ impl Into<u16> for Status {
     fn into(self) -> u16 {
         match self {
             Self::VerificationFailed => 0x6300,
-            Self::FailedRetries(x) => {
+            Self::RemainingRetries(x) => {
                 assert!(x < 16);
                 u16::from_be_bytes([0x63, 0xc0 + x])
             }

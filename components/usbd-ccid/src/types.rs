@@ -1,6 +1,4 @@
-use core::convert::TryInto;
-
-use cortex_m_semihosting::hprintln;
+// use cortex_m_semihosting::hprintln;
 use heapless_bytes::Bytes;
 
 use crate::constants::*;

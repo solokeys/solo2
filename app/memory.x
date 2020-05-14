@@ -1,1 +1,1 @@
-memory-bigger.x
+memory-big.x

@@ -1,10 +1,9 @@
-use crate::{Bytes, Bytes16, Bytes32};
+use crate::{Bytes16, Bytes32};
 use serde_indexed::{DeserializeIndexed, SerializeIndexed};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
 use crate::{
     cose::PublicKey,
-    sizes::*,
     webauthn::{
         PublicKeyCredentialDescriptor,
         PublicKeyCredentialRpEntity,

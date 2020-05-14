@@ -10,7 +10,6 @@ use funnel::info;
 
 use trussed::{
     Client as CryptoClient,
-    pipe::Syscall as CryptoSyscall,
     types::{
         KeySerialization,
         Mechanism,
@@ -105,6 +104,7 @@ pub mod credential;
 pub use credential::*;
 
 #[cfg(not(feature = "debug-logs"))]
+#[allow(unused_imports)]
 #[macro_use(info)]
 extern crate funnel;
 
@@ -1060,7 +1060,7 @@ impl<UP: UserPresence> Authenticator<UP> {
                     )
             }
 
-            _ => todo!("not implemented yet"),
+            // _ => todo!("not implemented yet"),
         }
     }
 
