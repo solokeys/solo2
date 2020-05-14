@@ -109,14 +109,14 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
     pub fn reply_to(&mut self, request: Request) -> Result<Reply, Error> {
         // TODO: what we want to do here is map an enum to a generic type
         // Is there a nicer way to do this?
-        // hprintln!("crypto-service request: {:?}", &request).ok();
+        // hprintln!("trussed request: {:?}", &request).ok();
         // hprintln!("IFS/EFS/VFS available BEFORE: {}/{}/{}",
         //       self.store.ifs().available_blocks().unwrap(),
         //       self.store.efs().available_blocks().unwrap(),
         //       self.store.vfs().available_blocks().unwrap(),
         // ).ok();
         #[cfg(feature = "deep-semihosting-logs")]
-        hprintln!("crypto-service request: {:?}", &request).ok();
+        hprintln!("trussed request: {:?}", &request).ok();
         match request {
             Request::DummyRequest => {
                 // #[cfg(test)]

@@ -4,7 +4,7 @@ use core::convert::{TryFrom, TryInto};
 
 use cortex_m_semihosting::hprintln;
 
-use crypto_service::{
+use trussed::{
     // Client as CryptoClient,
     pipe::Syscall as CryptoSyscall,
     types::{
@@ -57,29 +57,25 @@ macro_rules! syscall {
     }}
 }
 
-pub struct CredentialManagement<'a, 'b, S, UP>
+pub struct CredentialManagement<'a, UP>
 where
-    S: CryptoSyscall,
     UP: UserPresence,
-    'b: 'a,
 {
-    authnr: &'a mut Authenticator<'b, S, UP>,
+    authnr: &'a mut Authenticator<UP>,
 }
 
-impl<'a, 'b, S, UP> core::ops::Deref for CredentialManagement<'a, 'b, S, UP>
+impl<'a, UP> core::ops::Deref for CredentialManagement<'a, UP>
 where
-    S: CryptoSyscall,
     UP: UserPresence
 {
-    type Target = Authenticator<'b, S, UP>;
+    type Target = Authenticator<UP>;
     fn deref(&self) -> &Self::Target {
         &self.authnr
     }
 }
 
-impl<'a, 'b, S, UP> core::ops::DerefMut for CredentialManagement<'a, 'b, S, UP>
+impl<'a, UP> core::ops::DerefMut for CredentialManagement<'a, UP>
 where
-    S: CryptoSyscall,
     UP: UserPresence
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
@@ -87,23 +83,21 @@ where
     }
 }
 
-impl<'a, 'b, S, UP> CredentialManagement<'a, 'b, S, UP>
+impl<'a, UP> CredentialManagement<'a, UP>
 where
-    S: CryptoSyscall,
     UP: UserPresence
 {
-    pub fn new(authnr: &'a mut Authenticator<'b, S, UP>) -> Self {
+    pub fn new(authnr: &'a mut Authenticator<UP>) -> Self {
         Self { authnr }
     }
 }
 
-impl<S, UP> CredentialManagement<'_, '_, S, UP>
+impl<UP> CredentialManagement<'_, UP>
 where
-    S: CryptoSyscall,
     UP: UserPresence
 {
     pub fn get_creds_metadata(&mut self) -> Result<Response> {
-        hprintln!("get metadata");
+        hprintln!("get metadata").ok();
         let mut response: ctap2::credential_management::Response =
             Default::default();
 
@@ -155,7 +149,7 @@ where
     }
 
     pub fn first_relying_party(&mut self) -> Result<Response> {
-        hprintln!("first rp");
+        hprintln!("first rp").ok();
 
         // rp (0x03): PublicKeyCredentialRpEntity
         // rpIDHash (0x04) : RP ID SHA-256 hash.
@@ -228,7 +222,7 @@ where
     }
 
     pub fn next_relying_party(&mut self) -> Result<Response> {
-        hprintln!("next rp");
+        hprintln!("next rp").ok();
 
         let (remaining, last_rp_id_hash) = match self.state.runtime.cache {
             Some(CommandCache::CredentialManagementEnumerateRps(
@@ -312,7 +306,7 @@ where
     }
 
     pub fn first_credential(&mut self, rp_id_hash: &Bytes32) -> Result<Response> {
-        hprintln!("first credential");
+        hprintln!("first credential").ok();
 
         self.state.runtime.cache = None;
 
@@ -346,7 +340,7 @@ where
     }
 
     pub fn next_credential(&mut self) -> Result<Response> {
-        hprintln!("next credential");
+        hprintln!("next credential").ok();
 
         let (remaining, rp_dir, prev_filename) = match self.state.runtime.cache {
             Some(CommandCache::CredentialManagementEnumerateCredentials(
@@ -428,7 +422,7 @@ where
         };
 
         use crate::SupportedAlgorithm;
-        use crypto_service::types::{KeySerialization, Mechanism};
+        use trussed::types::{KeySerialization, Mechanism};
 
         let algorithm = SupportedAlgorithm::try_from(credential.algorithm)?;
         let cose_public_key =  match algorithm {
@@ -466,7 +460,7 @@ where
     )
         -> Result<Response>
     {
-        hprintln!("delete credential");
+        hprintln!("delete credential").ok();
         let credential_id_hash = self.hash(&credential_descriptor.id[..])?;
         let mut hex = [b'0'; 16];
         super::format_hex(&credential_id_hash[..8], &mut hex);
@@ -514,7 +508,7 @@ where
 }
 
 // pub fn get_creds_metadata<S, UP>(
-//     authnr: &mut Authenticator<'_, S, UP>,
+//     authnr: &mut Authenticator<UP>,
 // ) -> Result<Response>
 
 // where
@@ -534,7 +528,7 @@ where
 // }
 
 // pub fn enumerate_rps_begin<S, UP>(
-//     authnr: &mut Authenticator<'_, S, UP>,
+//     authnr: &mut Authenticator<UP>,
 // ) -> Result<Response>
 
 // where
@@ -616,7 +610,7 @@ where
 // }
 
 // pub fn enumerate_rps_get_next_rp<S, UP>(
-//     authnr: &mut Authenticator<'_, S, UP>,
+//     authnr: &mut Authenticator<UP>,
 // ) -> Result<Response>
 
 // where
@@ -689,7 +683,7 @@ where
 // }
 
 // pub fn delete_credential<S, UP>(
-//     authnr: &mut Authenticator<'_, S, UP>,
+//     authnr: &mut Authenticator<UP>,
 //     credential_descriptor: &PublicKeyCredentialDescriptor,
 // ) -> Result<Response>
 

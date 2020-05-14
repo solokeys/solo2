@@ -6,10 +6,7 @@ use interchange::Requester;
 use crate::{
     constants::*,
     types::{
-        apdu::{
-            self,
-            ApduInterchange,
-        },
+        ApduInterchange,
         MessageBuffer,
         packet::{
             self,
@@ -184,9 +181,16 @@ where
 
     fn call_app(&mut self) {
         hprintln!("called piv app").ok();
-        self.interchange.request(
-            apdu::Command::try_from(&self.message).unwrap()
-        ).expect("could not deposit command");
+        let command = match iso7816::Command::try_from(&self.message) {
+            Ok(command) => command,
+            Err(error) => {
+                hprintln!("could not parse command from APDU, ignoring {:?}", &self.message).ok();
+                return;
+            }
+        };
+        self.interchange.request(command).expect("could not deposit command");
+            // apdu::Command::try_from(&self.message).unwrap()
+        // ).expect("could not deposit command");
         hprintln!("set ccid state to processing").ok();
         self.state = State::Processing;
         // todo!("have message of length {} to dispatch", self.message.len());

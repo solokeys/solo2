@@ -4,6 +4,8 @@ use trussed::{
     types::{PathBuf, StorageLocation},
 };
 
+use crate::constants::*;
+
 #[macro_use]
 macro_rules! block {
     ($future_result:expr) => {{
@@ -52,7 +54,7 @@ impl State {
     }
 
     // it would be nicer to do this during "board bringup", by using TrussedService as Syscall
-    pub fn persistent<S: Syscall>(&mut self, trussed: &mut Trussed<S>) -> &mut Persistent {
+    pub fn persistent(&mut self, trussed: &mut Trussed) -> &mut Persistent {
         if self.persistent.is_none() {
             self.persistent = Some(match Persistent::load(trussed) {
                 Ok(previous_self) => previous_self,
@@ -76,7 +78,71 @@ pub struct Runtime {
     // aid: Option<
     // consecutive_pin_mismatches: u8,
 
+    pub global_security_status: GlobalSecurityStatus,
+    pub currently_selected_application: SelectableAid,
+    pub app_security_status: AppSecurityStatus,
     pub command_cache: Option<CommandCache>,
+}
+
+pub trait Aid {
+    const AID: &'static [u8];
+    const RIGHT_TRUNCATED_LENGTH: usize;
+
+    fn len() -> usize {
+        Self::AID.len()
+    }
+
+    fn full() -> &'static [u8] {
+        Self::AID
+    }
+
+    fn right_truncated() -> &'static [u8] {
+        &Self::AID[..Self::RIGHT_TRUNCATED_LENGTH]
+    }
+
+    fn pix() -> &'static [u8] {
+        &Self::AID[5..]
+    }
+
+    fn rid() -> &'static [u8] {
+        &Self::AID[..5]
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum SelectableAid {
+    Piv(PivAid),
+    YubicoOtp(YubicoOtpAid),
+}
+
+impl Default for SelectableAid {
+    fn default() -> Self {
+        Self::Piv(Default::default())
+    }
+}
+
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
+pub struct PivAid {}
+
+impl Aid for PivAid {
+    const AID: &'static [u8] = &PIV_AID;
+    const RIGHT_TRUNCATED_LENGTH: usize = 9;
+}
+
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
+pub struct YubicoOtpAid {}
+
+impl Aid for YubicoOtpAid {
+    const AID: &'static [u8] = &YUBICO_OTP_AID;
+    const RIGHT_TRUNCATED_LENGTH: usize = 8;
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct GlobalSecurityStatus {
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct AppSecurityStatus {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -93,7 +159,7 @@ impl Persistent {
     const PIN_RETRIES_DEFAULT: u8 = 3;
     const FILENAME: &'static [u8] = b"persistent-state.cbor";
 
-    pub fn load<S: Syscall>(trussed: &mut Trussed<S>) -> Result<Self> {
+    pub fn load(trussed: &mut Trussed) -> Result<Self> {
         let data = block!(trussed.read_file(
                 StorageLocation::Internal,
                 PathBuf::from(Self::FILENAME),
@@ -105,7 +171,7 @@ impl Persistent {
         previous_state
     }
 
-    pub fn save<S: Syscall>(&self, trussed: &mut Trussed<S>) {
+    pub fn save(&self, trussed: &mut Trussed) {
         let data: trussed::types::Message = trussed::cbor_serialize_bytebuf(self).unwrap();
 
         syscall!(trussed.write_file(
@@ -116,7 +182,7 @@ impl Persistent {
         ));
     }
 
-    pub fn timestamp<S: Syscall>(&mut self, trussed: &mut Trussed<S>) -> u32 {
+    pub fn timestamp(&mut self, trussed: &mut Trussed) -> u32 {
         self.timestamp += 1;
         self.save(trussed);
         self.timestamp

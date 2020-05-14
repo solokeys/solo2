@@ -10,9 +10,20 @@ edition = "2018"
 cortex-m-semihosting = { version = "0.3.5", optional = true}
 heapless-bytes = { git = "https://github.com/ycrypto/heapless-bytes", branch = "main" }
 interchange = { path = "../interchange" }
+iso7816 = { path = "../iso7816" }
 serde = { version = "1.0", default-features = false }
-trussed = { path = "../crypto-service", package = "crypto-service" }
+trussed = { path = "../trussed", package = "trussed" }
 usbd-ccid = { path = "../usbd-ccid" }
 
 [features]
 default = ["cortex-m-semihosting"]
+trussed-semihosting = ["trussed/semihosting"]
+
+[patch.crates-io]
+cortex-m-funnel = { git = "https://github.com/conorpp/cortex-m-funnel" }
+# ufmt = { path = "../../ufmt" }
+ufmt = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty-enums" }
+ufmt-macros = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty-enums" }
+# ufmt-macros = { git = "https://github.com/nickray/ufmt/macros", branch = "nickray-derive-empty-enums" }
+# lpc55s6x-pac = { path = "../../lpc55-pacs" }
+heapless = { git = "https://github.com/nickray/heapless", branch = "nickray-udebug" }

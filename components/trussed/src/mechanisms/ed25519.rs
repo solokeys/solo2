@@ -173,10 +173,10 @@ Sign<R, S> for super::Ed25519
         -> Result<reply::Sign, Error>
     {
         // Not so nice, expands to
-        // `crypto-service::/home/nicolas/projects/solo-bee/components/crypto-service/src/mechanisms/ed25519.rs:151
+        // `trussed::/home/nicolas/projects/solo-bee/components/trussed/src/mechanisms/ed25519.rs:151
         // Ed25519::Sign`, i.e. VEERY long
-        // debug!("crypto-service::{}:{} Ed25519::Sign", file!(), line!()).ok();
-        debug!("crypto-service: Ed25519::Sign").ok();
+        // debug!("trussed::{}:{} Ed25519::Sign", file!(), line!()).ok();
+        debug!("trussed: Ed25519::Sign").ok();
         if let SignatureSerialization::Raw = request.format {
         } else {
             return Err(Error::InvalidSerializationFormat);

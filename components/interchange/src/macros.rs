@@ -38,6 +38,7 @@ macro_rules! interchange {
                 use core::mem::MaybeUninit;
                 use core::cell::UnsafeCell;
 
+                // TODO(nickray): This turns up in .data section, fix this.
                 static mut INTERCHANGE: Option<$Name> = None;
                 static STATE: AtomicU8 = AtomicU8::new($crate::State::Idle as u8);
 

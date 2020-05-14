@@ -6,10 +6,7 @@ use interchange::Requester;
 use crate::{
     constants::*,
     types::{
-        apdu::{
-            self,
-            ApduInterchange,
-        },
+        ApduInterchange,
         ClassRequest,
         packet::{
             self,

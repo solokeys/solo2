@@ -3,26 +3,27 @@ use hal::drivers::UsbBus;
 use littlefs2::{
     const_ram_storage,
 };
-use crypto_service::types::{LfsResult, LfsStorage};
-use crypto_service::store;
+use trussed::types::{LfsResult, LfsStorage};
+use trussed::store;
 use ctap_types::consts;
 use fido_authenticator::SilentAuthenticator;
 // use usbd_ctaphid::insecure::InsecureRamAuthenticator;
 
 pub type FlashStorage = hal::drivers::FlashGordon;
 
-pub type Authenticator = fido_authenticator::Authenticator<'static, CryptoSyscall, SilentAuthenticator>;
+pub type Authenticator = fido_authenticator::Authenticator<SilentAuthenticator>;
 
-pub type Piv = piv_card::App<CryptoSyscall>;
+pub type Piv = piv_card::App;
 
-#[derive(Default)]
-pub struct CryptoSyscall {}
+pub use trussed::client::TrussedSyscall;
+// #[derive(Default)]
+// pub struct CryptoSyscall {}
 
-impl crypto_service::pipe::Syscall for CryptoSyscall {
-    fn syscall(&mut self) {
-        rtfm::pend(hal::raw::Interrupt::OS_EVENT);
-    }
-}
+// impl trussed::pipe::Syscall for CryptoSyscall {
+//     fn syscall(&mut self) {
+//         rtfm::pend(hal::raw::Interrupt::OS_EVENT);
+//     }
+// }
 
 // 8KB of RAM
 const_ram_storage!(
@@ -53,7 +54,7 @@ store!(Store,
     Volatile: VolatileStorage
 );
 
-pub type CryptoService = crypto_service::Service<
+pub type CryptoService = trussed::Service<
     hal::peripherals::rng::Rng<hal::Enabled>,
     Store,
 >;
@@ -65,7 +66,7 @@ pub type EnabledUsbPeripheral = hal::peripherals::usbfs::EnabledUsbfsDevice;
 
 pub type CcidClass = usbd_ccid::Ccid<UsbBus<EnabledUsbPeripheral>>;
 // pub type CtapHidClass = usbd_ctaphid::CtapHid<'static, InsecureRamAuthenticator, UsbBus>;
-pub type CtapHidClass = usbd_ctaphid::CtapHid<'static, 'static, UsbBus<EnabledUsbPeripheral>>;
+pub type CtapHidClass = usbd_ctaphid::CtapHid<'static, UsbBus<EnabledUsbPeripheral>>;
 
 pub type SerialClass = usbd_serial::SerialPort<'static, UsbBus<EnabledUsbPeripheral>>;
 // pub type SerialClass = usbd_serial::CdcAcmClass<'static, UsbBus>;

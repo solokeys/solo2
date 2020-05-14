@@ -6,11 +6,15 @@ use heapless_bytes::Bytes;
 use crate::constants::*;
 
 
-pub mod apdu;
+// pub mod apdu;
 pub mod packet;
 pub mod tlv;
 
 pub type MessageBuffer = Bytes<MAX_MSG_LENGTH_TYPE>;
+
+interchange::interchange! {
+    ApduInterchange: (iso7816::Command, iso7816::Response)
+}
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ClassRequest {

@@ -8,7 +8,7 @@ use cortex_m_semihosting::hprintln;
 
 use funnel::info;
 
-use crypto_service::{
+use trussed::{
     Client as CryptoClient,
     pipe::Syscall as CryptoSyscall,
     types::{
@@ -158,20 +158,19 @@ fn cbor_serialize_message<T: serde::Serialize>(object: &T) -> core::result::Resu
     Ok(message)
 }
 
-pub struct Authenticator<'a, S, UP>
+pub struct Authenticator<UP>
 where
-    S: CryptoSyscall,
     UP: UserPresence,
 {
-    crypto: CryptoClient<S>,
-    rpc: AuthenticatorEndpoint<'a>,
+    crypto: CryptoClient,
+    rpc: AuthenticatorEndpoint,
     state: state::State,
     up: UP,
 }
 
-impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
+impl<UP: UserPresence> Authenticator<UP> {
 
-    pub fn new(crypto: CryptoClient<S>, rpc: AuthenticatorEndpoint<'a>, up: UP) -> Self {
+    pub fn new(crypto: CryptoClient, rpc: AuthenticatorEndpoint, up: UP) -> Self {
 
         let crypto = crypto;
         let state = state::State::new();
@@ -344,7 +343,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                 let public_key = syscall!(self.crypto.derive_p256_public_key(&private_key, StorageLocation::Volatile)).key;
                 let serialized_cose_key = syscall!(self.crypto.serialize_key(
                     Mechanism::P256, public_key.clone(), KeySerialization::EcdhEsHkdf256)).serialized_key;
-                let cose_key = crypto_service::cbor_deserialize(&serialized_cose_key).unwrap();
+                let cose_key = trussed::cbor_deserialize(&serialized_cose_key).unwrap();
 
                 // TODO: delete public key
                 syscall!(self.crypto.delete(public_key));
@@ -1229,12 +1228,12 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
     }
 
     // SECURITY considerations:
-    // - we should "shred" the key material in crypto-service, not just delete it
+    // - we should "shred" the key material in trussed, not just delete it
     // - how to handle aborted/failed resets
     //
     // RELIABILITY/COMPLEXITY considerations:
     // - if it were just us, we could reformat (with shredding overwrite) the entire FS
-    // - still, we could tell crypto-service to delete all our stuff,
+    // - still, we could tell trussed to delete all our stuff,
     //   send our response,
     //   and then trigger a reboot
     fn reset(&mut self) -> Result<()> {
@@ -1643,7 +1642,7 @@ impl<'a, S: CryptoSyscall, UP: UserPresence> Authenticator<'a, S, UP> {
                     }
 
                     SupportedAlgorithm::P256 => {
-                        // DO NOT prehash here, `crypto-service` does that
+                        // DO NOT prehash here, `trussed` does that
                         let der_signature = syscall!(self.crypto.sign_p256(&private_key, &commitment, SignatureSerialization::Asn1Der)).signature;
                         (der_signature.try_convert_into().map_err(|_| Error::Other)?, -7)
                     }

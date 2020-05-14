@@ -1,9 +1,8 @@
 use core::convert::{TryFrom, TryInto};
 use cortex_m_semihosting::hprintln;
 
-use crypto_service::{
+use trussed::{
     Client as CryptoClient,
-    pipe::Syscall as CryptoSyscall,
     types::{
         ObjectHandle,
     },
@@ -53,10 +52,10 @@ pub struct CredentialId(pub Bytes<MAX_CREDENTIAL_ID_LENGTH>);
 // TODO: how to determine necessary size?
 // pub type SerializedCredential = Bytes<consts::U512>;
 // pub type SerializedCredential = Bytes<consts::U256>;
-pub type SerializedCredential = crypto_service::types::Message;
+pub type SerializedCredential = trussed::types::Message;
 
 #[derive(Clone, Debug)]
-pub struct EncryptedSerializedCredential(pub crypto_service::api::reply::Encrypt);
+pub struct EncryptedSerializedCredential(pub trussed::api::reply::Encrypt);
 
 impl TryFrom<EncryptedSerializedCredential> for CredentialId {
     type Error = Error;
@@ -189,14 +188,12 @@ impl Credential {
         }
     }
 
-    pub fn id<'a, S>(
+    pub fn id<'a>(
         &self,
-        crypto: &mut CryptoClient<S>,
+        crypto: &mut CryptoClient,
         key_encryption_key: &ObjectHandle,
     )
         -> Result<CredentialId>
-    where
-        S: CryptoSyscall,
     {
         let serialized_credential = self.serialize()?;
         let message = &serialized_credential;
@@ -236,14 +233,13 @@ impl Credential {
         }
     }
 
-    pub fn try_from<S, UP>(
-        authnr: &mut Authenticator<'_, S, UP>,
+    pub fn try_from<UP>(
+        authnr: &mut Authenticator<UP>,
         rp_id_hash: &Bytes<consts::U32>,
         descriptor: &PublicKeyCredentialDescriptor,
     )
         -> Result<Self>
     where
-        S: CryptoSyscall,
         UP: crate::UserPresence
     {
         let encrypted_serialized = EncryptedSerializedCredential::try_from(
@@ -284,9 +280,9 @@ impl Credential {
 
     // pub fn store(&self) -> Result<gt
     //     let serialized_credential = self.serialize()?;
-    //     let mut prefix = crypto_service::types::ShortData::new();
+    //     let mut prefix = trussed::types::ShortData::new();
     //     prefix.extend_from_slice(b"rk").map_err(|_| Error::Other)?;
-    //     let prefix = Some(crypto_service::types::Letters::try_from(prefix).map_err(|_| Error::Other)?);
+    //     let prefix = Some(trussed::types::Letters::try_from(prefix).map_err(|_| Error::Other)?);
     //     let blob_id = syscall!(self.crypto.store_blob(
     //         prefix.clone(),
     //         // credential_id.0.clone(),

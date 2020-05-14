@@ -3,9 +3,9 @@
 // panic handler, depending on debug/release build
 // BUT: need to run in release anyway, to have USB work
 // #[cfg(debug_assertions)]
-use panic_semihosting as _;
+// use panic_semihosting as _;
 // #[cfg(not(debug_assertions))]
-// use panic_halt as _;
+use panic_halt as _;
 
 use core::convert::TryInto;
 
@@ -18,6 +18,8 @@ pub use lpcxpresso55 as board;
 
 #[cfg(feature = "board-prototype")]
 pub use prototype_bee as board;
+
+use c_stubs as _;
 
 // re-exports for convenience
 pub use board::hal;
@@ -148,11 +150,11 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
     let rng = hal.rng.enabled(&mut syscon);
 
-    static mut CRYPTO_REQUESTS: crypto_service::pipe::RequestPipe = heapless::spsc::Queue(heapless::i::Queue::u8());
-    static mut CRYPTO_REPLIES: crypto_service::pipe::ReplyPipe = heapless::spsc::Queue(heapless::i::Queue::u8());
+    static mut CRYPTO_REQUESTS: trussed::pipe::RequestPipe = heapless::spsc::Queue(heapless::i::Queue::u8());
+    static mut CRYPTO_REPLIES: trussed::pipe::ReplyPipe = heapless::spsc::Queue(heapless::i::Queue::u8());
     let mut client_id = littlefs2::path::PathBuf::new();
     client_id.push(b"fido2\0".try_into().unwrap());
-    let (service_endpoint, client_endpoint) = crypto_service::pipe::new_endpoints(
+    let (service_endpoint, client_endpoint) = trussed::pipe::new_endpoints(
         unsafe { &mut CRYPTO_REQUESTS },
         unsafe { &mut CRYPTO_REPLIES },
         client_id,
@@ -193,18 +195,18 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     ).unwrap();
 
     // // just testing, remove again obviously
-    // use crypto_service::store::Store as _;
+    // use trussed::store::Store as _;
     // let tmp_file = b"tmp.file\0".try_into().unwrap();
     // store.ifs().write(tmp_file, b"test data").unwrap();
     // let data: heapless::Vec<_, heapless::consts::U64> = store.ifs().read(tmp_file).unwrap();
     // cortex_m_semihosting::hprintln!("data: {:?}", &data).ok();
 
-    let mut crypto_service = crypto_service::service::Service::new(rng, store);
+    let mut trussed = trussed::service::Service::new(rng, store);
 
-    assert!(crypto_service.add_endpoint(service_endpoint).is_ok());
+    assert!(trussed.add_endpoint(service_endpoint).is_ok());
 
-    let syscaller = types::CryptoSyscall::default();
-    let crypto_client = crypto_service::client::Client::new(client_endpoint, syscaller);
+    let syscaller = trussed::client::TrussedSyscall::default();
+    let crypto_client = trussed::client::Client::new(client_endpoint, syscaller);
 
     static mut AUTHNR_REQUESTS: ctap_types::rpc::RequestPipe = heapless::spsc::Queue(heapless::i::Queue::u8());
     static mut AUTHNR_RESPONSES: ctap_types::rpc::ResponsePipe = heapless::spsc::Queue(heapless::i::Queue::u8());
@@ -227,22 +229,22 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
     // setup PIV
     let (requester, responder) =
-        usbd_ccid::types::apdu::ApduInterchange::claim()
+        usbd_ccid::types::ApduInterchange::claim()
         .expect("could not setup ApduInterchange");
 
-    static mut PIV_TRUSSED_REQUESTS: crypto_service::pipe::RequestPipe = heapless::spsc::Queue(heapless::i::Queue::u8());
-    static mut PIV_TRUSSED_REPLIES: crypto_service::pipe::ReplyPipe = heapless::spsc::Queue(heapless::i::Queue::u8());
+    static mut PIV_TRUSSED_REQUESTS: trussed::pipe::RequestPipe = heapless::spsc::Queue(heapless::i::Queue::u8());
+    static mut PIV_TRUSSED_REPLIES: trussed::pipe::ReplyPipe = heapless::spsc::Queue(heapless::i::Queue::u8());
     let mut client_id = littlefs2::path::PathBuf::new();
     client_id.push(b"piv\0".try_into().unwrap());
-    let (piv_service_endpoint, piv_client_endpoint) = crypto_service::pipe::new_endpoints(
+    let (piv_service_endpoint, piv_client_endpoint) = trussed::pipe::new_endpoints(
         unsafe { &mut PIV_TRUSSED_REQUESTS },
         unsafe { &mut PIV_TRUSSED_REPLIES },
         client_id,
     );
-    assert!(crypto_service.add_endpoint(piv_service_endpoint).is_ok());
+    assert!(trussed.add_endpoint(piv_service_endpoint).is_ok());
 
-    let syscaller = types::CryptoSyscall::default();
-    let piv_trussed = crypto_service::client::Client::new(
+    let syscaller = trussed::client::TrussedSyscall::default();
+    let piv_trussed = trussed::client::Client::new(
         piv_client_endpoint,
         syscaller,
     );
@@ -270,7 +272,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         .max_packet_size_0(64)
         .build();
 
-    (authnr, ccid, crypto_service, ctaphid, piv, rgb, serial, usbd)
+    (authnr, ccid, trussed, ctaphid, piv, rgb, serial, usbd)
 }
 
 //

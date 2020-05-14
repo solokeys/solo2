@@ -2,7 +2,7 @@
 //! internal flash, external flash, volatile/RAM.
 //!
 //! It covers two usecases:
-//! - cryptographic key storage (for crypto-service itself)
+//! - cryptographic key storage (for trussed itself)
 //! - somewhat namespaced key-value storage for client apps
 //!
 //! The cryptographic keys are stored with a random filename (which is used as

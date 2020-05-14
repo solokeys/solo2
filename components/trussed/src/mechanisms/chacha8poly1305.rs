@@ -170,7 +170,7 @@ WrapKey<R, S> for super::Chacha8Poly1305
     fn wrap_key(resources: &mut ServiceResources<R, S>, request: request::WrapKey)
         -> Result<reply::WrapKey, Error>
     {
-        debug!("crypto-service: Chacha8Poly1305::WrapKey").ok();
+        debug!("trussed: Chacha8Poly1305::WrapKey").ok();
 
         // TODO: need to check both secret and private keys
         let serialized_key = resources

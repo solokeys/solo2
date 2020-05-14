@@ -2,7 +2,7 @@ use core::cmp::Ordering;
 
 use cortex_m_semihosting::hprintln;
 
-use crypto_service::{
+use trussed::{
     Client as CryptoClient,
     pipe::Syscall,
     types::{
@@ -202,7 +202,7 @@ pub struct PersistentState {
     key_wrapping_key: Option<Key>,
     consecutive_pin_mismatches: u8,
     pin_hash: Option<[u8; 16]>,
-    // Ideally, we'd dogfood a "Monotonic Counter" from crypto-service.
+    // Ideally, we'd dogfood a "Monotonic Counter" from trussed.
     // TODO: Add per-key counters for resident keys.
     // counter: Option<Key>,
     timestamp: u32,
@@ -227,7 +227,7 @@ impl PersistentState {
             ).unwrap()
         ).map_err(|_| Error::Other)?.data;
 
-        let previous_state = crypto_service::cbor_deserialize(&data).map_err(|_| Error::Other);
+        let previous_state = trussed::cbor_deserialize(&data).map_err(|_| Error::Other);
         cortex_m_semihosting::hprintln!("previously persisted state:\n{:?}", &previous_state).ok();
         previous_state
     }

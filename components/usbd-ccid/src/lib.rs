@@ -9,6 +9,6 @@ pub mod der;
 pub mod pipe;
 pub mod types;
 
-pub mod piv;
+// pub mod piv;
 
 pub use class::Ccid;

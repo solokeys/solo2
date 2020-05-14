@@ -32,7 +32,8 @@ lpcxpresso55 = { path = "../boards/lpcxpresso55", optional = true }
 prototype-bee = { path = "../boards/prototype-bee", optional = true }
 
 # components
-crypto-service = { path = "../components/crypto-service" }
+c-stubs = { path = "../components/c-stubs" }
+trussed = { path = "../components/trussed" }
 ctap-types = { path = "../components/ctap-types" }
 fido-authenticator = { path = "../components/fido-authenticator" }
 interchange = { path = "../components/interchange" }
@@ -63,7 +64,7 @@ serial = []
 # log debug! level of app itself?
 debug-app = []
 # log debug! level of component libraries?
-debug-crypto-service = ["crypto-service/debug-logs"]
+debug-trussed = ["trussed/debug-logs"]
 debug-fido-authenticator = ["fido-authenticator/debug-logs"]
 
 # This would need funnel features to be additive, not subtractive
@@ -78,8 +79,8 @@ disable-debug = ["cortex-m-funnel/release_max_level_info"]
 log-serial = []
 log-semihosting = ["cortex-m-semihosting"]
 
-trace-crypto-service-ram = ["crypto-service/deep-semihosting-logs"]
-crypto-service-semihosting = ["crypto-service/semihosting"]
+trace-trussed-ram = ["trussed/deep-semihosting-logs"]
+trussed-semihosting = ["trussed/semihosting"]
 fido-authenticator-semihosting = ["fido-authenticator/semihosting"]
 semihost-raw-responses = ["usbd-ctaphid/semihost-responses"]
 
@@ -97,3 +98,12 @@ ufmt-macros = { git = "https://github.com/nickray/ufmt", branch = "nickray-deriv
 # ufmt-macros = { git = "https://github.com/nickray/ufmt/macros", branch = "nickray-derive-empty-enums" }
 # lpc55s6x-pac = { path = "../../lpc55-pacs" }
 heapless = { git = "https://github.com/nickray/heapless", branch = "nickray-udebug" }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+# codegen-units = 1
+incremental = false
+debug = true
+# lto = true

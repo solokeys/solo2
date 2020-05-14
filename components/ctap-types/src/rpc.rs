@@ -15,11 +15,11 @@ pub type ResponsePipe = Queue::<Result<Response, Error>, ResponsePipeLength, u8>
 
 /// during setup, allocate pipes (e.g. statically),
 /// then split with this function.
-pub fn new_endpoints<'a>(
-    request_pipe: &'a mut RequestPipe,
-    response_pipe: &'a mut ResponsePipe,
-) 
-    -> (TransportEndpoint<'a>, AuthenticatorEndpoint<'a>)
+pub fn new_endpoints(
+    request_pipe: &'static mut RequestPipe,
+    response_pipe: &'static mut ResponsePipe,
+)
+    -> (TransportEndpoint, AuthenticatorEndpoint)
 {
     let (req_send, req_recv) = request_pipe.split();
     let (resp_send, resp_recv) = response_pipe.split();
@@ -28,12 +28,12 @@ pub fn new_endpoints<'a>(
     (transport_endpoint, authenticator_endpoint)
 }
 
-pub struct AuthenticatorEndpoint<'a> {
-    pub recv: Consumer<'a, Request, RequestPipeLength, u8>,
-    pub send: Producer<'a, Result<Response, Error>, ResponsePipeLength, u8>,
+pub struct AuthenticatorEndpoint {
+    pub recv: Consumer<'static, Request, RequestPipeLength, u8>,
+    pub send: Producer<'static, Result<Response, Error>, ResponsePipeLength, u8>,
 }
 
-pub struct TransportEndpoint<'a> {
-    pub recv: Consumer<'a, Result<Response, Error>, ResponsePipeLength, u8>,
-    pub send: Producer<'a, Request, RequestPipeLength, u8>,
+pub struct TransportEndpoint {
+    pub recv: Consumer<'static, Result<Response, Error>, ResponsePipeLength, u8>,
+    pub send: Producer<'static, Request, RequestPipeLength, u8>,
 }
