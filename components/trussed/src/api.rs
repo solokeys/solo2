@@ -41,6 +41,7 @@ generate_enums! {
     SerializeKey: 10
     Sign: 11
     WriteFile: 12
+    UnsafeInjectKey: 31
     UnwrapKey: 13
     Verify: 14
     WrapKey: 15
@@ -207,6 +208,11 @@ pub mod request {
           - data: Message
           - user_attribute: Option<UserAttribute>
 
+        UnsafeInjectKey:
+          - mechanism: Mechanism        // -> implies key type
+          - raw_key: ShortData
+          - attributes: StorageAttributes
+
         UnwrapKey:
           - mechanism: Mechanism
           - wrapping_key: ObjectHandle
@@ -326,6 +332,9 @@ pub mod reply {
 
         Verify:
             - valid: bool
+
+        UnsafeInjectKey:
+            - key: ObjectHandle
 
         UnwrapKey:
             - key: Option<ObjectHandle>

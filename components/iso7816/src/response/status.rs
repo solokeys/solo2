@@ -33,7 +33,11 @@ pub enum Status {
 ////////////////////////////////
 
     // 64XX: persistent memory unchanged (cf. SW2)
+    UnspecifiedNonpersistentExecutionError,
+
     // 65XX: persistent memory changed (cf. SW2)
+    UnspecifiedPersistentExecutionError,
+
     // 66XX: security related issues
 
 ///////////////////////////////
@@ -82,6 +86,9 @@ impl Into<u16> for Status {
                 assert!(x < 16);
                 u16::from_be_bytes([0x63, 0xc0 + x])
             }
+
+            Self::UnspecifiedNonpersistentExecutionError => 0x6400,
+            Self::UnspecifiedPersistentExecutionError => 0x6500,
 
             Self::LogicalChannelNotSupported => 0x6881,
             Self::SecureMessagingNotSupported => 0x6882,

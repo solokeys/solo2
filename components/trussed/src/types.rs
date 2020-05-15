@@ -156,6 +156,7 @@ pub enum KeyKind {
     SymmetricKey16 = 5,
     SymmetricKey32 = 6, // or directly: SharedSecret32 —DeriveKey(HmacSha256)-> SymmetricKey32 —Encrypt(Aes256)-> ...
     Symmetric32Nonce12 = 7,
+    Symmetric24 = 8,
     // ThirtytwoBytes,
 }
 
@@ -379,8 +380,10 @@ pub enum Mechanism {
     HmacSha256,
     // P256XSha256,
     P256,
+    P256Prehashed,
     // clients can also do hashing by themselves
     Sha256,
+    Tdes,
     Trng,
     X25519,
 }

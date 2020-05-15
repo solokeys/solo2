@@ -38,6 +38,7 @@ rpc_trait! {
     Hash, hash,
     SerializeKey, serialize_key,
     Sign, sign,
+    UnsafeInjectKey, unsafe_inject_key,
     UnwrapKey, unwrap_key,
     Verify, verify,
     // TODO: can the default implementation be implemented in terms of Encrypt?
@@ -138,6 +139,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
 
                     Mechanism::Aes256Cbc => mechanisms::Aes256Cbc::decrypt(self, request),
                     Mechanism::Chacha8Poly1305 => mechanisms::Chacha8Poly1305::decrypt(self, request),
+                    Mechanism::Tdes => mechanisms::Tdes::decrypt(self, request),
                     _ => Err(Error::MechanismNotAvailable),
 
                 }.map(|reply| Reply::Decrypt(reply))
@@ -169,6 +171,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
 
                     Mechanism::Aes256Cbc => mechanisms::Aes256Cbc::encrypt(self, request),
                     Mechanism::Chacha8Poly1305 => mechanisms::Chacha8Poly1305::encrypt(self, request),
+                    Mechanism::Tdes => mechanisms::Tdes::encrypt(self, request),
                     _ => Err(Error::MechanismNotAvailable),
 
                 }.map(|reply| Reply::Encrypt(reply))
@@ -215,6 +218,13 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
                     Mechanism::P256 => mechanisms::P256::generate_key(self, request),
                     _ => Err(Error::MechanismNotAvailable),
                 }.map(|reply| Reply::GenerateKey(reply))
+            },
+
+            Request::UnsafeInjectKey(request) => {
+                match request.mechanism {
+                    Mechanism::Tdes => mechanisms::Tdes::unsafe_inject_key(self, request),
+                    _ => Err(Error::MechanismNotAvailable),
+                }.map(|reply| Reply::UnsafeInjectKey(reply))
             },
 
             Request::Hash(request) => {
@@ -657,6 +667,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
                     Mechanism::Ed25519 => mechanisms::Ed25519::sign(self, request),
                     Mechanism::HmacSha256 => mechanisms::HmacSha256::sign(self, request),
                     Mechanism::P256 => mechanisms::P256::sign(self, request),
+                    Mechanism::P256Prehashed => mechanisms::P256Prehashed::sign(self, request),
                     _ => Err(Error::MechanismNotAvailable),
 
                 }.map(|reply| Reply::Sign(reply))

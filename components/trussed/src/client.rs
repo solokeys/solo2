@@ -509,6 +509,30 @@ impl<Syscall: crate::pipe::Syscall> Client<Syscall> {
             nonce.and_then(|nonce| ShortData::try_from_slice(nonce).ok()))
     }
 
+    pub fn decrypt_tdes<'c>(&'c mut self, key: &ObjectHandle, message: &[u8])
+        -> core::result::Result<FutureResult<'c, reply::Decrypt>, ClientError>
+    {
+        self.decrypt(Mechanism::Tdes, key.clone(), message, &[], &[], &[])
+    }
+
+    pub fn encrypt_tdes<'c>(&'c mut self, key: &ObjectHandle, message: &[u8])
+        -> core::result::Result<FutureResult<'c, reply::Encrypt>, ClientError>
+    {
+        self.encrypt(Mechanism::Tdes, key.clone(), message, &[], None)
+    }
+
+    pub fn unsafe_inject_tdes_key<'c>(&'c mut self, raw_key: &[u8; 24], persistence: StorageLocation)
+        -> core::result::Result<FutureResult<'c, reply::UnsafeInjectKey>, ClientError>
+    {
+        self.raw.request(request::UnsafeInjectKey {
+            mechanism: Mechanism::Tdes,
+            raw_key: ShortData::try_from_slice(raw_key).unwrap(),
+            attributes: StorageAttributes::new().set_persistence(persistence),
+        })?;
+        self.syscall.syscall();
+        Ok(FutureResult::new(self))
+    }
+
     pub fn generate_chacha8poly1305_key<'c>(&'c mut self, persistence: StorageLocation)
         -> core::result::Result<FutureResult<'c, reply::GenerateKey>, ClientError>
     {

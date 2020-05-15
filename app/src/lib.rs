@@ -3,9 +3,9 @@
 // panic handler, depending on debug/release build
 // BUT: need to run in release anyway, to have USB work
 // #[cfg(debug_assertions)]
-// use panic_semihosting as _;
+use panic_semihosting as _;
 // #[cfg(not(debug_assertions))]
-use panic_halt as _;
+// use panic_halt as _;
 
 use core::convert::TryInto;
 

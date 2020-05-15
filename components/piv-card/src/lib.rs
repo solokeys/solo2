@@ -3,7 +3,7 @@
 pub mod constants;
 pub mod state;
 
-use core::convert::TryFrom;
+use core::convert::{TryFrom, TryInto};
 
 use cortex_m_semihosting::{dbg, hprintln};
 use heapless_bytes::consts;
@@ -30,6 +30,35 @@ pub struct App
     state: state::State,
     trussed: Trussed,
     // trussed: RefCell<Trussed>,
+}
+
+#[macro_use]
+macro_rules! block {
+    ($future_result:expr) => {{
+        // evaluate the expression
+        let mut future_result = $future_result;
+        loop {
+            match future_result.poll() {
+                core::task::Poll::Ready(result) => { break result; },
+                core::task::Poll::Pending => {},
+            }
+        }
+    }}
+}
+
+#[macro_use]
+macro_rules! syscall {
+    ($pre_future_result:expr) => {{
+        // evaluate the expression
+        let mut future_result = $pre_future_result.expect("no client error");
+        loop {
+            match future_result.poll() {
+                // core::task::Poll::Ready(result) => { break result.expect("no errors"); },
+                core::task::Poll::Ready(result) => { break result.unwrap(); },
+                core::task::Poll::Pending => {},
+            }
+        }
+    }}
 }
 
 impl App
@@ -67,7 +96,7 @@ impl App
     fn try_handle(&mut self, command: &Command) -> ResponseResult {
 
         // TEMP
-        dbg!(self.state.persistent(&mut self.trussed).timestamp(&mut self.trussed));
+        // dbg!(self.state.persistent(&mut self.trussed).timestamp(&mut self.trussed));
 
         // handle CLA
         // - command chaining not supported
@@ -89,16 +118,20 @@ impl App
             return Err(Status::LogicalChannelNotSupported);
         }
 
-        hprintln!("CLA = {:?}", &command.class()).ok();
-        hprintln!("INS = {:?}", &command.instruction()).ok();
-        hprintln!("P1 = {:X}, P2 = {:X}", command.p1, command.p2).ok();
-        hprintln!("extended = {:?}", command.extended).ok();
+        // hprintln!("CLA = {:?}", &command.class()).ok();
+        hprintln!("INS = {:?}, P1 = {:X}, P2 = {:X}",
+                  &command.instruction(),
+                  command.p1, command.p2,
+                  ).ok();
+        // hprintln!("extended = {:?}", command.extended).ok();
 
         // hprintln!("INS = {:?}" &command.instruction()).ok();
         match command.instruction() {
             Instruction::Select => self.select(command),
             Instruction::GetData => self.get_data(command),
             Instruction::Verify => self.verify(command),
+            Instruction::ChangeReferenceData => self.change_reference_data(command),
+            Instruction::GeneralAuthenticate => self.general_authenticate(command),
 
             Instruction::Unknown(ins) => {
 
@@ -114,40 +147,235 @@ impl App
         }
     }
 
-    fn yubico_piv_extension(&mut self, command: &Command, instruction: YubicoPivExtension) -> ResponseResult {
-        hprintln!("yubico extension: {:?}", &instruction).ok();
-        match instruction {
-            YubicoPivExtension::GetSerial => {
-                // make up a 4-byte serial
-                let data = ResponseData::try_from_slice(
-                    &[0x00, 0x52, 0xf7, 0x43]).unwrap();
-                Ok(data)
-            }
+    // SP 800-73-4, Part 2, Section 3.2.4
+    // https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-73-4.pdf#page=92
+    //
+    // General use:
+    // - PIV authn keys (9A, 9B, 9E):
+    //   - card/app to client (INTERNAL)
+    //   - entity to card (EXTERNAL)
+    //   - mutual card/external (MUTUAL)
+    // - Signature key (9C): => Appendix A.4
+    //   - signing data hashed off card
+    // - Management key (9D, retired 82-95): => Appendix A.5
+    //   - key establishment schems in SP 800-78 (ECDH)
+    // - PIV secure messaging key (04, alg 27, 2E)
+    //
+    // Data field tags:
+    // - 80 witness
+    // - 81 challenge
+    // - 82 response
+    // - 83 exponentiation
+    //
+    // Request for requests:
+    // - '80 00' returns '80 TL <encrypted random>'
+    // - '81 00' returns '81 TL <random>'
+    //
+    // Errors:
+    // - 9000, 61XX for success
+    // - 6982 security status
+    // - 6A80, 6A86 for data, P1/P2 issue
+    fn general_authenticate(&mut self, command: &Command) -> ResponseResult {
 
-            YubicoPivExtension::GetVersion => {
-                // make up a version, be >= 5.0.0
-                let data = ResponseData::try_from_slice(
-                    &[0x06, 0x06, 0x06]).unwrap();
-                Ok(data)
-            }
+        // For "SSH", we need implement A.4.2 in SP-800-73-4 Part 2, ECDSA signatures
+        //
+        // ins = 87 = general authenticate
+        // p1 = 11 = alg P256
+        // p2 = 9a = keyref "PIV authentication"
+        // 00 87 11 9A 26
+        //     # 7c = specified template
+        //     7C 24
+        //         # 82 = response, 00 = "request for request"
+        //         82 00
+        //         # 81 = challenge
+        //         81 20
+        //             # 32B nonce
+        //             95 AE 21 F9 5E 00 01 E6 23 27 F4 FD A5 05 F1 F5 B7 95 0F 11 75 BC 4D A2 06 B1 00 6B DA 90 C3 3A
+        //
+        // expected response: "7C L1 82 L2 SEQ(INT r, INT s)"
 
-            YubicoPivExtension::Attest => {
-                if command.p2 != 0x00 {
-                    return Err(Status::IncorrectP1OrP2Parameter);
-                }
+        let alg = command.p1;
+        let key = command.p2; // should we use Yubico's "slot" terminology? i don't like it
+        let mut data = command.data().as_ref();
 
-                let slot = command.p1;
-
-                if slot == 0x9a {
-                    let data = ResponseData::try_from_slice(YUBICO_ATTESTATION_CERTIFICATE_FOR_9A).unwrap();
-                    return Ok(data);
-                }
-
-                Err(Status::FunctionNotSupported)
-            }
-
-            _ => Err(Status::FunctionNotSupported),
+        // refine as we gain more capability
+        if data.len() < 2 {
+            return Err(Status::IncorrectDataParameter);
         }
+
+        let tag = data[0];
+        if tag != 0x7c {
+            return Err(Status::IncorrectDataParameter);
+        }
+
+        let len = data[1] as usize;
+        data = &data[2..];
+
+        // step 1 of piv-go/ykAuthenticate
+        // https://github.com/go-piv/piv-go/blob/d5ec95eb3bec9c20d60611fb77b7caeed7d886b6/piv/piv.go#L359-L384
+        if data.starts_with(&[0x80, 0x00]) {
+            // "request for witness"
+            // hint that this is an attempt to SetManagementKey
+            data = &data[2..];
+            return self.request_for_witness(command, data);
+        }
+
+        // step 2 of piv-go/ykAuthenticate
+        // https://github.com/go-piv/piv-go/blob/d5ec95eb3bec9c20d60611fb77b7caeed7d886b6/piv/piv.go#L415-L420
+        if data.starts_with(&[0x80, 0x08]) {
+            data = &data[2..];
+            return self.request_for_challenge(command, data);
+        }
+
+        // expect '82 00'
+        if !data.starts_with(&[0x82, 0x00]) {
+            return Err(Status::IncorrectDataParameter);
+        }
+        data = &data[2..];
+
+        // expect '81 20'
+        if !data.starts_with(&[0x81, 0x20]) {
+            return Err(Status::IncorrectDataParameter);
+        }
+        data = &data[2..];
+
+        if data.len() != 32 {
+            return Err(Status::IncorrectDataParameter);
+        }
+
+        let mechanism = trussed::types::Mechanism::P256Prehashed;
+        let commitment = data; // 32B of data
+        // dbg!(commitment);
+        let serialization = trussed::types::SignatureSerialization::Asn1Der;
+
+        let key_handle = trussed::types::ObjectHandle { object_id: trussed::types::UniqueId::try_from_hex(
+            b"1234567890abcdef1234567890abcdef"
+        ).unwrap() };
+        // dbg!(key_handle);
+
+        let signature = block!(self.trussed.sign(mechanism, key_handle, commitment, serialization).unwrap())
+            .map_err(|error| {
+                // NoSuchKey
+                dbg!(error);
+                Status::UnspecifiedNonpersistentExecutionError }
+            )?
+            .signature;
+        dbg!(signature);
+
+        dbg!("NOW WE SHOULD WORK");
+        Err(Status::FunctionNotSupported)
+    }
+
+    fn request_for_challenge(&mut self, command: &Command, remaining_data: &[u8]) -> ResponseResult {
+        // - data is of the form
+        //     00 87 03 9B 16 7C 14 80 08 99 6D 71 40 E7 05 DF 7F 81 08 6E EF 9C 02 00 69 73 E8
+        // - remaining data contains <decrypted challenge> 81 08 <encrypted counter challenge>
+        // - we must a) verify the decrypted challenge, b) decrypt the counter challenge
+
+        if command.p1 != 0x03 || command.p2 != 0x9b {
+            return Err(Status::IncorrectP1OrP2Parameter);
+        }
+
+        if remaining_data.len() != 8 + 2 + 8 {
+            return Err(Status::IncorrectDataParameter);
+        }
+
+        // A) verify decrypted challenge
+        let (response, data) = remaining_data.split_at(8);
+
+        use state::{AuthenticateManagement, CommandCache};
+        let our_challenge = match self.state.runtime.command_cache {
+            Some(CommandCache::AuthenticateManagement(AuthenticateManagement { challenge } ))
+                => challenge,
+            _ => { return Err(Status::InstructionNotSupportedOrInvalid); }
+        };
+        // no retries ;)
+        self.state.runtime.command_cache = None;
+
+        if &our_challenge != response {
+            dbg!(our_challenge, response);
+            return Err(Status::IncorrectDataParameter);
+        }
+
+        // TODO: actually store it and verify it
+        // self.state.runtime.app_security_status.management_verified = true;
+
+        // B) encrypt their challenge
+        let (header, challenge) = data.split_at(2);
+        if header != &[0x81, 0x08] {
+            return Err(Status::IncorrectDataParameter);
+        }
+
+        let key = self.state.persistent(&mut self.trussed).keys.management_key;
+
+        let encrypted_challenge = syscall!(self.trussed.encrypt_tdes(&key, &challenge)).ciphertext;
+
+        let mut der: Der<consts::U12> = Default::default();
+        // 7c = Dynamic Authentication Template tag
+        der.nested(0x7c, |der| {
+            // 82 = response
+            der.raw_tlv(0x82, &encrypted_challenge)
+        }).unwrap();
+
+        let response_data: ResponseData = der.try_convert_into().unwrap();
+        dbg!(&response_data);
+        return Ok(response_data);
+    }
+
+    fn request_for_witness(&mut self, command: &Command, remaining_data: &[u8]) -> ResponseResult {
+        // invariants: parsed data was '7C L1 80 00' + remaining_data
+
+        if command.p1 != 0x03 || command.p2 != 0x9b {
+            return Err(Status::IncorrectP1OrP2Parameter);
+        }
+
+        if !remaining_data.is_empty() {
+            return Err(Status::IncorrectDataParameter);
+        }
+
+        hprintln!("l").ok();
+        let key = self.state.persistent(&mut self.trussed).keys.management_key;
+        hprintln!("s").ok();
+
+        let challenge = syscall!(self.trussed.random_bytes(8)).bytes;
+        hprintln!("b").ok();
+        let command_cache = state::AuthenticateManagement { challenge: challenge[..].try_into().unwrap() };
+        hprintln!("a").ok();
+        self.state.runtime.command_cache = Some(state::CommandCache::AuthenticateManagement(command_cache));
+
+        hprintln!("e").ok();
+        let encrypted_challenge = block!(self.trussed.encrypt_tdes(&key, &challenge).unwrap()).unwrap().ciphertext;
+        hprintln!("f").ok();
+
+        let mut der: Der<consts::U12> = Default::default();
+        // 7c = Dynamic Authentication Template tag
+        der.nested(0x7c, |der| {
+            // 80 = witness
+            der.raw_tlv(0x80, &encrypted_challenge)
+        }).unwrap();
+
+        let response_data: ResponseData = der.try_convert_into().unwrap();
+        hprintln!("challenge data: {:?}", &response_data).ok();
+        return Ok(response_data);
+
+    }
+
+    fn change_reference_data(&mut self, command: &Command) -> ResponseResult {
+        // The way `piv-go` blocks PUK (which it needs to do because Yubikeys only
+        // allow their Reset if PIN+PUK are blocked) is that it sends "change PUK"
+        // with random (i.e. incorrect) PUK listed as both old and new PUK.
+        //
+        // 00 24 00 81 10
+        //       32 38 36 34 31 39 30 36 32 38 36 34 31 39 30 36
+        //
+        // For now, we don't support PUK, so we can just return "Blocked" directly
+        // if the key reference in P2 is '81' = PUK
+
+        if command.p2 == 0x81 {
+            return Err(Status::OperationBlocked);
+        }
+
+        Err(Status::FunctionNotSupported)
     }
 
     fn verify(&mut self, command: &Command) -> ResponseResult {
@@ -251,8 +479,13 @@ impl App
 
             // '5FC1 05' (351B)
             DataObjects::X509CertificateForPivAuthentication => {
-                let data = ResponseData::try_from_slice(YUBICO_PIV_AUTHENTICATION_CERTIFICATE).unwrap();
-                Ok(data)
+                // it seems like fetching this certificate is the way Filo's agent decides
+                // whether the key is "already setup":
+                // https://github.com/FiloSottile/yubikey-agent/blob/8781bc0082db5d35712a2244e3ab3086f415dd59/setup.go#L69-L70
+
+                Err(Status::NotFound)
+                // let data = ResponseData::try_from_slice(YUBICO_PIV_AUTHENTICATION_CERTIFICATE).unwrap();
+                // Ok(data)
             }
 
             // '5F FF01' (754B)
@@ -262,6 +495,82 @@ impl App
             }
 
             _ => return Err(Status::NotFound),
+        }
+    }
+
+    fn yubico_piv_extension(&mut self, command: &Command, instruction: YubicoPivExtension) -> ResponseResult {
+        hprintln!("yubico extension: {:?}", &instruction).ok();
+        match instruction {
+            YubicoPivExtension::GetSerial => {
+                // make up a 4-byte serial
+                let data = ResponseData::try_from_slice(
+                    &[0x00, 0x52, 0xf7, 0x43]).unwrap();
+                Ok(data)
+            }
+
+            YubicoPivExtension::GetVersion => {
+                // make up a version, be >= 5.0.0
+                let data = ResponseData::try_from_slice(
+                    &[0x06, 0x06, 0x06]).unwrap();
+                Ok(data)
+            }
+
+            YubicoPivExtension::Attest => {
+                if command.p2 != 0x00 {
+                    return Err(Status::IncorrectP1OrP2Parameter);
+                }
+
+                let slot = command.p1;
+
+                if slot == 0x9a {
+                    let data = ResponseData::try_from_slice(YUBICO_ATTESTATION_CERTIFICATE_FOR_9A).unwrap();
+                    return Ok(data);
+                }
+
+                Err(Status::FunctionNotSupported)
+            }
+
+            YubicoPivExtension::Reset => {
+                if command.p1 != 0x00 || command.p2 != 0x00 {
+                    return Err(Status::IncorrectP1OrP2Parameter);
+                }
+
+                // TODO: find out what all needs resetting :)
+                Ok(Default::default())
+            }
+
+            YubicoPivExtension::SetManagementKey => {
+                // cmd := apdu{
+                //     instruction: insSetMGMKey,
+                //     param1:      0xff,
+                //     param2:      0xff,
+                //     data: append([]byte{
+                //         alg3DES, keyCardManagement, 24,
+                //     }, key[:]...),
+                // }
+                // TODO check we are authenticated with old management key
+                if command.p1 != 0xff || (command.p2 != 0xff && command.p2 != 0xfe) {
+                    return Err(Status::IncorrectP1OrP2Parameter);
+                }
+
+                let data = &command.data();
+
+                // example:  03 9B 18
+                //      B0 20 7A 20 DC 39 0B 1B A5 56 CC EB 8D CE 7A 8A C8 23 E6 F5 0D 89 17 AA
+                if data.len() != 3 + 24 {
+                    return Err(Status::IncorrectDataParameter);
+                }
+                let (prefix, new_management_key) = data.split_at(3);
+                if prefix != &[0x03, 0x9b, 0x18] {
+                    return Err(Status::IncorrectDataParameter);
+                }
+                let new_management_key: [u8; 24] = new_management_key.try_into().unwrap();
+                self.state.persistent(&mut self.trussed).set_management_key(&mut self.trussed, &new_management_key);
+
+                Ok(Default::default())
+            }
+
+            _ => Err(Status::FunctionNotSupported),
         }
     }
 

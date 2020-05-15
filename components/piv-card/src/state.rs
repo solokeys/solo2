@@ -3,7 +3,7 @@ use core::convert::TryInto;
 use cortex_m_semihosting::dbg;
 use trussed::{
     Client as Trussed,
-    types::{PathBuf, StorageLocation},
+    types::{ObjectHandle, PathBuf, StorageLocation},
 };
 
 use crate::constants::*;
@@ -60,7 +60,7 @@ impl State {
         if self.persistent.is_none() {
             self.persistent = Some(match Persistent::load(trussed) {
                 Ok(previous_self) => previous_self,
-                Err(_) => Default::default(),
+                Err(_) => Persistent::initialize(trussed),
             });
         }
         self.persistent.as_mut().unwrap()
@@ -92,7 +92,6 @@ impl Pin {
         if unpadded_pin.len() < 6 {
             return Err(());
         }
-        dbg!(unpadded_pin);
         let valid_bytes = unpadded_pin.iter().all(|&b| b >= b'0' && b <= b'9');
         if valid_bytes {
             Ok(Self {
@@ -104,8 +103,9 @@ impl Pin {
     }
 }
 
-#[derive(Clone, Debug, Default, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct Persistent {
+    pub keys: Keys,
     consecutive_pin_mismatches: u8,
     // the PIN can be 6-8 digits, padded with 0xFF if <8
     // we just store all of them for now. this implies that
@@ -187,16 +187,38 @@ pub struct GlobalSecurityStatus {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct AppSecurityStatus {
     pub pin_verified: bool,
+    pub puk_verified: bool,
+    pub management_verified: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CommandCache {
     GetData(GetData),
+    AuthenticateManagement(AuthenticateManagement),
 }
 
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GetData {
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AuthenticateManagement {
+    pub challenge: [u8; 8],
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+pub struct Keys {
+    // 9a "PIV Authentication Key" (YK: PIV Authentication)
+    pub authentication_key: Option<ObjectHandle>,
+    // 9b "PIV Card Application Administration Key" (YK: PIV Management)
+    pub management_key: ObjectHandle,
+    // 9c "Digital Signature Key" (YK: Digital Signature)
+    pub signature_key: Option<ObjectHandle>,
+    // 9d "Key Management Key" (YK: Key Management)
+    pub encryption_key: Option<ObjectHandle>,
+    // 9e "Card Authentication Key" (YK: Card Authentication)
+    pub pinless_authentication_key: Option<ObjectHandle>,
 }
 
 impl Persistent {
@@ -213,6 +235,11 @@ impl Persistent {
 
     pub fn verify_pin(&self, other_pin: &Pin) -> bool {
         self.pin == *other_pin
+    }
+
+    pub fn set_pin(&mut self, trussed: &mut Trussed, new_pin: Pin) {
+        self.pin = new_pin;
+        self.save(trussed);
     }
 
     pub fn increment_consecutive_pin_mismatches(&mut self, trussed: &mut Trussed) -> u8 {
@@ -232,6 +259,39 @@ impl Persistent {
         }
 
         Self::PIN_RETRIES_DEFAULT
+    }
+
+    pub fn set_management_key(&mut self, trussed: &mut Trussed, management_key: &[u8; 24]) {
+        let new_management_key = syscall!(trussed.unsafe_inject_tdes_key(
+            management_key,
+            trussed::types::StorageLocation::Internal,
+        )).key;
+        let old_management_key = self.keys.management_key;
+        self.keys.management_key = new_management_key;
+        self.save(trussed);
+        syscall!(trussed.delete(old_management_key));
+    }
+
+    pub fn initialize(trussed: &mut Trussed) -> Self {
+        let management_key = syscall!(trussed.unsafe_inject_tdes_key(
+            YUBICO_DEFAULT_MANAGEMENT_KEY,
+            trussed::types::StorageLocation::Internal,
+        )).key;
+
+        let keys = Keys {
+            authentication_key: None,
+            management_key: management_key,
+            signature_key: None,
+            encryption_key: None,
+            pinless_authentication_key: None,
+        };
+
+        Self {
+            keys,
+            consecutive_pin_mismatches: 0,
+            pin: Pin::default(),
+            timestamp: 0,
+        }
     }
 
     pub fn load(trussed: &mut Trussed) -> Result<Self> {

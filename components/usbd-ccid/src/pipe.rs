@@ -243,7 +243,7 @@ where
         };
 
         let primed_packet = DataBlock::new(self.seq, chain, chunk);
-        hprintln!("priming {:?}", &primed_packet).ok();
+        // hprintln!("priming {:?}", &primed_packet).ok();
         self.outbox = Some(primed_packet.into());
 
         // fast-lane response attempt
@@ -342,7 +342,7 @@ where
                     // }
 
                     if needs_zlp {
-                        hprintln!("sending ZLP").ok();
+                        // hprintln!("sending ZLP").ok();
                         self.outbox = Some(RawPacket::new());
                     } else {
                         self.outbox = None;

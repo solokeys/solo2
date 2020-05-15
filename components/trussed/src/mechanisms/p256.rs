@@ -35,6 +35,7 @@ fn load_public_key<R: RngRead, S: Store>(resources: &mut ServiceResources<R, S>,
 fn load_keypair<R: RngRead, S: Store>(resources: &mut ServiceResources<R, S>, key_id: &UniqueId)
     -> Result<nisty::Keypair, Error> {
 
+    hprintln!("loading keypair").ok();
     let seed: [u8; 32] = resources
         .load_key(KeyType::Secret, Some(KeyKind::P256), &key_id)?
         .value.as_ref()
@@ -42,7 +43,7 @@ fn load_keypair<R: RngRead, S: Store>(resources: &mut ServiceResources<R, S>, ke
         .map_err(|_| Error::InternalError)?;
 
     let keypair = nisty::Keypair::generate_patiently(&seed);
-    // hprintln!("seed: {:?}", &seed).ok();
+    hprintln!("seed: {:?}", &seed).ok();
     Ok(keypair)
 }
 
@@ -286,6 +287,45 @@ Sign<R, S> for super::P256
         // cortex_m_semihosting::hprintln!("p256 sig = {:?}", &our_signature).ok();
 
         hprintln!("P256 signature:").ok();
+        // hprintln!("msg: {:?}", &request.message).ok();
+        // hprintln!("sig: {:?}", &our_signature).ok();
+
+        // return signature
+        Ok(reply::Sign { signature: our_signature })
+    }
+}
+
+#[cfg(feature = "p256")]
+impl<R: RngRead, S: Store>
+Sign<R, S> for super::P256Prehashed
+{
+    fn sign(resources: &mut ServiceResources<R, S>, request: request::Sign)
+        -> Result<reply::Sign, Error>
+    {
+        let key_id = request.key.object_id;
+
+        let keypair = load_keypair(resources, &key_id)?;
+
+        if request.message.len() != nisty::DIGEST_LENGTH {
+            return Err(Error::WrongMessageLength);
+        }
+        let message: [u8; 32] = request.message.as_ref().try_into().unwrap();
+
+        let native_signature = keypair.sign_prehashed(&message);
+
+        let our_signature = match request.format {
+            SignatureSerialization::Asn1Der => {
+                Signature::try_from_slice(&native_signature.to_asn1_der()).unwrap()
+            }
+            SignatureSerialization::Raw => {
+                Signature::try_from_slice(&native_signature.to_bytes()).unwrap()
+            }
+        };
+        // #[cfg(all(test, feature = "verbose-tests"))]
+        // println!("p256 sig = {:?}", &native_signature);
+        // cortex_m_semihosting::hprintln!("p256 sig = {:?}", &our_signature).ok();
+
+        hprintln!("P256 ph signature:").ok();
         // hprintln!("msg: {:?}", &request.message).ok();
         // hprintln!("sig: {:?}", &our_signature).ok();
 

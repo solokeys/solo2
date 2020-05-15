@@ -96,12 +96,12 @@ const APP: () = {
         }
     }
 
-    #[task(binds = USB0_NEEDCLK, resources = [ccid, ctaphid, serial, usbd])]
+    #[task(binds = USB0_NEEDCLK, resources = [ccid, ctaphid, serial, usbd], priority=5)]
     fn usb0_needclk(c: usb0_needclk::Context) {
         c.resources.usbd.poll(&mut [c.resources.ccid, c.resources.ctaphid, c.resources.serial]);
     }
 
-    #[task(binds = USB0, resources = [ccid, ctaphid, serial, usbd])]
+    #[task(binds = USB0, resources = [ccid, ctaphid, serial, usbd], priority=5)]
     fn usb0(c: usb0::Context) {
         let usb = unsafe { hal::raw::Peripherals::steal().USB0 } ;
         // cortex_m_semihosting::hprintln!("handler intstat = {:x}", usb0.intstat.read().bits()).ok();
@@ -139,7 +139,7 @@ const APP: () = {
 
     }
 
-    #[task(binds = OS_EVENT, resources = [crypto], priority = 7)]
+    #[task(binds = OS_EVENT, resources = [crypto], priority = 3)]
     fn os_event(c: os_event::Context) {
         c.resources.crypto.process();
     }
