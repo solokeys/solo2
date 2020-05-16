@@ -3,7 +3,7 @@ pub mod instruction;
 
 pub type Data = heapless_bytes::Bytes<crate::MAX_COMMAND_DATA>;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Command {
     class: class::Class,
     instruction: instruction::Instruction,
@@ -35,6 +35,10 @@ impl Command {
 
     pub fn data(&self) -> &Data {
         &self.data
+    }
+
+    pub fn data_mut(&mut self) -> &mut Data {
+        &mut self.data
     }
 
     pub fn expected(&self) -> usize {

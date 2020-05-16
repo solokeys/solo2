@@ -105,11 +105,37 @@ impl App
         // - only channel zero supported
         // - ensure INS known to us
 
-        let class = command.class();
+        let last_or_only = command.class().chain().last_or_only();
 
-        if !class.chain().last_or_only() {
-            return Err(Status::CommandChainingNotSupported);
-        }
+        // TODO: avoid owned copy?
+        let owned_command = match self.state.runtime.chained_command.as_mut() {
+            Some(command_so_far) => {
+                // TODO: make sure the prefix matches, e.g. '00 DB 3F FF'
+                command_so_far.data_mut().extend_from_slice(command.data()).unwrap();
+
+                if last_or_only {
+                    let total_command = command_so_far.clone();
+                    self.state.runtime.chained_command = None;
+                    total_command
+                } else {
+                    return Ok(Default::default());
+                }
+            }
+
+            None => {
+                if last_or_only {
+                    // Command
+                    command.clone()
+                } else {
+                    self.state.runtime.chained_command = Some(command.clone());
+                    return Ok(Default::default());
+                }
+            }
+        };
+
+        let command = &owned_command;
+
+        let class = command.class();
 
         if !class.secure_messaging().none() {
             return Err(Status::SecureMessagingNotSupported);
@@ -603,6 +629,7 @@ impl App
     }
 
     fn put_data(&mut self, command: &Command) -> ResponseResult {
+        hprintln!("PutData").ok();
         if command.p1 != 0x3f || command.p2 != 0xff {
             return Err(Status::IncorrectP1OrP2Parameter);
         }
@@ -632,7 +659,7 @@ impl App
                 Status::IncorrectDataParameter
         })?;
 
-        hprintln!("PutData in {:?}: {:?}", data_object, data).ok();
+        // hprintln!("PutData in {:?}: {:?}", data_object, data).ok();
 
         if data_object == &[0x5f, 0xc1, 0x09] {
             // "Printed Information", supposedly
@@ -651,6 +678,31 @@ impl App
             block!(self.trussed.write_file(
                 trussed::types::StorageLocation::Internal,
                 trussed::types::PathBuf::from(b"printed-information"),
+                trussed::types::Message::try_from_slice(data).unwrap(),
+                None,
+            ).unwrap()).map_err(|_| Status::NotEnoughMemory)?;
+
+            return Ok(Default::default());
+        }
+
+        if data_object == &[0x5f, 0xc1, 0x05] {
+            // "X.509 Certificate for PIV Authentication", supposedly
+            // IOW, the cert for "authentication key"
+            // Yubico uses this to store its "Metadata"
+            //
+            // 88 1A
+            //    89 18
+            //       # we see here the raw management key? amazing XD
+            //       AA 81 D5 48 A5 EC 26 01 60 BA 06 F6 EC 3B B6 05 00 2E B6 3D 4B 28 7F 86
+
+            // TODO: use smarter quota rule, actual data sent is 28B
+            if data.len() >= 512 {
+                return Err(Status::UnspecifiedCheckingError);
+            }
+
+            block!(self.trussed.write_file(
+                trussed::types::StorageLocation::Internal,
+                trussed::types::PathBuf::from(b"authentication-key.x5c"),
                 trussed::types::Message::try_from_slice(data).unwrap(),
                 None,
             ).unwrap()).map_err(|_| Status::NotEnoughMemory)?;
@@ -705,10 +757,12 @@ impl App
                 // it seems like fetching this certificate is the way Filo's agent decides
                 // whether the key is "already setup":
                 // https://github.com/FiloSottile/yubikey-agent/blob/8781bc0082db5d35712a2244e3ab3086f415dd59/setup.go#L69-L70
+                let data = block!(self.trussed.read_file(
+                    trussed::types::StorageLocation::Internal,
+                    trussed::types::PathBuf::from(b"authentication-key.x5c"),
+                ).unwrap()).map_err(|_| Status::NotFound)?.data;
 
-                Err(Status::NotFound)
-                // let data = ResponseData::try_from_slice(YUBICO_PIV_AUTHENTICATION_CERTIFICATE).unwrap();
-                // Ok(data)
+                Ok(data.try_convert_into().unwrap())
             }
 
             // '5F FF01' (754B)
