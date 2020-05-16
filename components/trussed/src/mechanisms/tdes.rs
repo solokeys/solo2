@@ -3,7 +3,7 @@
 //! We need to support 3DES to provide compatibility with Yubico's braindead
 //! implementation of key management...
 
-use cortex_m_semihosting::{dbg, hprintln};
+// use cortex_m_semihosting::{dbg, hprintln};
 
 use core::convert::TryInto;
 // needed to even get ::new() from des...

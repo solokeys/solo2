@@ -19,6 +19,7 @@ use trussed::Client as Trussed;
 use usbd_ccid::{
     // constants::*,
     der::Der,
+    derp,
     types::ApduInterchange,
 };
 
@@ -129,9 +130,11 @@ impl App
         match command.instruction() {
             Instruction::Select => self.select(command),
             Instruction::GetData => self.get_data(command),
+            Instruction::PutData => self.put_data(command),
             Instruction::Verify => self.verify(command),
             Instruction::ChangeReferenceData => self.change_reference_data(command),
             Instruction::GeneralAuthenticate => self.general_authenticate(command),
+            Instruction::GenerateAsymmetricKeyPair => self.generate_asymmetric_keypair(command),
 
             Instruction::Unknown(ins) => {
 
@@ -297,8 +300,7 @@ impl App
             return Err(Status::IncorrectDataParameter);
         }
 
-        // TODO: actually store it and verify it
-        // self.state.runtime.app_security_status.management_verified = true;
+        self.state.runtime.app_security_status.management_verified = true;
 
         // B) encrypt their challenge
         let (header, challenge) = data.split_at(2);
@@ -318,7 +320,7 @@ impl App
         }).unwrap();
 
         let response_data: ResponseData = der.try_convert_into().unwrap();
-        dbg!(&response_data);
+        // dbg!(&response_data);
         return Ok(response_data);
     }
 
@@ -333,19 +335,13 @@ impl App
             return Err(Status::IncorrectDataParameter);
         }
 
-        hprintln!("l").ok();
         let key = self.state.persistent(&mut self.trussed).keys.management_key;
-        hprintln!("s").ok();
 
         let challenge = syscall!(self.trussed.random_bytes(8)).bytes;
-        hprintln!("b").ok();
         let command_cache = state::AuthenticateManagement { challenge: challenge[..].try_into().unwrap() };
-        hprintln!("a").ok();
         self.state.runtime.command_cache = Some(state::CommandCache::AuthenticateManagement(command_cache));
 
-        hprintln!("e").ok();
         let encrypted_challenge = block!(self.trussed.encrypt_tdes(&key, &challenge).unwrap()).unwrap().ciphertext;
-        hprintln!("f").ok();
 
         let mut der: Der<consts::U12> = Default::default();
         // 7c = Dynamic Authentication Template tag
@@ -355,7 +351,7 @@ impl App
         }).unwrap();
 
         let response_data: ResponseData = der.try_convert_into().unwrap();
-        hprintln!("challenge data: {:?}", &response_data).ok();
+        // hprintln!("challenge data: {:?}", &response_data).ok();
         return Ok(response_data);
 
     }
@@ -371,11 +367,80 @@ impl App
         // For now, we don't support PUK, so we can just return "Blocked" directly
         // if the key reference in P2 is '81' = PUK
 
-        if command.p2 == 0x81 {
-            return Err(Status::OperationBlocked);
+        // application PIN
+        if command.p2 == 0x80 {
+            let remaining_retries = self.state.persistent(&mut self.trussed).remaining_pin_retries();
+
+            if remaining_retries == 0 {
+                return Err(Status::OperationBlocked);
+            }
+
+            if command.data().len() != 16 {
+                return Err(Status::IncorrectDataParameter);
+            }
+
+            let (old_pin, new_pin) = command.data().split_at(8);
+
+            let old_pin = match state::Pin::try_new(old_pin) {
+                Ok(pin) => pin,
+                _ => return Err(Status::IncorrectDataParameter),
+            };
+
+            let new_pin = match state::Pin::try_new(new_pin) {
+                Ok(pin) => pin,
+                _ => return Err(Status::IncorrectDataParameter),
+            };
+
+            if !self.state.persistent(&mut self.trussed).verify_pin(&old_pin) {
+                let remaining = self.state.persistent(&mut self.trussed).increment_consecutive_pin_mismatches(&mut self.trussed);
+                self.state.runtime.app_security_status.pin_verified = false;
+                return Err(Status::RemainingRetries(remaining));
+            }
+
+            self.state.persistent(&mut self.trussed).reset_consecutive_pin_mismatches(&mut self.trussed);
+            self.state.persistent(&mut self.trussed).set_pin(&mut self.trussed, new_pin);
+            self.state.runtime.app_security_status.pin_verified = true;
+            return Ok(Default::default());
         }
 
-        Err(Status::FunctionNotSupported)
+        // PUK
+        if command.p2 == 0x81 {
+            let remaining_retries = self.state.persistent(&mut self.trussed).remaining_puk_retries();
+
+            if remaining_retries == 0 {
+                return Err(Status::OperationBlocked);
+            }
+
+            if command.data().len() != 16 {
+                return Err(Status::IncorrectDataParameter);
+            }
+
+            let (old_puk, new_puk) = command.data().split_at(8);
+
+            let old_puk = match state::Pin::try_new(old_puk) {
+                Ok(puk) => puk,
+                _ => return Err(Status::IncorrectDataParameter),
+            };
+
+            let new_puk = match state::Pin::try_new(new_puk) {
+                Ok(puk) => puk,
+                _ => return Err(Status::IncorrectDataParameter),
+            };
+
+            if !self.state.persistent(&mut self.trussed).verify_puk(&old_puk) {
+                let remaining = self.state.persistent(&mut self.trussed).increment_consecutive_puk_mismatches(&mut self.trussed);
+                self.state.runtime.app_security_status.puk_verified = false;
+                return Err(Status::RemainingRetries(remaining));
+            }
+
+            self.state.persistent(&mut self.trussed).reset_consecutive_puk_mismatches(&mut self.trussed);
+            self.state.persistent(&mut self.trussed).set_puk(&mut self.trussed, new_puk);
+            self.state.runtime.app_security_status.puk_verified = true;
+            return Ok(Default::default());
+        }
+
+
+        Err(Status::KeyReferenceNotFound)
     }
 
     fn verify(&mut self, command: &Command) -> ResponseResult {
@@ -434,8 +499,166 @@ impl App
 
         } else {
             let remaining = self.state.persistent(&mut self.trussed).increment_consecutive_pin_mismatches(&mut self.trussed);
+            self.state.runtime.app_security_status.pin_verified = false;
             Err(Status::RemainingRetries(remaining))
         }
+    }
+
+    fn generate_asymmetric_keypair(&mut self, command: &Command) -> ResponseResult {
+        if !self.state.runtime.app_security_status.management_verified {
+            return Err(Status::SecurityStatusNotSatisfied);
+        }
+
+        if command.p1 != 0x00 {
+            return Err(Status::IncorrectP1OrP2Parameter);
+        }
+
+        if command.p2 != 0x9a {
+            // TODO: make more general
+            return Err(Status::FunctionNotSupported);
+        }
+
+        // example: 00 47 00 9A 0B
+        //   AC 09
+        //      # P256
+        //      80 01 11
+        //      # 0xAA = Yubico extension (of course...), PinPolicy, 0x2 =
+        //      AA 01 02
+        //      # 0xAB = Yubico extension (of course...), TouchPolicy, 0x2 =
+        //      AB 01 02
+        //
+        // var touchPolicyMap = map[TouchPolicy]byte{
+        //     TouchPolicyNever:  0x01,
+        //     TouchPolicyAlways: 0x02,
+        //     TouchPolicyCached: 0x03,
+        // }
+
+        // var pinPolicyMap = map[PINPolicy]byte{
+        //     PINPolicyNever:  0x01,
+        //     PINPolicyOnce:   0x02,
+        //     PINPolicyAlways: 0x03,
+        // }
+
+        // TODO: iterate on this, don't expect tags..
+        let input = derp::Input::from(&command.data());
+        // let (mechanism, parameter) = input.read_all(derp::Error::Read, |input| {
+        let (mechanism, pin_policy, touch_policy) = input.read_all(derp::Error::Read, |input| {
+            derp::nested(input, 0xac, |input| {
+                let mechanism = derp::expect_tag_and_get_value(input, 0x80)?;
+                // let parameter = derp::expect_tag_and_get_value(input, 0x81)?;
+                let pin_policy = derp::expect_tag_and_get_value(input, 0xaa)?;
+                let touch_policy = derp::expect_tag_and_get_value(input, 0xab)?;
+                // Ok((mechanism.as_slice_less_safe(), parameter.as_slice_less_safe()))
+                Ok((
+                    mechanism.as_slice_less_safe(),
+                    pin_policy.as_slice_less_safe(),
+                    touch_policy.as_slice_less_safe(),
+                ))
+            })
+        }).map_err(|e| {
+                hprintln!("error parsing GenerateAsymmetricKeypair: {:?}", &e).ok();
+                Status::IncorrectDataParameter
+        })?;
+
+        if mechanism != &[0x11] {
+            return Err(Status::InstructionNotSupportedOrInvalid);
+        }
+
+        // ble policy
+
+        if let Some(key) = self.state.persistent(&mut self.trussed).keys.authentication_key {
+            syscall!(self.trussed.delete(key));
+        }
+
+        let key = syscall!(self.trussed.generate_p256_private_key(
+            trussed::types::StorageLocation::Internal,
+        )).key;
+        self.state.persistent(&mut self.trussed).keys.authentication_key = Some(key);
+        self.state.persistent(&mut self.trussed).save(&mut self.trussed);
+
+        hprintln!("a").ok();
+        let public_key = syscall!(self.trussed.derive_p256_public_key(
+            &key,
+            trussed::types::StorageLocation::Volatile,
+        )).key;
+        hprintln!("b").ok();
+
+        let serialized_public_key = syscall!(self.trussed.serialize_key(
+            trussed::types::Mechanism::P256,
+            public_key.clone(),
+            trussed::types::KeySerialization::Raw,
+        )).serialized_key;
+        hprintln!("c").ok();
+
+        let l2 = 65;
+        let l1 = l2 + 2;
+        let mut data = ResponseData::try_from_slice(&[0x7f, 0x49, l1, 0x86, l2]).unwrap();
+        hprintln!("d").ok();
+        data.extend_from_slice(&[0x04]).unwrap();
+        hprintln!("e").ok();
+        data.extend_from_slice(&serialized_public_key).unwrap();
+        hprintln!("f").ok();
+
+        Ok(data)
+    }
+
+    fn put_data(&mut self, command: &Command) -> ResponseResult {
+        if command.p1 != 0x3f || command.p2 != 0xff {
+            return Err(Status::IncorrectP1OrP2Parameter);
+        }
+
+        // if !self.state.runtime.app_security_status.management_verified {
+        //     return Err(Status::SecurityStatusNotSatisfied);
+        // }
+
+        // # PutData
+        // 00 DB 3F FF 23
+        //    # data object: 5FC109
+        //    5C 03 5F C1 09
+        //    # data:
+        //    53 1C
+        //       # actual data
+        //       88 1A 89 18 AA 81 D5 48 A5 EC 26 01 60 BA 06 F6 EC 3B B6 05 00 2E B6 3D 4B 28 7F 86
+        //
+
+        let input = derp::Input::from(&command.data());
+        let (data_object, data) = input.read_all(derp::Error::Read, |input| {
+            let data_object = derp::expect_tag_and_get_value(input, 0x5c)?;
+            let data = derp::expect_tag_and_get_value(input, 0x53)?;
+            Ok((data_object.as_slice_less_safe(), data.as_slice_less_safe()))
+        // }).unwrap();
+        }).map_err(|e| {
+                hprintln!("error parsing PutData: {:?}", &e).ok();
+                Status::IncorrectDataParameter
+        })?;
+
+        hprintln!("PutData in {:?}: {:?}", data_object, data).ok();
+
+        if data_object == &[0x5f, 0xc1, 0x09] {
+            // "Printed Information", supposedly
+            // Yubico uses this to store its "Metadata"
+            //
+            // 88 1A
+            //    89 18
+            //       # we see here the raw management key? amazing XD
+            //       AA 81 D5 48 A5 EC 26 01 60 BA 06 F6 EC 3B B6 05 00 2E B6 3D 4B 28 7F 86
+
+            // TODO: use smarter quota rule, actual data sent is 28B
+            if data.len() >= 512 {
+                return Err(Status::UnspecifiedCheckingError);
+            }
+
+            block!(self.trussed.write_file(
+                trussed::types::StorageLocation::Internal,
+                trussed::types::PathBuf::from(b"printed-information"),
+                trussed::types::Message::try_from_slice(data).unwrap(),
+                None,
+            ).unwrap()).map_err(|_| Status::NotEnoughMemory)?;
+
+            return Ok(Default::default());
+        }
+
+        Err(Status::IncorrectDataParameter)
     }
 
     fn get_data(&mut self, command: &Command) -> ResponseResult {
@@ -536,6 +759,13 @@ impl App
                 }
 
                 // TODO: find out what all needs resetting :)
+                self.state.persistent(&mut self.trussed).reset_pin(&mut self.trussed);
+                self.state.persistent(&mut self.trussed).reset_puk(&mut self.trussed);
+                self.state.persistent(&mut self.trussed).reset_management_key(&mut self.trussed);
+                self.state.runtime.app_security_status.pin_verified = false;
+                self.state.runtime.app_security_status.puk_verified = false;
+                self.state.runtime.app_security_status.management_verified = false;
+
                 Ok(Default::default())
             }
 
@@ -609,147 +839,3 @@ impl App
         Err(Status::NotFound)
     }
 }
-
-
-//pub fn fake_piv(command: &mut MessageBuffer) {
-//        // This is what we get from `piv-agent`
-//        // raw APDU: 00 87 11 9A 26 7C 24 82 00 81 20 E6 57 78 FC E5 C5 D8 03 4F EA C9 17 27 D5 8A 40 54 5F BC 05 BC 6A CD 37 85 3B F5 E4 E2 A9 33 F2
-//        //
-//        // APDU: 00 87 11 9A 26
-//        //      7C 24
-//        //          // 82 = response, empty = "request for request"
-//        //          82 00
-//        //          // 81 = challenge, length 0x20 = 32 bytes
-//        //          81 20
-//        //              E6 57 78 FC E5 C5 D8 03 4F EA C9 17 27 D5 8A 40 54 5F BC 05 BC 6A CD 37 85 3B F5 E4 E2 A9 33 F2
-//        //
-//        // reponse length = 76 bytes
-//        // SW: 7C 4A 82 48 30 46 02 21 00 C2 E4 D8 7E B4 4A F1 A7 71 DC F8 69 5C F5 CA BD 9A 71 C9 4F 16 FB B6 FF FF CC E2 1E D2 49 BE C8 02 21 00 BE 63 44 F3 33 CD D9 4E 1C CB 52 43 EB 1D 78 11 0E A2 AB E0 5A 3E A3 93 58 6C F0 82 28 E1 A2 B1
-//        //      90 00
-//        // GENERAL AUTHENTICATE => {
-//        (0x00, 0x87, 0x11, 0x9a) => {
-//            // P1 = alg = 0x11 = P256
-//            // P2 = key = 0x9a = authentication (w/PIN)
-
-//        }
-//        // VERIFY => {
-//        (0x00, 0x20, 0x00, 0x80) => {
-//            // P2 = 0x80 = PIV  card application PIN
-
-//            // APDU: 00 20 00 80 00
-//            // SW: 63 C3
-//            // APDU: 00 20 00 80 00
-//            // SW: 63 C3
-//            // APDU: 00 20 00 80 08 31 32 33 34 FF FF FF FF
-//            // SW: 63 C2
-//            match apdu.data().len() {
-//                // case of missing data: used to read out retries
-//                // - '63 CX' => X retries
-//                // - '90 00' => no PIN set
-//                0 => {
-//                    command.clear();
-//                    // 0x63 = verification failed, Cx => x = remaining tries
-//                    command.extend_from_slice(&[0x63, 0xC3]).unwrap();
-//                }
-//                // shorter PINs are padded
-//                8 => {
-//                    // PIN "1234"
-//                    if apdu.data() == [0x31, 0x32, 0x33, 0x34, 0xff, 0xff, 0xff, 0xff] {
-//                        command.clear();
-//                        command.extend_from_slice(OK).unwrap();
-//                    } else {
-//                        command.clear();
-//                        // TODO: decrement PIN retries (here we "set" it to 2)
-//                        command.extend_from_slice(&[0x63, 0xc2]).unwrap();
-//                        // if retries = 0, then return '69 83'
-//                    }
-//                }
-//                _ => {
-//                    command.clear();
-//                    // "incorrect parameter in command data field"
-//                    command.extend_from_slice(&[0x6a, 0x80]).unwrap();
-//                }
-//            }
-//        }
-//        // 00000156 APDU: 00 A4 04 00 05 A0 00 00 03 08
-//        // 00001032 SW: 61 11 4F 06 00 00 10 00 01 00 79 07 4F 05 A0 00 00 03 08 90 00
-//        //
-//        // 00009280 APDU: 00 A4 04 00 05 A0 00 00 03 08
-//        // 00001095 SW: 61 11 4F 06 00 00 10 00 01 00 79 07 4F 05 A0 00 00 03 08 90 00
-//        //
-//        // 00000117 APDU: 00 FD 00 00 00
-//        // 00001057 SW: 04 03 04 90 00
-//        //
-//        // 00000152 APDU: 00 A4 04 00 08 A0 00 00 05 27 20 01 01
-//        // 00001154 SW: 04 03 04 01 05 00 05 0F 00 00 90 00
-//        //
-//        // 00000112 APDU: 00 01 10 00 00
-//        // 00001010 SW: 00 52 F7 43 90 00
-//        //
-//        // 00000102 APDU: 00 A4 04 00 05 A0 00 00 03 08
-//        // 00001426 SW: 61 11 4F 06 00 00 10 00 01 00 79 07 4F 05 A0 00 00 03 08 90 00
-//        _ => {
-//            panic!("unhandled APDU (0x{:x}, 0x{:x}, 0x{:x}, 0x{:x}, {}), !",
-//                cla, ins, p1, p2, le);
-//        }
-//    }
-//}
-
-// calling `yubikey readers`, response from NEO OTP+U2F+CCID
-// 05808693 APDU: 00 A4 04 00 05 A0 00 00 03 08
-// 00011103 SW: 61 11 4F 06 00 00 10 00 01 00 79 07 4F 05 A0 00 00 03 08 90 00
-// 00000145 APDU: 00 FD 00 00 00
-// 00005749 SW: 01 00 04 90 00
-// 00000131 APDU: 00 A4 04 00 08 A0 00 00 05 27 20 01 01
-// 00013940 SW: 03 04 01 01 85 07 06 0F 00 00 90 00
-// 00008731 APDU: 00 01 10 00 00
-// 00008949 SW: 00 60 E8 4B 90 00
-// 00000090 APDU: 00 A4 04 00 05 A0 00 00 03 08
-// 00008148 SW: 61 11 4F 06 00 00 10 00 01 00 79 07 4F 05 A0 00 00 03 08 90 00
-// 00039651 APDU: 00 A4 04 00 05 A0 00 00 03 08
-// 00008103 SW: 61 11 4F 06 00 00 10 00 01 00 79 07 4F 05 A0 00 00 03 08 90 00
-// 00000086 APDU: 00 FD 00 00 00
-// 00006044 SW: 01 00 04 90 00
-// 00000101 APDU: 00 A4 04 00 08 A0 00 00 05 27 20 01 01
-// 00009155 SW: 03 04 01 01 85 07 06 0F 00 00 90 00
-// 00000228 APDU: 00 01 10 00 00
-// 00005829 SW: 00 60 E8 4B 90 00
-// 00000094 APDU: 00 A4 04 00 05 A0 00 00 03 08
-// 00008128 SW: 61 11 4F 06 00 00 10 00 01 00 79 07 4F 05 A0 00 00 03 08 90 00
-//
-//
-// 00003001 readerfactory.c:376:RFAddReader() Yubico YubiKey FIDO+CCID init failed.
-//
-// 03510021 APDU: 00 A4 04 00 05 A0 00 00 03 08
-// 00001106 SW: 61 11 4F 06 00 00 10 00 01 00 79 07 4F 05 A0 00 00 03 08 90 00
-// --> 90 00 = OK
-//
-// 00000104 APDU: 00 FD 00 00 00
-// 00000949 SW: 04 03 04 90 00
-// --> ?!?! what is this `FD` command?!
-//
-// 00000141 APDU: 00 A4 04 00 08 A0 00 00 05 27 20 01 01
-// 00001183 SW: 04 03 04 01 05 00 05 0F 00 00 90 00
-//
-// 00000489 APDU: 00 01 10 00 00
-// 00000950 SW: 00 52 F7 43 90 00
-// --> ?!?! what is this `01` command?!
-//
-// 00000156 APDU: 00 A4 04 00 05 A0 00 00 03 08
-// 00001032 SW: 61 11 4F 06 00 00 10 00 01 00 79 07 4F 05 A0 00 00 03 08 90 00
-//
-// 00009280 APDU: 00 A4 04 00 05 A0 00 00 03 08
-// 00001095 SW: 61 11 4F 06 00 00 10 00 01 00 79 07 4F 05 A0 00 00 03 08 90 00
-//
-// 00000117 APDU: 00 FD 00 00 00
-// 00001057 SW: 04 03 04 90 00
-//
-// 00000152 APDU: 00 A4 04 00 08 A0 00 00 05 27 20 01 01
-// 00001154 SW: 04 03 04 01 05 00 05 0F 00 00 90 00
-//
-// 00000112 APDU: 00 01 10 00 00
-// 00001010 SW: 00 52 F7 43 90 00
-//
-// 00000102 APDU: 00 A4 04 00 05 A0 00 00 03 08
-// 00001426 SW: 61 11 4F 06 00 00 10 00 01 00 79 07 4F 05 A0 00 00 03 08 90 00
-

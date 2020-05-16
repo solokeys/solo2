@@ -1,3 +1,5 @@
+use cortex_m_semihosting::hprintln;
+
 use core::convert::TryInto;
 
 use cortex_m_semihosting::dbg;
@@ -72,12 +74,14 @@ pub struct Pin {
     padded_pin: [u8; 8]
 }
 
-impl Default for Pin {
-    /// Default is "202020"
-    fn default() -> Self {
-        Self::try_new(b"202020\xff\xff").unwrap()
-    }
-}
+// impl Default for Pin {
+//     /// Default is "202020"
+//     /// But right now we have to use "123456" cause.. Filo
+//     fn default() -> Self {
+//         // Self::try_new(b"202020\xff\xff").unwrap()
+//         Self::try_new(b"123456\xff\xff").unwrap()
+//     }
+// }
 
 impl Pin {
     pub fn try_new(padded_pin: &[u8]) -> Result<Self> {
@@ -107,10 +111,13 @@ impl Pin {
 pub struct Persistent {
     pub keys: Keys,
     consecutive_pin_mismatches: u8,
+    consecutive_puk_mismatches: u8,
     // the PIN can be 6-8 digits, padded with 0xFF if <8
-    // we just store all of them for now. this implies that
-    // the default pin is "00000000"
+    // we just store all of them for now.
     pin: Pin,
+    // the PUK should be 8 digits, but it seems Yubico allows 6-8
+    // like for PIN
+    puk: Pin,
     // pin_hash: Option<[u8; 16]>,
     // Ideally, we'd dogfood a "Monotonic Counter" from `trussed`.
     timestamp: u32,
@@ -223,7 +230,11 @@ pub struct Keys {
 
 impl Persistent {
     pub const PIN_RETRIES_DEFAULT: u8 = 3;
+    // hmm...!
+    pub const PUK_RETRIES_DEFAULT: u8 = 5;
     const FILENAME: &'static [u8] = b"persistent-state.cbor";
+    const DEFAULT_PIN: &'static [u8] = b"123456\xff\xff";
+    const DEFAULT_PUK: &'static [u8] = b"12345678";
 
     pub fn remaining_pin_retries(&self) -> u8 {
         if self.consecutive_pin_mismatches >= Self::PIN_RETRIES_DEFAULT {
@@ -233,13 +244,42 @@ impl Persistent {
         }
     }
 
+    pub fn remaining_puk_retries(&self) -> u8 {
+        if self.consecutive_puk_mismatches >= Self::PUK_RETRIES_DEFAULT {
+            0
+        } else {
+            Self::PUK_RETRIES_DEFAULT - self.consecutive_puk_mismatches
+        }
+    }
+
     pub fn verify_pin(&self, other_pin: &Pin) -> bool {
+        // hprintln!("verifying pin {:?} against {:?}", other_pin, &self.pin).ok();
         self.pin == *other_pin
+    }
+
+    pub fn verify_puk(&self, other_puk: &Pin) -> bool {
+        // hprintln!("verifying puk {:?} against {:?}", other_puk, &self.puk).ok();
+        self.puk == *other_puk
     }
 
     pub fn set_pin(&mut self, trussed: &mut Trussed, new_pin: Pin) {
         self.pin = new_pin;
         self.save(trussed);
+    }
+
+    pub fn set_puk(&mut self, trussed: &mut Trussed, new_puk: Pin) {
+        self.puk = new_puk;
+        self.save(trussed);
+    }
+
+    pub fn reset_pin(&mut self, trussed: &mut Trussed) {
+        self.set_pin(trussed, Pin::try_new(Self::DEFAULT_PIN).unwrap());
+        self.reset_consecutive_pin_mismatches(trussed);
+    }
+
+    pub fn reset_puk(&mut self, trussed: &mut Trussed) {
+        self.set_puk(trussed, Pin::try_new(Self::DEFAULT_PUK).unwrap());
+        self.reset_consecutive_puk_mismatches(trussed);
     }
 
     pub fn increment_consecutive_pin_mismatches(&mut self, trussed: &mut Trussed) -> u8 {
@@ -252,6 +292,16 @@ impl Persistent {
         Self::PIN_RETRIES_DEFAULT - self.consecutive_pin_mismatches
     }
 
+    pub fn increment_consecutive_puk_mismatches(&mut self, trussed: &mut Trussed) -> u8 {
+        if self.consecutive_puk_mismatches >= Self::PUK_RETRIES_DEFAULT {
+            return 0;
+        }
+
+        self.consecutive_puk_mismatches += 1;
+        self.save(trussed);
+        Self::PUK_RETRIES_DEFAULT - self.consecutive_puk_mismatches
+    }
+
     pub fn reset_consecutive_pin_mismatches(&mut self, trussed: &mut Trussed) -> u8 {
         if self.consecutive_pin_mismatches != 0 {
             self.consecutive_pin_mismatches = 0;
@@ -259,6 +309,19 @@ impl Persistent {
         }
 
         Self::PIN_RETRIES_DEFAULT
+    }
+
+    pub fn reset_consecutive_puk_mismatches(&mut self, trussed: &mut Trussed) -> u8 {
+        if self.consecutive_puk_mismatches != 0 {
+            self.consecutive_puk_mismatches = 0;
+            self.save(trussed);
+        }
+
+        Self::PUK_RETRIES_DEFAULT
+    }
+
+    pub fn reset_management_key(&mut self, trussed: &mut Trussed) {
+        self.set_management_key(trussed, YUBICO_DEFAULT_MANAGEMENT_KEY);
     }
 
     pub fn set_management_key(&mut self, trussed: &mut Trussed, management_key: &[u8; 24]) {
@@ -289,7 +352,9 @@ impl Persistent {
         Self {
             keys,
             consecutive_pin_mismatches: 0,
-            pin: Pin::default(),
+            consecutive_puk_mismatches: 0,
+            pin: Pin::try_new(Self::DEFAULT_PIN).unwrap(),
+            puk: Pin::try_new(Self::DEFAULT_PUK).unwrap(),
             timestamp: 0,
         }
     }

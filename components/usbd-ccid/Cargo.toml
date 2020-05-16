@@ -14,6 +14,7 @@ heapless-bytes = { git = "https://github.com/ycrypto/heapless-bytes", branch = "
 # heapless-bytes = { path = "../../../heapless-bytes" }
 interchange = { path = "../interchange" }
 iso7816 = { path = "../iso7816" }
+untrusted = "0.7.1"
 usb-device = { version = "0.2.3", features = ["control-buffer-256"] }
 
 [features]

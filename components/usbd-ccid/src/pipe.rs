@@ -190,7 +190,7 @@ where
         self.interchange.request(command).expect("could not deposit command");
             // apdu::Command::try_from(&self.message).unwrap()
         // ).expect("could not deposit command");
-        hprintln!("set ccid state to processing").ok();
+        // hprintln!("set ccid state to processing").ok();
         self.state = State::Processing;
         // todo!("have message of length {} to dispatch", self.message.len());
     }
@@ -205,8 +205,8 @@ where
         //     }
         // }
         if let State::Processing = self.state {
-            hprintln!("processing, checking for response, interchange state {:?}",
-                      self.interchange.state()).ok();
+            // hprintln!("processing, checking for response, interchange state {:?}",
+            //           self.interchange.state()).ok();
 
             if let Some(response) = self.interchange.take_response() {
                 self.message = response.into_message();
