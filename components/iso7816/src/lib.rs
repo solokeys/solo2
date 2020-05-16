@@ -1,5 +1,5 @@
-// #![cfg_attr(not(test), no_std)]
-#![no_std]
+#![cfg_attr(not(test), no_std)]
+// #![no_std]
 
 #[allow(non_camel_case_types)]
 pub type U3076 = <heapless_bytes::consts::U2048 as core::ops::Add<heapless_bytes::consts::U1024>>::Output;

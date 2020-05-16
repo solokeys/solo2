@@ -4,6 +4,17 @@ use crate::constants::*;
 
 
 pub type RawPacket = heapless_bytes::Bytes<PACKET_SIZE_TYPE>;
+pub type ExtPacket = heapless_bytes::Bytes<EXT_PACKET_SIZE_TYPE>;
+
+pub trait RawPacketExt {
+    fn packet_len(&self) -> usize;
+}
+
+impl RawPacketExt for RawPacket {
+    fn packet_len(&self) -> usize {
+        u32::from_le_bytes(self[1..5].try_into().unwrap()) as usize
+    }
+}
 
 pub enum Error {
     ShortPacket,
@@ -15,7 +26,7 @@ pub enum Message {
     Response(Response),
 }
 
-pub trait Packet: core::ops::Deref<Target = RawPacket> {
+pub trait Packet: core::ops::Deref<Target = ExtPacket> {
 
     #[inline]
     fn slot(&self) -> u8 {
@@ -36,7 +47,7 @@ pub trait PacketWithData: Packet {
         // let len = u32::from_le_bytes(self[1..5].try_into().unwrap()) as usize;
         let declared_len =
             u32::from_le_bytes(self[1..5].try_into().unwrap()) as usize;
-        let len = core::cmp::min(PACKET_SIZE - 10, declared_len);
+        let len = core::cmp::min(EXT_PACKET_SIZE - 10, declared_len);
         // hprintln!("delcared = {}, len = {}", declared_len, len).ok();
         &self[10..][..len]
     }
@@ -158,17 +169,18 @@ macro_rules! command_message {
 
     ($($Name:ident: $code:expr,)*) => {
         $(
+            #[derive(Debug)]
             pub struct $Name {
                 // use reference? pulls in lifetimes though...
-                raw: RawPacket,
+                ext_raw: ExtPacket,
             }
 
             impl core::ops::Deref for $Name {
-                type Target = RawPacket;
+                type Target = ExtPacket;
 
                 #[inline]
                 fn deref(&self) -> &Self::Target {
-                    &self.raw
+                    &self.ext_raw
                 }
             }
 
@@ -176,7 +188,7 @@ macro_rules! command_message {
 
                 #[inline]
                 fn deref_mut(&mut self) -> &mut Self::Target {
-                    &mut self.raw
+                    &mut self.ext_raw
                 }
             }
 
@@ -207,11 +219,11 @@ macro_rules! command_message {
             }
         }
 
-        impl core::convert::TryFrom<RawPacket> for Command {
+        impl core::convert::TryFrom<ExtPacket> for Command {
             type Error = Error;
 
             #[inline]
-            fn try_from(packet: RawPacket)
+            fn try_from(packet: ExtPacket)
                 -> core::result::Result<Self, Self::Error>
             {
                 if packet.len() < 10 {
@@ -223,7 +235,7 @@ macro_rules! command_message {
                 let command_byte = packet[0];
                 Ok(match command_byte {
                     $(
-                        $code => Command::$Name($Name { raw: packet } ),
+                        $code => Command::$Name($Name { ext_raw: packet } ),
                     )*
                     _ => return Err(Error::UnknownCommand(command_byte)),
                 })
@@ -231,7 +243,7 @@ macro_rules! command_message {
         }
 
         impl core::ops::Deref for Command {
-            type Target = RawPacket;
+            type Target = ExtPacket;
 
             #[inline]
             fn deref(&self) -> &Self::Target {

@@ -10,7 +10,11 @@ pub type PACKET_SIZE_TYPE = consts::U512;
 #[cfg(not(feature = "highspeed-usb"))]
 pub type PACKET_SIZE_TYPE = consts::U64;
 
+// size??
+pub type EXT_PACKET_SIZE_TYPE = consts::U384;
+
 pub const PACKET_SIZE: usize = PACKET_SIZE_TYPE::USIZE;
+pub const EXT_PACKET_SIZE: usize = EXT_PACKET_SIZE_TYPE::USIZE;
 
 pub const CLASS_CCID: u8 = 0x0B;
 pub const SUBCLASS_NONE: u8 = 0x0;
