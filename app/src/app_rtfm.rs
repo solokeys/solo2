@@ -115,7 +115,7 @@ const APP: () = {
 
         let after = Instant::now();
         let length = (after - before).as_cycles();
-        if length > 5_000 {
+        if length > 10_000 {
             info!("poll took {:?} cycles", length).ok();
         }
         let inten = usb.inten.read().bits();
@@ -139,7 +139,7 @@ const APP: () = {
 
     }
 
-    #[task(binds = OS_EVENT, resources = [crypto], priority = 3)]
+    #[task(binds = OS_EVENT, resources = [crypto], priority = 7)]
     fn os_event(c: os_event::Context) {
         c.resources.crypto.process();
     }

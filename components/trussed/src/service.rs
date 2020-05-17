@@ -851,12 +851,12 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
 
         let serialized_key: SerializedKey = crate::cbor_deserialize(&bytes).map_err(|_| Error::CborError)?;
 
-        if let Some(kind) = key_kind {
-            if serialized_key.kind != kind {
-                // hprintln!("wrong key kind, expected {:?} got {:?}", &kind, &serialized_key.kind).ok();
-                Err(Error::WrongKeyKind)?;
-            }
-        }
+        // if let Some(kind) = key_kind {
+        //     if serialized_key.kind != kind {
+        //         // hprintln!("wrong key kind, expected {:?} got {:?}", &kind, &serialized_key.kind).ok();
+        //         Err(Error::WrongKeyKind)?;
+        //     }
+        // }
 
         Ok(serialized_key)
     }

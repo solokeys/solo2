@@ -176,11 +176,11 @@ Sign<R, S> for super::Ed25519
         // `trussed::/home/nicolas/projects/solo-bee/components/trussed/src/mechanisms/ed25519.rs:151
         // Ed25519::Sign`, i.e. VEERY long
         // debug!("trussed::{}:{} Ed25519::Sign", file!(), line!()).ok();
-        debug!("trussed: Ed25519::Sign").ok();
-        if let SignatureSerialization::Raw = request.format {
-        } else {
-            return Err(Error::InvalidSerializationFormat);
-        }
+        // debug!("trussed: Ed25519::Sign").ok();
+        // if let SignatureSerialization::Raw = request.format {
+        // } else {
+        //     return Err(Error::InvalidSerializationFormat);
+        // }
 
         let key_id = request.key.object_id;
 
@@ -189,8 +189,9 @@ Sign<R, S> for super::Ed25519
         let native_signature = keypair.sign(&request.message);
         let our_signature = Signature::try_from_slice(&native_signature.to_bytes()).unwrap();
 
-        hprintln!("Ed25519 signature:").ok();
+        // hprintln!("Ed25519 signature:").ok();
         // hprintln!("msg: {:?}", &request.message).ok();
+        // hprintln!("pk:  {:?}", &keypair.public.as_bytes()).ok();
         // hprintln!("sig: {:?}", &our_signature).ok();
 
         // return signature

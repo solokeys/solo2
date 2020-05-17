@@ -237,8 +237,16 @@ impl App
             return Err(Status::IncorrectDataParameter);
         }
 
-        let len = data[1] as usize;
-        data = &data[2..];
+        if data[1] > 0x81 {
+            panic!("unhandled >1B lengths");
+        }
+        let len = if data[1] == 0x81 {
+            data[2] as usize;
+            data = &data[3..];
+        } else {
+            data[1] as usize; // 158 for ssh ed25519 signatures (which have a 150B commitment)
+            data = &data[2..];
+        };
 
         // step 1 of piv-go/ykAuthenticate
         // https://github.com/go-piv/piv-go/blob/d5ec95eb3bec9c20d60611fb77b7caeed7d886b6/piv/piv.go#L359-L384
@@ -262,25 +270,37 @@ impl App
         }
         data = &data[2..];
 
-        // expect '81 20'
-        if !data.starts_with(&[0x81, 0x20]) {
+        // // expect '81 20'
+        // if !data.starts_with(&[0x81, 0x20]) {
+        //     return Err(Status::IncorrectDataParameter);
+        // }
+        // data = &data[2..];
+
+        // expect '81 81 96'
+        // if !data.starts_with(&[0x81, 0x81, 0x96]) {
+        if !data.starts_with(&[0x81, 0x81]) {
             return Err(Status::IncorrectDataParameter);
         }
-        data = &data[2..];
+        let len = data[2] as usize;
+        data = &data[3..];
 
-        if data.len() != 32 {
+        // if data.len() != 32 {
+        //     return Err(Status::IncorrectDataParameter);
+        // }
+        if data.len() != len {
             return Err(Status::IncorrectDataParameter);
         }
 
-        let mechanism = trussed::types::Mechanism::P256Prehashed;
-        let commitment = data; // 32B of data
+        let mechanism = trussed::types::Mechanism::Ed25519;
+        let commitment = data; // 32B of data // 150B for ed25519
         // dbg!(commitment);
-        let serialization = trussed::types::SignatureSerialization::Asn1Der;
+        let serialization = trussed::types::SignatureSerialization::Asn1Der; // ed25519 disregards
 
-        let key_handle = trussed::types::ObjectHandle { object_id: trussed::types::UniqueId::try_from_hex(
-            b"1234567890abcdef1234567890abcdef"
-        ).unwrap() };
-        // dbg!(key_handle);
+        hprintln!("looking for keyreference");
+        let key_handle = match self.state.persistent(&mut self.trussed).keys.authentication_key {
+            Some(key) => key,
+            None => return Err(Status::KeyReferenceNotFound),
+        };
 
         let signature = block!(self.trussed.sign(mechanism, key_handle, commitment, serialization).unwrap())
             .map_err(|error| {
@@ -289,10 +309,22 @@ impl App
                 Status::UnspecifiedNonpersistentExecutionError }
             )?
             .signature;
-        dbg!(signature);
+        // dbg!(&signature);
 
-        dbg!("NOW WE SHOULD WORK");
-        Err(Status::FunctionNotSupported)
+        let mut der: Der<consts::U256> = Default::default();
+        // 7c = Dynamic Authentication Template tag
+        der.nested(0x7c, |der| {
+            // 82 = response
+            der.raw_tlv(0x82, &signature)
+        }).unwrap();
+        // dbg!(&der);
+
+        let response_data: ResponseData = der.try_convert_into().unwrap();
+        // dbg!(&response_data);
+        return Ok(response_data);
+
+        // dbg!("NOW WE SHOULD WORK");
+        // Err(Status::FunctionNotSupported)
     }
 
     fn request_for_challenge(&mut self, command: &Command, remaining_data: &[u8]) -> ResponseResult {
@@ -586,7 +618,9 @@ impl App
                 Status::IncorrectDataParameter
         })?;
 
-        if mechanism != &[0x11] {
+        // if mechanism != &[0x11] {
+        // HA! patch in Ed25519
+        if mechanism != &[0x22] {
             return Err(Status::InstructionNotSupportedOrInvalid);
         }
 
@@ -596,34 +630,57 @@ impl App
             syscall!(self.trussed.delete(key));
         }
 
-        let key = syscall!(self.trussed.generate_p256_private_key(
+        // let key = syscall!(self.trussed.generate_p256_private_key(
+        // let key = syscall!(self.trussed.generate_p256_private_key(
+        let key = syscall!(self.trussed.generate_ed25519_private_key(
             trussed::types::StorageLocation::Internal,
         )).key;
+
+
+        // // TEMP
+        // let mechanism = trussed::types::Mechanism::P256Prehashed;
+        // let mechanism = trussed::types::Mechanism::P256;
+        // let commitment = &[37u8; 32];
+        // // dbg!(commitment);
+        // let serialization = trussed::types::SignatureSerialization::Asn1Der;
+        // // dbg!(&key);
+        // let signature = block!(self.trussed.sign(mechanism, key.clone(), commitment, serialization).map_err(|e| {
+        //     dbg!(e);
+        //     e
+        // }).unwrap())
+        //     .map_err(|error| {
+        //         // NoSuchKey
+        //         dbg!(error);
+        //         Status::UnspecifiedNonpersistentExecutionError }
+        //     )?
+        //     .signature;
+        // dbg!(&signature);
+
         self.state.persistent(&mut self.trussed).keys.authentication_key = Some(key);
         self.state.persistent(&mut self.trussed).save(&mut self.trussed);
 
-        hprintln!("a").ok();
-        let public_key = syscall!(self.trussed.derive_p256_public_key(
+        // let public_key = syscall!(self.trussed.derive_p256_public_key(
+        let public_key = syscall!(self.trussed.derive_ed25519_public_key(
             &key,
             trussed::types::StorageLocation::Volatile,
         )).key;
-        hprintln!("b").ok();
 
         let serialized_public_key = syscall!(self.trussed.serialize_key(
-            trussed::types::Mechanism::P256,
+            // trussed::types::Mechanism::P256,
+            trussed::types::Mechanism::Ed25519,
             public_key.clone(),
             trussed::types::KeySerialization::Raw,
         )).serialized_key;
-        hprintln!("c").ok();
 
-        let l2 = 65;
+        // hprintln!("supposed SEC1 pubkey, len {}: {:X?}", serialized_public_key.len(), &serialized_public_key).ok();
+
+        // P256 SEC1 has 65 bytes, Ed25519 pubkeys have 32
+        // let l2 = 65;
+        let l2 = 32;
         let l1 = l2 + 2;
         let mut data = ResponseData::try_from_slice(&[0x7f, 0x49, l1, 0x86, l2]).unwrap();
-        hprintln!("d").ok();
-        data.extend_from_slice(&[0x04]).unwrap();
-        hprintln!("e").ok();
+        // data.extend_from_slice(&[0x04]).unwrap();
         data.extend_from_slice(&serialized_public_key).unwrap();
-        hprintln!("f").ok();
 
         Ok(data)
     }
@@ -754,15 +811,24 @@ impl App
 
             // '5FC1 05' (351B)
             DataObjects::X509CertificateForPivAuthentication => {
+                // return Err(Status::NotFound);
+
+                // hprintln!("loading 9a cert").ok();
                 // it seems like fetching this certificate is the way Filo's agent decides
                 // whether the key is "already setup":
                 // https://github.com/FiloSottile/yubikey-agent/blob/8781bc0082db5d35712a2244e3ab3086f415dd59/setup.go#L69-L70
                 let data = block!(self.trussed.read_file(
                     trussed::types::StorageLocation::Internal,
                     trussed::types::PathBuf::from(b"authentication-key.x5c"),
-                ).unwrap()).map_err(|_| Status::NotFound)?.data;
+                ).unwrap()).map_err(|e| {
+                    // hprintln!("error loading: {:?}", &e).ok();
+                    Status::NotFound
+                } )?.data;
+                // hprintln!("got the data: {:?}", &data).ok();
 
-                Ok(data.try_convert_into().unwrap())
+                let mut der: Der<consts::U1024> = Default::default();
+                der.raw_tlv(0x53, &data).unwrap();
+                Ok(der.try_convert_into().unwrap())
             }
 
             // '5F FF01' (754B)

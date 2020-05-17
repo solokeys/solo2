@@ -58,11 +58,21 @@ impl State {
     }
 
     // it would be nicer to do this during "board bringup", by using TrussedService as Syscall
+    //
+    // TODO: it is really not good to overwrite user data on failure to decode old state.
+    // To fix this, need a flag to detect if we're "fresh", and/or initialize state in factory.
     pub fn persistent(&mut self, trussed: &mut Trussed) -> &mut Persistent {
         if self.persistent.is_none() {
             self.persistent = Some(match Persistent::load(trussed) {
-                Ok(previous_self) => previous_self,
-                Err(_) => Persistent::initialize(trussed),
+                Ok(previous_self) => {
+                    // hprintln!("loading succeeded!\n{:?}", &previous_self).ok();
+                    previous_self
+                }
+                Err(e) => {
+
+                    // hprintln!("loading failed: {:?}", e).ok();
+                    Persistent::initialize(trussed)
+                }
             });
         }
         self.persistent.as_mut().unwrap()
@@ -218,14 +228,18 @@ pub struct AuthenticateManagement {
 #[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct Keys {
     // 9a "PIV Authentication Key" (YK: PIV Authentication)
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub authentication_key: Option<ObjectHandle>,
     // 9b "PIV Card Application Administration Key" (YK: PIV Management)
     pub management_key: ObjectHandle,
     // 9c "Digital Signature Key" (YK: Digital Signature)
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub signature_key: Option<ObjectHandle>,
     // 9d "Key Management Key" (YK: Key Management)
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub encryption_key: Option<ObjectHandle>,
     // 9e "Card Authentication Key" (YK: Card Authentication)
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub pinless_authentication_key: Option<ObjectHandle>,
 }
 
@@ -365,10 +379,18 @@ impl Persistent {
                 StorageLocation::Internal,
                 PathBuf::from(Self::FILENAME),
             ).unwrap()
-        ).map_err(drop)?.data;
+        ).map_err(|e| {
+            hprintln!("loading error: {:?}", &e).ok();
+            drop(e)
+        })?.data;
 
-        let previous_state = trussed::cbor_deserialize(&data).map_err(drop);
-        cortex_m_semihosting::hprintln!("previously persisted PIV state:\n{:?}", &previous_state).ok();
+        let previous_state = trussed::cbor_deserialize(&data).map_err(|e| {
+            hprintln!("cbor deser error: {:?}", e);
+            // hprintln!("data: {:X?}", &data).ok();
+            drop(e)
+        })?;
+        // TODO (!!!) bad major
+        // cortex_m_semihosting::hprintln!("previously persisted PIV state:\n{:?}", &previous_state).ok();
         previous_state
     }
 

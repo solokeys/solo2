@@ -1,6 +1,6 @@
 use core::convert::{TryFrom, TryInto};
 
-use cortex_m_semihosting::hprintln;
+use cortex_m_semihosting::{dbg, hprintln};
 
 use crate::api::*;
 // use crate::config::*;
@@ -30,21 +30,6 @@ fn load_public_key<R: RngRead, S: Store>(resources: &mut ServiceResources<R, S>,
     let public_key = nisty::PublicKey::try_from(&public_bytes).map_err(|_| Error::InternalError)?;
 
     Ok(public_key)
-}
-
-fn load_keypair<R: RngRead, S: Store>(resources: &mut ServiceResources<R, S>, key_id: &UniqueId)
-    -> Result<nisty::Keypair, Error> {
-
-    hprintln!("loading keypair").ok();
-    let seed: [u8; 32] = resources
-        .load_key(KeyType::Secret, Some(KeyKind::P256), &key_id)?
-        .value.as_ref()
-        .try_into()
-        .map_err(|_| Error::InternalError)?;
-
-    let keypair = nisty::Keypair::generate_patiently(&seed);
-    hprintln!("seed: {:?}", &seed).ok();
-    Ok(keypair)
 }
 
 
@@ -261,6 +246,21 @@ Exists<R, S> for super::P256
     }
 }
 
+fn load_keypair<R: RngRead, S: Store>(resources: &mut ServiceResources<R, S>, key_id: &UniqueId)
+    -> Result<nisty::Keypair, Error> {
+
+    // hprintln!("loading keypair").ok();
+    let seed: [u8; 32] = resources
+        .load_key(KeyType::Secret, Some(KeyKind::P256), &key_id)?
+        .value.as_ref()
+        .try_into()
+        .map_err(|_| Error::InternalError)?;
+
+    let keypair = nisty::Keypair::generate_patiently(&seed);
+    // hprintln!("seed: {:?}", &seed).ok();
+    Ok(keypair)
+}
+
 #[cfg(feature = "p256")]
 impl<R: RngRead, S: Store>
 Sign<R, S> for super::P256
@@ -270,6 +270,7 @@ Sign<R, S> for super::P256
     {
         let key_id = request.key.object_id;
 
+        // hprintln!("loading keypair");
         let keypair = load_keypair(resources, &key_id)?;
 
         let native_signature = keypair.sign(&request.message);
@@ -304,14 +305,24 @@ Sign<R, S> for super::P256Prehashed
     {
         let key_id = request.key.object_id;
 
-        let keypair = load_keypair(resources, &key_id)?;
+        let keypair = load_keypair(resources, &key_id).map_err(|e| {
+            dbg!("load keypair error {:?}", e);
+            e
+        })?;
+
+        // hprintln!("keypair loaded").ok();
 
         if request.message.len() != nisty::DIGEST_LENGTH {
+            hprintln!("wrong length").ok();
             return Err(Error::WrongMessageLength);
         }
+        let data = request.message.as_ref();
+        // hprintln!("data: {:X?}", data).ok();
         let message: [u8; 32] = request.message.as_ref().try_into().unwrap();
+        hprintln!("cast to 32B array").ok();
 
         let native_signature = keypair.sign_prehashed(&message);
+        hprintln!("signed").ok();
 
         let our_signature = match request.format {
             SignatureSerialization::Asn1Der => {
