@@ -3,6 +3,7 @@ use cortex_m_semihosting::hprintln;
 use core::convert::TryInto;
 
 use cortex_m_semihosting::dbg;
+use heapless_bytes::Bytes;
 use trussed::{
     Client as Trussed,
     types::{ObjectHandle, PathBuf, StorageLocation},
@@ -81,7 +82,8 @@ impl State {
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct Pin {
-    padded_pin: [u8; 8]
+    // padded_pin: [u8; 8]
+    padded_pin: heapless_bytes::Bytes<heapless_bytes::consts::U8>,
 }
 
 // impl Default for Pin {
@@ -109,7 +111,8 @@ impl Pin {
         let valid_bytes = unpadded_pin.iter().all(|&b| b >= b'0' && b <= b'9');
         if valid_bytes {
             Ok(Self {
-                padded_pin: padded_pin.try_into().unwrap(),
+                // padded_pin: padded_pin.try_into().unwrap(),
+                padded_pin: Bytes::try_from_slice(padded_pin).unwrap(),//padded_pin.try_into().unwrap(),
             })
         } else {
             Err(())
@@ -380,18 +383,17 @@ impl Persistent {
                 PathBuf::from(Self::FILENAME),
             ).unwrap()
         ).map_err(|e| {
-            hprintln!("loading error: {:?}", &e).ok();
+            // hprintln!("loading error: {:?}", &e).ok();
             drop(e)
         })?.data;
 
-        let previous_state = trussed::cbor_deserialize(&data).map_err(|e| {
-            hprintln!("cbor deser error: {:?}", e);
+        let previous_state: Persistent = trussed::cbor_deserialize(&data).map_err(|e| {
+            // hprintln!("cbor deser error: {:?}", e);
             // hprintln!("data: {:X?}", &data).ok();
             drop(e)
         })?;
-        // TODO (!!!) bad major
-        // cortex_m_semihosting::hprintln!("previously persisted PIV state:\n{:?}", &previous_state).ok();
-        previous_state
+        // horrible deser bug to forget Ok here :)
+        Ok(previous_state)
     }
 
     pub fn save(&self, trussed: &mut Trussed) {

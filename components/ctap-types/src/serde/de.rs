@@ -96,10 +96,8 @@ impl<'de> Deserializer<'de> {
     fn expect_major(&mut self, major: u8) -> Result<u8> {
         let byte = self.try_take_n(1)?[0];
         if major != (byte >> 5) {
-            // println!("expecting {}, got {} in byte {}", major, byte >> 5, byte);
-            // println!("remaining data: {:?}", &self.input);
-            // hprintln!("expecting {}, got {} in byte {}", major, byte >> 5, byte).ok();
-            // hprintln!("remaining data: {:?}", &self.input).ok();
+            // hprintln!("expecting {}, got {} in byte {}", major, byte >> 5, byte);
+            // hprintln!("remaining data: {:?}", &self.input);
             return Err(Error::DeserializeBadMajor);
         }
         Ok(byte & ((1 << 5) - 1))
@@ -703,8 +701,8 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     {
         // TODO: ORLY?
         // Will not support
-        use cortex_m_semihosting::hprintln;
-        hprintln!("ignored any").ok();// {:?}", &_visitor).ok();
+        // use cortex_m_semihosting::hprintln;
+        // hprintln!("ignored any").ok();// {:?}", &_visitor).ok();
         Err(Error::WontImplement)
     }
 }
@@ -1042,4 +1040,10 @@ mod tests {
         cbor_deserialize::<T>(&data).ok();
     }
 
+    // #[test]
+    // fn piv_persistent_state() {
+    //     let data = b"\xa6dkeys\xa2rauthentication_keyP<\xc1\xaa\x8c\xc3\xfav4\x88\xbc\xdb\x9fe\x81\xa7nnmanagement_keyP\x8c\x16\"\xed\x0f\xce\x9c\xac^\xf1;\xd0r\xea\xc9\xcbx\x1aconsecutive_pin_mismatches\x00x\x1aconsecutive_puk_mismatches\x00cpin\xa1jpadded_pin\x88\x181\x182\x183\x181\x182\x183\x18\xff\x18\xffcpuk\xa1jpadded_pin\x88\x181\x182\x183\x181\x182\x183\x18\xff\x18\xffitimestamp\x00";
+
+    //     cbor_deserialize::<T>(&data).ok();
+    // }
 }

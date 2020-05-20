@@ -886,6 +886,16 @@ impl App
                 self.state.runtime.app_security_status.puk_verified = false;
                 self.state.runtime.app_security_status.management_verified = false;
 
+                block!(self.trussed.remove_file(
+                    trussed::types::StorageLocation::Internal,
+                    trussed::types::PathBuf::from(b"printed-information"),
+                ).unwrap()).ok();
+
+                block!(self.trussed.remove_file(
+                    trussed::types::StorageLocation::Internal,
+                    trussed::types::PathBuf::from(b"authentication-key.x5c"),
+                ).unwrap()).ok();
+
                 Ok(Default::default())
             }
 

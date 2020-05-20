@@ -228,7 +228,9 @@ where
             }
 
             State::Processing => {
-                panic!("{:?} unexpected in processing state")
+                // hprintln!("handle xfrblock").ok();
+                // hprintln!("{:X?}", &command).ok();
+                panic!("ccid pipe unexpectedly received command while in processing state: {:?}", &command);
             }
 
             State::ReadyToSend => {

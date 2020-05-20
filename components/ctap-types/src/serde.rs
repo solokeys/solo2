@@ -40,6 +40,7 @@ pub fn cbor_serialize_bytes<'a, 'b, N: heapless_bytes::ArrayLength<u8>, T: serde
 pub fn cbor_deserialize<'de, T: serde::Deserialize<'de>>(
     buffer: &'de [u8],
 ) -> Result<T> {
+    // cortex_m_semihosting::hprintln!("deserializing {:?}", buffer).ok();
     de::from_bytes(buffer)
 }
 
