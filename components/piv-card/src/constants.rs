@@ -245,6 +245,8 @@ impl DataObjects {
     pub const BiometricInformationTemplate: &'static [u8] = &[0x7f, 0x61];
 
     pub const X509CertificateForCardAuthentication: &'static [u8] = &[0x5f, 0xc1, 0x01];
+    // CHUID, contains GUID
+    pub const CardHolderUniqueIdentifier: &'static [u8] = &[0x5f, 0xc1, 0x02];
     pub const X509CertificateForPivAuthentication: &'static [u8] = &[0x5f, 0xc1, 0x05];
     pub const X509CertificateForDigitalSignature: &'static [u8] = &[0x5f, 0xc1, 0x0a];
     pub const X509CertificateForKeyManagement: &'static [u8] = &[0x5f, 0xc1, 0x0b];
@@ -415,3 +417,9 @@ pub const YUBICO_DEFAULT_MANAGEMENT_KEY: &'static [u8; 24] = &[
     0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
     0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
 ];
+
+// stolen from le yubico
+pub const DISCOVERY_OBJECT: &'static [u8; 20] = b"~\x12O\x0b\xa0\x00\x00\x03\x08\x00\x00\x10\x00\x01\x00_/\x02@\x00";
+
+// import secrets; secrets.token_bytes(16)
+pub const GUID: &'static [u8; 16] = b"\x0c\x92\xc9\x04\xd0\xdeL\xd9\xf6\xd1\xa2\x9fE3\xca\xeb";

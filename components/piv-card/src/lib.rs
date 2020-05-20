@@ -806,8 +806,30 @@ impl App
         // Table 3, Part 1, SP 800-73-4
         // https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-73-4.pdf#page=30
         match data {
-            DataObjects::DiscoveryObject => todo!("discovery object"),
-            DataObjects::BiometricInformationTemplate => todo!("biometric information template"),
+            DataObjects::DiscoveryObject => {
+                // Err(Status::InstructionNotSupportedOrInvalid)
+                let data = ResponseData::try_from_slice(DISCOVERY_OBJECT).unwrap();
+                Ok(data)
+                // todo!("discovery object"),
+            }
+
+            DataObjects::BiometricInformationTemplate => {
+                Err(Status::InstructionNotSupportedOrInvalid)
+                // todo!("biometric information template"),
+            }
+
+            // '5FC1 02' (351B)
+            DataObjects::CardHolderUniqueIdentifier => {
+                // pivy: https://git.io/JfzBo
+                let mut der = Der::<consts::U1024>::default();
+                der.nested(0x53, |der| {
+                    der.raw_tlv(0x34, GUID)?;
+                    // der.raw_tlv(0x36, CARDHOLDER_UUID)?;
+                    Ok(())
+                }).unwrap();
+
+                Ok(der.try_convert_into().unwrap())
+            }
 
             // '5FC1 05' (351B)
             DataObjects::X509CertificateForPivAuthentication => {
