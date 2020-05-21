@@ -821,10 +821,18 @@ impl App
             // '5FC1 02' (351B)
             DataObjects::CardHolderUniqueIdentifier => {
                 // pivy: https://git.io/JfzBo
+                // https://www.idmanagement.gov/wp-content/uploads/sites/1171/uploads/TIG_SCEPACS_v2.3.pdf
                 let mut der = Der::<consts::U1024>::default();
                 der.nested(0x53, |der| {
-                    der.raw_tlv(0x34, GUID)?;
-                    // der.raw_tlv(0x36, CARDHOLDER_UUID)?;
+                    // der.raw_tlv(0x30, FASC_N)?; // pivy: 26B, TIG: 25B
+                    der.raw_tlv(0x30, &[0x99, 0x99])?; // 9999 = non-federal; pivy: 26B, TIG: 25B
+                    // der.raw_tlv(0x34, DUNS)?; // ? - pivy skips
+                    der.raw_tlv(0x34, GUID)?; // 16B type 1,2,4 UUID
+                    // der.raw_tlv(0x35, EXPIRATION_DATE)?; // [u8; 8], YYYYMMDD
+                    der.raw_tlv(0x35, b"22220101")?; // [u8; 8], YYYYMMDD
+                    // der.raw_tlv(0x36, CARDHOLDER_UUID)?; // 16B, like GUID
+                    // der.raw_tlv(0x3E, SIGNATURE)?; // ? - pivy only checks for non-zero entry
+                    der.raw_tlv(0x3E, b" ")?; // ? - pivy only checks for non-zero entry
                     Ok(())
                 }).unwrap();
 

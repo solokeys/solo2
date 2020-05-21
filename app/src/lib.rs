@@ -260,6 +260,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
     // our composite USB device
     let usbd = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0x1209, 0xBEEE))
+    // let usbd = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0x072f, 0x2200))
     // no longer need to fake it, see README.md for how to get PCSC
     // to identify us as a smartcard.
     // let usbd = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0x072f, 0x90cc))

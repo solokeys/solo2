@@ -54,6 +54,7 @@ default = ["board-lpcxpresso"]
 # use this to format internal flash filesystem,
 # for instance to hard reset
 format-storage = []
+no-semihosting = ["cortex-m-semihosting/no-semihosting"]
 
 board-lpcxpresso = ["lpcxpresso55"]
 board-prototype = ["prototype-bee"]
@@ -98,6 +99,7 @@ ufmt-macros = { git = "https://github.com/nickray/ufmt", branch = "nickray-deriv
 # ufmt-macros = { git = "https://github.com/nickray/ufmt/macros", branch = "nickray-derive-empty-enums" }
 # lpc55s6x-pac = { path = "../../lpc55-pacs" }
 heapless = { git = "https://github.com/nickray/heapless", branch = "nickray-udebug" }
+cortex-m-semihosting = { git = "https://github.com/nickray/cortex-m-semihosting", branch = "no-semihosting" }
 
 [profile.release]
 codegen-units = 1
