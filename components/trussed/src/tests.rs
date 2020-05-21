@@ -220,7 +220,7 @@ fn dummy() {
 //     let request = api::request::Sign {
 //         key_handle: keypair_handle,
 //         mechanism: Mechanism::Ed25519,
-//         message: Message::try_from_slice(&message).expect("all good"),
+//         message: Message::from_slice(&message).expect("all good"),
 //     };
 
 //     let mut future = request.submit(&mut client).map_err(drop).unwrap();

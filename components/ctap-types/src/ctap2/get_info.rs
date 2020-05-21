@@ -1,4 +1,4 @@
-use crate::{Bytes, consts, String, Vec};
+use crate::{ByteBuf, consts, String, Vec};
 use serde::{Deserialize, Serialize};
 use serde_indexed::{DeserializeIndexed, SerializeIndexed};
 
@@ -20,7 +20,7 @@ pub struct Response {
     // #[serde(serialize_with = "serde_bytes::serialize", deserialize_with = "serde_bytes::deserialize")]
     // #[serde(serialize_with = "serde_bytes::serialize")]
     // pub(crate) aaguid: Vec<u8, consts::U16>,
-    pub aaguid: Bytes<consts::U16>,
+    pub aaguid: ByteBuf<consts::U16>,
 
     // 0x04
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -49,7 +49,7 @@ pub struct Response {
     // only in FIDO_2_1_PRE, see https://git.io/JeNxG
     // can be: usb, nfc, ble, internal
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub transports: Option<Vec<Bytes<consts::U8>, consts::U4>>,
+    pub transports: Option<Vec<ByteBuf<consts::U8>, consts::U4>>,
 
     // #[serde(skip_serializing_if = "Option::is_none")]
     // pub(crate) algorithms: Option<&'l[u8]>,
@@ -59,7 +59,7 @@ impl Default for Response {
     fn default() -> Self {
         let mut zero_aaguid = Vec::<u8, consts::U16>::new();
         zero_aaguid.resize_default(16).unwrap();
-        let aaguid = Bytes::<consts::U16>::from(zero_aaguid);
+        let aaguid = ByteBuf::<consts::U16>::from(zero_aaguid);
 
         Self {
             versions: Vec::new(),

@@ -2,7 +2,7 @@
 // #![no_std]
 
 #[allow(non_camel_case_types)]
-pub type U3076 = <heapless_bytes::consts::U2048 as core::ops::Add<heapless_bytes::consts::U1024>>::Output;
+pub type U3076 = <heapless::consts::U2048 as core::ops::Add<heapless::consts::U1024>>::Output;
 #[allow(non_camel_case_types)]
 pub type MAX_COMMAND_DATA = U3076;
 

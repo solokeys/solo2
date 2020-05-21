@@ -1,4 +1,4 @@
-use crate::{Bytes, consts, String, Vec};
+use crate::{ByteBuf, consts, String, Vec};
 
 use serde::{Deserialize, Serialize};
 use serde_indexed::{DeserializeIndexed, SerializeIndexed};
@@ -90,7 +90,7 @@ pub struct Extensions {
 // #[serde(rename_all = "camelCase")]
 #[serde_indexed(offset = 1)]
 pub struct Parameters {
-    pub client_data_hash: Bytes<consts::U32>,
+    pub client_data_hash: ByteBuf<consts::U32>,
     pub rp: PublicKeyCredentialRpEntity,
     pub user: PublicKeyCredentialUserEntity,
     // e.g. webauthn.io sends 10
@@ -117,7 +117,7 @@ pub type AttestationObject = Response;
 // #[derive(Clone,Debug,Eq,PartialEq,Serialize)]
 // #[serde(into = "ResponseExplicitEnumOption")]
 // pub struct Response {
-//     pub auth_data: Bytes<AUTHENTICATOR_DATA_LENGTH>,
+//     pub auth_data: ByteBuf<AUTHENTICATOR_DATA_LENGTH>,
 //     pub att_stmt: Option<AttestationStatement>,
 // }
 
@@ -126,16 +126,16 @@ pub type AuthenticatorData = super::AuthenticatorData<AttestedCredentialData, Ex
 // #[derive(Clone,Debug,Eq,PartialEq)]
 // // #[serde(rename_all = "camelCase")]
 // pub struct AuthenticatorData {
-//     pub rp_id_hash: Bytes<consts::U32>,
+//     pub rp_id_hash: ByteBuf<consts::U32>,
 //     pub flags: Flags,
 //     pub sign_count: u32,
 //     // this can get pretty long
-//     // pub attested_credential_data: Option<Bytes<ATTESTED_CREDENTIAL_DATA_LENGTH>>,
+//     // pub attested_credential_data: Option<ByteBuf<ATTESTED_CREDENTIAL_DATA_LENGTH>>,
 //     pub attested_credential_data: Option<AttestedCredentialData>,
 //     pub extensions: Option<Extensions>
 // }
 
-// pub type SerializedAuthenticatorData = Bytes<AUTHENTICATOR_DATA_LENGTH>;
+// pub type SerializedAuthenticatorData = ByteBuf<AUTHENTICATOR_DATA_LENGTH>;
 
 // // The reason for this non-use of CBOR is for compatibility with
 // // FIDO U2F authentication signatures.
@@ -171,16 +171,16 @@ pub type AuthenticatorData = super::AuthenticatorData<AttestedCredentialData, Ex
 // https://www.w3.org/TR/webauthn/#sec-attested-credential-data
 #[derive(Clone,Debug,Eq,PartialEq)]
 pub struct AttestedCredentialData {
-	pub aaguid: Bytes<consts::U16>,
+	pub aaguid: ByteBuf<consts::U16>,
     // this is where "unlimited non-resident keys" get stored
     // TODO: Model as actual credential ID, with ser/de to bytes (format is up to authenticator)
-    pub credential_id: Bytes<MAX_CREDENTIAL_ID_LENGTH>,
-    // pub credential_public_key: crate::cose::PublicKey,//Bytes<COSE_KEY_LENGTH>,
-    pub credential_public_key: Bytes<COSE_KEY_LENGTH>,
+    pub credential_id: ByteBuf<MAX_CREDENTIAL_ID_LENGTH>,
+    // pub credential_public_key: crate::cose::PublicKey,//ByteBuf<COSE_KEY_LENGTH>,
+    pub credential_public_key: ByteBuf<COSE_KEY_LENGTH>,
 }
 
 impl super::SerializeAttestedCredentialData for AttestedCredentialData {
-    fn serialize(&self) -> Bytes<ATTESTED_CREDENTIAL_DATA_LENGTH> {
+    fn serialize(&self) -> ByteBuf<ATTESTED_CREDENTIAL_DATA_LENGTH> {
         let mut bytes = Vec::<u8, ATTESTED_CREDENTIAL_DATA_LENGTH>::new();
         // 16 bytes, the aaguid
         bytes.extend_from_slice(&self.aaguid).unwrap();
@@ -198,7 +198,7 @@ impl super::SerializeAttestedCredentialData for AttestedCredentialData {
         // bytes.extend_from_slice(&cbor_key[..l]).unwrap();
         bytes.extend_from_slice(&self.credential_public_key).unwrap();
 
-        Bytes::from(bytes)
+        ByteBuf::from(bytes)
     }
 }
 
@@ -207,7 +207,7 @@ impl super::SerializeAttestedCredentialData for AttestedCredentialData {
 pub struct Response {
     pub fmt: String<consts::U32>,
     pub auth_data: super::SerializedAuthenticatorData,
-    // pub att_stmt: Bytes<consts::U64>,
+    // pub att_stmt: ByteBuf<consts::U64>,
     pub att_stmt: AttestationStatement,
 }
 
@@ -235,7 +235,7 @@ pub struct NoneAttestationStatement {}
 #[derive(Clone,Debug,uDebug,Eq,PartialEq,Serialize)]
 pub struct PackedAttestationStatement {
     pub alg: i32,
-    pub sig: Bytes<ASN1_SIGNATURE_LENGTH>,
+    pub sig: ByteBuf<ASN1_SIGNATURE_LENGTH>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub x5c: Option<Vec<Bytes<consts::U1024>, consts::U1>>,
+    pub x5c: Option<Vec<ByteBuf<consts::U1024>, consts::U1>>,
 }

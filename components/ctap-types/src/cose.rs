@@ -42,7 +42,7 @@
    }
 */
 
-use crate::{consts, Bytes};
+use crate::{consts, ByteBuf};
 use serde::Serialize;
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
@@ -131,8 +131,8 @@ trait PublicKeyConstants {
 
 #[derive(Clone, Debug, uDebug, Eq, PartialEq)]
 pub struct P256PublicKey {
-    pub x: Bytes<consts::U32>,
-    pub y: Bytes<consts::U32>,
+    pub x: ByteBuf<consts::U32>,
+    pub y: ByteBuf<consts::U32>,
 }
 
 impl PublicKeyConstants for P256PublicKey {
@@ -143,8 +143,8 @@ impl PublicKeyConstants for P256PublicKey {
 
 #[derive(Clone, Debug, uDebug, Eq, PartialEq)]
 pub struct EcdhEsHkdf256PublicKey {
-    pub x: Bytes<consts::U32>,
-    pub y: Bytes<consts::U32>,
+    pub x: ByteBuf<consts::U32>,
+    pub y: ByteBuf<consts::U32>,
 }
 
 impl PublicKeyConstants for EcdhEsHkdf256PublicKey {
@@ -155,7 +155,7 @@ impl PublicKeyConstants for EcdhEsHkdf256PublicKey {
 
 #[derive(Clone, Debug, uDebug, Eq, PartialEq)]
 pub struct Ed25519PublicKey {
-    pub x: Bytes<consts::U32>,
+    pub x: ByteBuf<consts::U32>,
 }
 
 impl PublicKeyConstants for Ed25519PublicKey {
@@ -166,7 +166,7 @@ impl PublicKeyConstants for Ed25519PublicKey {
 
 #[derive(Clone, Debug, uDebug, Eq, PartialEq)]
 pub struct X25519PublicKey {
-    pub pub_key: Bytes<consts::U32>,
+    pub pub_key: ByteBuf<consts::U32>,
 }
 
 // impl serde::Serialize for PublicKey {

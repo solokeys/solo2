@@ -37,7 +37,7 @@ generate_enums! {
     ReadDirFilesNext: 20
     ReadFile: 9
     // ReadCounter: 7
-    RandomBytes: 17
+    RandomByteBuf: 17
     SerializeKey: 10
     Sign: 11
     WriteFile: 12
@@ -188,7 +188,7 @@ pub mod request {
         // ReadCounter:
         //     - counter: ObjectHandle
 
-        RandomBytes:
+        RandomByteBuf:
           - count: usize
 
         SerializeKey:
@@ -319,7 +319,7 @@ pub mod reply {
         // ReadCounter:
         //     - counter: u32
 
-        RandomBytes:
+        RandomByteBuf:
             - bytes: Message
 
         SerializeKey:

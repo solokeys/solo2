@@ -9,7 +9,7 @@ use trussed::{
 };
 
 pub(crate) use ctap_types::{
-    Bytes, Bytes32, consts, String, Vec,
+    ByteBuf, ByteBuf32, consts, String, Vec,
     // authenticator::{ctap1, ctap2, Error, Request, Response},
     authenticator::ctap2,
     ctap2::make_credential::CredentialProtectionPolicy,
@@ -47,11 +47,11 @@ pub enum CtapVersion {
 }
 
 #[derive(Clone, Debug, ufmt::derive::uDebug, Default, serde::Serialize, serde::Deserialize)]
-pub struct CredentialId(pub Bytes<MAX_CREDENTIAL_ID_LENGTH>);
+pub struct CredentialId(pub ByteBuf<MAX_CREDENTIAL_ID_LENGTH>);
 
 // TODO: how to determine necessary size?
-// pub type SerializedCredential = Bytes<consts::U512>;
-// pub type SerializedCredential = Bytes<consts::U256>;
+// pub type SerializedCredential = ByteBuf<consts::U512>;
+// pub type SerializedCredential = ByteBuf<consts::U256>;
 pub type SerializedCredential = trussed::types::Message;
 
 #[derive(Clone, Debug)]
@@ -84,13 +84,13 @@ impl TryFrom<CredentialId> for EncryptedSerializedCredential {
 pub enum Key {
     ResidentKey(ObjectHandle),
     // THIS USED TO BE 92 NOW IT'S 96 or 97 or so... waddup?
-    WrappedKey(Bytes<consts::U128>),
+    WrappedKey(ByteBuf<consts::U128>),
 }
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub enum CredRandom {
     Resident(ObjectHandle),
-    Wrapped(Bytes<consts::U92>),
+    Wrapped(ByteBuf<consts::U92>),
 }
 
 #[derive(Clone, Debug, serde_indexed::DeserializeIndexed, serde_indexed::SerializeIndexed)]
@@ -128,7 +128,7 @@ pub struct CredentialData {
 pub struct Credential {
     ctap: CtapVersion,
     pub data: CredentialData,
-    nonce: Bytes<consts::U12>,
+    nonce: ByteBuf<consts::U12>,
 }
 
 impl core::ops::Deref for Credential {
@@ -184,7 +184,7 @@ impl Credential {
         Credential {
             ctap,
             data,
-            nonce: Bytes::try_from_slice(&nonce).unwrap(),
+            nonce: ByteBuf::from_slice(&nonce).unwrap(),
         }
     }
 
@@ -199,12 +199,12 @@ impl Credential {
         let message = &serialized_credential;
         // info!("ser cred = {:?}", message).ok();
 
-        let rp_id_hash: Bytes32 = syscall!(crypto.hash_sha256(&self.rp.id.as_ref()))
+        let rp_id_hash: ByteBuf32 = syscall!(crypto.hash_sha256(&self.rp.id.as_ref()))
             .hash
-            .try_convert_into().map_err(|_| Error::Other)?;
+            .try_embed().map_err(|_| Error::Other)?;
 
         let associated_data = &rp_id_hash[..];
-        let nonce: [u8; 12] = self.nonce.as_ref().try_into().unwrap();
+        let nonce: [u8; 12] = self.nonce.as_slice().try_into().unwrap();
         let encrypted_serialized_credential = EncryptedSerializedCredential(
             syscall!(crypto.encrypt_chacha8poly1305(
                     key_encryption_key, message, associated_data, Some(&nonce))));
@@ -235,7 +235,7 @@ impl Credential {
 
     pub fn try_from<UP>(
         authnr: &mut Authenticator<UP>,
-        rp_id_hash: &Bytes<consts::U32>,
+        rp_id_hash: &ByteBuf<consts::U32>,
         descriptor: &PublicKeyCredentialDescriptor,
     )
         -> Result<Self>

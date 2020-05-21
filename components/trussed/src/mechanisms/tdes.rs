@@ -28,7 +28,7 @@ impl<R: RngRead, S: Store> Encrypt<R, S> for super::Tdes
 
         let symmetric_key: [u8; 24] = resources
             .load_key(KeyType::Secret, None, &key_id)?
-            .value.as_ref().try_into()
+            .value.as_slice().try_into()
             .map_err(|_| Error::InternalError)?;
 
 		let cipher = des::TdesEde3::new(GenericArray::from_slice(&symmetric_key));
@@ -53,7 +53,7 @@ impl<R: RngRead, S: Store> Decrypt<R, S> for super::Tdes
 
         let symmetric_key: [u8; 24] = resources
             .load_key(KeyType::Secret, None, &key_id)?
-            .value.as_ref().try_into()
+            .value.as_slice().try_into()
             .map_err(|_| Error::InternalError)?;
 
 		let cipher = des::TdesEde3::new(GenericArray::from_slice(&symmetric_key));

@@ -3,8 +3,8 @@ use core::convert::TryInto;
 use crate::constants::*;
 
 
-pub type RawPacket = heapless_bytes::Bytes<PACKET_SIZE_TYPE>;
-pub type ExtPacket = heapless_bytes::Bytes<EXT_PACKET_SIZE_TYPE>;
+pub type RawPacket = heapless::ByteBuf<PACKET_SIZE_TYPE>;
+pub type ExtPacket = heapless::ByteBuf<EXT_PACKET_SIZE_TYPE>;
 
 pub trait RawPacketExt {
     fn packet_len(&self) -> usize;

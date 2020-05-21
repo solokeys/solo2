@@ -1,4 +1,4 @@
-pub use heapless_bytes::{consts, ArrayLength, Bytes};
+pub use heapless::{consts, ArrayLength, ByteBuf};
 
 const CONSTRUCTED: u8 = 1 << 5;
 // const CONTEXT_SPECIFIC: u8 = 2 << 6;
@@ -40,7 +40,7 @@ type Result = core::result::Result<(), ()>;
 
 /// DER writer
 #[derive(Debug)]
-pub struct Der<N>(Bytes<N>)
+pub struct Der<N>(ByteBuf<N>)
 where
     N: ArrayLength<u8>;
 
@@ -51,14 +51,14 @@ impl<N: ArrayLength<u8>> Default for Der<N> {
 }
 
 impl<N: ArrayLength<u8>> core::ops::Deref for Der<N> {
-    type Target = Bytes<N>;
+    type Target = ByteBuf<N>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
 impl<N: ArrayLength<u8>> core::ops::DerefMut for Der<N> {
-    fn deref_mut(&mut self) -> &mut Bytes<N> {
+    fn deref_mut(&mut self) -> &mut ByteBuf<N> {
         &mut self.0
     }
 }
@@ -66,7 +66,7 @@ impl<N: ArrayLength<u8>> core::ops::DerefMut for Der<N> {
 impl<N: ArrayLength<u8>> Der<N> {
     /// Create a new `Der` structure that writes values to the given buffer
     pub fn new() -> Self {
-        Der(Bytes::new())
+        Der(ByteBuf::new())
     }
 
     // // equivalent of method in std::io::Write
@@ -75,7 +75,7 @@ impl<N: ArrayLength<u8>> Der<N> {
     // }
 
     /// Return underlying buffer
-    pub fn into_inner(self) -> Bytes<N> {
+    pub fn into_inner(self) -> ByteBuf<N> {
         self.0
     }
 
@@ -234,8 +234,8 @@ mod test {
         ];
         assert_eq!(der.len(), expected.len());
         assert_eq!(
-            Bytes::<consts::U72>::try_from_slice(&der).unwrap(),
-            Bytes::<consts::U72>::try_from_slice(&expected).unwrap(),
+            ByteBuf::<consts::U72>::from_slice(&der).unwrap(),
+            ByteBuf::<consts::U72>::from_slice(&expected).unwrap(),
         );
         // assert_eq!(&got[..32], &expected[..32]);
         // assert_eq!(&got[32..64], &expected[32..64]);

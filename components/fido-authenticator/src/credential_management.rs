@@ -12,7 +12,7 @@ use trussed::{
 };
 
 use ctap_types::{
-    Bytes32,
+    ByteBuf32,
     authenticator::{
         Error,
         ctap2::{
@@ -196,7 +196,7 @@ where
 
                     let rp = credential.data.rp;
 
-                    response.rp_id_hash = Some(self.hash(&rp.id.as_ref())?);
+                    response.rp_id_hash = Some(self.hash(&rp.id.as_ref()));
                     response.rp = Some(rp);
 
                 }
@@ -261,7 +261,7 @@ where
 
                     let rp = credential.data.rp;
 
-                    response.rp_id_hash = Some(self.hash(&rp.id.as_ref())?);
+                    response.rp_id_hash = Some(self.hash(&rp.id.as_ref()));
                     response.rp = Some(rp);
 
                     // cache state for next call
@@ -299,7 +299,7 @@ where
         Ok((num_rks, first_rk))
     }
 
-    pub fn first_credential(&mut self, rp_id_hash: &Bytes32) -> Result<Response> {
+    pub fn first_credential(&mut self, rp_id_hash: &ByteBuf32) -> Result<Response> {
         hprintln!("first credential").ok();
 
         self.state.runtime.cache = None;
@@ -455,7 +455,7 @@ where
         -> Result<Response>
     {
         hprintln!("delete credential").ok();
-        let credential_id_hash = self.hash(&credential_descriptor.id[..])?;
+        let credential_id_hash = self.hash(&credential_descriptor.id[..]);
         let mut hex = [b'0'; 16];
         super::format_hex(&credential_id_hash[..8], &mut hex);
         let dir = PathBuf::from(b"rk");

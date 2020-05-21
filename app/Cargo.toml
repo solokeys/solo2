@@ -19,7 +19,7 @@ path = "src/app_rtfm.rs"
 cortex-m-funnel = { version = "0.1.0-alpha.1" }
 cortex-m-rtfm = "0.5.1"
 cortex-m-semihosting = { version = "0.3.5", optional = true }
-heapless = "0.5.5"
+heapless = { version = "0.5.5", features = ["ufmt"] }
 ufmt = "0.1.0"
 usb-device = "0.2.3"
 # usbd-ctaphid = { git = "https://github.com/nickray/usbd-ctaphid", branch = "main", features = ["logging"] }
@@ -98,14 +98,14 @@ ufmt = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty
 ufmt-macros = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty-enums" }
 # ufmt-macros = { git = "https://github.com/nickray/ufmt/macros", branch = "nickray-derive-empty-enums" }
 # lpc55s6x-pac = { path = "../../lpc55-pacs" }
-heapless = { git = "https://github.com/nickray/heapless", branch = "nickray-udebug" }
+# heapless = { git = "https://github.com/nickray/heapless", branch = "nickray-udebug" }
+heapless = { git = "https://github.com/nicolas-solokeys/heapless", branch = "bytebuf" }
 cortex-m-semihosting = { git = "https://github.com/nickray/cortex-m-semihosting", branch = "no-semihosting" }
+# micro-ecc-sys = { path = "../../micro-ecc-sys" }
 
 [profile.release]
 codegen-units = 1
 lto = true
 opt-level = "s"
-# codegen-units = 1
 incremental = false
 debug = true
-# lto = true

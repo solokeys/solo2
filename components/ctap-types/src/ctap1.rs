@@ -5,7 +5,7 @@
 use core::convert::TryInto;
 
 // use cortex_m_semihosting::hprintln;
-use crate::{Bytes, consts};
+use crate::{ByteBuf, consts};
 
 // pub struct WrongData;
 pub const NO_ERROR: u16 = 0x9000;
@@ -64,8 +64,8 @@ pub type Result<T> = core::result::Result<T, Error>;
 
 #[derive(Clone,Debug,uDebug,Eq,PartialEq)]
 pub struct Register {
-    client_data_hash: Bytes<consts::U32>,
-    app_id_hash: Bytes<consts::U32>,
+    client_data_hash: ByteBuf<consts::U32>,
+    app_id_hash: ByteBuf<consts::U32>,
     max_response: usize,
 }
 
@@ -106,7 +106,7 @@ pub struct Register {
 //                 }
 //             },
 //             user: PublicKeyCredentialUserEntity {
-//                 id: Bytes::new(),
+//                 id: ByteBuf::new(),
 //                 icon: None, name: None, display_name: None,
 //             },
 //             pub_key_cred_params,
@@ -122,9 +122,9 @@ pub struct Register {
 #[derive(Clone,Debug,uDebug,Eq,PartialEq)]
 pub struct Authenticate {
     control_byte: ControlByte,
-    client_data_hash: Bytes<consts::U32>,
-    app_id_hash: Bytes<consts::U32>,
-    key_handle: Bytes<consts::U255>,
+    client_data_hash: ByteBuf<consts::U32>,
+    app_id_hash: ByteBuf<consts::U32>,
+    key_handle: ByteBuf<consts::U255>,
     max_response: usize,
 }
 
@@ -228,8 +228,8 @@ impl core::convert::TryFrom<&[u8]> for Command {
                     return Err(Error::WrongData);
                 }
                 Ok(Command::Register(Register {
-                    client_data_hash: Bytes::try_from_slice(&request[..32]).unwrap(),
-                    app_id_hash: Bytes::try_from_slice(&request[32..]).unwrap(),
+                    client_data_hash: ByteBuf::from_slice(&request[..32]).unwrap(),
+                    app_id_hash: ByteBuf::from_slice(&request[32..]).unwrap(),
                     max_response,
                 }))
             },
@@ -246,9 +246,9 @@ impl core::convert::TryFrom<&[u8]> for Command {
                 }
                 Ok(Command::Authenticate(Authenticate {
                     control_byte,
-                    client_data_hash: Bytes::try_from_slice(&request[..32]).unwrap(),
-                    app_id_hash: Bytes::try_from_slice(&request[32..]).unwrap(),
-                    key_handle: Bytes::try_from_slice(&request[65..]).unwrap(),
+                    client_data_hash: ByteBuf::from_slice(&request[..32]).unwrap(),
+                    app_id_hash: ByteBuf::from_slice(&request[32..]).unwrap(),
+                    key_handle: ByteBuf::from_slice(&request[65..]).unwrap(),
                     max_response,
                 }))
             },

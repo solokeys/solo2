@@ -1,7 +1,7 @@
 pub mod class;
 pub mod instruction;
 
-pub type Data = heapless_bytes::Bytes<crate::MAX_COMMAND_DATA>;
+pub type Data = heapless::ByteBuf<crate::MAX_COMMAND_DATA>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Command {
@@ -83,7 +83,7 @@ impl core::convert::TryFrom<&[u8]> for Command {
             p1: header[2],
             p2: header[3],
             le: parsed.le,
-            data: Data::try_from_slice(data_slice).unwrap(),
+            data: Data::from_slice(data_slice).unwrap(),
             extended: parsed.extended,
         })
     }

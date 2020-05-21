@@ -1,7 +1,7 @@
 use core::convert::TryFrom;
 
 use cortex_m_semihosting::hprintln;
-use heapless_bytes::consts;
+use heapless::consts;
 
 use crate::{
     der::Der,

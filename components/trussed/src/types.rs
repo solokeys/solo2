@@ -9,7 +9,7 @@ pub use heapless::{
     Vec,
 };
 
-pub use heapless_bytes::Bytes;
+pub use heapless::ByteBuf;
 
 pub use littlefs2::{
     fs::{DirEntry, Filesystem},
@@ -90,7 +90,7 @@ pub struct DataAttributes {
     // application that manages the object
     // pub application: String<MAX_APPLICATION_NAME_LENGTH>,
     // DER-encoding of *type* of data object
-    // pub object_id: Bytes<?>,
+    // pub object_id: ByteBuf<?>,
     pub kind: ShortData,
     pub value: LongData,
 }
@@ -105,7 +105,7 @@ pub struct DataAttributes {
 #[derive(Copy, Clone, Eq, PartialEq, Debug, uDebug, Serialize, Deserialize)]
 pub struct KeyAttributes {
     // key_type: KeyType,
-    // object_id: Bytes,
+    // object_id: ByteBuf,
     // derive: bool, // can other keys be derived
     // local: bool, // generated on token, or copied from such
     // key_gen_mechanism: Mechanism, // only for local, how was key generated
@@ -157,7 +157,7 @@ pub enum KeyKind {
     SymmetricKey32 = 6, // or directly: SharedSecret32 —DeriveKey(HmacSha256)-> SymmetricKey32 —Encrypt(Aes256)-> ...
     Symmetric32Nonce12 = 7,
     Symmetric24 = 8,
-    // ThirtytwoBytes,
+    // ThirtytwoByteBuf,
 }
 
 impl core::convert::TryFrom<u8> for KeyKind {
@@ -388,11 +388,11 @@ pub enum Mechanism {
     X25519,
 }
 
-pub type LongData = Bytes<MAX_LONG_DATA_LENGTH>;
-pub type MediumData = Bytes<MAX_MEDIUM_DATA_LENGTH>;
-pub type ShortData = Bytes<MAX_SHORT_DATA_LENGTH>;
+pub type LongData = ByteBuf<MAX_LONG_DATA_LENGTH>;
+pub type MediumData = ByteBuf<MAX_MEDIUM_DATA_LENGTH>;
+pub type ShortData = ByteBuf<MAX_SHORT_DATA_LENGTH>;
 
-pub type Message = Bytes<MAX_MESSAGE_LENGTH>;
+pub type Message = ByteBuf<MAX_MESSAGE_LENGTH>;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, uDebug, Serialize, Deserialize)]
 pub enum KeySerialization {
@@ -403,7 +403,7 @@ pub enum KeySerialization {
     Sec1,
 }
 
-pub type Signature = Bytes<MAX_SIGNATURE_LENGTH>;
+pub type Signature = ByteBuf<MAX_SIGNATURE_LENGTH>;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, uDebug, Serialize, Deserialize)]
 pub enum SignatureSerialization {
@@ -428,7 +428,7 @@ impl UniqueId {
         // (0..hex.len())
         // use hex::FromHex;
         // let maybe_bytes = <[u8; 16]>::from_hex(hex).map_err(|e| ());
-        // maybe_bytes.map(|bytes| Self(Bytes::try_from_slice(&bytes).unwrap()))
+        // maybe_bytes.map(|bytes| Self(ByteBuf::from_slice(&bytes).unwrap()))
         if (hex.len() & 1) == 1 {
             // panic!("hex len & 1 =  {}", hex.len() & 1);
             return Err(());
@@ -468,7 +468,7 @@ impl ufmt::uDebug for UniqueId {
     }
 }
 
-pub type UserAttribute = Bytes<MAX_USER_ATTRIBUTE_LENGTH>;
+pub type UserAttribute = ByteBuf<MAX_USER_ATTRIBUTE_LENGTH>;
 
 // PANICS
 // Also assumes buffer is initialised with b'0',

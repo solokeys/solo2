@@ -6,7 +6,7 @@ pub mod state;
 use core::convert::{TryFrom, TryInto};
 
 use cortex_m_semihosting::{dbg, hprintln};
-use heapless_bytes::consts;
+use heapless::consts;
 use interchange::Responder;
 use iso7816::{
     Command, Instruction, Status,
@@ -225,7 +225,7 @@ impl App
 
         let alg = command.p1;
         let key = command.p2; // should we use Yubico's "slot" terminology? i don't like it
-        let mut data = command.data().as_ref();
+        let mut data = command.data().as_slice();
 
         // refine as we gain more capability
         if data.len() < 2 {
@@ -319,7 +319,7 @@ impl App
         }).unwrap();
         // dbg!(&der);
 
-        let response_data: ResponseData = der.try_convert_into().unwrap();
+        let response_data: ResponseData = der.embed();
         // dbg!(&response_data);
         return Ok(response_data);
 
@@ -377,7 +377,7 @@ impl App
             der.raw_tlv(0x82, &encrypted_challenge)
         }).unwrap();
 
-        let response_data: ResponseData = der.try_convert_into().unwrap();
+        let response_data: ResponseData = der.embed();
         // dbg!(&response_data);
         return Ok(response_data);
     }
@@ -408,9 +408,7 @@ impl App
             der.raw_tlv(0x80, &encrypted_challenge)
         }).unwrap();
 
-        let response_data: ResponseData = der.try_convert_into().unwrap();
-        // hprintln!("challenge data: {:?}", &response_data).ok();
-        return Ok(response_data);
+        return Ok(der.embed());
 
     }
 
@@ -678,7 +676,7 @@ impl App
         // let l2 = 65;
         let l2 = 32;
         let l1 = l2 + 2;
-        let mut data = ResponseData::try_from_slice(&[0x7f, 0x49, l1, 0x86, l2]).unwrap();
+        let mut data = ResponseData::from_slice(&[0x7f, 0x49, l1, 0x86, l2]).unwrap();
         // data.extend_from_slice(&[0x04]).unwrap();
         data.extend_from_slice(&serialized_public_key).unwrap();
 
@@ -735,7 +733,7 @@ impl App
             block!(self.trussed.write_file(
                 trussed::types::StorageLocation::Internal,
                 trussed::types::PathBuf::from(b"printed-information"),
-                trussed::types::Message::try_from_slice(data).unwrap(),
+                trussed::types::Message::from_slice(data).unwrap(),
                 None,
             ).unwrap()).map_err(|_| Status::NotEnoughMemory)?;
 
@@ -760,7 +758,7 @@ impl App
             block!(self.trussed.write_file(
                 trussed::types::StorageLocation::Internal,
                 trussed::types::PathBuf::from(b"authentication-key.x5c"),
-                trussed::types::Message::try_from_slice(data).unwrap(),
+                trussed::types::Message::from_slice(data).unwrap(),
                 None,
             ).unwrap()).map_err(|_| Status::NotEnoughMemory)?;
 
@@ -808,7 +806,7 @@ impl App
         match data {
             DataObjects::DiscoveryObject => {
                 // Err(Status::InstructionNotSupportedOrInvalid)
-                let data = ResponseData::try_from_slice(DISCOVERY_OBJECT).unwrap();
+                let data = ResponseData::from_slice(DISCOVERY_OBJECT).unwrap();
                 Ok(data)
                 // todo!("discovery object"),
             }
@@ -836,7 +834,7 @@ impl App
                     Ok(())
                 }).unwrap();
 
-                Ok(der.try_convert_into().unwrap())
+                Ok(der.embed())
             }
 
             // '5FC1 05' (351B)
@@ -858,12 +856,12 @@ impl App
 
                 let mut der: Der<consts::U1024> = Default::default();
                 der.raw_tlv(0x53, &data).unwrap();
-                Ok(der.try_convert_into().unwrap())
+                Ok(der.embed())
             }
 
             // '5F FF01' (754B)
             YubicoObjects::AttestationCertificate => {
-                let data = ResponseData::try_from_slice(YUBICO_ATTESTATION_CERTIFICATE).unwrap();
+                let data = ResponseData::from_slice(YUBICO_ATTESTATION_CERTIFICATE).unwrap();
                 Ok(data)
             }
 
@@ -876,14 +874,14 @@ impl App
         match instruction {
             YubicoPivExtension::GetSerial => {
                 // make up a 4-byte serial
-                let data = ResponseData::try_from_slice(
+                let data = ResponseData::from_slice(
                     &[0x00, 0x52, 0xf7, 0x43]).unwrap();
                 Ok(data)
             }
 
             YubicoPivExtension::GetVersion => {
                 // make up a version, be >= 5.0.0
-                let data = ResponseData::try_from_slice(
+                let data = ResponseData::from_slice(
                     &[0x06, 0x06, 0x06]).unwrap();
                 Ok(data)
             }
@@ -896,7 +894,7 @@ impl App
                 let slot = command.p1;
 
                 if slot == 0x9a {
-                    let data = ResponseData::try_from_slice(YUBICO_ATTESTATION_CERTIFICATE_FOR_9A).unwrap();
+                    let data = ResponseData::from_slice(YUBICO_ATTESTATION_CERTIFICATE_FOR_9A).unwrap();
                     return Ok(data);
                 }
 
@@ -989,9 +987,7 @@ impl App
             }).unwrap();
 
 
-            let response_data: ResponseData = der.try_convert_into().unwrap();
-            // hprintln!("reponse data: {:?}", &response_data).ok();
-            return Ok(response_data);
+            return Ok(der.embed());
         }
 
         // if command.data().starts_with(

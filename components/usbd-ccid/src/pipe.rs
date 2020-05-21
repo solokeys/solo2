@@ -168,7 +168,7 @@ where
                 panic!("short packet!");
             }
 
-            Err(PacketError::UnknownCommand(c)) => {
+            Err(PacketError::UnknownCommand(_c)) => {
                 // hprintln!("{:X?}", &p).ok();
                 // panic!("unknown command byte 0x{:x}", c);
 

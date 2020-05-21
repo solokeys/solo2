@@ -1,4 +1,4 @@
-use crate::{Bytes, consts, String, Vec};
+use crate::{ByteBuf, consts, String, Vec};
 use serde::{Deserialize, Serialize};
 use serde_indexed::{DeserializeIndexed, SerializeIndexed};
 
@@ -19,8 +19,8 @@ use crate::webauthn::*;
 pub struct HmacSecretInput {
     pub key_agreement: P256PublicKey,
     // *either* enc(salt1) *or* enc(salt1 || salt2)
-    pub salt_enc: Bytes<consts::U64>,
-    pub salt_auth: Bytes<consts::U16>,
+    pub salt_enc: ByteBuf<consts::U64>,
+    pub salt_auth: ByteBuf<consts::U16>,
 
 }
 
@@ -34,8 +34,8 @@ pub struct Extensions {
 pub struct NoAttestedCredentialData (core::marker::PhantomData<()>);
 
 impl super::SerializeAttestedCredentialData for NoAttestedCredentialData {
-    fn serialize(&self) -> Bytes<ATTESTED_CREDENTIAL_DATA_LENGTH> {
-        Bytes::new()
+    fn serialize(&self) -> ByteBuf<ATTESTED_CREDENTIAL_DATA_LENGTH> {
+        ByteBuf::new()
     }
 }
 
@@ -48,7 +48,7 @@ pub type AllowList = Vec<PublicKeyCredentialDescriptor, MAX_CREDENTIAL_COUNT_IN_
 #[serde_indexed(offset = 1)]
 pub struct Parameters {
     pub rp_id: String<consts::U64>,
-    pub client_data_hash: Bytes<consts::U32>,
+    pub client_data_hash: ByteBuf<consts::U32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub allow_list: Option<AllowList>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -69,8 +69,8 @@ pub struct Parameters {
 pub struct Response {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub credential: Option<PublicKeyCredentialDescriptor>,
-    pub auth_data: Bytes<AUTHENTICATOR_DATA_LENGTH>,
-    pub signature: Bytes<ASN1_SIGNATURE_LENGTH>,
+    pub auth_data: ByteBuf<AUTHENTICATOR_DATA_LENGTH>,
+    pub signature: ByteBuf<ASN1_SIGNATURE_LENGTH>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user: Option<PublicKeyCredentialUserEntity>,
     #[serde(skip_serializing_if = "Option::is_none")]

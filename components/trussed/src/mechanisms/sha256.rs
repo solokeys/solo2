@@ -18,7 +18,7 @@ DeriveKey<R, S> for super::Sha256
 
         let shared_secret: [u8; 32] = resources
             .load_key(KeyType::Secret, Some(KeyKind::SharedSecret32), base_id)?
-            .value.as_ref()
+            .value.as_slice()
             .try_into()
             .map_err(|_| Error::InternalError)?;
 

@@ -20,7 +20,9 @@ extern crate ufmt_macros;
 
 pub use heapless::{consts, ArrayLength, String, Vec};
 pub use heapless::spsc::{Consumer, Producer, Queue};
-pub use heapless_bytes::{Bytes, Bytes16, Bytes32};
+pub use heapless::ByteBuf;
+pub type ByteBuf16 = ByteBuf<consts::U16>;
+pub type ByteBuf32 = ByteBuf<consts::U32>;
 
 pub mod authenticator;
 pub mod cose;

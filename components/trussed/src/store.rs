@@ -128,7 +128,7 @@ use crate::config::*;
 use crate::error::Error;
 use crate::types::*;
 
-// pub type FileContents = Bytes<MAX_FILE_SIZE>;
+// pub type FileContents = ByteBuf<MAX_FILE_SIZE>;
 
 // pub mod our {
 //     type Result = ();
@@ -362,13 +362,13 @@ pub fn create_directories<'s, S: LfsStorage>(
     Ok(())
 }
 
-pub type KeyMaterial = Bytes<MAX_SERIALIZED_KEY_LENGTH>;
+pub type KeyMaterial = ByteBuf<MAX_SERIALIZED_KEY_LENGTH>;
 
 #[derive(Clone,Debug,Eq,PartialEq,SerializeIndexed,DeserializeIndexed)]
 pub struct SerializedKey {
    // r#type: KeyType,
    pub kind: KeyKind,
-   pub value: Bytes<MAX_SERIALIZED_KEY_LENGTH>,
+   pub value: ByteBuf<MAX_SERIALIZED_KEY_LENGTH>,
 }
 
 impl<'a> TryFrom<(KeyKind, &'a [u8])> for SerializedKey {
@@ -376,18 +376,18 @@ impl<'a> TryFrom<(KeyKind, &'a [u8])> for SerializedKey {
     fn try_from(from: (KeyKind, &'a [u8])) -> Result<Self, Error> {
         Ok(SerializedKey {
             kind: from.0,
-            value: Bytes::try_from_slice(from.1).map_err(|_| Error::InternalError)?,
+            value: ByteBuf::from_slice(from.1).map_err(|_| Error::InternalError)?,
         })
     }
 }
 
 /// Reads contents from path in location of store.
-pub fn read<N: heapless::ArrayLength<u8>>(store: impl Store, location: StorageLocation, path: &Path) -> Result<Bytes<N>, Error> {
+pub fn read<N: heapless::ArrayLength<u8>>(store: impl Store, location: StorageLocation, path: &Path) -> Result<ByteBuf<N>, Error> {
     match location {
         StorageLocation::Internal => store.ifs().read(path),
         StorageLocation::External => store.efs().read(path),
         StorageLocation::Volatile => store.vfs().read(path),
-    }.map(|vec| Bytes::from(vec)).map_err(|_| Error::FilesystemReadFailure)
+    }.map(|vec| ByteBuf::from(vec)).map_err(|_| Error::FilesystemReadFailure)
 }
 
 /// Writes contents to path in location of store.

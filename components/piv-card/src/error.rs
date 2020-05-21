@@ -63,7 +63,7 @@
 //     NotFound:                    [0x6a, 0x82],
 //     Success:                     [0x90, 0x00],
 
-//     SuccessBytesRemaining:       [0x61,  XX ],
+//     SuccessByteBufRemaining:       [0x61,  XX ],
 // }
 
 // pub trait StatusWordTrait {
@@ -80,7 +80,7 @@
 
 //     #[test]
 //     fn deref() {
-//         let sw = SuccessBytesRemaining::new(42);
+//         let sw = SuccessByteBufRemaining::new(42);
 //         println!("SW: {:?}", &sw.as_bytes());
 //     }
 

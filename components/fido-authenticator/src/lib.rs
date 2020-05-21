@@ -22,7 +22,7 @@ use trussed::{
 };
 
 use ctap_types::{
-    Bytes, Bytes32, consts, String, Vec,
+    ByteBuf, ByteBuf32, consts, String, Vec,
     // cose::EcdhEsHkdf256PublicKey as CoseEcdhEsHkdf256PublicKey,
     // cose::PublicKey as CosePublicKey,
     ctaphid::VendorOperation,
@@ -51,7 +51,7 @@ fn format_hex(data: &[u8], mut buffer: &mut [u8]) {
     }
 }
 
-fn rp_rk_dir(rp_id_hash: &Bytes<consts::U32>) -> PathBuf {
+fn rp_rk_dir(rp_id_hash: &ByteBuf<consts::U32>) -> PathBuf {
     // uses only first 8 bytes of hash, which should be "good enough"
     let mut hex = [b'0'; 16];
     format_hex(&rp_id_hash[..8], &mut hex);
@@ -62,7 +62,7 @@ fn rp_rk_dir(rp_id_hash: &Bytes<consts::U32>) -> PathBuf {
     dir
 }
 
-fn rk_path(rp_id_hash: &Bytes<consts::U32>, credential_id_hash: &Bytes<consts::U32>) -> PathBuf {
+fn rk_path(rp_id_hash: &ByteBuf<consts::U32>, credential_id_hash: &ByteBuf<consts::U32>) -> PathBuf {
     let mut path = rp_rk_dir(rp_id_hash);
 
     let mut hex = [0u8; 16];
@@ -514,7 +514,7 @@ impl<UP: UserPresence> Authenticator<UP> {
                 if pin_token_enc.len() != 16 {
                     return Err(Error::Other);
                 }
-                let pin_token_enc_32 = Bytes::<consts::U32>::try_from_slice(&pin_token_enc).unwrap();
+                let pin_token_enc_32 = ByteBuf::<consts::U32>::from_slice(&pin_token_enc).unwrap();
 
                 ctap2::client_pin::Response {
                     key_agreement: None,
@@ -526,7 +526,7 @@ impl<UP: UserPresence> Authenticator<UP> {
         })
     }
 
-    fn decrypt_pin_hash_and_maybe_escalate(&mut self, shared_secret: &ObjectHandle, pin_hash_enc: &Bytes<consts::U64>)
+    fn decrypt_pin_hash_and_maybe_escalate(&mut self, shared_secret: &ObjectHandle, pin_hash_enc: &ByteBuf<consts::U64>)
         -> Result<()>
     {
         let pin_hash = syscall!(self.crypto.decrypt_aes256cbc(
@@ -587,7 +587,7 @@ impl<UP: UserPresence> Authenticator<UP> {
     }
 
 
-    // fn verify_pin(&mut self, pin_auth: &Bytes<consts::U16>, client_data_hash: &Bytes<consts::U32>) -> bool {
+    // fn verify_pin(&mut self, pin_auth: &ByteBuf<consts::U16>, client_data_hash: &ByteBuf<consts::U32>) -> bool {
     fn verify_pin(&mut self, pin_auth: &[u8; 16], data: &[u8]) -> Result<()> {
         let key = self.state.runtime.pin_token(&mut self.crypto);
         let tag = syscall!(self.crypto.sign_hmacsha256(&key, data)).signature;
@@ -598,7 +598,7 @@ impl<UP: UserPresence> Authenticator<UP> {
         }
     }
 
-    fn verify_pin_auth(&mut self, shared_secret: &ObjectHandle, data: &[u8], pin_auth: &Bytes<consts::U16>)
+    fn verify_pin_auth(&mut self, shared_secret: &ObjectHandle, data: &[u8], pin_auth: &ByteBuf<consts::U16>)
         -> Result<()>
     {
         let expected_pin_auth = syscall!(self.crypto.sign_hmacsha256(shared_secret, data)).signature;
@@ -610,7 +610,7 @@ impl<UP: UserPresence> Authenticator<UP> {
         }
     }
 
-    // fn verify_pin_auth_using_token(&mut self, data: &[u8], pin_auth: &Bytes<consts::U16>)
+    // fn verify_pin_auth_using_token(&mut self, data: &[u8], pin_auth: &ByteBuf<consts::U16>)
     fn verify_pin_auth_using_token(
         &mut self,
         parameters: &ctap2::credential_management::Parameters
@@ -635,8 +635,8 @@ impl<UP: UserPresence> Authenticator<UP> {
 
                 // check pinAuth
                 let pin_token = self.state.runtime.pin_token(&mut self.crypto);
-                let mut data: Bytes<consts::U256> =
-                    Bytes::try_from_slice(&[sub_command as u8]).unwrap();
+                let mut data: ByteBuf<consts::U256> =
+                    ByteBuf::from_slice(&[sub_command as u8]).unwrap();
                 let len = 1 + match sub_command {
                     Subcommand::EnumerateCredentialsBegin |
                     Subcommand::DeleteCredential => {
@@ -745,7 +745,7 @@ impl<UP: UserPresence> Authenticator<UP> {
                     // error --> PinAuthInvalid
                     self.verify_pin(
                         // unwrap panic ruled out above
-                        pin_auth.as_ref().try_into().unwrap(),
+                        pin_auth.as_slice().try_into().unwrap(),
                         data,
                     )?;
 
@@ -773,7 +773,7 @@ impl<UP: UserPresence> Authenticator<UP> {
     /// If allow_list is none, pull applicable credentials, store
     /// in state's credential_heap, and return none
     fn locate_credentials(
-        &mut self, rp_id_hash: &Bytes32,
+        &mut self, rp_id_hash: &ByteBuf32,
         allow_list: &Option<ctap2::get_assertion::AllowList>,
         uv_performed: bool,
     )
@@ -841,7 +841,7 @@ impl<UP: UserPresence> Authenticator<UP> {
             // locate all credentials that are present on this authenticator
             // and bound to the specified rpId; sorted by reverse creation time
 
-            // let rp_id_hash = self.hash(rp_id.as_ref())?;
+            // let rp_id_hash = self.hash(rp_id.as_ref());
 
             //
             // So here's the idea:
@@ -887,7 +887,7 @@ impl<UP: UserPresence> Authenticator<UP> {
 
             if keep {
                 let id = credential.id(&mut self.crypto, &kek)?;
-                let credential_id_hash = self.hash(&id.0.as_ref())?;
+                let credential_id_hash = self.hash(&id.0.as_ref());
 
                 let timestamp_path = TimestampPath {
                     timestamp: credential.creation_time,
@@ -916,7 +916,7 @@ impl<UP: UserPresence> Authenticator<UP> {
                 if keep {
 
                     let id = credential.id(&mut self.crypto, &kek)?;
-                    let credential_id_hash = self.hash(&id.0.as_ref())?;
+                    let credential_id_hash = self.hash(&id.0.as_ref());
 
                     let timestamp_path = TimestampPath {
                         timestamp: credential.creation_time,
@@ -1066,7 +1066,7 @@ impl<UP: UserPresence> Authenticator<UP> {
 
     fn get_assertion(&mut self, parameters: &ctap2::get_assertion::Parameters) -> Result<ctap2::get_assertion::Response> {
 
-        let rp_id_hash = self.hash(&parameters.rp_id.as_ref())?;
+        let rp_id_hash = self.hash(&parameters.rp_id.as_ref());
 
         // 1-4.
         let uv_performed = self.pin_prechecks(
@@ -1143,7 +1143,7 @@ impl<UP: UserPresence> Authenticator<UP> {
         let sig_count = self.state.persistent.timestamp(&mut self.crypto)?;
 
         let authenticator_data = ctap2::get_assertion::AuthenticatorData {
-            rp_id_hash: Bytes::try_from_slice(&data.rp_id_hash).unwrap(),
+            rp_id_hash: ByteBuf::from_slice(&data.rp_id_hash).unwrap(),
 
             flags: {
                 let mut flags = Flags::USER_PRESENCE;
@@ -1166,7 +1166,7 @@ impl<UP: UserPresence> Authenticator<UP> {
 
         let serialized_auth_data = authenticator_data.serialize();
 
-        let mut commitment = Bytes::<consts::U1024>::new();
+        let mut commitment = ByteBuf::<consts::U1024>::new();
         commitment.extend_from_slice(&serialized_auth_data).map_err(|_| Error::Other)?;
         commitment.extend_from_slice(&data.client_data_hash).map_err(|_| Error::Other)?;
 
@@ -1177,7 +1177,7 @@ impl<UP: UserPresence> Authenticator<UP> {
                 // hprintln!("unwrapping {:?} with wrapping key {:?}", &bytes, &wrapping_key).ok();
                 let key_result = syscall!(self.crypto.unwrap_key_chacha8poly1305(
                     &wrapping_key,
-                    &bytes.try_convert_into().map_err(|_| Error::Other)?,
+                    &bytes.embed(),
                     b"",
                     // &rp_id_hash,
                     StorageLocation::Volatile,
@@ -1199,7 +1199,7 @@ impl<UP: UserPresence> Authenticator<UP> {
 
         debug!("signing with {:?}, {:?}", &mechanism, &serialization).ok();
         let signature = syscall!(self.crypto.sign(mechanism, key.clone(), &commitment, serialization)).signature
-            .try_convert_into().map_err(|_| Error::Other)?;
+            .embed();
         if gc {
             syscall!(self.crypto.delete(key));
         }
@@ -1207,7 +1207,7 @@ impl<UP: UserPresence> Authenticator<UP> {
         let response = ctap2::get_assertion::Response {
             credential: Some(credential_id.into()),
             // credential: None,
-            auth_data: Bytes::try_from_slice(&serialized_auth_data).map_err(|_| Error::Other)?,
+            auth_data: ByteBuf::from_slice(&serialized_auth_data).map_err(|_| Error::Other)?,
             signature,
             user: None,
             // number_of_credentials: if num_credentials > 1 { Some(num_credentials as u32) } else { None },
@@ -1316,8 +1316,8 @@ impl<UP: UserPresence> Authenticator<UP> {
         &mut self,
         rk_path: &Path,
     )
-        // rp_id_hash: &Bytes32,
-        // credential_id_hash: &Bytes32,
+        // rp_id_hash: &ByteBuf32,
+        // credential_id_hash: &ByteBuf32,
     // )
         -> Result<()>
     {
@@ -1357,14 +1357,14 @@ impl<UP: UserPresence> Authenticator<UP> {
         Ok(())
     }
 
-    fn hash(&mut self, data: &[u8]) -> Result<Bytes<consts::U32>> {
+    fn hash(&mut self, data: &[u8]) -> ByteBuf<consts::U32> {
         let hash = syscall!(self.crypto.hash_sha256(&data)).hash;
-        hash.try_convert_into().map_err(|_| Error::Other)
+        hash.try_embed().expect("hash should fit")
     }
 
     fn make_credential(&mut self, parameters: &ctap2::make_credential::Parameters) -> Result<ctap2::make_credential::Response> {
 
-        let rp_id_hash = self.hash(&parameters.rp.id.as_ref())?;
+        let rp_id_hash = self.hash(&parameters.rp.id.as_ref());
 
         // 1-4.
         let uv_performed = self.pin_prechecks(
@@ -1459,9 +1459,9 @@ impl<UP: UserPresence> Authenticator<UP> {
 
                         // 32B key, 12B nonce, 16B tag + some info on algorithm (P256/Ed25519)
                         // Turns out it's size 92 (enum serialization not optimized yet...)
-                        // let mut wrapped_key = Bytes::<consts::U60>::new();
+                        // let mut wrapped_key = ByteBuf::<consts::U60>::new();
                         // wrapped_key.extend_from_slice(&wrapped_key_msg).unwrap();
-                        CredRandom::Wrapped(wrapped_key.try_convert_into().map_err(|_| Error::Other)?)
+                        CredRandom::Wrapped(wrapped_key.try_embed().map_err(|_| Error::Other)?)
                     }
                 });
             }
@@ -1525,18 +1525,18 @@ impl<UP: UserPresence> Authenticator<UP> {
 
                 // 32B key, 12B nonce, 16B tag + some info on algorithm (P256/Ed25519)
                 // Turns out it's size 92 (enum serialization not optimized yet...)
-                // let mut wrapped_key = Bytes::<consts::U60>::new();
+                // let mut wrapped_key = ByteBuf::<consts::U60>::new();
                 // wrapped_key.extend_from_slice(&wrapped_key_msg).unwrap();
-                let ret = Key::WrappedKey(wrapped_key.try_convert_into().map_err(|_| Error::Other)?);
+                let ret = Key::WrappedKey(wrapped_key.try_embed().map_err(|_| Error::Other)?);
                 ret
                 // debug!("len wrapped key = {}", wrapped_key.len()).ok();
-                // Key::WrappedKey(wrapped_key.try_convert_into().unwrap())
+                // Key::WrappedKey(wrapped_key.try_embed().unwrap())
 
             }
         };
 
         // injecting this is a bit mehhh..
-        let nonce = syscall!(self.crypto.random_bytes(12)).bytes.as_ref().try_into().unwrap();
+        let nonce = syscall!(self.crypto.random_bytes(12)).bytes.as_slice().try_into().unwrap();
         info!("nonce = {:?}", &nonce).ok();
 
         let credential = Credential::new(
@@ -1555,7 +1555,7 @@ impl<UP: UserPresence> Authenticator<UP> {
         // 12.b generate credential ID { = AEAD(Serialize(Credential)) }
         let kek = &self.state.persistent.key_encryption_key(&mut self.crypto)?;
         let credential_id = credential.id(&mut self.crypto, &kek)?;
-        let credential_id_hash = self.hash(&credential_id.0.as_ref())?;
+        let credential_id_hash = self.hash(&credential_id.0.as_ref());
 
         // store it.
         // TODO: overwrite, error handling with KeyStoreFull
@@ -1576,7 +1576,7 @@ impl<UP: UserPresence> Authenticator<UP> {
         // 13.a AuthenticatorData and its serialization
         use ctap2::AuthenticatorDataFlags as Flags;
         let authenticator_data = ctap2::make_credential::AuthenticatorData {
-            rp_id_hash: rp_id_hash.try_convert_into().map_err(|_| Error::Other)?,
+            rp_id_hash: rp_id_hash.try_embed().map_err(|_| Error::Other)?,
 
             flags: {
                 let mut flags = Flags::USER_PRESENCE;
@@ -1598,8 +1598,8 @@ impl<UP: UserPresence> Authenticator<UP> {
                 // debug!("acd in, cid len {}, pk len {}", credential_id.0.len(), cose_public_key.len()).ok();
                 let attested_credential_data = ctap2::make_credential::AttestedCredentialData {
                     aaguid: self.state.identity.aaguid(),
-                    credential_id: credential_id.0.try_convert_into().unwrap(),
-                    credential_public_key: cose_public_key.try_convert_into().unwrap(),
+                    credential_id: credential_id.0.try_embed().unwrap(),
+                    credential_public_key: cose_public_key.try_embed().unwrap(),
                 };
                 // debug!("cose PK = {:?}", &attested_credential_data.credential_public_key).ok();
                 Some(attested_credential_data)
@@ -1617,7 +1617,7 @@ impl<UP: UserPresence> Authenticator<UP> {
 
         // can we write Sum<M, N> somehow?
         // debug!("seeking commitment, {} + {}", serialized_auth_data.len(), parameters.client_data_hash.len()).ok();
-        let mut commitment = Bytes::<consts::U1024>::new();
+        let mut commitment = ByteBuf::<consts::U1024>::new();
         commitment.extend_from_slice(&serialized_auth_data).map_err(|_| Error::Other)?;
         // debug!("serialized_auth_data ={:?}", &serialized_auth_data).ok();
         commitment.extend_from_slice(&parameters.client_data_hash).map_err(|_| Error::Other)?;
@@ -1638,13 +1638,13 @@ impl<UP: UserPresence> Authenticator<UP> {
                 match algorithm {
                     SupportedAlgorithm::Ed25519 => {
                         let signature = syscall!(self.crypto.sign_ed25519(&private_key, &commitment)).signature;
-                        (signature.try_convert_into().map_err(|_| Error::Other)?, -8)
+                        (signature.try_embed().map_err(|_| Error::Other)?, -8)
                     }
 
                     SupportedAlgorithm::P256 => {
                         // DO NOT prehash here, `trussed` does that
                         let der_signature = syscall!(self.crypto.sign_p256(&private_key, &commitment, SignatureSerialization::Asn1Der)).signature;
-                        (der_signature.try_convert_into().map_err(|_| Error::Other)?, -7)
+                        (der_signature.try_embed().map_err(|_| Error::Other)?, -7)
                     }
                 }
             } else {
@@ -1655,7 +1655,7 @@ impl<UP: UserPresence> Authenticator<UP> {
                     &hash,
                     SignatureSerialization::Asn1Der,
                 )).signature;
-                (signature.try_convert_into().map_err(|_| Error::Other)?, -7)
+                (signature.try_embed().map_err(|_| Error::Other)?, -7)
             }
         };
         // debug!("SIG = {:?}", &signature).ok();
@@ -1671,7 +1671,7 @@ impl<UP: UserPresence> Authenticator<UP> {
                 true => None,
                 false => {
                     // let mut x5c = Vec::new();
-                    // x5c.push(Bytes::try_from_slice(&SOLO_HACKER_ATTN_CERT).unwrap()).unwrap();
+                    // x5c.push(ByteBuf::from_slice(&SOLO_HACKER_ATTN_CERT).unwrap()).unwrap();
                     //
                     // See: https://www.w3.org/TR/webauthn-2/#sctn-packed-attestation-cert-requirements
                     //

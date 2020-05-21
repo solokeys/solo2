@@ -91,7 +91,7 @@ where
     fn endpoint_out(&mut self, addr: EndpointAddress) {
         if addr != self.read.address() { return; }
 
-        let maybe_packet = RawPacket::try_from(
+        let maybe_packet = RawPacket::try_read(
             |packet| self.read.read(packet));
 
         // should we return an error message

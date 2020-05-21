@@ -3,7 +3,7 @@ use cortex_m_semihosting::hprintln;
 use core::convert::TryInto;
 
 use cortex_m_semihosting::dbg;
-use heapless_bytes::Bytes;
+use heapless::ByteBuf;
 use trussed::{
     Client as Trussed,
     types::{ObjectHandle, PathBuf, StorageLocation},
@@ -83,7 +83,7 @@ impl State {
 #[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct Pin {
     // padded_pin: [u8; 8]
-    padded_pin: heapless_bytes::Bytes<heapless_bytes::consts::U8>,
+    padded_pin: heapless::ByteBuf<heapless::consts::U8>,
 }
 
 // impl Default for Pin {
@@ -112,7 +112,7 @@ impl Pin {
         if valid_bytes {
             Ok(Self {
                 // padded_pin: padded_pin.try_into().unwrap(),
-                padded_pin: Bytes::try_from_slice(padded_pin).unwrap(),//padded_pin.try_into().unwrap(),
+                padded_pin: ByteBuf::from_slice(padded_pin).unwrap(),//padded_pin.try_into().unwrap(),
             })
         } else {
             Err(())

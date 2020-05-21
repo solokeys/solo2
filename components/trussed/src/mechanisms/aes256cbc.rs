@@ -29,7 +29,7 @@ impl<R: RngRead, S: Store> Encrypt<R, S> for super::Aes256Cbc
 
         let symmetric_key: [u8; 32] = resources
             .load_key(KeyType::Secret, None, &key_id)?
-            .value.as_ref().try_into()
+            .value.as_slice().try_into()
             .map_err(|_| Error::InternalError)?;
 
         let zero_iv = [0u8; 16];
@@ -48,7 +48,7 @@ impl<R: RngRead, S: Store> Encrypt<R, S> for super::Aes256Cbc
         // The padding space should be big enough for padding, otherwise method will return Err(BlockModeError).
 		let ciphertext = cipher.encrypt(&mut buffer, l).unwrap();
 
-        let ciphertext = Message::try_from_slice(&ciphertext).unwrap();
+        let ciphertext = Message::from_slice(&ciphertext).unwrap();
         Ok(reply::Encrypt { ciphertext, nonce: ShortData::new(), tag: ShortData::new()  })
     }
 }
@@ -63,12 +63,11 @@ impl<R: RngRead, S: Store> WrapKey<R, S> for super::Aes256Cbc
         // let path = resources.key_path(KeyType::Secret, &request.key.object_id)?;
         // let (serialized_key, _location) = resources.load_key_unchecked(&path)?;
 
-        // let message: Message = serialized_key.value.try_convert_into().map_err(|_| Error::InternalError)?;
+        // let message: Message = serialized_key.value.try_embed().map_err(|_| Error::InternalError)?;
 
         let message: Message = resources
             .load_key(KeyType::Secret, None, &request.key.object_id)?
-            .value.try_convert_into()
-            .map_err(|_| Error::InternalError)?;
+            .value.try_embed().map_err(|_| Error::InternalError)?;
 
         let encryption_request = request::Encrypt {
             mechanism: Mechanism::Aes256Cbc,
@@ -102,7 +101,7 @@ impl<R: RngRead, S: Store> Decrypt<R, S> for super::Aes256Cbc
         let key_id = request.key.object_id;
         let symmetric_key: [u8; 32] = resources
             .load_key(KeyType::Secret, None, &key_id)?
-            .value.as_ref()
+            .value.as_slice()
             .try_into()
             .map_err(|_| Error::InternalError)?;
 
@@ -123,7 +122,7 @@ impl<R: RngRead, S: Store> Decrypt<R, S> for super::Aes256Cbc
         // hprintln!("symmetric key: {:?}", &symmetric_key).ok();
 		let plaintext = cipher.decrypt(&mut buffer).unwrap();
         // hprintln!("decrypted: {:?}", &plaintext).ok();
-        let plaintext = Message::try_from_slice(&plaintext).unwrap();
+        let plaintext = Message::from_slice(&plaintext).unwrap();
 
         Ok(reply::Decrypt { plaintext: Some(plaintext) })
     }

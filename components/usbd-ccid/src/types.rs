@@ -1,5 +1,5 @@
 // use cortex_m_semihosting::hprintln;
-use heapless_bytes::Bytes;
+use heapless::ByteBuf;
 
 use crate::constants::*;
 
@@ -8,7 +8,7 @@ use crate::constants::*;
 pub mod packet;
 pub mod tlv;
 
-pub type MessageBuffer = Bytes<MAX_MSG_LENGTH_TYPE>;
+pub type MessageBuffer = ByteBuf<MAX_MSG_LENGTH_TYPE>;
 
 interchange::interchange! {
     ApduInterchange: (iso7816::Command, iso7816::Response)

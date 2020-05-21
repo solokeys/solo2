@@ -67,7 +67,7 @@ Decrypt<R, S> for super::Chacha8Poly1305
         let serialized_value = resources
             .load_key(KeyType::Secret, Some(KeyKind::Symmetric32Nonce12), &request.key.object_id)?
             .value;
-        let serialized = serialized_value.as_ref();
+        let serialized = serialized_value.as_slice();
 
         // if serialized.len() != 44 {
         //     return Error::InternalError;
@@ -115,7 +115,7 @@ Encrypt<R, S> for super::Chacha8Poly1305
         let mut serialized_value = resources
             .load_key(key_type, Some(key_kind), key_id)?
             .value;
-        let serialized = serialized_value.as_mut();
+        let serialized = serialized_value.as_mut_slice();
 
         assert!(serialized.len() == 44);
 
@@ -155,10 +155,10 @@ Encrypt<R, S> for super::Chacha8Poly1305
             &mut ciphertext,
         ).unwrap().as_slice().try_into().unwrap();
 
-        let nonce = ShortData::try_from_slice(nonce).unwrap();
-        let tag = ShortData::try_from_slice(&tag).unwrap();
+        let nonce = ShortData::from_slice(nonce).unwrap();
+        let tag = ShortData::from_slice(&tag).unwrap();
 
-        // let ciphertext = Message::try_from_slice(&ciphertext).unwrap();
+        // let ciphertext = Message::from_slice(&ciphertext).unwrap();
         Ok(reply::Encrypt { ciphertext, nonce, tag })
     }
 }
@@ -305,7 +305,7 @@ UnwrapKey<R, S> for super::Chacha8Poly1305
 //         // Returns an error if buffer length is not multiple of block size and
 //         // if after decoding message has malformed padding.
 // 		let plaintext = cipher.decrypt(&mut buffer).unwrap();
-//         let plaintext = Message::try_from_slice(&plaintext).unwrap();
+//         let plaintext = Message::from_slice(&plaintext).unwrap();
 
 //         Ok(reply::Decrypt { plaintext: Ok(plaintext) })
 //     }
@@ -354,7 +354,7 @@ UnwrapKey<R, S> for super::Chacha8Poly1305
 //         // // The padding space should be big enough for padding, otherwise method will return Err(BlockModeError).
 // 		// let ciphertext = cipher.encrypt(&mut buffer, l).unwrap();
 
-//         // let ciphertext = Message::try_from_slice(&ciphertext).unwrap();
+//         // let ciphertext = Message::from_slice(&ciphertext).unwrap();
 //         Ok(reply::Encrypt { ciphertext })
 //     }
 // }

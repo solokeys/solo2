@@ -913,10 +913,10 @@ mod tests {
         let mut buf = [0u8; 64];
 
         let slice = b"thank you postcard!";
-        let bytes = heapless_bytes::Bytes::<U64>::try_from_slice(slice).unwrap();
+        let bytes = heapless::ByteBuf::<U64>::from_slice(slice).unwrap();
         let ser = cbor_serialize(&bytes, &mut buf).unwrap();
         println!("serialized bytes = {:?}", ser);
-        let de: heapless_bytes::Bytes::<U64> = from_bytes(&buf).unwrap();
+        let de: heapless::ByteBuf::<U64> = from_bytes(&buf).unwrap();
         println!("deserialized bytes = {:?}", &de);
         assert_eq!(&de, slice);
     }
@@ -965,13 +965,13 @@ mod tests {
 
     #[test]
     fn de_credential_id() {
-        use heapless_bytes::{Bytes, consts::{U32, U64}};
+        use heapless::{ByteBuf, consts::{U32, U64}};
         use serde_indexed::{DeserializeIndexed, SerializeIndexed};
         #[derive(Clone,Debug,Eq,PartialEq,SerializeIndexed,DeserializeIndexed)]
         pub struct CredentialInner {
-            pub user_id: Bytes<U64>,
+            pub user_id: ByteBuf<U64>,
             pub alg: i8,
-            pub seed: Bytes<U32>,
+            pub seed: ByteBuf<U32>,
         }
 
         let input = b"\xa3\x00Gnickray\x01&\x02X @7\xbf\xa6\x98j\xb9\x0e8nB\x92\xd8\xf2\x1bK\xef\x92\xe87\xfe2`\x92%\xff\x98jR\xd1\xc8\xc1";

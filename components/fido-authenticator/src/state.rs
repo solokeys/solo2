@@ -12,7 +12,7 @@ use trussed::{
     },
 };
 use ctap_types::{
-    Bytes, Bytes32, consts,
+    ByteBuf, ByteBuf32, consts,
     authenticator::Error,
     cose::EcdhEsHkdf256PublicKey as CoseEcdhEsHkdf256PublicKey,
     sizes::MAX_CREDENTIAL_COUNT_IN_LIST, // U8 currently
@@ -106,8 +106,8 @@ impl State {
 
 #[derive(Clone, Debug, uDebug, Default, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct Identity {
-    // can this be [u8; 16] or need Bytes for serialization?
-    // aaguid: Option<Bytes<consts::U16>>,
+    // can this be [u8; 16] or need ByteBuf for serialization?
+    // aaguid: Option<ByteBuf<consts::U16>>,
     attestation_key: Option<Key>,
 }
 
@@ -120,13 +120,13 @@ impl Identity {
     //         .key;
 
     //     Self {
-    //         aaguid: Bytes::try_from_slice(b"AAGUID0123456789").unwrap(),
+    //         aaguid: ByteBuf::from_slice(b"AAGUID0123456789").unwrap(),
     //         attestation_key,
     //     }
     // }
 
-    pub fn aaguid(&self) -> Bytes<consts::U16> {
-        Bytes::try_from_slice(b"AAGUID0123456789").unwrap()
+    pub fn aaguid(&self) -> ByteBuf<consts::U16> {
+        ByteBuf::from_slice(b"AAGUID0123456789").unwrap()
     }
 
     pub fn attestation_key<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) -> Key
@@ -149,7 +149,7 @@ impl Identity {
 
 #[derive(Clone, Debug, uDebug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum CommandCache {
-    CredentialManagementEnumerateRps(u32, Bytes32),
+    CredentialManagementEnumerateRps(u32, ByteBuf32),
     CredentialManagementEnumerateCredentials(u32, PathBuf, PathBuf),
 }
 

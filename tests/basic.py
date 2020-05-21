@@ -39,6 +39,7 @@ public_keys = []
 
 # for alg in (Ed25519, P256):
 for alg in (P256,):
+# for alg in (Ed25519,):
     print(f"MC for {alg}")
     att = dev.make_credential(
         b"1234567890ABCDEF1234567890ABCDEF",

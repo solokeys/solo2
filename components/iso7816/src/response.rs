@@ -1,7 +1,7 @@
 pub mod status;
 pub use status::Status;
 
-pub type Data = heapless_bytes::Bytes<crate::MAX_COMMAND_DATA>;
+pub type Data = heapless::ByteBuf<crate::MAX_COMMAND_DATA>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Response {

@@ -50,7 +50,7 @@ interchange::interchange! {
 //             p2: apdu.p2(),
 //             lc: apdu.lc(),
 //             le: apdu.le(),
-//             data: MessageBuffer::try_from_slice(apdu.data()).unwrap(),
+//             data: MessageBuffer::from_slice(apdu.data()).unwrap(),
 //         })
 //     }
 // }

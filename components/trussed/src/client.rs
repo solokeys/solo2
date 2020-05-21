@@ -216,8 +216,8 @@ impl<Syscall: crate::pipe::Syscall> Client<Syscall> {
                        message: &[u8], associated_data: &[u8], nonce: Option<ShortData>)
         -> core::result::Result<FutureResult<'c, reply::Encrypt>, ClientError>
     {
-        let message = Message::try_from_slice(message).map_err(|_| ClientError::DataTooLarge)?;
-        let associated_data = ShortData::try_from_slice(associated_data).map_err(|_| ClientError::DataTooLarge)?;
+        let message = Message::from_slice(message).map_err(|_| ClientError::DataTooLarge)?;
+        let associated_data = ShortData::from_slice(associated_data).map_err(|_| ClientError::DataTooLarge)?;
         self.raw.request(request::Encrypt { mechanism, key, message, associated_data, nonce })?;
         self.syscall.syscall();
         Ok(FutureResult::new(self))
@@ -235,10 +235,10 @@ impl<Syscall: crate::pipe::Syscall> Client<Syscall> {
                        )
         -> core::result::Result<FutureResult<'c, reply::Decrypt>, ClientError>
     {
-        let message = Message::try_from_slice(message).map_err(|_| ClientError::DataTooLarge)?;
-        let associated_data = Message::try_from_slice(associated_data).map_err(|_| ClientError::DataTooLarge)?;
-        let nonce = ShortData::try_from_slice(nonce).map_err(|_| ClientError::DataTooLarge)?;
-        let tag = ShortData::try_from_slice(tag).map_err(|_| ClientError::DataTooLarge)?;
+        let message = Message::from_slice(message).map_err(|_| ClientError::DataTooLarge)?;
+        let associated_data = Message::from_slice(associated_data).map_err(|_| ClientError::DataTooLarge)?;
+        let nonce = ShortData::from_slice(nonce).map_err(|_| ClientError::DataTooLarge)?;
+        let tag = ShortData::from_slice(tag).map_err(|_| ClientError::DataTooLarge)?;
         self.raw.request(request::Decrypt { mechanism, key, message, associated_data, nonce, tag })?;
         self.syscall.syscall();
         Ok(FutureResult::new(self))
@@ -435,7 +435,7 @@ impl<Syscall: crate::pipe::Syscall> Client<Syscall> {
         self.raw.request(request::Sign {
             key,
             mechanism,
-            message: Bytes::try_from_slice(data).map_err(|_| ClientError::DataTooLarge)?,
+            message: ByteBuf::from_slice(data).map_err(|_| ClientError::DataTooLarge)?,
             format,
         })?;
         self.syscall.syscall();
@@ -455,8 +455,8 @@ impl<Syscall: crate::pipe::Syscall> Client<Syscall> {
         self.raw.request(request::Verify {
             mechanism,
             key,
-            message: Message::try_from_slice(&message).expect("all good"),
-            signature: Signature::try_from_slice(&signature).expect("all good"),
+            message: Message::from_slice(&message).expect("all good"),
+            signature: Signature::from_slice(&signature).expect("all good"),
             format,
         })?;
         self.syscall.syscall();
@@ -465,9 +465,9 @@ impl<Syscall: crate::pipe::Syscall> Client<Syscall> {
 
 
     pub fn random_bytes<'c>(&'c mut self, count: usize)
-        -> core::result::Result<FutureResult<'c, reply::RandomBytes>, ClientError>
+        -> core::result::Result<FutureResult<'c, reply::RandomByteBuf>, ClientError>
     {
-        self.raw.request(request::RandomBytes { count } )?;
+        self.raw.request(request::RandomByteBuf { count } )?;
         self.syscall.syscall();
         Ok(FutureResult::new(self))
     }
@@ -483,7 +483,7 @@ impl<Syscall: crate::pipe::Syscall> Client<Syscall> {
     pub fn hash_sha256<'c>(&'c mut self, message: &[u8])
         -> core::result::Result<FutureResult<'c, reply::Hash>, ClientError>
     {
-        self.hash(Mechanism::Sha256, Message::try_from_slice(message).map_err(|_| ClientError::DataTooLarge)?)
+        self.hash(Mechanism::Sha256, Message::from_slice(message).map_err(|_| ClientError::DataTooLarge)?)
     }
 
     pub fn decrypt_chacha8poly1305<'c>(&'c mut self, key: &ObjectHandle, message: &[u8], associated_data: &[u8],
@@ -506,7 +506,7 @@ impl<Syscall: crate::pipe::Syscall> Client<Syscall> {
         -> core::result::Result<FutureResult<'c, reply::Encrypt>, ClientError>
     {
         self.encrypt(Mechanism::Chacha8Poly1305, key.clone(), message, associated_data,
-            nonce.and_then(|nonce| ShortData::try_from_slice(nonce).ok()))
+            nonce.and_then(|nonce| ShortData::from_slice(nonce).ok()))
     }
 
     pub fn decrypt_tdes<'c>(&'c mut self, key: &ObjectHandle, message: &[u8])
@@ -526,7 +526,7 @@ impl<Syscall: crate::pipe::Syscall> Client<Syscall> {
     {
         self.raw.request(request::UnsafeInjectKey {
             mechanism: Mechanism::Tdes,
-            raw_key: ShortData::try_from_slice(raw_key).unwrap(),
+            raw_key: ShortData::from_slice(raw_key).unwrap(),
             attributes: StorageAttributes::new().set_persistence(persistence),
         })?;
         self.syscall.syscall();
@@ -602,7 +602,7 @@ impl<Syscall: crate::pipe::Syscall> Client<Syscall> {
                        associated_data: &[u8], attributes: StorageAttributes)
         -> core::result::Result<FutureResult<'c, reply::UnwrapKey>, ClientError>
     {
-        let associated_data = Message::try_from_slice(associated_data).map_err(|_| ClientError::DataTooLarge)?;
+        let associated_data = Message::from_slice(associated_data).map_err(|_| ClientError::DataTooLarge)?;
         self.raw.request(request::UnwrapKey { mechanism, wrapping_key, wrapped_key, associated_data, attributes })?;
         self.syscall.syscall();
         Ok(FutureResult::new(self))
@@ -636,7 +636,7 @@ impl<Syscall: crate::pipe::Syscall> Client<Syscall> {
                        associated_data: &[u8])
         -> core::result::Result<FutureResult<'c, reply::WrapKey>, ClientError>
     {
-        let associated_data = Message::try_from_slice(associated_data).map_err(|_| ClientError::DataTooLarge)?;
+        let associated_data = Message::from_slice(associated_data).map_err(|_| ClientError::DataTooLarge)?;
         self.raw.request(request::WrapKey { mechanism, wrapping_key, key, associated_data })?;
         self.syscall.syscall();
         Ok(FutureResult::new(self))

@@ -3,7 +3,7 @@ use core::convert::{TryFrom, TryInto};
 #[cfg(feature = "semihosting")]
 use cortex_m_semihosting::hprintln;
 pub use embedded_hal::blocking::rng::Read as RngRead;
-use heapless_bytes::Bytes;
+use heapless::ByteBuf;
 use littlefs2::path::{Path, PathBuf};
 
 
@@ -639,13 +639,13 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
                 Ok(Reply::ReadFile(reply::ReadFile { data } ))
             }
 
-            Request::RandomBytes(request) => {
+            Request::RandomByteBuf(request) => {
                 if request.count < 1024 {
                     let mut bytes = Message::new();
                     bytes.resize_default(request.count).unwrap();
                     self.rng.read(&mut bytes)
                         .map_err(|_| Error::EntropyMalfunction)?;
-                    Ok(Reply::RandomBytes(reply::RandomBytes { bytes } ))
+                    Ok(Reply::RandomByteBuf(reply::RandomByteBuf { bytes } ))
                 } else {
                     Err(Error::MechanismNotAvailable)
                 }
@@ -847,16 +847,16 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
             None => return Err(Error::NoSuchKey),
         };
 
-        let bytes: Bytes<consts::U128> = store::read(self.store, location, &path)?;
+        let bytes: ByteBuf<consts::U128> = store::read(self.store, location, &path)?;
 
         let serialized_key: SerializedKey = crate::cbor_deserialize(&bytes).map_err(|_| Error::CborError)?;
 
-        // if let Some(kind) = key_kind {
-        //     if serialized_key.kind != kind {
-        //         // hprintln!("wrong key kind, expected {:?} got {:?}", &kind, &serialized_key.kind).ok();
-        //         Err(Error::WrongKeyKind)?;
-        //     }
-        // }
+        if let Some(kind) = key_kind {
+            if serialized_key.kind != kind {
+                // hprintln!("wrong key kind, expected {:?} got {:?}", &kind, &serialized_key.kind).ok();
+                Err(Error::WrongKeyKind)?;
+            }
+        }
 
         Ok(serialized_key)
     }
