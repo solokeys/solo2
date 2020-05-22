@@ -87,21 +87,26 @@ semihost-raw-responses = ["usbd-ctaphid/semihost-responses"]
 
 # patch dependencies like so to test local changes
 
-# [patch."https://github.com/nickray/lpc55-hal"]
-# lpc55-hal = { path = "../../lpc55-hal" }
+
+[patch."https://github.com/nickray/lpc55-hal"]
+lpc55-hal = { path = "../../lpc55-hal" }
+
 # [patch."https://github.com/nickray/littlefs2"]
 # littlefs2 = { path = "../../littlefs2" }
+
+
 [patch.crates-io]
 cortex-m-funnel = { git = "https://github.com/conorpp/cortex-m-funnel" }
-# ufmt = { path = "../../ufmt" }
+cortex-m-semihosting = { git = "https://github.com/nickray/cortex-m-semihosting", branch = "no-semihosting" }
+heapless = { git = "https://github.com/nicolas-solokeys/heapless", branch = "bytebuf" }
 ufmt = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty-enums" }
 ufmt-macros = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty-enums" }
+
+# ufmt = { path = "../../ufmt" }
 # ufmt-macros = { git = "https://github.com/nickray/ufmt/macros", branch = "nickray-derive-empty-enums" }
 # lpc55s6x-pac = { path = "../../lpc55-pacs" }
-# heapless = { git = "https://github.com/nickray/heapless", branch = "nickray-udebug" }
-heapless = { git = "https://github.com/nicolas-solokeys/heapless", branch = "bytebuf" }
-cortex-m-semihosting = { git = "https://github.com/nickray/cortex-m-semihosting", branch = "no-semihosting" }
 # micro-ecc-sys = { path = "../../micro-ecc-sys" }
+
 
 [profile.release]
 codegen-units = 1

@@ -201,7 +201,7 @@ impl Credential {
 
         let rp_id_hash: ByteBuf32 = syscall!(crypto.hash_sha256(&self.rp.id.as_ref()))
             .hash
-            .try_embed().map_err(|_| Error::Other)?;
+            .try_to_byte_buf().map_err(|_| Error::Other)?;
 
         let associated_data = &rp_id_hash[..];
         let nonce: [u8; 12] = self.nonce.as_slice().try_into().unwrap();

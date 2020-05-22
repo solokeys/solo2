@@ -319,7 +319,7 @@ impl App
         }).unwrap();
         // dbg!(&der);
 
-        let response_data: ResponseData = der.embed();
+        let response_data: ResponseData = der.to_byte_buf();
         // dbg!(&response_data);
         return Ok(response_data);
 
@@ -377,7 +377,7 @@ impl App
             der.raw_tlv(0x82, &encrypted_challenge)
         }).unwrap();
 
-        let response_data: ResponseData = der.embed();
+        let response_data: ResponseData = der.to_byte_buf();
         // dbg!(&response_data);
         return Ok(response_data);
     }
@@ -408,7 +408,7 @@ impl App
             der.raw_tlv(0x80, &encrypted_challenge)
         }).unwrap();
 
-        return Ok(der.embed());
+        return Ok(der.to_byte_buf());
 
     }
 
@@ -834,7 +834,7 @@ impl App
                     Ok(())
                 }).unwrap();
 
-                Ok(der.embed())
+                Ok(der.to_byte_buf())
             }
 
             // '5FC1 05' (351B)
@@ -856,7 +856,7 @@ impl App
 
                 let mut der: Der<consts::U1024> = Default::default();
                 der.raw_tlv(0x53, &data).unwrap();
-                Ok(der.embed())
+                Ok(der.to_byte_buf())
             }
 
             // '5F FF01' (754B)
@@ -987,7 +987,7 @@ impl App
             }).unwrap();
 
 
-            return Ok(der.embed());
+            return Ok(der.to_byte_buf());
         }
 
         // if command.data().starts_with(

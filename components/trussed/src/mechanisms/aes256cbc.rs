@@ -63,11 +63,11 @@ impl<R: RngRead, S: Store> WrapKey<R, S> for super::Aes256Cbc
         // let path = resources.key_path(KeyType::Secret, &request.key.object_id)?;
         // let (serialized_key, _location) = resources.load_key_unchecked(&path)?;
 
-        // let message: Message = serialized_key.value.try_embed().map_err(|_| Error::InternalError)?;
+        // let message: Message = serialized_key.value.try_to_byte_buf().map_err(|_| Error::InternalError)?;
 
         let message: Message = resources
             .load_key(KeyType::Secret, None, &request.key.object_id)?
-            .value.try_embed().map_err(|_| Error::InternalError)?;
+            .value.try_to_byte_buf().map_err(|_| Error::InternalError)?;
 
         let encryption_request = request::Encrypt {
             mechanism: Mechanism::Aes256Cbc,

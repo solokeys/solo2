@@ -1177,7 +1177,7 @@ impl<UP: UserPresence> Authenticator<UP> {
                 // hprintln!("unwrapping {:?} with wrapping key {:?}", &bytes, &wrapping_key).ok();
                 let key_result = syscall!(self.crypto.unwrap_key_chacha8poly1305(
                     &wrapping_key,
-                    &bytes.embed(),
+                    &bytes.to_byte_buf(),
                     b"",
                     // &rp_id_hash,
                     StorageLocation::Volatile,
@@ -1199,7 +1199,7 @@ impl<UP: UserPresence> Authenticator<UP> {
 
         debug!("signing with {:?}, {:?}", &mechanism, &serialization).ok();
         let signature = syscall!(self.crypto.sign(mechanism, key.clone(), &commitment, serialization)).signature
-            .embed();
+            .to_byte_buf();
         if gc {
             syscall!(self.crypto.delete(key));
         }
@@ -1359,7 +1359,7 @@ impl<UP: UserPresence> Authenticator<UP> {
 
     fn hash(&mut self, data: &[u8]) -> ByteBuf<consts::U32> {
         let hash = syscall!(self.crypto.hash_sha256(&data)).hash;
-        hash.try_embed().expect("hash should fit")
+        hash.try_to_byte_buf().expect("hash should fit")
     }
 
     fn make_credential(&mut self, parameters: &ctap2::make_credential::Parameters) -> Result<ctap2::make_credential::Response> {
@@ -1461,7 +1461,7 @@ impl<UP: UserPresence> Authenticator<UP> {
                         // Turns out it's size 92 (enum serialization not optimized yet...)
                         // let mut wrapped_key = ByteBuf::<consts::U60>::new();
                         // wrapped_key.extend_from_slice(&wrapped_key_msg).unwrap();
-                        CredRandom::Wrapped(wrapped_key.try_embed().map_err(|_| Error::Other)?)
+                        CredRandom::Wrapped(wrapped_key.try_to_byte_buf().map_err(|_| Error::Other)?)
                     }
                 });
             }
@@ -1527,10 +1527,10 @@ impl<UP: UserPresence> Authenticator<UP> {
                 // Turns out it's size 92 (enum serialization not optimized yet...)
                 // let mut wrapped_key = ByteBuf::<consts::U60>::new();
                 // wrapped_key.extend_from_slice(&wrapped_key_msg).unwrap();
-                let ret = Key::WrappedKey(wrapped_key.try_embed().map_err(|_| Error::Other)?);
+                let ret = Key::WrappedKey(wrapped_key.try_to_byte_buf().map_err(|_| Error::Other)?);
                 ret
                 // debug!("len wrapped key = {}", wrapped_key.len()).ok();
-                // Key::WrappedKey(wrapped_key.try_embed().unwrap())
+                // Key::WrappedKey(wrapped_key.try_to_byte_buf().unwrap())
 
             }
         };
@@ -1576,7 +1576,7 @@ impl<UP: UserPresence> Authenticator<UP> {
         // 13.a AuthenticatorData and its serialization
         use ctap2::AuthenticatorDataFlags as Flags;
         let authenticator_data = ctap2::make_credential::AuthenticatorData {
-            rp_id_hash: rp_id_hash.try_embed().map_err(|_| Error::Other)?,
+            rp_id_hash: rp_id_hash.try_to_byte_buf().map_err(|_| Error::Other)?,
 
             flags: {
                 let mut flags = Flags::USER_PRESENCE;
@@ -1598,8 +1598,8 @@ impl<UP: UserPresence> Authenticator<UP> {
                 // debug!("acd in, cid len {}, pk len {}", credential_id.0.len(), cose_public_key.len()).ok();
                 let attested_credential_data = ctap2::make_credential::AttestedCredentialData {
                     aaguid: self.state.identity.aaguid(),
-                    credential_id: credential_id.0.try_embed().unwrap(),
-                    credential_public_key: cose_public_key.try_embed().unwrap(),
+                    credential_id: credential_id.0.try_to_byte_buf().unwrap(),
+                    credential_public_key: cose_public_key.try_to_byte_buf().unwrap(),
                 };
                 // debug!("cose PK = {:?}", &attested_credential_data.credential_public_key).ok();
                 Some(attested_credential_data)
@@ -1638,13 +1638,13 @@ impl<UP: UserPresence> Authenticator<UP> {
                 match algorithm {
                     SupportedAlgorithm::Ed25519 => {
                         let signature = syscall!(self.crypto.sign_ed25519(&private_key, &commitment)).signature;
-                        (signature.try_embed().map_err(|_| Error::Other)?, -8)
+                        (signature.try_to_byte_buf().map_err(|_| Error::Other)?, -8)
                     }
 
                     SupportedAlgorithm::P256 => {
                         // DO NOT prehash here, `trussed` does that
                         let der_signature = syscall!(self.crypto.sign_p256(&private_key, &commitment, SignatureSerialization::Asn1Der)).signature;
-                        (der_signature.try_embed().map_err(|_| Error::Other)?, -7)
+                        (der_signature.try_to_byte_buf().map_err(|_| Error::Other)?, -7)
                     }
                 }
             } else {
@@ -1655,7 +1655,7 @@ impl<UP: UserPresence> Authenticator<UP> {
                     &hash,
                     SignatureSerialization::Asn1Der,
                 )).signature;
-                (signature.try_embed().map_err(|_| Error::Other)?, -7)
+                (signature.try_to_byte_buf().map_err(|_| Error::Other)?, -7)
             }
         };
         // debug!("SIG = {:?}", &signature).ok();
