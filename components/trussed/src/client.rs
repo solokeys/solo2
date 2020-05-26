@@ -521,6 +521,19 @@ impl<Syscall: crate::pipe::Syscall> Client<Syscall> {
         self.encrypt(Mechanism::Tdes, key.clone(), message, &[], None)
     }
 
+    pub fn unsafe_inject_totp_key<'c>(&'c mut self, raw_key: &[u8; 20], persistence: StorageLocation)
+        -> core::result::Result<FutureResult<'c, reply::UnsafeInjectKey>, ClientError>
+    {
+        cortex_m_semihosting::hprintln!("{}B: raw key: {:X?}", raw_key.len(), raw_key).ok();
+        self.raw.request(request::UnsafeInjectKey {
+            mechanism: Mechanism::Totp,
+            raw_key: ShortData::from_slice(raw_key).unwrap(),
+            attributes: StorageAttributes::new().set_persistence(persistence),
+        })?;
+        self.syscall.syscall();
+        Ok(FutureResult::new(self))
+    }
+
     pub fn unsafe_inject_tdes_key<'c>(&'c mut self, raw_key: &[u8; 24], persistence: StorageLocation)
         -> core::result::Result<FutureResult<'c, reply::UnsafeInjectKey>, ClientError>
     {
@@ -593,6 +606,14 @@ impl<Syscall: crate::pipe::Syscall> Client<Syscall> {
         self.sign(Mechanism::P256, key.clone(), message, format)
     }
 
+    pub fn sign_totp<'c>(&'c mut self, key: &ObjectHandle, timestamp: u64)
+        -> core::result::Result<FutureResult<'c, reply::Sign>, ClientError>
+    {
+        self.sign(Mechanism::Totp, key.clone(),
+            &timestamp.to_le_bytes().as_ref(),
+            SignatureSerialization::Raw,
+        )
+    }
 
           // - mechanism: Mechanism
           // - wrapping_key: ObjectHandle

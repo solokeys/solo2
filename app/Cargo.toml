@@ -98,7 +98,8 @@ lpc55-hal = { path = "../../lpc55-hal" }
 [patch.crates-io]
 cortex-m-funnel = { git = "https://github.com/conorpp/cortex-m-funnel" }
 cortex-m-semihosting = { git = "https://github.com/nickray/cortex-m-semihosting", branch = "no-semihosting" }
-heapless = { git = "https://github.com/nicolas-solokeys/heapless", branch = "bytebuf" }
+# heapless = { git = "https://github.com/nicolas-solokeys/heapless", branch = "bytebuf" }
+heapless = { path = "../../heapless" }
 ufmt = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty-enums" }
 ufmt-macros = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty-enums" }
 
@@ -110,7 +111,7 @@ ufmt-macros = { git = "https://github.com/nickray/ufmt", branch = "nickray-deriv
 
 [profile.release]
 codegen-units = 1
-lto = true
-opt-level = "s"
+# lto = true
+# opt-level = "s"
 incremental = false
 debug = true

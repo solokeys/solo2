@@ -265,7 +265,8 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     // to identify us as a smartcard.
     // let usbd = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0x072f, 0x90cc))
         .manufacturer("SoloKeys")
-        .product("Solo Bee")
+        // .product("Solo Bee")
+        .product("Solo 🐝")
         .serial_number("20/20")
         .device_release(0x0123)
         // #[cfg(feature = "highspeed")]

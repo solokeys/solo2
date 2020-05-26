@@ -5,9 +5,6 @@ pub trait MechanismTrait {}
 pub struct Aes256Cbc {}
 mod aes256cbc;
 
-pub struct Tdes {}
-mod tdes;
-
 pub struct Chacha8Poly1305 {}
 mod chacha8poly1305;
 
@@ -23,6 +20,12 @@ mod p256;
 
 pub struct Sha256 {}
 mod sha256;
+
+pub struct Totp {}
+mod totp;
+
+pub struct Tdes {}
+mod tdes;
 
 pub struct Trng {}
 mod trng;

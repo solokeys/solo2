@@ -124,6 +124,7 @@ pub type Result<T> = core::result::Result<T, Error>;
 pub enum SupportedAlgorithm {
     P256 = -7,
     Ed25519 = -8,
+    Totp = -9,
 }
 
 impl core::convert::TryFrom<i32> for SupportedAlgorithm {
@@ -132,6 +133,7 @@ impl core::convert::TryFrom<i32> for SupportedAlgorithm {
         Ok(match alg {
             -7 => SupportedAlgorithm::P256,
             -8 => SupportedAlgorithm::Ed25519,
+            -9 => SupportedAlgorithm::Totp,
             _ => return Err(Error::UnsupportedAlgorithm),
         })
     }
@@ -817,6 +819,11 @@ impl<UP: UserPresence> Authenticator<UP> {
                         match credential.algorithm {
                             -7 => syscall!(self.crypto.exists(Mechanism::P256, key)).exists,
                             -8 => syscall!(self.crypto.exists(Mechanism::Ed25519, key)).exists,
+                            -9 => {
+                                let exists = syscall!(self.crypto.exists(Mechanism::Totp, key)).exists;
+                                hprintln!("found it").ok();
+                                exists
+                            }
                             _ => false,
                         }
                     }
@@ -835,6 +842,7 @@ impl<UP: UserPresence> Authenticator<UP> {
             while applicable_credentials.len() > 1 {
                 applicable_credentials.pop().unwrap();
             }
+            // TODO: this can panic
             Some(applicable_credentials.pop().unwrap())
         } else {
             // If an allowList is not present,
@@ -1101,8 +1109,12 @@ impl<UP: UserPresence> Authenticator<UP> {
         };
 
         // NB: misleading, if we have "1" we return "None"
-        debug!("found {:?} applicable credentials", num_credentials).ok();
-        hprintln!("found {:?} applicable credentials", num_credentials).ok();
+        let human_num_credentials = match num_credentials {
+            Some(n) => n,
+            None => 1,
+        };
+        debug!("found {:?} applicable credentials", human_num_credentials).ok();
+        hprintln!("found {:?} applicable credentials", human_num_credentials).ok();
 
         self.state.runtime.active_get_assertion = Some(state::ActiveGetAssertionData {
             rp_id_hash: {
@@ -1194,12 +1206,21 @@ impl<UP: UserPresence> Authenticator<UP> {
         let (mechanism, serialization) = match credential.algorithm {
             -7 => (Mechanism::P256, SignatureSerialization::Asn1Der),
             -8 => (Mechanism::Ed25519, SignatureSerialization::Raw),
+            -9 => (Mechanism::Totp, SignatureSerialization::Raw),
             _ => { return Err(Error::Other); }
         };
 
         debug!("signing with {:?}, {:?}", &mechanism, &serialization).ok();
-        let signature = syscall!(self.crypto.sign(mechanism, key.clone(), &commitment, serialization)).signature
-            .to_byte_buf();
+        let signature = match mechanism {
+            Mechanism::Totp => {
+                let timestamp = u64::from_le_bytes(data.client_data_hash[..8].try_into().unwrap());
+                hprintln!("TOTP with timestamp {:?}", &timestamp).ok();
+                syscall!(self.crypto.sign_totp(&key, timestamp)).signature.to_byte_buf()
+            }
+            _ => syscall!(self.crypto.sign(mechanism, key.clone(), &commitment, serialization)).signature
+                     .to_byte_buf(),
+        };
+
         if gc {
             syscall!(self.crypto.delete(key));
         }
@@ -1385,6 +1406,7 @@ impl<UP: UserPresence> Authenticator<UP> {
             match param.alg {
                 -7 => { if algorithm.is_none() { algorithm = Some(SupportedAlgorithm::P256); }}
                 -8 => { algorithm = Some(SupportedAlgorithm::Ed25519); }
+                -9 => { algorithm = Some(SupportedAlgorithm::Totp); }
                 _ => {}
             }
         }
@@ -1504,6 +1526,21 @@ impl<UP: UserPresence> Authenticator<UP> {
                     Mechanism::Ed25519, public_key.clone(), KeySerialization::Cose
                 )).serialized_key;
                 info!("deleted public Ed25519 key: {}", syscall!(self.crypto.delete(public_key)).success).ok();
+            }
+            SupportedAlgorithm::Totp => {
+                if parameters.client_data_hash.len() != 32 {
+                    return Err(Error::InvalidParameter);
+                }
+                // b'TOTP---W\x0e\xf1\xe0\xd7\x83\xfe\t\xd1\xc1U\xbf\x08T_\x07v\xb2\xc6--TOTP'
+                let totp_secret: [u8; 20] = parameters.client_data_hash[6..26].try_into().unwrap();
+                private_key = syscall!(self.crypto.unsafe_inject_totp_key(
+                    &totp_secret, StorageLocation::Internal)).key;
+                hprintln!("totes injected");
+                let fake_cose_pk = ctap_types::cose::TotpPublicKey {};
+                let mut fake_serialized_cose_pk = Message::new();
+                trussed::cbor_serialize_bytes(&fake_cose_pk, &mut fake_serialized_cose_pk)
+                    .map_err(|_| Error::NotAllowed)?;
+                cose_public_key = fake_serialized_cose_pk; // ByteBuf::from_slice(&[0u8; 20]).unwrap();
             }
         }
 
@@ -1631,7 +1668,7 @@ impl<UP: UserPresence> Authenticator<UP> {
         //
         // we should also directly support "none" format, it's a bit weird
         // how browsers firefox this
-        const SELF_SIGNED: bool  = true;
+        const SELF_SIGNED: bool = true;
 
         let (signature, attestation_algorithm) = {
             if SELF_SIGNED {
@@ -1645,6 +1682,19 @@ impl<UP: UserPresence> Authenticator<UP> {
                         // DO NOT prehash here, `trussed` does that
                         let der_signature = syscall!(self.crypto.sign_p256(&private_key, &commitment, SignatureSerialization::Asn1Der)).signature;
                         (der_signature.try_to_byte_buf().map_err(|_| Error::Other)?, -7)
+                    }
+                    SupportedAlgorithm::Totp => {
+                        // maybe we can fake it here too, but seems kinda weird
+                        // return Err(Error::UnsupportedAlgorithm);
+                        // micro-ecc is borked. let's self-sign anyway
+                        let hash = syscall!(self.crypto.hash_sha256(&commitment.as_ref())).hash;
+                        let attestation_key = self.state.identity.attestation_key(&mut self.crypto);
+                        let signature = syscall!(self.crypto.sign_p256(
+                            &attestation_key,
+                            &hash,
+                            SignatureSerialization::Asn1Der,
+                        )).signature;
+                        (signature.try_to_byte_buf().map_err(|_| Error::Other)?, -7)
                     }
                 }
             } else {

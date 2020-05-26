@@ -24,11 +24,12 @@ des = { version = "0.3.0", optional = true }
 embedded-hal = { version = "0.2.3", features = ["unproven"] }
 generic-array = "0.12.3"  # "0.13.2"
 # generic-array = { version = "0.13.2", default-features = false }
-heapless = "0.5.5"
+heapless = { version = "0.5.5", features = ["ufmt"] }
 hmac = "0.7.1"
 serde = { version = "1.0", default-features = false }
 serde_cbor = { version = "0.11.0", default-features = false }
 serde-indexed = "0.0.4"
+sha-1 = { version = "0.8.2", default-features = false, optional = true }
 sha2 = { version = "0.8.0", default-features = false }
 ufmt = "0.1.0"
 
@@ -79,6 +80,7 @@ default-mechanisms = [
     "p256",
     "sha256",
     "tdes",
+    "totp",
     "trng",
 ]
 aes256-cbc = []
@@ -88,9 +90,11 @@ hmac-sha256 = []
 p256 = []
 sha256 = []
 tdes = ["des"]
-trng = []
+totp = ["sha-1"]
+trng = ["sha-1"]
 
 [patch.crates-io]
-heapless = { git = "https://github.com/nickray/heapless", branch = "nickray-udebug" }
+# heapless = { git = "https://github.com/nicolas-solokeys/heapless", branch = "bytebuf" }
+heapless = { path = "../../../heapless" }
 ufmt = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty-enums" }
 ufmt-macros = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty-enums" }

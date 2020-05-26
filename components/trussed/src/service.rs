@@ -205,6 +205,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
 
                     Mechanism::Ed25519 => mechanisms::Ed25519::exists(self, request),
                     Mechanism::P256 => mechanisms::P256::exists(self, request),
+                    Mechanism::Totp => mechanisms::Totp::exists(self, request),
                     _ => Err(Error::MechanismNotAvailable),
 
                 }.map(|reply| Reply::Exists(reply))
@@ -223,6 +224,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
             Request::UnsafeInjectKey(request) => {
                 match request.mechanism {
                     Mechanism::Tdes => mechanisms::Tdes::unsafe_inject_key(self, request),
+                    Mechanism::Totp => mechanisms::Totp::unsafe_inject_key(self, request),
                     _ => Err(Error::MechanismNotAvailable),
                 }.map(|reply| Reply::UnsafeInjectKey(reply))
             },
@@ -668,6 +670,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
                     Mechanism::HmacSha256 => mechanisms::HmacSha256::sign(self, request),
                     Mechanism::P256 => mechanisms::P256::sign(self, request),
                     Mechanism::P256Prehashed => mechanisms::P256Prehashed::sign(self, request),
+                    Mechanism::Totp => mechanisms::Totp::sign(self, request),
                     _ => Err(Error::MechanismNotAvailable),
 
                 }.map(|reply| Reply::Sign(reply))

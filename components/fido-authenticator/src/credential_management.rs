@@ -442,6 +442,9 @@ where
                     ctap_types::serde::cbor_deserialize(&cose_public_key)
                     .unwrap())
             }
+            SupportedAlgorithm::Totp => {
+                PublicKey::TotpKey(Default::default())
+            }
         };
         response.public_key = Some(cose_public_key);
         // response.cred_protect = Some(credential.data.cred_protect as u8);

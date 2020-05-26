@@ -69,6 +69,8 @@ enum Kty {
 enum Alg {
     Es256 = -7, // ECDSA with SHA-256
     EdDsa = -8,
+    Totp = -9, // Unassigned, we use it for TOTP
+
     // MAC
     // Hs256 = 5,
     // Hs512 = 7,
@@ -86,6 +88,7 @@ enum Alg {
 #[repr(i8)]
 #[derive(Clone, Debug, uDebug, Eq, PartialEq, Serialize_repr, Deserialize_repr)]
 enum Crv {
+    None = 0,
     P256 = 1,
     // P384 = 2,
     // P512 = 3,
@@ -103,6 +106,7 @@ pub enum PublicKey {
     P256Key(P256PublicKey),
     EcdhEsHkdf256Key(EcdhEsHkdf256PublicKey),
     Ed25519Key(Ed25519PublicKey),
+    TotpKey(TotpPublicKey),
 }
 
 impl From<P256PublicKey> for PublicKey {
@@ -120,6 +124,12 @@ impl From<EcdhEsHkdf256PublicKey> for PublicKey {
 impl From<Ed25519PublicKey> for PublicKey {
     fn from(key: Ed25519PublicKey) -> Self {
         PublicKey::Ed25519Key(key)
+    }
+}
+
+impl From<TotpPublicKey> for PublicKey {
+    fn from(key: TotpPublicKey) -> Self {
+        PublicKey::TotpKey(key)
     }
 }
 
@@ -164,6 +174,15 @@ impl PublicKeyConstants for Ed25519PublicKey {
     const CRV: Crv = Crv::Ed25519;
 }
 
+#[derive(Clone, Debug, Default, uDebug, Eq, PartialEq)]
+pub struct TotpPublicKey {}
+
+impl PublicKeyConstants for TotpPublicKey {
+    const KTY: Kty = Kty::Symmetric;
+    const ALG: Alg = Alg::Totp;
+    const CRV: Crv = Crv::None;
+}
+
 #[derive(Clone, Debug, uDebug, Eq, PartialEq)]
 pub struct X25519PublicKey {
     pub pub_key: ByteBuf<consts::U32>,
@@ -181,6 +200,26 @@ pub struct X25519PublicKey {
 //         }
 //     }
 // }
+
+impl serde::Serialize for TotpPublicKey {
+    fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeMap;
+        // let mut map = serializer.serialize_map(Some(3))?;
+        let mut map = serializer.serialize_map(Some(2))?;
+
+        //  1: kty
+        map.serialize_entry(&(Label::Kty as i8), &(Self::KTY as i8))?;
+        //  3: alg
+        map.serialize_entry(&(Label::Alg as i8), &(Self::ALG as i8))?;
+        // // -1: crv
+        // map.serialize_entry(&(Label::Crv as i8), &(Self::CRV as i8))?;
+
+        map.end()
+    }
+}
 
 impl serde::Serialize for P256PublicKey {
     fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
