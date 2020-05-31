@@ -20,6 +20,7 @@ extern crate funnel;
 macro_rules! debug { ($($tt:tt)*) => {{ core::result::Result::<(), core::convert::Infallible>::Ok(()) }} }
 
 pub mod api;
+#[macro_export]
 pub mod client;
 pub mod config;
 pub mod error;

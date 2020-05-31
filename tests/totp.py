@@ -92,7 +92,7 @@ otp = str(int.from_bytes(assn.signature[:8], "little")).zfill(6)
 hotp = pyotp.HOTP(SECRETb32)
 correct = hotp.verify(otp, timestamp)
 print(f"Solo calculated the correct TOTP? {correct}")
-IPython.embed()
+# IPython.embed()
 
 sys.exit(not correct)
 

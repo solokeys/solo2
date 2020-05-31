@@ -16,6 +16,8 @@ use iso7816::{
     },
 };
 use trussed::Client as Trussed;
+use trussed::{block, syscall};
+
 use usbd_ccid::{
     // constants::*,
     der::Der,
@@ -31,35 +33,6 @@ pub struct App
     state: state::State,
     trussed: Trussed,
     // trussed: RefCell<Trussed>,
-}
-
-#[macro_use]
-macro_rules! block {
-    ($future_result:expr) => {{
-        // evaluate the expression
-        let mut future_result = $future_result;
-        loop {
-            match future_result.poll() {
-                core::task::Poll::Ready(result) => { break result; },
-                core::task::Poll::Pending => {},
-            }
-        }
-    }}
-}
-
-#[macro_use]
-macro_rules! syscall {
-    ($pre_future_result:expr) => {{
-        // evaluate the expression
-        let mut future_result = $pre_future_result.expect("no client error");
-        loop {
-            match future_result.poll() {
-                // core::task::Poll::Ready(result) => { break result.expect("no errors"); },
-                core::task::Poll::Ready(result) => { break result.unwrap(); },
-                core::task::Poll::Pending => {},
-            }
-        }
-    }}
 }
 
 impl App

@@ -2,6 +2,7 @@ use core::convert::{TryFrom, TryInto};
 use cortex_m_semihosting::hprintln;
 
 use trussed::{
+    block, syscall,
     Client as CryptoClient,
     types::{
         ObjectHandle,
@@ -22,20 +23,6 @@ use crate::{
     Error,
     Result,
 };
-
-#[macro_use]
-macro_rules! block {
-    ($future_result:expr) => {{
-        // evaluate the expression
-        let mut future_result = $future_result;
-        loop {
-            match future_result.poll() {
-                core::task::Poll::Ready(result) => { break result; },
-                core::task::Poll::Pending => {},
-            }
-        }
-    }}
-}
 
 
 #[derive(Copy, Clone, Debug, serde::Deserialize, serde::Serialize)]

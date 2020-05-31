@@ -11,17 +11,6 @@ use littlefs2::ram_storage;
 use crate::*;
 use crate::types::*;
 
-macro_rules! block {
-    ($future_result:expr) => {
-        loop {
-            match $future_result.poll() {
-                Poll::Ready(result) => { break result; },
-                Poll::Pending => {},
-            }
-        }
-    }
-}
-
 struct MockRng(ChaCha20);
 
 impl MockRng {

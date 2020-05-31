@@ -5,6 +5,7 @@ use core::convert::TryFrom;
 use cortex_m_semihosting::hprintln;
 
 use trussed::{
+    syscall,
     types::{
         DirEntry,
         StorageLocation,
@@ -35,21 +36,6 @@ use crate::{
     credential::Credential,
     state::CommandCache,
 };
-
-#[macro_use]
-macro_rules! syscall {
-    ($pre_future_result:expr) => {{
-        // evaluate the expression
-        let mut future_result = $pre_future_result.expect("no client error");
-        loop {
-            match future_result.poll() {
-                // core::task::Poll::Ready(result) => { break result.expect("no errors"); },
-                core::task::Poll::Ready(result) => { break result.unwrap(); },
-                core::task::Poll::Pending => {},
-            }
-        }
-    }}
-}
 
 pub struct CredentialManagement<'a, UP>
 where

@@ -66,55 +66,6 @@
 //! - CON: this is already two directories deep (not just "one namespace')
 //! - Alternative: subdirectory <==> RP hash, everything else in flat files
 //! - In any case need to "list dirs excluding . and .." or similar
-//!
-//! (fido)
-//!     :   |-- data/              <-- the KeyValue portion
-//!             |-- <rp hash>/
-//!                 + rk.1 (filename: hash of credential ID)
-//!                 + rk.2
-//!                 :
-//!             |-- <rp hash>/
-//!         + config.cbor
-//!         + state.cbor
-//!
-//!
-//! /
-//! |-- root/
-//! :   :   <-- freestyle?
-//! |-- app/                       <-- plays the role of `/home`
-//! :   |-- <app id>/
-//!     :   |-- data/              <-- the KeyValue portion
-//!         :   |-- dir.1/
-//!                 +-- file.1.a (attr)
-//!                 +-- file.1.b
-//!                 :
-//!             |-- dir.2/
-//!                 +-- file.2.a
-//!             :
-//!             +-- file.1
-//!         :   +-- file.2
-//!         +-- secret/            <-- the CryptoKey portion
-//!         :   |-- tmp/ -> /tmp/<app id>/secret  [ good or bad to symlink?! ]
-//!             +-- <hash>
-//!             +-- <hash>
-//!         :   :
-//!         +-- private/
-//!         :   +-- <hash>
-//!             +-- <hash>
-//!         :   :
-//!         +-- public/
-//!         |   |-- <hash>
-//!         :   :
-//!         |   |-- <hash>
-//!
-//!     :
-//! :   |-- <app id>
-//! |-- mnt/ <-- may not be available
-//! :   :
-//! :   +-- mirrors subtree under `/app/` without "app" prefix
-//! |-- tmp/ <-- volatile
-//!     :
-//!     +-- mirrors subtree under `/app/` without "app" prefix
 
 use core::convert::TryFrom;
 

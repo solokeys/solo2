@@ -21,20 +21,15 @@ fn hotp_raw(key: &[u8], counter: u64, digits: u32) -> u64 {
 fn hmac_and_truncate(key: &[u8], message: &[u8], digits: u32) -> u64 {
     use hmac::{Hmac, Mac};
     // let mut hmac = Hmac::<D>::new(GenericArray::from_slice(key));
-    hprintln!("1").ok();
     let mut hmac = Hmac::<sha1::Sha1>::new_varkey(key).unwrap();
-    hprintln!("2").ok();
     hmac.input(message);
-    hprintln!("3").ok();
     let result = hmac.result();
-    hprintln!("4").ok();
 
     // output of `.code()` is GenericArray<u8, OutputSize>, again 20B
-    // crypto-mac docs warn: "Be very careful using this method, 
-    // since incorrect use of the code value may permit timing attacks 
+    // crypto-mac docs warn: "Be very careful using this method,
+    // since incorrect use of the code value may permit timing attacks
     // which defeat the security provided by the Mac trait."
     let hs = result.code();
-    hprintln!("5").ok();
 
     dynamic_truncation(&hs) % 10_u64.pow(digits)
 }
@@ -58,13 +53,11 @@ UnsafeInjectKey<R, S> for super::Totp
         -> Result<reply::UnsafeInjectKey, Error>
     {
         // in usual format, secret is a 32B Base32 encoding of 20B actual secret bytes
-        hprintln!("a").ok();
         if request.raw_key.len() != 20 {
-            hprintln!("{}B: {:X?}", request.raw_key.len(), &request.raw_key).ok();
+            // hprintln!("{}B: {:X?}", request.raw_key.len(), &request.raw_key).ok();
             return Err(Error::WrongMessageLength);
         }
 
-        hprintln!("b").ok();
         // store it
         let key_id = resources.store_key(
             request.attributes.persistence,

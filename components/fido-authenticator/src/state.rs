@@ -3,6 +3,7 @@ use core::cmp::Ordering;
 use cortex_m_semihosting::hprintln;
 
 use trussed::{
+    block, syscall,
     Client as CryptoClient,
     pipe::Syscall,
     types::{
@@ -27,35 +28,6 @@ use crate::cbor_serialize_message;
 
 pub type MaxCredentialHeap = BinaryHeap<TimestampPath, MAX_CREDENTIAL_COUNT_IN_LIST, Max>;
 pub type MinCredentialHeap = BinaryHeap<TimestampPath, MAX_CREDENTIAL_COUNT_IN_LIST, Min>;
-
-#[macro_use]
-macro_rules! block {
-    ($future_result:expr) => {{
-        // evaluate the expression
-        let mut future_result = $future_result;
-        loop {
-            match future_result.poll() {
-                core::task::Poll::Ready(result) => { break result; },
-                core::task::Poll::Pending => {},
-            }
-        }
-    }}
-}
-
-#[macro_use]
-macro_rules! syscall {
-    ($pre_future_result:expr) => {{
-        // evaluate the expression
-        let mut future_result = $pre_future_result.expect("no client error");
-        loop {
-            match future_result.poll() {
-                // core::task::Poll::Ready(result) => { break result.expect("no errors"); },
-                core::task::Poll::Ready(result) => { break result.unwrap(); },
-                core::task::Poll::Pending => {},
-            }
-        }
-    }}
-}
 
 #[derive(Clone, Debug, /*uDebug, Eq, PartialEq,*/ serde::Deserialize, serde::Serialize)]
 pub struct State {
