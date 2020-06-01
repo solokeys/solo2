@@ -385,6 +385,11 @@ where
                 // T1 = first historical byte
                 0x59,
 
+                // "SoloBee"
+                0x53, 0x6F, 0x6C, 0x6F, 0x42, 0x65 ,0x65,
+
+                // Checksum
+                0x94,
             ],
             // Yubikey NEO OTP+U2F+CCID
             // 3b:fc:13:00:00:81:31:fe:15:59:75:62:69:6b:65:79:4e:45:4f:72:33:e1
