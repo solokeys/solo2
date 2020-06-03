@@ -149,15 +149,10 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
     let rng = hal.rng.enabled(&mut syscon);
 
-    static mut CRYPTO_REQUESTS: trussed::pipe::RequestPipe = heapless::spsc::Queue(heapless::i::Queue::u8());
-    static mut CRYPTO_REPLIES: trussed::pipe::ReplyPipe = heapless::spsc::Queue(heapless::i::Queue::u8());
-    let mut client_id = littlefs2::path::PathBuf::new();
-    client_id.push(b"fido2\0".try_into().unwrap());
-    let (service_endpoint, client_endpoint) = trussed::pipe::new_endpoints(
-        unsafe { &mut CRYPTO_REQUESTS },
-        unsafe { &mut CRYPTO_REPLIES },
-        client_id,
-    );
+    let (fido_trussed_requester, fido_trussed_responder) = trussed::pipe::TrussedInterchange::claim(0)
+        .expect("could not setup FIDO TrussedInterchange");
+    let mut fido_client_id = littlefs2::path::PathBuf::new();
+    fido_client_id.push(b"fido2\0".try_into().unwrap());
 
     // static mut INTERNAL_STORAGE: InternalStorage = InternalStorage::new();
     // static mut INTERNAL_FS_ALLOC: Option<Allocation<InternalStorage>> = None;
@@ -202,17 +197,19 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
     let mut trussed = trussed::service::Service::new(rng, store);
 
-    assert!(trussed.add_endpoint(service_endpoint).is_ok());
+    assert!(trussed.add_endpoint(fido_trussed_responder, fido_client_id).is_ok());
 
     let syscaller = trussed::client::TrussedSyscall::default();
-    let crypto_client = trussed::client::Client::new(client_endpoint, syscaller);
+    let crypto_client = trussed::client::Client::new(fido_trussed_requester, syscaller);
 
-    static mut AUTHNR_REQUESTS: ctap_types::rpc::RequestPipe = heapless::spsc::Queue(heapless::i::Queue::u8());
-    static mut AUTHNR_RESPONSES: ctap_types::rpc::ResponsePipe = heapless::spsc::Queue(heapless::i::Queue::u8());
-    let (transport_pipe, authenticator_pipe) = ctap_types::rpc::new_endpoints(
-        unsafe { &mut AUTHNR_REQUESTS },
-        unsafe { &mut AUTHNR_RESPONSES },
-    );
+    let (ctap_requester, ctap_responder) = ctap_types::rpc::CtapInterchange::claim(0)
+        .expect("could not setup CtapInterchange");
+    // static mut AUTHNR_REQUESTS: ctap_types::rpc::RequestPipe = heapless::spsc::Queue(heapless::i::Queue::u8());
+    // static mut AUTHNR_RESPONSES: ctap_types::rpc::ResponsePipe = heapless::spsc::Queue(heapless::i::Queue::u8());
+    // let (transport_pipe, authenticator_pipe) = ctap_types::rpc::new_endpoints(
+    //     unsafe { &mut AUTHNR_REQUESTS },
+    //     unsafe { &mut AUTHNR_RESPONSES },
+    // );
 
     // static mut PIV_REQUESTS: ctap_types::rpc::RequestPipe = heapless::spsc::Queue(heapless::i::Queue::u8());
     // static mut PIV_RESPONSES: ctap_types::rpc::ResponsePipe = heapless::spsc::Queue(heapless::i::Queue::u8());
@@ -222,29 +219,24 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     // );
 
     let authnr = fido_authenticator::Authenticator::new(
-        crypto_client, authenticator_pipe,
+        crypto_client, ctap_responder,
         fido_authenticator::SilentAuthenticator {},
         );
 
     // setup PIV
     let (requester, responder) =
-        usbd_ccid::types::ApduInterchange::claim()
+        usbd_ccid::types::ApduInterchange::claim(0)
         .expect("could not setup ApduInterchange");
 
-    static mut PIV_TRUSSED_REQUESTS: trussed::pipe::RequestPipe = heapless::spsc::Queue(heapless::i::Queue::u8());
-    static mut PIV_TRUSSED_REPLIES: trussed::pipe::ReplyPipe = heapless::spsc::Queue(heapless::i::Queue::u8());
-    let mut client_id = littlefs2::path::PathBuf::new();
-    client_id.push(b"piv\0".try_into().unwrap());
-    let (piv_service_endpoint, piv_client_endpoint) = trussed::pipe::new_endpoints(
-        unsafe { &mut PIV_TRUSSED_REQUESTS },
-        unsafe { &mut PIV_TRUSSED_REPLIES },
-        client_id,
-    );
-    assert!(trussed.add_endpoint(piv_service_endpoint).is_ok());
+    let (piv_trussed_requester, piv_trussed_responder) = trussed::pipe::TrussedInterchange::claim(1)
+        .expect("could not setup PIV TrussedInterchange");
+    let mut piv_client_id = littlefs2::path::PathBuf::new();
+    piv_client_id.push(b"piv2\0".try_into().unwrap());
+    assert!(trussed.add_endpoint(piv_trussed_responder, piv_client_id).is_ok());
 
     let syscaller = trussed::client::TrussedSyscall::default();
     let piv_trussed = trussed::client::Client::new(
-        piv_client_endpoint,
+        piv_trussed_requester,
         syscaller,
     );
 
@@ -254,7 +246,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     );
 
     // our USB classes
-    let ctaphid = CtapHid::new(usb_bus, transport_pipe);
+    let ctaphid = CtapHid::new(usb_bus, ctap_requester);
     let ccid = Ccid::new(usb_bus, requester);//, ccid_pipe);
     let serial = usbd_serial::SerialPort::new(usb_bus);
 

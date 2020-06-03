@@ -1,11 +1,12 @@
 use core::marker::PhantomData;
 
+use interchange::Requester;
+
 use crate::api::*;
 // use crate::config::*;
 use crate::error::*;
+use crate::pipe::TrussedInterchange;
 use crate::types::*;
-
-pub use crate::pipe::ClientEndpoint;
 
 // to be fair, this is a programmer error,
 // and could also just panic
@@ -46,14 +47,14 @@ macro_rules! syscall {
 
 
 pub struct RawClient {
-    pub(crate) ep: ClientEndpoint,
+    pub(crate) interchange: Requester<TrussedInterchange>,
     // pending: Option<Discriminant<Request>>,
     pending: Option<u8>,
 }
 
 impl RawClient {
-    pub fn new(ep: ClientEndpoint) -> Self {
-        Self { ep, pending: None }
+    pub fn new(interchange: Requester<TrussedInterchange>) -> Self {
+        Self { interchange, pending: None }
     }
 
     // call with any of `crate::api::request::*`
@@ -72,7 +73,7 @@ impl RawClient {
         // in particular, can unwrap
         let request = req.into();
         self.pending = Some(u8::from(&request));
-        self.ep.send.enqueue(request).map_err(drop).unwrap();
+        self.interchange.request(request).map_err(drop).unwrap();
         Ok(RawFutureResult::new(self))
     }
 }
@@ -90,7 +91,7 @@ impl<'c> RawFutureResult<'c> {
     pub fn poll(&mut self)
         -> core::task::Poll<core::result::Result<Reply, Error>>
     {
-        match self.c.ep.recv.dequeue() {
+        match self.c.interchange.take_response() {
             Some(reply) => {
                 // #[cfg(all(test, feature = "verbose-tests"))]
                 // println!("got a reply: {:?}", &reply);
@@ -192,8 +193,8 @@ impl<Syscall: crate::pipe::Syscall> From<(RawClient, Syscall)> for Client<Syscal
 }
 
 impl<Syscall: crate::pipe::Syscall> Client<Syscall> {
-    pub fn new(ep: ClientEndpoint, syscall: Syscall) -> Self {
-        Self { raw: RawClient::new(ep), syscall }
+    pub fn new(interchange: Requester<TrussedInterchange>, syscall: Syscall) -> Self {
+        Self { raw: RawClient::new(interchange), syscall }
     }
 
 

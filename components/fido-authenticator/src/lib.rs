@@ -27,10 +27,11 @@ use ctap_types::{
     // cose::EcdhEsHkdf256PublicKey as CoseEcdhEsHkdf256PublicKey,
     // cose::PublicKey as CosePublicKey,
     ctaphid::VendorOperation,
-    rpc::AuthenticatorEndpoint,
+    rpc::CtapInterchange,
     // authenticator::ctap1,
     authenticator::{ctap2, Error, Request, Response},
 };
+use interchange::Responder;
 
 use littlefs2::path::{Path, PathBuf};
 
@@ -138,152 +139,149 @@ where
     UP: UserPresence,
 {
     crypto: CryptoClient,
-    rpc: AuthenticatorEndpoint,
+    interchange: Responder<CtapInterchange>,
     state: state::State,
     up: UP,
 }
 
 impl<UP: UserPresence> Authenticator<UP> {
 
-    pub fn new(crypto: CryptoClient, rpc: AuthenticatorEndpoint, up: UP) -> Self {
+    pub fn new(crypto: CryptoClient, interchange: Responder<CtapInterchange>, up: UP) -> Self {
 
         let crypto = crypto;
         let state = state::State::new();
-        let authenticator = Authenticator { crypto, rpc, state, up };
+        let authenticator = Authenticator { crypto, interchange, state, up };
 
         authenticator
     }
 
     fn respond(&mut self, response: Result<Response>) {
-        self.rpc.send.enqueue(response).expect("internal error");
+        self.interchange.respond(response).expect("internal error");
     }
 
     pub fn poll(&mut self) {
-        match self.rpc.recv.dequeue() {
-            None => {},
-            Some(request) => {
-                // debug!("request: {:?}", &request).ok();
+        if let Some(request) = self.interchange.take_request() {
+            // debug!("request: {:?}", &request).ok();
 
-                match request {
-                    Request::Ctap2(request) => {
-                        match request {
+            match request {
+                Request::Ctap2(request) => {
+                    match request {
 
-                            // 0x4
-                            ctap2::Request::GetInfo => {
-                                debug!("GI").ok();
-                                let response = self.get_info();
-                                self.rpc.send.enqueue(
-                                    Ok(Response::Ctap2(ctap2::Response::GetInfo(response))))
-                                    .expect("internal error");
-                            }
-
-                            // 0x2
-                            ctap2::Request::MakeCredential(parameters) => {
-                                // debug!("MC: {:?}", &parameters).ok();
-                                let response = self.make_credential(&parameters);
-                                self.rpc.send.enqueue(
-                                    match response {
-                                        Ok(response) => Ok(Response::Ctap2(ctap2::Response::MakeCredential(response))),
-                                        Err(error) => Err(error)
-                                    })
-                                    .expect("internal error");
-                                debug!("enqueued MC response").ok();
-                            }
-
-                            // 0x1
-                            ctap2::Request::GetAssertion(parameters) => {
-                                // debug!("GA: {:?}", &parameters).ok();
-                                let response = self.get_assertion(&parameters);
-                                self.rpc.send.enqueue(
-                                    match response {
-                                        Ok(response) => Ok(Response::Ctap2(ctap2::Response::GetAssertion(response))),
-                                        Err(error) => Err(error)
-                                    })
-                                    .expect("internal error");
-                                debug!("enqueued GA response").ok();
-                            }
-
-                            // 0x8
-                            ctap2::Request::GetNextAssertion => {
-                                // debug!("GNA: {:?}", &parameters).ok();
-                                let response = self.get_next_assertion();
-                                self.rpc.send.enqueue(
-                                    match response {
-                                        Ok(response) => Ok(Response::Ctap2(ctap2::Response::GetNextAssertion(response))),
-                                        Err(error) => Err(error)
-                                    })
-                                    .expect("internal error");
-                                debug!("enqueued GA response").ok();
-                            }
-
-                            // 0x7
-                            ctap2::Request::Reset => {
-                                // debug!("RESET: {:?}", &parameters).ok();
-                                let response = self.reset();
-                                self.rpc.send.enqueue(
-                                    match response {
-                                        Ok(()) => Ok(Response::Ctap2(ctap2::Response::Reset)),
-                                        Err(error) => Err(error)
-                                    })
-                                    .expect("internal error");
-                                debug!("enqueued GA response").ok();
-                            }
-
-
-                            // 0x6
-                            ctap2::Request::ClientPin(parameters) => {
-                                let response = self.client_pin(&parameters);
-                                // #[cfg(feature = "semihosting")]
-                                // hprintln!("{:?}", &response).ok();
-                                self.rpc.send.enqueue(
-                                    match response {
-                                        Ok(response) => Ok(Response::Ctap2(ctap2::Response::ClientPin(response))),
-                                        Err(error) => Err(error)
-                                    })
-                                    .expect("internal error");
-                                debug!("enqueued CP response").ok();
-                            }
-
-                            // 0xA
-                            ctap2::Request::CredentialManagement(parameters) => {
-                                // debug!("CM: {:?}", &parameters).ok();
-                                let response = self.credential_management(&parameters);
-                                self.rpc.send.enqueue(
-                                    match response {
-                                        Ok(response) => {
-                                            // let mut buf = [0u8; 512];
-                                            // hprintln!("{:?}", ctap_types::serde::cbor_serialize(&response, &mut buf)).ok();
-                                            Ok(Response::Ctap2(ctap2::Response::CredentialManagement(response)))
-                                        }
-                                        Err(error) => Err(error)
-                                    })
-                                    .expect("internal error");
-                                debug!("enqueued GA response").ok();
-                            }
-
-
-                            ctap2::Request::Vendor(op) => {
-                                let response = self.vendor(op);
-                                self.rpc.send.enqueue(
-                                    match response {
-                                        Ok(()) => Ok(Response::Ctap2(ctap2::Response::Vendor)),
-                                        Err(error) => Err(error)
-                                    })
-                                    .expect("internal error");
-                            }
-
-                            // _ => {
-                            //     // debug!("not implemented: {:?}", &request).ok();
-                            //     debug!("request not implemented").ok();
-                            //     self.rpc.send.enqueue(Err(Error::InvalidCommand)).expect("internal error");
-                            // }
+                        // 0x4
+                        ctap2::Request::GetInfo => {
+                            debug!("GI").ok();
+                            let response = self.get_info();
+                            self.interchange.respond(
+                                Ok(Response::Ctap2(ctap2::Response::GetInfo(response))))
+                                .expect("internal error");
                         }
+
+                        // 0x2
+                        ctap2::Request::MakeCredential(parameters) => {
+                            // debug!("MC: {:?}", &parameters).ok();
+                            let response = self.make_credential(&parameters);
+                            self.interchange.respond(
+                                match response {
+                                    Ok(response) => Ok(Response::Ctap2(ctap2::Response::MakeCredential(response))),
+                                    Err(error) => Err(error)
+                                })
+                                .expect("internal error");
+                            debug!("enqueued MC response").ok();
+                        }
+
+                        // 0x1
+                        ctap2::Request::GetAssertion(parameters) => {
+                            // debug!("GA: {:?}", &parameters).ok();
+                            let response = self.get_assertion(&parameters);
+                            self.interchange.respond(
+                                match response {
+                                    Ok(response) => Ok(Response::Ctap2(ctap2::Response::GetAssertion(response))),
+                                    Err(error) => Err(error)
+                                })
+                                .expect("internal error");
+                            debug!("enqueued GA response").ok();
+                        }
+
+                        // 0x8
+                        ctap2::Request::GetNextAssertion => {
+                            // debug!("GNA: {:?}", &parameters).ok();
+                            let response = self.get_next_assertion();
+                            self.interchange.respond(
+                                match response {
+                                    Ok(response) => Ok(Response::Ctap2(ctap2::Response::GetNextAssertion(response))),
+                                    Err(error) => Err(error)
+                                })
+                                .expect("internal error");
+                            debug!("enqueued GA response").ok();
+                        }
+
+                        // 0x7
+                        ctap2::Request::Reset => {
+                            // debug!("RESET: {:?}", &parameters).ok();
+                            let response = self.reset();
+                            self.interchange.respond(
+                                match response {
+                                    Ok(()) => Ok(Response::Ctap2(ctap2::Response::Reset)),
+                                    Err(error) => Err(error)
+                                })
+                                .expect("internal error");
+                            debug!("enqueued GA response").ok();
+                        }
+
+
+                        // 0x6
+                        ctap2::Request::ClientPin(parameters) => {
+                            let response = self.client_pin(&parameters);
+                            // #[cfg(feature = "semihosting")]
+                            // hprintln!("{:?}", &response).ok();
+                            self.interchange.respond(
+                                match response {
+                                    Ok(response) => Ok(Response::Ctap2(ctap2::Response::ClientPin(response))),
+                                    Err(error) => Err(error)
+                                })
+                                .expect("internal error");
+                            debug!("enqueued CP response").ok();
+                        }
+
+                        // 0xA
+                        ctap2::Request::CredentialManagement(parameters) => {
+                            // debug!("CM: {:?}", &parameters).ok();
+                            let response = self.credential_management(&parameters);
+                            self.interchange.respond(
+                                match response {
+                                    Ok(response) => {
+                                        // let mut buf = [0u8; 512];
+                                        // hprintln!("{:?}", ctap_types::serde::cbor_serialize(&response, &mut buf)).ok();
+                                        Ok(Response::Ctap2(ctap2::Response::CredentialManagement(response)))
+                                    }
+                                    Err(error) => Err(error)
+                                })
+                                .expect("internal error");
+                            debug!("enqueued GA response").ok();
+                        }
+
+
+                        ctap2::Request::Vendor(op) => {
+                            let response = self.vendor(op);
+                            self.interchange.respond(
+                                match response {
+                                    Ok(()) => Ok(Response::Ctap2(ctap2::Response::Vendor)),
+                                    Err(error) => Err(error)
+                                })
+                                .expect("internal error");
+                        }
+
+                        // _ => {
+                        //     // debug!("not implemented: {:?}", &request).ok();
+                        //     debug!("request not implemented").ok();
+                        //     self.interchange.respond(Err(Error::InvalidCommand)).expect("internal error");
+                        // }
                     }
-                    Request::Ctap1(_request) => {
-                        debug!("ctap1 not implemented: {:?}", &request).ok();
-                        // self.rpc.send.enqueue(Err(Error::InvalidCommand)).expect("internal error");
-                        self.respond(Err(Error::InvalidCommand));
-                    }
+                }
+                Request::Ctap1(_request) => {
+                    debug!("ctap1 not implemented: {:?}", &request).ok();
+                    // self.interchange.respond(Err(Error::InvalidCommand)).expect("internal error");
+                    self.respond(Err(Error::InvalidCommand));
                 }
             }
         }
