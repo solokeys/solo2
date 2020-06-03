@@ -1,6 +1,6 @@
 use core::time::Duration;
 use nb;
-use void;
+use core::convert::Infallible;
 
 /// Timer trait for Trussed, with inspiration from
 /// https://docs.rs/embedded-hal/0.2.3/embedded_hal/timer/trait.CountDown.html
@@ -31,5 +31,5 @@ pub trait Timer {
     fn lap(&mut self) -> nb::Result<Duration, Error>;
 
     /// Nonblockingly wait until the timer running duration has elapsed.
-    fn wait(&mut self) -> nb::Result<(), void::Void>;
+    fn wait(&mut self) -> nb::Result<(), Infallible>;
 }

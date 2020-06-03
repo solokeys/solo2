@@ -6,7 +6,6 @@ edition = "2018"
 
 [dependencies]
 nb = "0.1"
-void = { version = "1", default-features = false }
 
 [profile.release]
 codegen-units = 1
