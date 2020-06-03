@@ -1,6 +1,5 @@
 #![no_std]
 use core::time::Duration;
-use void;
 use solo_bee_traits::timer;
 use lpc55_hal as hal;
 
@@ -24,7 +23,8 @@ use hal::time::*;
 /// bsp_timer2.start(Duration::from_millis(1_000))
 /// block!(bsp_timer2.wait());
 /// let time_elapsed = bsp_timer1.lap().unwrap();
-/// heprintln!("1 second = {} us", time_elapsed.as_micros());
+/// heprintln!("1 second ~ {} us", time_elapsed.as_micros());
+/// // 1 second ~ 100056 us
 /// ```
 
 pub struct Timer<CTIMER>
@@ -63,7 +63,11 @@ where CTIMER: ctimer::Ctimer<Enabled>
     }
 
     /// Nonblockingly wait until the timer running duration has elapsed.
-    fn wait(&mut self) -> nb::Result<(), void::Void> {
-        self.timer.wait()
+    fn wait(&mut self) -> nb::Result<(), core::convert::Infallible> {
+        if self.timer.wait().is_ok() {
+            Ok(())
+        } else {
+            Err(nb::Error::WouldBlock)
+        }
     }
 }
