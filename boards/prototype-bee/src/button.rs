@@ -10,8 +10,6 @@ use crate::hal::peripherals::{
 };
 use solo_bee_traits::buttons::{
     self,
-    ButtonPress,
-    ButtonEdge,
     Button,
 };
 use crate::hal::typestates::{
@@ -75,82 +73,46 @@ impl SoloThreeTouchButtons<ButtonTopPin, ButtonBotPin, ButtonMidPin>
     }
 
     /// Map internal cmd number to Button type
-    fn button_get_state (&self, button: buttons::Button, ctype: Compare) -> buttons::Button {
+    fn button_get_state (&self, button: buttons::Button, ctype: Compare) -> bool {
         match button {
-            buttons::ButtonTop => {
-                if self.touch_sensor.get_state(TouchSensorChannel::Channel1, ctype).is_active { return button };
+            Button::A => {
+                self.touch_sensor.get_state(TouchSensorChannel::Channel1, ctype).is_active
             }
-            buttons::ButtonBot => {
-                if self.touch_sensor.get_state(TouchSensorChannel::Channel2, ctype).is_active { return button };
+            Button::B => {
+                self.touch_sensor.get_state(TouchSensorChannel::Channel2, ctype).is_active
             }
-            buttons::ButtonSides => {
-                if self.touch_sensor.get_state(TouchSensorChannel::Channel2, ctype).is_active &&
-                    self.touch_sensor.get_state(TouchSensorChannel::Channel1, ctype).is_active
-                        { return button };
-            }
-            buttons::ButtonMid=> {
-                if self.touch_sensor.get_state(TouchSensorChannel::Channel3, ctype).is_active  { return button };
-            }
-            buttons::ButtonAny => {
-                if self.touch_sensor.get_state(TouchSensorChannel::Channel3, ctype).is_active { return buttons::ButtonMid };
-                if self.touch_sensor.get_state(TouchSensorChannel::Channel2, ctype).is_active { return buttons::ButtonBot};
-                if self.touch_sensor.get_state(TouchSensorChannel::Channel1, ctype).is_active { return buttons::ButtonTop};
-            }
-            buttons::ButtonNone => {
-                return button;
+            Button::Middle => {
+                self.touch_sensor.get_state(TouchSensorChannel::Channel3, ctype).is_active
             }
         }
-        return buttons::ButtonNone;
     }
 
     /// Map internal cmd number to Button type
-    fn button_has_edge (&self, button: Button, edge_type: Edge,) -> buttons::Button {
+    fn button_has_edge (&self, button: Button, edge_type: Edge,) -> bool {
         match button {
-            buttons::ButtonTop => {
-                if self.touch_sensor.has_edge(TouchSensorChannel::Channel1, edge_type) { return button }
+            Button::A => {
+                self.touch_sensor.has_edge(TouchSensorChannel::Channel1, edge_type)
             }
-            buttons::ButtonBot => {
-                if self.touch_sensor.has_edge(TouchSensorChannel::Channel2, edge_type) { return button }
+            Button::B => {
+                self.touch_sensor.has_edge(TouchSensorChannel::Channel2, edge_type)
             }
-            buttons::ButtonSides => {
-                if
-                    self.touch_sensor.has_edge(TouchSensorChannel::Channel1, edge_type) &&
-                    self.touch_sensor.has_edge(TouchSensorChannel::Channel2, edge_type)
-                        { return button }
+            Button::Middle => {
+                self.touch_sensor.has_edge(TouchSensorChannel::Channel3, edge_type)
             }
-            buttons::ButtonMid=> {
-                if
-                    self.touch_sensor.has_edge(TouchSensorChannel::Channel3, edge_type)
-                        {  return button }
-            }
-            buttons::ButtonAny => {
-                if self.touch_sensor.has_edge(TouchSensorChannel::Channel1, edge_type) {return buttons::ButtonTop}
-                if self.touch_sensor.has_edge(TouchSensorChannel::Channel2, edge_type) {return buttons::ButtonBot}
-                if self.touch_sensor.has_edge(TouchSensorChannel::Channel3, edge_type) {return buttons::ButtonMid}
-            }
-            buttons::ButtonNone => {}
-        }
 
-        buttons::ButtonNone
+        }
     }
 
     fn button_reset_state(&self, button: Button, offset: i32) {
         match button {
-            buttons::ButtonTop => {
+            Button::A => {
                 self.touch_sensor.reset_results(TouchSensorChannel::Channel1, offset);
             }
-            buttons::ButtonBot => {
+            Button::B => {
                 self.touch_sensor.reset_results(TouchSensorChannel::Channel2, offset);
             }
-            buttons::ButtonSides => {
-                self.touch_sensor.reset_results(TouchSensorChannel::Channel2, offset);
-                self.touch_sensor.reset_results(TouchSensorChannel::Channel1, offset);
-            }
-            buttons::ButtonMid=> {
+            Button::Middle => {
                 self.touch_sensor.reset_results(TouchSensorChannel::Channel3, offset);
-            }
-            _ => {
-                panic!("Invaid button combination to reset")
             }
         }
     }
@@ -158,63 +120,84 @@ impl SoloThreeTouchButtons<ButtonTopPin, ButtonBotPin, ButtonMidPin>
 
 }
 
-impl ButtonPress for SoloThreeTouchButtons<ButtonTopPin, ButtonBotPin, ButtonMidPin>
+impl buttons::Press for SoloThreeTouchButtons<ButtonTopPin, ButtonBotPin, ButtonMidPin>
 {
     fn is_pressed(&self, button: buttons::Button) -> bool {
-        self.button_get_state(button, Compare::BelowThreshold) != buttons::ButtonNone
+        self.button_get_state(button, Compare::BelowThreshold)
     }
 
     fn is_released(&self, button: buttons::Button) -> bool {
-        self.button_get_state(button, Compare::AboveThreshold) != buttons::ButtonNone
+        self.button_get_state(button, Compare::AboveThreshold)
     }
-
-
-    fn get_status(&self) -> buttons::Buttons {
-        buttons::Buttons {
-            top: self.is_pressed(buttons::ButtonTop),
-            bot: self.is_pressed(buttons::ButtonBot),
-            mid: self.is_pressed(buttons::ButtonMid),
-        }
-    }
-
 }
 
-impl ButtonEdge for SoloThreeTouchButtons<ButtonTopPin, ButtonBotPin, ButtonMidPin>
+impl buttons::Edge for SoloThreeTouchButtons<ButtonTopPin, ButtonBotPin, ButtonMidPin>
 {
-    fn wait_for_press(&mut self, button: buttons::Button) -> nb::Result<Button, Infallible> {
-        let button = self.button_has_edge(button, Edge::Falling);
+    fn wait_for_new_press(&mut self, button: Button) -> nb::Result<(), Infallible> {
+        let result = self.button_has_edge(button, Edge::Falling);
 
         // Erase edge with pressed status.
-        if button != buttons::ButtonNone {
+        if result {
             self.button_reset_state(button, -1);
+            Ok(())
         } else {
-            return Err(nb::Error::WouldBlock);
+            return Err(nb::Error::WouldBlock)
         }
 
-        Ok(button)
     }
 
-    fn wait_for_release(&mut self, button: buttons::Button) -> nb::Result<Button, Infallible> {
-        let button = self.button_has_edge(button, Edge::Rising);
+    fn wait_for_new_release(&mut self, button: Button) -> nb::Result<(), Infallible> {
+        let result = self.button_has_edge(button, Edge::Rising);
 
-        // Erase edge with released status.
-        if button != buttons::ButtonNone {
+        if result {
             self.button_reset_state(button, 1);
+            Ok(())
         } else {
-            return Err(nb::Error::WouldBlock);
+            return Err(nb::Error::WouldBlock)
         }
 
-        Ok(button)
     }
 
     /// See wait_for_press
-    fn wait_for_any_press(&mut self, ) -> nb::Result<Button, Infallible> {
-        self.wait_for_press(buttons::ButtonAny)
+    fn wait_for_any_new_press(&mut self, ) -> nb::Result<Button, Infallible> {
+
+        if self.wait_for_new_press(Button::A).is_ok() {
+            Ok(Button::A)
+        }
+        else if self.wait_for_new_press(Button::B).is_ok() {
+            Ok(Button::B)
+        } else if self.wait_for_new_press(Button::Middle).is_ok() {
+            Ok(Button::Middle)
+        } else {
+            Err(nb::Error::WouldBlock)
+        }
     }
 
     /// See wait_for_release
-    fn wait_for_any_release(&mut self, ) -> nb::Result<Button, Infallible> {
-        self.wait_for_release(buttons::ButtonAny)
+    fn wait_for_any_new_release(&mut self, ) -> nb::Result<Button, Infallible> {
+        if self.wait_for_new_release(Button::A).is_ok() {
+            Ok(Button::A)
+        }
+        else if self.wait_for_new_release(Button::B).is_ok() {
+            Ok(Button::B)
+        } else if self.wait_for_new_release(Button::Middle).is_ok() {
+            Ok(Button::Middle)
+        } else {
+            Err(nb::Error::WouldBlock)
+        }
+    }
+
+    /// Wait for squeeze gesture
+    fn wait_for_new_squeeze(&mut self) -> nb::Result<(), Infallible> {
+        let a = self.button_has_edge(Button::A, Edge::Rising);
+        let b = self.button_has_edge(Button::B, Edge::Rising);
+        if a && b {
+            self.button_reset_state(Button::A, -1);
+            self.button_reset_state(Button::B, -1);
+            Ok(())
+        } else {
+            return Err(nb::Error::WouldBlock)
+        }
     }
 }
 
