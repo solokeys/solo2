@@ -12,6 +12,7 @@ cortex-m = "0.6.1"
 cortex-m-rt = "0.6.10"
 embedded-hal = { version = "0.2", features = ["unproven"] }
 solo-bee-traits = {path = "../solo-bee-traits"}
+lpc55-common = {path = "../lpc55-common"}
 
 [dependencies.lpc55-hal]
 git = "https://github.com/nickray/lpc55-hal"
