@@ -1,9 +1,21 @@
 [package]
 name = "prototype-bee"
 version = "0.1.0"
-authors = ["Nicolas Stalder <n@stalder.io>"]
+authors = ["Nicolas Stalder <n@stalder.io>", "Conor Patrick <conor@solokeys.com>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+nb = "0.1"
+cortex-m = "0.6.1"
+cortex-m-rt = "0.6.10"
+embedded-hal = { version = "0.2", features = ["unproven"] }
+solo-bee-traits = {path = "../solo-bee-traits"}
+
+[dependencies.lpc55-hal]
+git = "https://github.com/nickray/lpc55-hal"
+branch = "main"
+features = ["littlefs", "rtfm-peripherals"]
+# path = "../../../../lpc55-hal"
+

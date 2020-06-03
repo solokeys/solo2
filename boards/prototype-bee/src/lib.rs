@@ -1,7 +1,8 @@
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}
+#![no_std]
+
+pub use cortex_m_rt as rt;
+pub use lpc55_hal as hal;
+
+pub mod button;
+pub mod led;
+
