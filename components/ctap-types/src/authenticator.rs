@@ -6,14 +6,14 @@
 //     fn process(&mut self, request: &mut Request) -> Result<Response, Error>;
 // }
 
-#[derive(Debug,uDebug)]
+#[derive(Clone, Debug,uDebug, PartialEq)]
 pub enum Request {
     Ctap1(ctap1::Request),
     Ctap2(ctap2::Request),
 }
 
 // see below
-#[derive(Debug,uDebug)]
+#[derive(Clone, Debug,uDebug, PartialEq)]
 // #[derive(Debug)]
 pub enum Response {
     Ctap1(ctap1::Response),
@@ -23,14 +23,14 @@ pub enum Response {
 pub mod ctap1 {
     pub use crate::ctap1;
 
-    #[derive(Debug,uDebug)]
+    #[derive(Clone, Debug,uDebug, PartialEq)]
     pub enum Request {
         Register(ctap1::Register),
         Authenticate(ctap1::Register),
         Version,
     }
 
-    #[derive(Debug,uDebug)]
+    #[derive(Clone, Debug,uDebug, PartialEq)]
     pub enum Response {
     }
 
@@ -38,7 +38,7 @@ pub mod ctap1 {
 pub mod ctap2 {
     pub use crate::ctap2::*;
 
-    #[derive(Debug,uDebug)]
+    #[derive(Clone, Debug,uDebug, PartialEq)]
     pub enum Request {
         // 0x1
         MakeCredential(make_credential::Parameters),
@@ -59,7 +59,7 @@ pub mod ctap2 {
         Vendor(crate::ctaphid::VendorOperation),
     }
 
-    #[derive(Debug,uDebug)]
+    #[derive(Clone, Debug,uDebug, PartialEq)]
     pub enum Response {
         MakeCredential(make_credential::Response),
         GetAssertion(get_assertion::Response),

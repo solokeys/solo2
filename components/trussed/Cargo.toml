@@ -26,6 +26,7 @@ generic-array = "0.12.3"  # "0.13.2"
 # generic-array = { version = "0.13.2", default-features = false }
 heapless = { version = "0.5.5", features = ["ufmt"] }
 hmac = "0.7.1"
+interchange = { path = "../interchange" }
 serde = { version = "1.0", default-features = false }
 serde_cbor = { version = "0.11.0", default-features = false }
 serde-indexed = "0.0.4"
@@ -69,6 +70,7 @@ verbose-lfs = ["littlefs2/ll-assertions", "littlefs2/ll-trace"]
 debug-logs = []
 deep-semihosting-logs = ["semihosting"]
 semihosting = ["cortex-m-semihosting"]
+no-semihosting = ["cortex-m-semihosting/no-semihosting"]
 
 # mechanisms
 # default-mechanisms = ["aes256-cbc", "chacha8-poly1305", "ed25519", "hmac-sha256", "p256", "sha256", "trng"]
@@ -93,8 +95,16 @@ tdes = ["des"]
 totp = ["sha-1"]
 trng = ["sha-1"]
 
+clients-1 = []
+clients-2 = []
+clients-3 = []
+clients-4 = []
+clients-5 = []
+
 [patch.crates-io]
 # heapless = { git = "https://github.com/nicolas-solokeys/heapless", branch = "bytebuf" }
 heapless = { path = "../../../heapless" }
+# cortex-m-semihosting = { git = "https://github.com/rust-embedded/cortex-m-semihosting" }
+cortex-m-semihosting = { path = "../../../cortex-m-semihosting" }
 ufmt = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty-enums" }
 ufmt-macros = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty-enums" }

@@ -159,7 +159,7 @@ pub trait Interchange: Sized {
     ///
     /// The first time it is called in the program, it constructs
     /// singleton static resources, thereafter, `None` is returned.
-    fn claim() -> Option<(Requester<Self>, Responder<Self>)>;
+    fn claim(i: usize) -> Option<(Requester<Self>, Responder<Self>)>;
 
     #[doc(hidden)]
     unsafe fn rq_ref(&self) -> &Self::REQUEST;

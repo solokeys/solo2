@@ -33,7 +33,7 @@ prototype-bee = { path = "../boards/prototype-bee", optional = true }
 
 # components
 c-stubs = { path = "../components/c-stubs" }
-trussed = { path = "../components/trussed" }
+trussed = { path = "../components/trussed", features = ["clients-2"] }
 ctap-types = { path = "../components/ctap-types" }
 fido-authenticator = { path = "../components/fido-authenticator" }
 interchange = { path = "../components/interchange" }

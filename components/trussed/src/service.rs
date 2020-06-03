@@ -4,6 +4,7 @@ use core::convert::{TryFrom, TryInto};
 use cortex_m_semihosting::hprintln;
 pub use embedded_hal::blocking::rng::Read as RngRead;
 use heapless::ByteBuf;
+use interchange::Responder;
 use littlefs2::path::{Path, PathBuf};
 
 
@@ -11,6 +12,7 @@ use crate::api::*;
 use crate::config::*;
 use crate::error::Error;
 use crate::mechanisms;
+use crate::pipe::TrussedInterchange;
 use crate::store::{self, *};
 use crate::types::*;
 
@@ -889,8 +891,8 @@ impl<R: RngRead, S: Store> Service<R, S> {
         Self { eps: Vec::new(), resources }
     }
 
-    pub fn add_endpoint(&mut self, ep: ServiceEndpoint) -> Result<(), ServiceEndpoint> {
-        self.eps.push(ep)
+    pub fn add_endpoint(&mut self, interchange: Responder<TrussedInterchange>, client_id: ClientId) -> Result<(), ServiceEndpoint> {
+        self.eps.push(ServiceEndpoint { interchange, client_id })
     }
 
     // process one request per client which has any
@@ -900,15 +902,12 @@ impl<R: RngRead, S: Store> Service<R, S> {
         let resources = &mut self.resources;
 
         for ep in eps.iter_mut() {
-            if !ep.send.ready() {
-                continue;
-            }
-            if let Some(request) = ep.recv.dequeue() {
+            if let Some(request) = ep.interchange.take_request() {
                 // #[cfg(test)] println!("service got request: {:?}", &request);
 
                 resources.currently_serving = ep.client_id.clone();
                 let reply_result = resources.reply_to(request);
-                ep.send.enqueue(reply_result).ok();
+                ep.interchange.respond(reply_result).ok();
 
             }
         }
