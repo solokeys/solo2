@@ -1,0 +1,15 @@
+[package]
+name = "solo-bee-traits"
+version = "0.0.0-unreleased"
+authors = ["Conor Patrick <conor@solokeys.com>"]
+edition = "2018"
+
+[dependencies]
+nb = "0.1"
+
+[profile.release]
+codegen-units = 1
+# lto = true
+# opt-level = "s"
+incremental = false
+debug = true
