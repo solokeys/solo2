@@ -20,7 +20,6 @@ littlefs2 = { git = "https://github.com/nickray/littlefs2", branch = "closures-i
 serde = { version = "1.0", default-features = false }
 serde_cbor = { version = "0.11.0", default-features = false }
 serde-indexed = "0.0.3"
-# usbd-ctaphid = { git = "https://github.com/nickray/usbd-ctaphid", branch = "main", features = ["logging"] }
 ufmt = "0.1.0"
 
 [features]

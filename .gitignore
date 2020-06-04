@@ -1,7 +1,5 @@
 **/target
 **/Cargo.lock
 **/.gdb_history
-components/usbd-ctaphid.hidden/
-components/usbd-ctaphid/
 ctap-2-1-pre.pdf
 solo-bee.code-workspace

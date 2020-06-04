@@ -1,0 +1,23 @@
+[package]
+name = "usbd-ctaphid"
+version = "0.0.0-unreleased"
+authors = ["Nicolas Stalder <n@stalder.io>"]
+license = "Apache-2.0 OR MIT"
+edition = "2018"
+
+[dependencies]
+cortex-m-semihosting = { version = "0.3.5", optional = true }
+ctap-types = { path = "../ctap-types" }
+interchange = { path = "../interchange" }
+serde = { version = "1.0", default-features = false }
+usb-device = "0.2.3"
+
+cortex-m-funnel = { version = "0.1.0-alpha.1", optional = true }
+ufmt = { version = "0.1.0", optional = true }
+
+[features]
+default = ["logging"]
+logging = ["cortex-m-funnel", "ufmt"]
+# insecure-ram-authenticator = ["derpy", "nisty", "salty/haase", "sha2"]
+semihost-responses = ["semihosting"]
+semihosting = ["cortex-m-semihosting"]

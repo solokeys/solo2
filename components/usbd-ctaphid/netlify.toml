@@ -1,0 +1,7 @@
+[build]
+  command = "curl https://sh.rustup.rs -sSf | sh -s -- -y && apt-get install llvm arm-none-eabi-gcc && source $HOME/.cargo/env && rustup target add thumbv7em-none-eabi && cargo doc --document-private-items --features insecure-ram-authenticator --target thumbv7em-none-eabi"
+  publish = "target/thumbv7em-none-eabi/doc"
+
+[[redirects]]
+  from = "/"
+  to = "/usbd-ctaphid"
