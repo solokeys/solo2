@@ -279,7 +279,7 @@ impl<UP: UserPresence> Authenticator<UP> {
                     }
                 }
                 Request::Ctap1(_request) => {
-                    debug!("ctap1 not implemented: {:?}", &request).ok();
+                    debug!("ctap1 not implemented: {:?}", &_request).ok();
                     // self.interchange.respond(Err(Error::InvalidCommand)).expect("internal error");
                     self.respond(Err(Error::InvalidCommand));
                 }
