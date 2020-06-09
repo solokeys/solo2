@@ -73,7 +73,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     let mut pmc = hal.pmc;
     let mut syscon = hal.syscon;
 
-    let mut gpio = hal.gpio.enabled(&mut syscon);
+    // let mut gpio = hal.gpio.enabled(&mut syscon);
     let mut iocon = hal.iocon.enabled(&mut syscon);
 
     let usb0_vbus_pin = pins::Pio0_22::take().unwrap()

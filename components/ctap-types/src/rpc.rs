@@ -1,4 +1,3 @@
-use crate::{consts, Consumer, Producer, Queue};
 use crate::authenticator::{Error, Request, Response};
 
 // PRIOR ART:

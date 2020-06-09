@@ -1,7 +1,5 @@
 use core::convert::TryInto;
 
-use cortex_m_semihosting::hprintln;
-
 use crate::api::*;
 use crate::error::Error;
 use crate::service::*;

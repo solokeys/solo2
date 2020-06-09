@@ -1,12 +1,3 @@
-use heapless::{
-    consts::U1,
-    spsc::{
-        Consumer,
-        Producer,
-        Queue,
-    },
-};
-
 use interchange::Responder;
 
 use crate::api::{Request, Reply};

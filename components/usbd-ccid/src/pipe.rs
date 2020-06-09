@@ -126,7 +126,7 @@ where
             }
         } else {
             // TODO check
-            self.ext_packet.extend_from_slice(&packet);
+            self.ext_packet.extend_from_slice(&packet).ok();
             self.in_chain += 1;
             assert!(packet.len() <= self.long_packet_missing);
             self.long_packet_missing -= packet.len();

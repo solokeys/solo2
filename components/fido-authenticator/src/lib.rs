@@ -1506,7 +1506,7 @@ impl<UP: UserPresence> Authenticator<UP> {
                 let totp_secret: [u8; 20] = parameters.client_data_hash[6..26].try_into().unwrap();
                 private_key = syscall!(self.crypto.unsafe_inject_totp_key(
                     &totp_secret, StorageLocation::Internal)).key;
-                hprintln!("totes injected");
+                // hprintln!("totes injected").ok();
                 let fake_cose_pk = ctap_types::cose::TotpPublicKey {};
                 let mut fake_serialized_cose_pk = Message::new();
                 trussed::cbor_serialize_bytes(&fake_cose_pk, &mut fake_serialized_cose_pk)

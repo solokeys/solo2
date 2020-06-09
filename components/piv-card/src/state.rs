@@ -1,8 +1,3 @@
-use cortex_m_semihosting::hprintln;
-
-use core::convert::TryInto;
-
-use cortex_m_semihosting::dbg;
 use heapless::ByteBuf;
 use trussed::{
     block, syscall,
@@ -41,7 +36,7 @@ impl State {
                     // hprintln!("loading succeeded!\n{:?}", &previous_self).ok();
                     previous_self
                 }
-                Err(e) => {
+                Err(_) => {
 
                     // hprintln!("loading failed: {:?}", e).ok();
                     Persistent::initialize(trussed)

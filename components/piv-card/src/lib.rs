@@ -196,8 +196,8 @@ impl App
         //
         // expected response: "7C L1 82 L2 SEQ(INT r, INT s)"
 
-        let alg = command.p1;
-        let key = command.p2; // should we use Yubico's "slot" terminology? i don't like it
+        let _alg = command.p1;
+        let _slot = command.p2;
         let mut data = command.data().as_slice();
 
         // refine as we gain more capability
@@ -213,11 +213,11 @@ impl App
         if data[1] > 0x81 {
             panic!("unhandled >1B lengths");
         }
-        let len = if data[1] == 0x81 {
+        if data[1] == 0x81 {
             data[2] as usize;
             data = &data[3..];
         } else {
-            data[1] as usize; // 158 for ssh ed25519 signatures (which have a 150B commitment)
+            data[1] as usize; // ~158 for ssh ed25519 signatures (which have a ~150B commitment)
             data = &data[2..];
         };
 
@@ -269,7 +269,7 @@ impl App
         // dbg!(commitment);
         let serialization = trussed::types::SignatureSerialization::Asn1Der; // ed25519 disregards
 
-        hprintln!("looking for keyreference");
+        hprintln!("looking for keyreference").ok();
         let key_handle = match self.state.persistent(&mut self.trussed).keys.authentication_key {
             Some(key) => key,
             None => return Err(Status::KeyReferenceNotFound),
@@ -571,7 +571,7 @@ impl App
         // TODO: iterate on this, don't expect tags..
         let input = derp::Input::from(&command.data());
         // let (mechanism, parameter) = input.read_all(derp::Error::Read, |input| {
-        let (mechanism, pin_policy, touch_policy) = input.read_all(derp::Error::Read, |input| {
+        let (mechanism, _pin_policy, _touch_policy) = input.read_all(derp::Error::Read, |input| {
             derp::nested(input, 0xac, |input| {
                 let mechanism = derp::expect_tag_and_get_value(input, 0x80)?;
                 // let parameter = derp::expect_tag_and_get_value(input, 0x81)?;
@@ -821,7 +821,7 @@ impl App
                 let data = block!(self.trussed.read_file(
                     trussed::types::StorageLocation::Internal,
                     trussed::types::PathBuf::from(b"authentication-key.x5c"),
-                ).unwrap()).map_err(|e| {
+                ).unwrap()).map_err(|_| {
                     // hprintln!("error loading: {:?}", &e).ok();
                     Status::NotFound
                 } )?.data;

@@ -162,10 +162,10 @@ const APP: () = {
         static mut ON: bool = false;
         use solo_bee_traits::rgb_led::RgbLed;
         if *ON {
-            // c.resources.rgb.red(0);
+            c.resources.rgb.red(0);
             *ON = false;
         } else {
-            // c.resources.rgb.red(200);
+            c.resources.rgb.red(200);
             *ON = true;
         }
         c.schedule.toggle_red(Instant::now() + PERIOD.cycles()).unwrap();
