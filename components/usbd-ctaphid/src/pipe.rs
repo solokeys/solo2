@@ -766,8 +766,6 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
                                     //     todo!("what about all this");
                                     // }
                                 };
-                                #[cfg(feature = "semihosting")]
-                                // hprintln!("response: {:?}", &self.buffer[..response.length as usize]).ok();
                                 self.start_sending(response);
                             }
                         }
