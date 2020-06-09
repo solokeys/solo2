@@ -184,8 +184,8 @@ where CTIMER: ctimer::Ctimer<init_state::Enabled>
         if a && b {
             Ok(())
         } else {
-            self.last_state.a = oldstate.a;
-            self.last_state.b = oldstate.b;
+            if a { self.last_state.a = oldstate.a; }
+            if b { self.last_state.b = oldstate.b; }
             Err(nb::Error::WouldBlock)
         }
     }

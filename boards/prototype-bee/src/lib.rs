@@ -6,4 +6,4 @@ pub use lpc55_hal as hal;
 pub mod button;
 pub mod led;
 
-pub use lpc55_common::Timer;
+pub type Timer = lpc55_common::Timer<hal::peripherals::ctimer::Ctimer0<hal::typestates::init_state::Enabled>>;
