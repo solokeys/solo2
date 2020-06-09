@@ -33,7 +33,7 @@ const APP: () = {
         crypto: app::types::CryptoService,
         ctaphid: app::types::CtapHidClass,
         piv: app::types::Piv,
-        rgb: board::led::Rgb,
+        rgb: board::led::RgbLed,
         serial: app::types::SerialClass,
         usbd: app::types::Usbd,
         // os_channels: fido_authenticator::OsChannels,
@@ -159,8 +159,15 @@ const APP: () = {
     fn toggle_red(c: toggle_red::Context) {
 
         static mut TOGGLES: u32 = 1;
-        use hal::traits::wg::digital::v2::ToggleableOutputPin;
-        c.resources.rgb.red.toggle().ok();
+        static mut ON: bool = false;
+        use solo_bee_traits::rgb_led::RgbLed;
+        if *ON {
+            // c.resources.rgb.red(0);
+            *ON = false;
+        } else {
+            // c.resources.rgb.red(200);
+            *ON = true;
+        }
         c.schedule.toggle_red(Instant::now() + PERIOD.cycles()).unwrap();
         // debug!("{}:{} toggled red LED #{}", file!(), line!(), TOGGLES).ok();
         debug!("toggled red LED #{}", TOGGLES).ok();

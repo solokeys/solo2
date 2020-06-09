@@ -63,7 +63,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     types::CryptoService,
     types::CtapHidClass,
     types::Piv,
-    board::led::Rgb,
+    board::led::RgbLed,
     types::SerialClass,
     types::Usbd,
 ) {
@@ -76,17 +76,8 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     let mut gpio = hal.gpio.enabled(&mut syscon);
     let mut iocon = hal.iocon.enabled(&mut syscon);
 
-    let rgb = board::led::init_leds(
-        pins::Pio1_4::take().unwrap(),
-        pins::Pio1_6::take().unwrap(),
-        pins::Pio1_7::take().unwrap(),
-        &mut iocon, &mut gpio,
-    );
-
     let usb0_vbus_pin = pins::Pio0_22::take().unwrap()
         .into_usb0_vbus_pin(&mut iocon);
-
-    iocon.disabled(&mut syscon).release(); // save the environment :)
 
     // let clocks = hal::ClockRequirements::default()
     //     #[cfg(not(feature = "highspeed"))]
@@ -111,6 +102,24 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         .configure(&mut anactrl, &mut pmc, &mut syscon)
         .expect("Clock configuration failed");
 
+    #[cfg(feature = "board-lpcxpresso")]
+    let rgb = board::led::RgbLed::new(
+        board::led::RedLedPin::take().unwrap().into_match_output(&mut iocon),
+        board::led::GreenLedPin::take().unwrap().into_match_output(&mut iocon),
+        board::led::BlueLedPin::take().unwrap().into_match_output(&mut iocon),
+        hal::drivers::Pwm::new(hal.ctimer.2.enabled(&mut syscon)),
+    );
+
+    #[cfg(feature = "board-prototype")]
+    let rgb = board::led::RgbLed::new(
+        board::led::RedLedPin::take().unwrap().into_match_output(&mut iocon),
+        board::led::GreenLedPin::take().unwrap().into_match_output(&mut iocon),
+        board::led::BlueLedPin::take().unwrap().into_match_output(&mut iocon),
+        Pwm::new(hal.ctimer.3.enabled(&mut syscon)),
+    );
+
+    iocon.disabled(&mut syscon).release(); // save the environment :)
+
     #[cfg(feature = "highspeed")]
     let mut delay_timer = Timer::new(hal.ctimer.0.enabled(&mut syscon));
 
@@ -132,10 +141,9 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     );
 
     let _: EnabledUsbPeripheral = usbd;
-    // ugh, what's the nice way?
+    // alternatives: OnceCell...
     static mut USB_BUS: Option<usb_device::bus::UsbBusAllocator<UsbBus<EnabledUsbPeripheral>>> = None;
-    unsafe { USB_BUS = Some(hal::drivers::UsbBus::new(usbd, usb0_vbus_pin)); }
-    let usb_bus = unsafe { USB_BUS.as_ref().unwrap() };
+    let usb_bus = unsafe { USB_BUS.get_or_insert(hal::drivers::UsbBus::new(usbd, usb0_vbus_pin)) };
 
     // use littlefs2::fs::{Filesystem, FilesystemWith};
     // let mut alloc = Filesystem::allocate();
@@ -162,27 +170,26 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
     let flash = hal.flash.enabled(&mut syscon);
     static mut INTERNAL_STORAGE: Option<FlashGordon> = None;
-    unsafe { INTERNAL_STORAGE = Some(hal::drivers::flash::FlashGordon::new(flash)); }
+    let internal_storage = unsafe { INTERNAL_STORAGE.get_or_insert(hal::drivers::flash::FlashGordon::new(flash)) };
     static mut INTERNAL_FS_ALLOC: Option<Allocation<FlashGordon>> = None;
-    unsafe { INTERNAL_FS_ALLOC = Some(Filesystem::allocate()); }
+    let internal_fs_alloc = unsafe { INTERNAL_FS_ALLOC.get_or_insert(Filesystem::allocate()) };
 
     static mut EXTERNAL_STORAGE: ExternalStorage = ExternalStorage::new();
     static mut EXTERNAL_FS_ALLOC: Option<Allocation<ExternalStorage>> = None;
-    unsafe { EXTERNAL_FS_ALLOC = Some(Filesystem::allocate()); }
+    let external_fs_alloc = unsafe { EXTERNAL_FS_ALLOC.get_or_insert(Filesystem::allocate()) };
 
     static mut VOLATILE_STORAGE: VolatileStorage = VolatileStorage::new();
     static mut VOLATILE_FS_ALLOC: Option<Allocation<VolatileStorage>> = None;
-    unsafe { VOLATILE_FS_ALLOC = Some(Filesystem::allocate()); }
+    let volatile_fs_alloc = unsafe { VOLATILE_FS_ALLOC.get_or_insert(Filesystem::allocate()) };
 
 
     let store = Store::claim().unwrap();
     store.mount(
-        unsafe { INTERNAL_FS_ALLOC.as_mut().unwrap() },
-        // unsafe { &mut INTERNAL_STORAGE },
-        unsafe { INTERNAL_STORAGE.as_mut().unwrap() },
-        unsafe { EXTERNAL_FS_ALLOC.as_mut().unwrap() },
+        internal_fs_alloc,
+        internal_storage,
+        external_fs_alloc,
         unsafe { &mut EXTERNAL_STORAGE },
-        unsafe { VOLATILE_FS_ALLOC.as_mut().unwrap() },
+        volatile_fs_alloc,
         unsafe { &mut VOLATILE_STORAGE },
         // to trash existing data, set to true
         cfg!(feature = "format-storage")

@@ -29,6 +29,7 @@ usbd-serial = "0.1.0"
 lpc55-hal = { git = "https://github.com/nickray/lpc55-hal", branch = "main" }
 lpcxpresso55 = { path = "../boards/lpcxpresso55", optional = true }
 prototype-bee = { path = "../boards/prototype-bee", optional = true }
+solo-bee-traits = { path = "../boards/solo-bee-traits" }
 
 # components
 c-stubs = { path = "../components/c-stubs" }
