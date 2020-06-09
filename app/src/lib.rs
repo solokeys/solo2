@@ -107,7 +107,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         board::led::RedLedPin::take().unwrap().into_match_output(&mut iocon),
         board::led::GreenLedPin::take().unwrap().into_match_output(&mut iocon),
         board::led::BlueLedPin::take().unwrap().into_match_output(&mut iocon),
-        hal::drivers::Pwm::new(hal.ctimer.2.enabled(&mut syscon)),
+        hal::drivers::Pwm::new(hal.ctimer.2.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap())),
     );
 
     #[cfg(feature = "board-prototype")]

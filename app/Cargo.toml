@@ -25,7 +25,6 @@ usb-device = "0.2.3"
 usbd-serial = "0.1.0"
 
 # board
-# lpc55-hal = { git = "https://github.com/nickray/lpc55-hal", branch = "main" }
 lpc55-hal = { git = "https://github.com/nickray/lpc55-hal", branch = "main" }
 lpcxpresso55 = { path = "../boards/lpcxpresso55", optional = true }
 prototype-bee = { path = "../boards/prototype-bee", optional = true }
@@ -86,9 +85,6 @@ fido-authenticator-semihosting = ["fido-authenticator/semihosting"]
 semihost-raw-responses = ["usbd-ctaphid/semihost-responses"]
 
 # patch dependencies like so to test local changes
-
-[patch."https://github.com/nickray/lpc55-hal"]
-lpc55-hal = { path = "../../lpc55-hal" }
 
 [patch.crates-io]
 cortex-m-funnel = { git = "https://github.com/conorpp/cortex-m-funnel" }
