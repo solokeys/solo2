@@ -1,9 +1,22 @@
 [package]
 name = "fm11nc08"
 version = "0.1.0"
-authors = ["Nicolas Stalder <n@stalder.io>"]
+authors = ["Conor Patrick <conor@solokeys.com>", "Nicolas Stalder <n@stalder.io>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+# cortex-m-funnel = "0.1.0-alpha.1"
+cortex-m-funnel = { git = "https://github.com/conorpp/cortex-m-funnel" }
+cortex-m = "0.6.1"
+cortex-m-rt = "0.6.10"
+cortex-m-semihosting = "0.3.5"
+nb = "0.1"
+ufmt = "0.1.0"
+
+logging = {path = "../logging"}
+
+[dependencies.lpc55-hal]
+git = "https://github.com/nickray/lpc55-hal"
+branch = "main"
