@@ -1,0 +1,18 @@
+[package]
+name = "apdu-manager"
+version = "0.0.1"
+authors = ["Conor Patrick <conor@solokeys.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+nb = "0.1"
+ufmt = "0.1"
+
+# Components
+logging = {path = "../logging"}
+
+[features]
+default = []
+std = []
