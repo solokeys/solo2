@@ -11,8 +11,9 @@ cortex-m-rt = "0.6.10"
 cortex-m-semihosting = "0.3.5"
 nb = "0.1"
 ufmt = "0.1.0"
+lpc55-hal = { git = "https://github.com/nickray/lpc55-hal", branch = "main" }
 
-apdu-manager = {path = "../apdu-manager"}
 iso7816 = {path = "../iso7816"}
 logging = {path = "../logging"}
 fm11nc08 = {path = "../fm11nc08"}
+interchange = { path = "../interchange" }

@@ -1,20 +1,22 @@
 use nb;
 use crate::{
     Applet,
-    ApduSource,
-    SourceError,
 };
 
 use iso7816::{
     Command,
     response::Result as ResponseResult,
+    Response,
     Instruction,
     Status,
-    command::FromSliceError,
 };
 use heapless::ByteBuf;
 use logging;
 use logging::info;
+
+use interchange::Responder;
+use iso14443::types::ApduInterchange as ContactlessInterchange;
+use usbd_ccid::types::ApduInterchange as ContactInterchange;
 
 // type AidBuffer = [u8; 16];
 
@@ -43,6 +45,8 @@ pub enum ApduStatus {
 
 pub struct ApduManager {
     selected_aid: AidBuffer,
+    contact_interchange: Responder<ContactInterchange>,
+    contactless_interchange: Responder<ContactlessInterchange>,
 }
 
 impl ApduManager
@@ -56,9 +60,14 @@ impl ApduManager
         }
     }
 
-    pub fn new() -> ApduManager {
+    pub fn new(
+        contact_interchange: Responder<ContactInterchange>,
+        contactless_interchange: Responder<ContactlessInterchange>,
+    ) -> ApduManager {
         ApduManager{
             selected_aid: Default::default(),
+            contact_interchange: contact_interchange,
+            contactless_interchange: contactless_interchange,
         }
     }
 
@@ -103,81 +112,53 @@ impl ApduManager
 
     pub fn poll(
         &mut self,
-        buf: &mut [u8],
-        source: &mut impl ApduSource,
+        // buf: &mut [u8],
         applets: &mut [&mut dyn Applet],
-    ) -> nb::Result<(), SourceError> {
+    ) -> () {
 
+        if let Some(apdu) = self.contactless_interchange.take_request() {
 
-        let len = source.read_apdu(buf)?;
+            // logging::info!("apdu ok").ok();
+            let maybe_aid = Self::is_select(&apdu);
+            let is_select = maybe_aid.is_ok();
 
-        let apdu = match Command::try_from(&buf[0 .. len as usize]) {
-            Ok(command) => command,
-            Err(_error) => {
-                // logging::info!("could not parse command from APDU, ignoring.").ok();
-                // logging::info!("{:?}", &_error).ok();
-                logging::info!("apdu bad").ok();
-                match _error {
-                    FromSliceError::TooShort => { info!("TooShort").ok(); },
-                    FromSliceError::InvalidClass => { info!("InvalidClass").ok(); },
-                    FromSliceError::InvalidFirstBodyByteForExtended => { info!("InvalidFirstBodyByteForExtended").ok(); },
-                    FromSliceError::CanThisReallyOccur => { info!("CanThisReallyOccur").ok(); },
+            let index = match maybe_aid {
+                Ok(aid) => {
+                    Self::pick_applet(&aid, applets)
+                },
+                _ => {
+                    Self::pick_applet(&self.selected_aid, applets)
                 }
+            };
 
-                source.send_apdu(Status::UnspecifiedCheckingError, &[])?;
-                return Ok(());
-            }
-        };
+            match index {
+                Some(i) => {
+                    // logging::info!("applet? {}", i).ok();
+                    let applet = &mut applets[i];
+                    let aid = AidBuffer::new(applet.aid());
 
-        // logging::info!("apdu ok").ok();
-        let maybe_aid = Self::is_select(&apdu);
-        let is_select = maybe_aid.is_ok();
+                    let applet_response = if is_select {
+                        applet.select(apdu)
+                    } else {
+                        applet.send_recv(apdu)
+                    };
 
-        let index = match maybe_aid {
-            Ok(aid) => {
-                Self::pick_applet(&aid, applets)
-            },
-            _ => {
-                Self::pick_applet(&self.selected_aid, applets)
-            }
-        };
-
-        match index {
-            Some(i) => {
-                // logging::info!("applet? {}", i).ok();
-                let applet = &mut applets[i];
-                let aid = AidBuffer::new(applet.aid());
-
-                let applet_response = if is_select {
-                    applet.select(apdu)
-                } else {
-                    applet.send_recv(apdu)
-                };
-
-                if applet_response.is_ok() {
-
-                    // logging::info!("applet ok").ok();
                     if is_select {
                         self.deselect_if_already_selected(applets);
                         self.selected_aid = aid;
                     }
-                    source.send_apdu(Status::Success, &applet_response.ok().unwrap())?;
+                    if !applet_response.is_ok() {
+                        logging::info!("applet error").ok();
+                    }
+                    self.contactless_interchange.respond(applet_response.into()).expect("cant respond");
                 }
-                else {
-                    logging::info!("applet error").ok();
-                    source.send_apdu(applet_response.err().unwrap(), &[])?;
+                None => {
+                    logging::info!("No applet").ok();
+                    self.contactless_interchange.respond(
+                        Response::Status(Status::NotFound)
+                    ).expect("cant respond");
                 }
-            }
-            None => {
-                logging::info!("No applet").ok();
-                source.send_apdu(Status::NotFound, &[])?;
             }
         }
-
-
-
-        // logging::dump_hex(&buf, len as usize);
-
-        Ok(())
     }
 }

@@ -9,12 +9,15 @@ edition = "2018"
 [dependencies]
 nb = "0.1"
 ufmt = "0.1"
+heapless = { version = "0.5.5" }
 
 # Components
 iso7816 = { path = "../iso7816" }
 logging = {path = "../logging"}
-heapless = { version = "0.5.5" }
+interchange = {path = "../interchange"}
 
+usbd-ccid = {path = "../usbd-ccid"}
+iso14443 = {path = "../iso14443"}
 
 [features]
 default = []

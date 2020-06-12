@@ -2,20 +2,6 @@ use heapless::ByteBuf;
 use iso7816::{Command, response::Result as ResponseResult, Status};
 
 
-pub enum SourceError {
-    NoData,
-}
-
-/// Something that ApduManager can read and write unparsed APDUs from/to.
-pub trait ApduSource{
-
-    /// Read APDU into given buffer.  Return length of APDU on success.
-    fn read_apdu(&mut self, buffer: &mut [u8]) -> nb::Result<u16, SourceError>;
-
-    /// Write response code + APDU
-    fn send_apdu(&mut self, code: Status, buffer: &[u8]) -> nb::Result<(), SourceError>;
-}
-
 pub trait Aid {
 
     fn aid(&self) -> &'static [u8];
