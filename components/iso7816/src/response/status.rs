@@ -4,7 +4,7 @@ impl Default for Status {
     }
 }
 
-// ISO/IEC 7816-4, 5.1.3 "Status bytes"
+// I0x6985SO/IEC 7816-4, 5.1.3 "Status bytes"
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Status {
 
@@ -53,6 +53,7 @@ pub enum Status {
 
     // 69xx: command not allowed (cf. SW2)
     SecurityStatusNotSatisfied,
+    ConditionsOfUseNotSatisfied,
     OperationBlocked,
 
     // 6Axx: wrong parameters P1-P2 (cf. SW2)
@@ -95,6 +96,7 @@ impl Into<u16> for Status {
             Self::CommandChainingNotSupported => 0x6884,
 
             Self::SecurityStatusNotSatisfied => 0x6982,
+            Self::ConditionsOfUseNotSatisfied => 0x6985,
             Self::OperationBlocked => 0x6983,
 
             Self::IncorrectDataParameter => 0x6a80,

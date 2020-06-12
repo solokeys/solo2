@@ -9,6 +9,7 @@ pub enum Instruction {
     PutData,
     GenerateAsymmetricKeyPair,
     GetResponse,
+    ReadBinary,
     Unknown(u8),
 }
 
@@ -26,6 +27,7 @@ impl core::convert::From<u8> for Instruction {
             0xc0 => Instruction::GetResponse,
             0xcb => Instruction::GetData,
             0xdb => Instruction::PutData,
+            0xb0 => Instruction::ReadBinary,
             ins => Instruction::Unknown(ins),
         }
     }

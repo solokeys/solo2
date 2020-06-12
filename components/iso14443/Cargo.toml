@@ -13,5 +13,6 @@ nb = "0.1"
 ufmt = "0.1.0"
 
 apdu-manager = {path = "../apdu-manager"}
+iso7816 = {path = "../iso7816"}
 logging = {path = "../logging"}
 fm11nc08 = {path = "../fm11nc08"}
