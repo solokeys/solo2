@@ -2,17 +2,19 @@ use fm11nc08::traits::{
     NfcDevice,
     NfcError,
 };
-use apdu_manager::{
-    ApduSource,
-    SourceError,
-};
-
+use iso7816::{Response, Command, command::FromSliceError, Status};
+use interchange::Requester;
 use nb::block;
-
+use crate::types::ApduInterchange;
 use logging;
+use lpc55_hal as hal;
 use funnel::{
     info,
 };
+
+pub enum SourceError {
+    NoData,
+}
 
 enum Type4{
     IBlock,
@@ -46,14 +48,17 @@ pub struct Iso14443<DEV: NfcDevice> {
     cid: u8,
     offset: u16,
     block_bit: u8,
-    // length: u16,
+
+    buffer: [u8; 1024],
+
+    interchange: Requester<ApduInterchange>,
 }
 
 impl<DEV> Iso14443<DEV>
 where
     DEV: NfcDevice
 {
-    pub fn new(device: DEV) -> Self {
+    pub fn new(device: DEV, interchange: Requester<ApduInterchange>) -> Self {
         Self {
             device: device,
             packet: [0u8; 128],
@@ -63,6 +68,10 @@ where
             block_bit: 0u8,
             cid: 0u8,
 
+            // TODO use memory from elsewhere?
+            buffer: [0u8; 1024],
+
+            interchange: interchange,
         }
     }
 
@@ -99,13 +108,12 @@ where
     }
 
     /// Returns length of payload when finished.
-    fn buffer_iblock(&mut self,buffer: &mut [u8])  -> nb::Result<u16, SourceError> {
-
+    fn buffer_iblock(&mut self,)  -> nb::Result<u16, SourceError> {
         let h = self.packet[0];
         self.load_block_settings();
 
         for i in 0 .. (self.packet_len - self.packet_payload_offset) {
-            buffer[self.offset as usize] = self.packet[(self.packet_payload_offset + i) as usize];
+            self.buffer[self.offset as usize] = self.packet[(self.packet_payload_offset + i) as usize];
             self.offset += 1;
         }
 
@@ -123,10 +131,10 @@ where
 
     }
 
-    fn handle_blocks(&mut self, buffer: &mut [u8]) -> nb::Result<u16, SourceError> {
+    fn handle_blocks(&mut self) -> nb::Result<u16, SourceError> {
         match get_block_type(&self.packet) {
             Type4::IBlock => {
-                return self.buffer_iblock(buffer);
+                return self.buffer_iblock();
             }
             Type4::RBlock => {
                 self.ack();
@@ -144,62 +152,71 @@ where
         func(&mut self.device);
     }
 
-}
-
-impl<DEV> ApduSource for Iso14443<DEV>
-where
-    DEV: NfcDevice
-{
     /// Read APDU into given buffer.  Return length of APDU on success.
-    fn read_apdu(&mut self, buffer: &mut [u8]) -> nb::Result<u16, SourceError>{
-        for _tries in 0 .. 5 {
-            let res = self.device.read(&mut self.packet);
-            match res {
-                Ok(len) => {
-                    self.packet_len = len as u16;
+    fn check_for_apdu(&mut self) -> nb::Result<(), SourceError> {
+        let res = (self.device.read(&mut self.packet));
+        match res {
+            Ok(len) => {
+                self.packet_len = len as u16;
 
-                    assert!(self.packet_len > 0);
+                assert!(self.packet_len > 0);
 
-                    let res = self.handle_blocks(buffer);
-                    if res.is_ok() {
-                        info!(">> ").ok();
-                        let l = res.ok().unwrap();
-                        logging::dump_hex(buffer, l as usize);
-                        return Ok(l);
+                let l = self.handle_blocks()?;
+
+                info!(">> {}", hal::get_cycle_count() / 96_000).ok();
+                logging::dump_hex(&self.buffer, l as usize);
+
+                match Command::try_from(&self.buffer[0 .. l as usize]) {
+                    Ok(command) => {
+                        self.interchange.request(command).expect("could not deposit command");
+                    },
+                    Err(_error) => {
+                        logging::info!("apdu bad").ok();
+                        match _error {
+                            FromSliceError::TooShort => { info!("TooShort").ok(); },
+                            FromSliceError::InvalidClass => { info!("InvalidClass").ok(); },
+                            FromSliceError::InvalidFirstBodyByteForExtended => { info!("InvalidFirstBodyByteForExtended").ok(); },
+                            FromSliceError::CanThisReallyOccur => { info!("CanThisReallyOccur").ok(); },
+                        }
+
+                        self.send_apdu(
+                            &Response::Status(Status::UnspecifiedCheckingError).into_message()
+                        )?;
                     }
+                };
 
-                    return res;
-
-                }
-                Err(
-                    nb::Error::Other(NfcError::NoActivity)
-                ) => {
-
-                    break;
-                }
-                _ => {
-                    // Keep going
-                    return Err(nb::Error::WouldBlock);
-                }
+            }
+            _ => {
             }
         }
-        return Err(nb::Error::Other(SourceError::NoData));
+        Ok(())
+    }
 
+
+
+    pub fn poll(&mut self){
+
+        if let Some(response) = self.interchange.take_response() {
+            self.send_apdu(
+                &response.into_message()
+            ).ok();
+        } else {
+            self.check_for_apdu().ok();
+        }
     }
 
     /// Write response code + APDU
-    fn send_apdu(&mut self, code: iso7816::Status, buffer: &[u8]) -> nb::Result<(), SourceError>
+    fn send_apdu(&mut self, buffer: &[u8]) -> nb::Result<(), SourceError>
     {
         // iblock header
         self.device.send( &[0x02 | self.block_bit] ).ok();
 
         if buffer.len() > 0 { self.device.send( buffer ).ok(); }
-        self.device.send( &u16::to_be_bytes(code.into()) ).ok();
 
-        info!("<< ").ok();
+        info!("<< {}", hal::get_cycle_count() / 96_000).ok();
         if buffer.len() > 0 { logging::dump_hex(buffer, buffer.len()); }
-        logging::dump_hex(&u16::to_be_bytes(code.into()), 2);
 
         Ok(())
     }
+
 }
