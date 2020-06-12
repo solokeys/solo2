@@ -161,12 +161,12 @@ where
                     assert!(self.packet_len > 0);
 
                     let res = self.handle_blocks(buffer);
-                    // if res.is_ok() {
-                    //     info!(">> ").ok();
-                    //     let l = res.ok().unwrap();
-                    //     logging::dump_hex(buffer, l as usize);
-                    //     return Ok(l);
-                    // }
+                    if res.is_ok() {
+                        info!(">> ").ok();
+                        let l = res.ok().unwrap();
+                        logging::dump_hex(buffer, l as usize);
+                        return Ok(l);
+                    }
 
                     return res;
 
@@ -188,17 +188,17 @@ where
     }
 
     /// Write response code + APDU
-    fn send_apdu(&mut self, code: apdu_manager::Error, buffer: &[u8]) -> nb::Result<(), SourceError>
+    fn send_apdu(&mut self, code: iso7816::Status, buffer: &[u8]) -> nb::Result<(), SourceError>
     {
         // iblock header
         self.device.send( &[0x02 | self.block_bit] ).ok();
 
         if buffer.len() > 0 { self.device.send( buffer ).ok(); }
-        self.device.send( &u16::to_be_bytes(code as u16) ).ok();
+        self.device.send( &u16::to_be_bytes(code.into()) ).ok();
 
-        // info!("<< ").ok();
-        // if buffer.len() > 0 { logging::dump_hex(buffer, buffer.len()); }
-        // logging::dump_hex(&u16::to_be_bytes(code as u16), 2);
+        info!("<< ").ok();
+        if buffer.len() > 0 { logging::dump_hex(buffer, buffer.len()); }
+        logging::dump_hex(&u16::to_be_bytes(code.into()), 2);
 
         Ok(())
     }

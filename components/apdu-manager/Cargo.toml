@@ -1,7 +1,7 @@
 [package]
 name = "apdu-manager"
 version = "0.0.1"
-authors = ["Conor Patrick <conor@solokeys.com>"]
+authors = ["Conor Patrick <conor@solokeys.com>", "Nicolas Stalder <n@stalder.io>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -11,7 +11,10 @@ nb = "0.1"
 ufmt = "0.1"
 
 # Components
+iso7816 = { path = "../iso7816" }
 logging = {path = "../logging"}
+heapless = { version = "0.5.5" }
+
 
 [features]
 default = []
