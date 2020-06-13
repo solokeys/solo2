@@ -102,9 +102,10 @@ where
         self.packet[0] = 0xa0 | (header & 0x0f);
         self.packet[1] = self.cid;
 
-        block!(self.device.send(
+        self.device.send(
             & self.packet[0 .. self.packet_payload_offset as usize]
-        )).ok();
+        ).ok();
+        // block!(self.device.wait()).ok();
     }
 
     /// Returns length of payload when finished.
@@ -192,6 +193,9 @@ where
         Ok(())
     }
 
+    pub fn is_ready_to_transmit(&self) -> bool {
+        self.interchange.state() == interchange::State::Responded
+    }
 
 
     pub fn poll(&mut self){
@@ -205,13 +209,24 @@ where
         }
     }
 
+
     /// Write response code + APDU
     fn send_apdu(&mut self, buffer: &[u8]) -> nb::Result<(), SourceError>
     {
         // iblock header
-        self.device.send( &[0x02 | self.block_bit] ).ok();
+        let r = self.device.send( &[0x02 | self.block_bit] );
+        let r = self.device.send( buffer );
+        if !r.is_ok() {
+            return Err(nb::Error::Other(SourceError::NoData));
+        }
 
-        if buffer.len() > 0 { self.device.send( buffer ).ok(); }
+        // if buffer.len() > 0 {
+            // if !r.is_ok() {
+                // return Err(nb::Error::Other(SourceError::NoData));
+            // }
+        // }
+
+        // block!(self.device.wait()).ok();
 
         info!("<< {}", hal::get_cycle_count() / 96_000).ok();
         if buffer.len() > 0 { logging::dump_hex(buffer, buffer.len()); }

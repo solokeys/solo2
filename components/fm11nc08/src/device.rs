@@ -127,7 +127,7 @@ where
 {
     spi: SPI,
     cs: CS,
-    int: INT,
+    pub int: INT,
 }
 
 
@@ -313,7 +313,6 @@ where
         // (assumes count >= 1)
         block!( self.spi.send(buf[0]) ).ok();
 
-
         for i in 1 .. buf.len() {
             block!( self.spi.send(buf[i as usize]) ).ok();
             block!( self.spi.read() ).ok().unwrap();
@@ -350,78 +349,96 @@ where
         self.cs.set_high().ok();
     }
 
-    pub fn read_packet(&mut self, buf: &mut [u8]) -> nb::Result<u8, NfcError>{
+    fn read_in_full_transaction(&mut self, initial_irq: u8, buf: &mut [u8]) -> nb::Result<u8, NfcError>{
 
-
-        let mut main_irq = self.read_reg(Register::MainIrq);
-        let mut i = 0;
-
+        let mut main_irq = initial_irq;
+        let mut rf_status = 0xff;
+        let mut i = 0usize;
         let mut attempts = 0;
-        // let mut dist = [0u8; 16];
+        // info!("reading {}", //logging::hex!(r),
+        // hal::get_cycle_count()/96_000).ok();
+        loop {
+            let count = self.read_reg(Register::FifoCount);
+            if count > 2 {
+                self.read_fifo(&mut buf[i..], count);
+                i += count as usize;
+            }
 
-        if (main_irq & (Interrupt::RxStart as u8 | Interrupt::RxDone as u8)) != 0 {
-
-            loop {
+            if (main_irq & (Interrupt::RxDone as u8)) != 0 {
+                // info!("done. irq = {}",
+                //     logging::hex!(initial_irq),
+                // ).ok();
                 let count = self.read_reg(Register::FifoCount);
-                if count > 2{
+                if count > 0 {
                     self.read_fifo(&mut buf[i..], count);
                     i += count as usize;
-                    attempts = 0;
                 }
-                // if attempts < 16{ dist[attempts] = count;}
+                // self.write_reg(Register::MainIrq, 0);
+                break;
+            } else if (rf_status & 2) == 0 {
                 attempts += 1;
-
-                if (main_irq & (Interrupt::RxDone as u8)) != 0 {
-                    let count = self.read_reg(Register::FifoCount);
-                    if count > 0 {
-                        self.read_fifo(&mut buf[i..], count);
-                        i += count as usize;
-                    }
-                    self.write_reg(Register::MainIrq, 0);
-                    break;
+                if attempts > 100 {
+                    info!("rf stopped on {}.  count = {}, irq = {}", hal::get_cycle_count()/96_000,i,
+                        logging::hex!(initial_irq),
+                    ).ok();
+                    return Err(nb::Error::Other(NfcError::NoActivity));
                 }
-
-                if attempts > 15 {
-                    info!("TIMEOUT").ok();
-                    self.write_reg(Register::MainIrq, 0);
-                    // info!("dist=").ok();
-                    // logging::dump_hex(&dist, dist.len());
-
-                    return Err(nb::Error::Other(NfcError::NoActivity))
-                }
-
-
-                main_irq = self.read_reg(Register::MainIrq);
+            } else {
+                rf_status = self.read_reg(Register::RfStatus);
             }
 
-            Ok(i as u8 - 2) // TODO verify crc
 
+            main_irq = self.read_reg(Register::MainIrq);
         }
-        else {
-            if main_irq != 0 {
+        if i >= (128+2) || i < 3 {
+            info!("Error, buffered invalid # of bytes for iso14443. irq: {}. {}:", initial_irq, i);
+            logging::dump_hex(buf, i);
+            // self.write_reg(Register::MainIrq, 0);
+            return Err(nb::Error::Other(NfcError::NoActivity));
+        }
+        // self.write_reg(Register::FifoFlush, 0x55);
+        // self.write_reg(Register::RfTxEn, 0x55);
+        Ok(i as u8 - 2) // TODO verify crc
 
-                // Clear interrupts we don't care about by writing 0
-                if (main_irq & (Interrupt::Fifo as u8)) != 0 {
-                    // info!("{}",  fm_dump_interrupts(self)).ok();
-                    self.write_reg(Register::FifoIrq, 0x00);
-                }
+    }
 
-                self.write_reg(Register::MainIrq,
-                    0xff & !(main_irq)
+    pub fn read_packet(&mut self, buf: &mut [u8]) -> nb::Result<u8, NfcError>{
+
+        let mut main_irq = self.read_reg(Register::MainIrq);
+        let mut fifo_irq = self.read_reg(Register::FifoIrq);
+        let mut aux_irq = self.read_reg(Register::AuxIrq);
+
+        if (main_irq & (Interrupt::RxStart as u8 )) != 0
+        // && (main_irq & (Interrupt::TxDone as u8) == 0)
+        {
+            self.read_in_full_transaction(main_irq, buf)
+        } else {
+            if main_irq != 0 || fifo_irq != 0 || aux_irq != 0 {
+                info!("ignoring {} {} {}@{}",
+                    logging::hex!(main_irq),
+                    logging::hex!(fifo_irq),
+                    logging::hex!(aux_irq),
+                    hal::get_cycle_count()
                 );
-
-                Err(nb::Error::WouldBlock)
             }
-            else {
-                Err(nb::Error::Other(NfcError::NoActivity))
-            }
+            Err(nb::Error::Other(NfcError::NoActivity))
         }
     }
 
     fn wait_for_transmission(&mut self) {
-        while (self.read_reg(Register::FifoIrq) & (FifoInterrupt::WaterLevel as u8)) == 0 {
+        let mut i = 0;
+        let current_count = self.read_reg(Register::FifoCount);
+        if current_count >= 8 {
+            let mut fifo_irq = self.read_reg(Register::FifoIrq);
+            while (fifo_irq & (FifoInterrupt::WaterLevel as u8)) == 0 {
+                let rf_status = self.read_reg(Register::RfStatus);
+                if (rf_status & 1) == 0 {
+                    info!("TX transmission stopped. count={}", current_count);
+                    break;
+                }
+                fifo_irq = self.read_reg(Register::FifoIrq);
+            }
         }
-        self.write_reg(Register::FifoIrq, 0xff & !(FifoInterrupt::WaterLevel as u8));
     }
 
     pub fn send_packet(&mut self, buf: &[u8]) -> nb::Result<(), NfcError>{
@@ -431,13 +448,9 @@ where
 
         let mut tx_en = false;
 
-        if buf.len() > 1 {
-            // Clear any possible water mark first
-            self.write_reg(Register::FifoIrq, 0xff & !(FifoInterrupt::WaterLevel as u8));
-        }
-
         // Write in chunks of 24
         for i in 0 .. buf.len()/24 {
+            info!("24 chunk").ok();
             self.write_fifo(&buf[i * 24 .. i * 24 + 24]);
 
             if !tx_en {
@@ -454,25 +467,6 @@ where
         if !tx_en {
             self.write_reg(Register::RfTxEn, 0x55);
         }
-
-        // Skip for single byte writes to avoid transmission finishing before
-        // next set of bytes get written.
-        if buf.len() > 1 {
-            let current_count = self.read_reg(Register::FifoCount);
-            let current_water_level = self.read_reg(Register::FifoIrq) & (FifoInterrupt::WaterLevel as u8);
-
-            // If >8 bytes in fifo, block on WaterLevel to ensure a future 24 byte chunk can be written.
-            if current_count > 8 {
-                self.wait_for_transmission();
-            } else if current_water_level != 0 {
-                self.write_reg(Register::FifoIrq, 0xff & !(FifoInterrupt::WaterLevel as u8));
-            }
-        }
-
-        // while (self.read_reg(Register::MainIrq) & (Interrupt::TxDone as u8)) == 0 {
-        // }
-        // self.write_reg(Register::MainIrq, 0);
-        self.write_reg(Register::MainIrq, 0xff & !(Interrupt::TxDone as u8));
 
         Ok(())
 
