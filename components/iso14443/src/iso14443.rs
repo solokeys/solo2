@@ -22,8 +22,8 @@ enum Type4{
     SBlock,
 }
 
-/// Max pkt size is 128 for iso14443
-type Packet = [u8; 128];
+/// Max pkt size is 256 for iso14443
+type Packet = [u8; 256];
 
 fn get_block_type(packet: &Packet) -> Type4 {
     let h = packet[0];
@@ -61,7 +61,7 @@ where
     pub fn new(device: DEV, interchange: Requester<ApduInterchange>) -> Self {
         Self {
             device: device,
-            packet: [0u8; 128],
+            packet: [0u8; 256],
             packet_len: 0u16,
             packet_payload_offset: 0u16,
             offset: 0u16,
@@ -102,6 +102,7 @@ where
         self.packet[0] = 0xa0 | (header & 0x0f);
         self.packet[1] = self.cid;
 
+        self.device.send(&[]).ok();
         self.device.send(
             & self.packet[0 .. self.packet_payload_offset as usize]
         ).ok();
@@ -214,7 +215,8 @@ where
     fn send_apdu(&mut self, buffer: &[u8]) -> nb::Result<(), SourceError>
     {
         // iblock header
-        let r = self.device.send( &[0x02 | self.block_bit] );
+        self.device.send(&[]).ok();
+        self.device.write_but_dont_send( &[0x02 | self.block_bit] );
         let r = self.device.send( buffer );
         if !r.is_ok() {
             return Err(nb::Error::Other(SourceError::NoData));
