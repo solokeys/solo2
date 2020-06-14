@@ -359,6 +359,8 @@ where
             let count = self.read_reg(Register::FifoCount);
             if count > 2 {
                 self.read_fifo(&mut buf[i..], count);
+                info!(". {}", count).ok();
+                logging::dump_hex(&mut buf[i..], count as usize);
                 i += count as usize;
             }
 
@@ -366,6 +368,8 @@ where
                 let count = self.read_reg(Register::FifoCount);
                 if count > 0 {
                     self.read_fifo(&mut buf[i..], count);
+                    info!("$ {}", count).ok();
+                    logging::dump_hex(&mut buf[i..], count as usize);
                     i += count as usize;
                 }
                 break;
@@ -400,6 +404,19 @@ where
         let mut fifo_irq = self.read_reg(Register::FifoIrq);
         let mut aux_irq = self.read_reg(Register::AuxIrq);
 
+        if (main_irq & (Interrupt::TxDone as u8)) != 0 {
+            // Need to turn off transmit mode
+            info!("Turning off transmit {}", logging::hex!(main_irq));
+            self.write_reg(Register::RfTxEn, 0x00);
+            return Err(nb::Error::Other(NfcError::NoActivity));
+        }
+
+        // check for overflow
+        if (fifo_irq & (1 << 2)) != 0 {
+            info!("!OF!");
+            self.write_reg(Register::FifoFlush, 0xff);
+        }
+
         if (main_irq & (Interrupt::RxStart as u8 )) != 0
         // && (main_irq & (Interrupt::TxDone as u8) == 0)
         {
@@ -432,13 +449,13 @@ where
 
             let mut rf_status = self.read_reg(Register::RfStatus);
             while (rf_status & 1) == 0 {
-                rf_status = self.read_reg(Register::RfStatus);
                 i += 1;
-                if i > 25 {
+                if i > 4 {
                     info!("Chip is not transmitting.").ok();
                     self.write_reg(Register::RfTxEn, 0x55);
                     break;
                 }
+                rf_status = self.read_reg(Register::RfStatus);
             }
 
             let mut fifo_irq = self.read_reg(Register::FifoIrq);
