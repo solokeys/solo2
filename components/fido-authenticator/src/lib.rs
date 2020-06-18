@@ -4,9 +4,8 @@ use core::convert::{TryFrom, TryInto};
 
 #[cfg(feature = "semihosting")]
 #[allow(unused_imports)]
-use cortex_m_semihosting::hprintln;
 
-use funnel::info;
+use logging::{info,debug};
 
 use trussed::{
     block, syscall,
@@ -76,16 +75,6 @@ fn rk_path(rp_id_hash: &ByteBuf<consts::U32>, credential_id_hash: &ByteBuf<const
 
 pub mod credential;
 pub use credential::*;
-
-#[cfg(not(feature = "debug-logs"))]
-#[allow(unused_imports)]
-#[macro_use(info)]
-extern crate funnel;
-
-#[allow(unused_imports)]
-#[cfg(feature = "debug-logs")]
-#[macro_use(debug,info)]
-extern crate funnel;
 
 #[cfg(not(feature = "debug-logs"))]
 #[macro_use]
@@ -169,7 +158,7 @@ impl<UP: UserPresence> Authenticator<UP> {
 
                         // 0x4
                         ctap2::Request::GetInfo => {
-                            debug!("GI").ok();
+                            // debug!("GI").ok();
                             let response = self.get_info();
                             self.interchange.respond(
                                 Ok(Response::Ctap2(ctap2::Response::GetInfo(response))))
@@ -635,13 +624,10 @@ impl<UP: UserPresence> Authenticator<UP> {
                     .pin_auth.as_ref().ok_or(Error::MissingParameter)?;
 
                 if &expected_pin_auth[..16] == &pin_auth[..] {
-                    hprintln!("passed pinauth").ok();
+                    info!("passed pinauth").ok();
                     Ok(())
                 } else {
-                    hprintln!("failed pinauth, expected {:?} got {:?}",
-                              &expected_pin_auth[..16],
-                              &pin_auth[..],
-                    ).ok();
+                    info!("failed pinauth!").ok();
                     self.state.decrement_retries(&mut self.crypto)?;
                     self.state.pin_blocked()
                 }
@@ -792,7 +778,7 @@ impl<UP: UserPresence> Authenticator<UP> {
                             -8 => syscall!(self.crypto.exists(Mechanism::Ed25519, key)).exists,
                             -9 => {
                                 let exists = syscall!(self.crypto.exists(Mechanism::Totp, key)).exists;
-                                hprintln!("found it").ok();
+                                info!("found it").ok();
                                 exists
                             }
                             _ => false,
@@ -971,7 +957,7 @@ impl<UP: UserPresence> Authenticator<UP> {
         // 4. select credential
         let max_heap = self.state.runtime.credential_heap();
         let timestamp_hash = max_heap.pop().unwrap();
-        hprintln!("{:?} @ {}", &timestamp_hash.path, timestamp_hash.timestamp).ok();
+        info!("{:?} @ {}", &timestamp_hash.path, timestamp_hash.timestamp).ok();
         let data = syscall!(self.crypto.read_file(
             StorageLocation::Internal,
             timestamp_hash.path,
@@ -1065,7 +1051,7 @@ impl<UP: UserPresence> Authenticator<UP> {
             None => {
                 let max_heap = self.state.runtime.credential_heap();
                 let timestamp_hash = max_heap.pop().unwrap();
-                hprintln!("{:?} @ {}", &timestamp_hash.path, timestamp_hash.timestamp).ok();
+                info!("{:?} @ {}", &timestamp_hash.path, timestamp_hash.timestamp).ok();
                 let data = syscall!(self.crypto.read_file(
                     StorageLocation::Internal,
                     timestamp_hash.path,
@@ -1084,8 +1070,8 @@ impl<UP: UserPresence> Authenticator<UP> {
             Some(n) => n,
             None => 1,
         };
-        debug!("found {:?} applicable credentials", human_num_credentials).ok();
-        hprintln!("found {:?} applicable credentials", human_num_credentials).ok();
+        info!("found {:?} applicable credentials", human_num_credentials).ok();
+        info!("found {:?} applicable credentials", human_num_credentials).ok();
 
         self.state.runtime.active_get_assertion = Some(state::ActiveGetAssertionData {
             rp_id_hash: {
@@ -1166,7 +1152,7 @@ impl<UP: UserPresence> Authenticator<UP> {
                     StorageLocation::Volatile,
                 )).key;
                 // debug!("key result: {:?}", &key_result).ok();
-                hprintln!("key result: {:?}", &key_result).ok();
+                info!("key result").ok();
                 match key_result {
                     Some(key) => (key, true),
                     None => { return Err(Error::Other); }
@@ -1185,7 +1171,7 @@ impl<UP: UserPresence> Authenticator<UP> {
         let signature = match mechanism {
             Mechanism::Totp => {
                 let timestamp = u64::from_le_bytes(data.client_data_hash[..8].try_into().unwrap());
-                hprintln!("TOTP with timestamp {:?}", &timestamp).ok();
+                info!("TOTP with timestamp {:?}", &timestamp).ok();
                 syscall!(self.crypto.sign_totp(&key, timestamp)).signature.to_byte_buf()
             }
             _ => syscall!(self.crypto.sign(mechanism, key.clone(), &commitment, serialization)).signature
@@ -1210,7 +1196,7 @@ impl<UP: UserPresence> Authenticator<UP> {
     }
 
     fn vendor(&mut self, op: VendorOperation) -> Result<()> {
-        hprintln!("hello VO {:?}", &op).ok();
+        info!("hello VO {:?}", &op).ok();
         match op.into() {
             0x79 => syscall!(self.crypto.debug_dump_store()),
             _ => return Err(Error::InvalidCommand),
@@ -1246,7 +1232,7 @@ impl<UP: UserPresence> Authenticator<UP> {
         loop {
             let dir = PathBuf::from(b"rk");
 
-            hprintln!("reset start: reading {:?}", &dir).ok();
+            info!("reset start: reading {:?}", &dir).ok();
             let entry = syscall!(self.crypto.read_dir_first(
                 StorageLocation::Internal,
                 dir,
@@ -1258,7 +1244,7 @@ impl<UP: UserPresence> Authenticator<UP> {
                 None => break,
                 Some(entry) => PathBuf::from(entry.path()),
             };
-            hprintln!("got RP {:?}, looking for its RKs", &rp_path).ok();
+            info!("got RP {:?}, looking for its RKs", &rp_path).ok();
 
             // delete all RKs for given RP
 
@@ -1284,7 +1270,7 @@ impl<UP: UserPresence> Authenticator<UP> {
                 self.delete_resident_key_by_path(&rk_path)?;
             }
 
-            hprintln!("deleting RP dir {:?}", &rp_path).ok();
+            info!("deleting RP dir {:?}", &rp_path).ok();
             syscall!(self.crypto.remove_dir(
                 StorageLocation::Internal,
                 rp_path,
@@ -1313,7 +1299,7 @@ impl<UP: UserPresence> Authenticator<UP> {
     // )
         -> Result<()>
     {
-        hprintln!("deleting RK {:?}", &rk_path).ok();
+        info!("deleting RK {:?}", &rk_path).ok();
         let credential_data = syscall!(self.crypto.read_file(
             StorageLocation::Internal,
             PathBuf::from(rk_path),
@@ -1323,7 +1309,7 @@ impl<UP: UserPresence> Authenticator<UP> {
 
         match credential.key {
             credential::Key::ResidentKey(key) => {
-                hprintln!(":: deleting resident key {:?}", &key).ok();
+                info!(":: deleting resident key").ok();
                 syscall!(self.crypto.delete(key));
             }
             credential::Key::WrappedKey(_) => {}
@@ -1332,14 +1318,14 @@ impl<UP: UserPresence> Authenticator<UP> {
         if let Some(secret) = credential.hmac_secret.clone() {
             match secret {
                 credential::CredRandom::Resident(secret) => {
-                    hprintln!(":: deleting hmac secret {:?}", &secret).ok();
+                    info!(":: deleting hmac secret").ok();
                     syscall!(self.crypto.delete(secret));
                 }
                 credential::CredRandom::Wrapped(_) => {}
             }
         }
 
-        hprintln!(":: deleting RK file {:?} itself", &rk_path).ok();
+        info!(":: deleting RK file {:?} itself", &rk_path).ok();
         syscall!(self.crypto.remove_file(
             StorageLocation::Internal,
             PathBuf::from(rk_path),
@@ -1381,9 +1367,11 @@ impl<UP: UserPresence> Authenticator<UP> {
                 _ => {}
             }
         }
-        hprintln!("algo: {:?}", algorithm).ok();
         let algorithm = match algorithm {
-            Some(algorithm) => algorithm,
+            Some(algorithm) => {
+                info!("algo: {:?}", algorithm as i32).ok();
+                algorithm
+            },
             None => { return Err(Error::UnsupportedAlgorithm); }
         };
         // debug!("making credential, eddsa = {}", eddsa).ok();
@@ -1767,13 +1755,13 @@ impl<UP: UserPresence> Authenticator<UP> {
 
         use core::str::FromStr;
         let mut versions = Vec::<String<consts::U12>, consts::U3>::new();
-        versions.push(String::from_str("FIDO_2_1_PRE").unwrap()).unwrap();
-        versions.push(String::from_str("FIDO_2_0").unwrap()).unwrap();
         versions.push(String::from_str("U2F_V2").unwrap()).unwrap();
+        versions.push(String::from_str("FIDO_2_0").unwrap()).unwrap();
+        versions.push(String::from_str("FIDO_2_1_PRE").unwrap()).unwrap();
 
         let mut extensions = Vec::<String<consts::U11>, consts::U4>::new();
+        // extensions.push(String::from_str("credProtect").unwrap()).unwrap();
         extensions.push(String::from_str("hmac-secret").unwrap()).unwrap();
-        extensions.push(String::from_str("credProtect").unwrap()).unwrap();
 
         let mut pin_protocols = Vec::<u8, consts::U1>::new();
         pin_protocols.push(1).unwrap();
