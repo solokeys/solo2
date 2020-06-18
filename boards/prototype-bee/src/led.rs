@@ -56,11 +56,16 @@ impl RgbLed {
 
 impl rgb_led::RgbLed for RgbLed {
     fn red(&mut self, intensity: u8){
-       self.pwm.set_duty(RedLed::CHANNEL, intensity);
+       self.pwm.set_duty(RedLed::CHANNEL, intensity/7 + 1);
     }
 
     fn green(&mut self, intensity: u8){
-        self.pwm.set_duty(GreenLed::CHANNEL, intensity);
+        let intensity: u16 = (intensity as u16) * 3/2;
+        if intensity > 255 {
+            self.pwm.set_duty(GreenLed::CHANNEL, 255);
+        } else {
+            self.pwm.set_duty(GreenLed::CHANNEL, intensity as u8);
+        }
     }
 
     fn blue(&mut self, intensity: u8) {
