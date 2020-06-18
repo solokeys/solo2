@@ -1,5 +1,4 @@
 use core::convert::{TryFrom, TryInto};
-use cortex_m_semihosting::hprintln;
 
 use trussed::{
     block, syscall,
@@ -154,7 +153,7 @@ impl Credential {
     )
         -> Self
     {
-        hprintln!("credential for algorithm {}", algorithm).ok();
+        logging::info!("credential for algorithm {}", algorithm).ok();
         let data = CredentialData {
             rp: parameters.rp.clone(),
             user: parameters.user.clone(),
