@@ -1,22 +1,23 @@
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum NfcState {
-    Idle,
-    Recieving,
-    Transmitting,
+    NewSession(u8),
+    Continue(u8),
 }
 
-pub enum NfcError{
+pub enum NfcError {
+    NewSession,
     NoActivity,
 }
 
 pub trait NfcDevice {
-    fn get_state(&mut self, ) -> NfcState;
+    fn read(&mut self, buf: &mut [u8]) -> Result<NfcState, NfcError>;
 
-    fn read(&mut self, buf: &mut [u8]) -> nb::Result<u8, NfcError>;
+    fn send(&mut self,buf: &[u8]) -> Result<(), NfcError>;
 
-    fn send(&mut self,buf: &[u8]) -> nb::Result<(), NfcError>;
+    // fn wait(&mut self) -> nb::Result<(), NfcError>;
 
+    fn frame_size(&self) -> u8 { 127 }
 
-    fn write_but_dont_send(&mut self,buf: &[u8]);
+    // fn write_but_dont_send(&mut self,buf: &[u8]);
 }

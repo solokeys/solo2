@@ -1,9 +1,11 @@
-use iso7816::{Command, Instruction, response::Result as ResponseResult, Status};
+use iso7816::{Command, Instruction, Status};
 use heapless::ByteBuf;
 
 use apdu_manager::{
     Applet,
     Aid,
+    AppletResponse,
+    Result as ResponseResult
 };
 
 pub struct NdefApplet<'a>{
@@ -50,20 +52,14 @@ impl<'a> Aid for NdefApplet<'a> {
 
 impl<'a> Applet for NdefApplet<'a> {
 
-    /// Given parsed APDU for select command.
-    /// Write response data back to buf, and return length of payload.  Return APDU Error code on error.
-    fn select(&mut self, apdu: Command) -> ResponseResult {
+    fn select(&mut self, _apdu: Command) -> ResponseResult {
         Ok(Default::default())
     }
 
-    /// Deselects the applet.  This may be as a result of another applet getting selected.
-    /// It would be a good idea for the applet to use this to reset any sensitive state.
     fn deselect(&mut self) -> Result<(), Status> {
         Ok(())
     }
 
-    /// Given parsed APDU for applet when selected.
-    /// Write response data back to buf, and return length of payload.  Return APDU Error code on error.
     fn send_recv(&mut self, apdu: Command) -> ResponseResult {
         let instruction = apdu.instruction();
         let p1 = apdu.p1;
@@ -98,9 +94,9 @@ impl<'a> Applet for NdefApplet<'a> {
                         }
                     };
 
-                Ok(ByteBuf::from_slice(
+                Ok(AppletResponse::Respond(ByteBuf::from_slice(
                     & self.reader[offset .. offset + len_to_read]
-                ).unwrap())
+                ).unwrap()))
             }
             _ => {
                 Err(Status::ConditionsOfUseNotSatisfied)

@@ -1,18 +1,27 @@
-use nb;
+//! This "APDU manager" consumes APDUs from either a contactless or contact interface, or both.
+//! Each APDU will be sent to an "App".  The manager will manage selecting and deselecting apps,
+//! and will gauruntee only one app will be selected at a time.  Only the selected app will
+//! receive APDU's.  Apps are selected based on their AID.
+//!
+//! Additionally, the APDU manager will repeatedly call "poll" on the selected App.  The App
+//! can choose to reply at time of APDU, or can defer and reply later (during one of the poll calls).
+//!
+//! Apps need to implement the Applet trait to be managed.
+//!
+
 use crate::{
     Applet,
+    AppletResponse,
 };
 
 use iso7816::{
     Command,
-    response::Result as ResponseResult,
     Response,
     Instruction,
     Status,
 };
 use heapless::ByteBuf;
 use logging;
-use logging::info;
 
 use interchange::Responder;
 use iso14443::types::ApduInterchange as ContactlessInterchange;
@@ -47,12 +56,12 @@ pub struct ApduManager {
     selected_aid: AidBuffer,
     contact_interchange: Responder<ContactInterchange>,
     contactless_interchange: Responder<ContactlessInterchange>,
+    buffer: [u8; 4096]
 }
 
 impl ApduManager
 {
     fn is_select(apdu: &Command) -> Result<AidBuffer, ApduStatus> {
-        let mut aid = [0u8; 16];
         if apdu.instruction() == Instruction::Select && (apdu.p1 & 0x04) != 0{
             Ok(AidBuffer::new(apdu.data()))
         } else {
@@ -68,6 +77,9 @@ impl ApduManager
             selected_aid: Default::default(),
             contact_interchange: contact_interchange,
             contactless_interchange: contactless_interchange,
+
+            // not sure what to make max for nfc messages
+            buffer: [0u8; 4096]
         }
     }
 
@@ -134,8 +146,16 @@ impl ApduManager
             match index {
                 Some(i) => {
                     // logging::info!("applet? {}", i).ok();
+                    if is_select {
+                        self.deselect_if_already_selected(applets);
+                    }
+
                     let applet = &mut applets[i];
                     let aid = AidBuffer::new(applet.aid());
+                    if is_select {
+                        self.selected_aid = aid;
+                    }
+
 
                     let applet_response = if is_select {
                         applet.select(apdu)
@@ -143,14 +163,18 @@ impl ApduManager
                         applet.send_recv(apdu)
                     };
 
-                    if is_select {
-                        self.deselect_if_already_selected(applets);
-                        self.selected_aid = aid;
+                    match applet_response {
+                        Ok(AppletResponse::Defer) => {
+
+                        }
+                        Ok(AppletResponse::Respond(response)) => {
+                            self.contactless_interchange.respond(Response::Data(response)).expect("cant respond");
+                        }
+                        Err(status) => {
+                            logging::info!("applet error").ok();
+                            self.contactless_interchange.respond(Response::Status(status)).expect("cant respond");
+                        }
                     }
-                    if !applet_response.is_ok() {
-                        logging::info!("applet error").ok();
-                    }
-                    self.contactless_interchange.respond(applet_response.into()).expect("cant respond");
                 }
                 None => {
                     logging::info!("No applet").ok();
@@ -158,6 +182,26 @@ impl ApduManager
                         Response::Status(Status::NotFound)
                     ).expect("cant respond");
                 }
+            }
+        } else {
+            let index = Self::pick_applet(&self.selected_aid, applets);
+            match index {
+                Some(i) => {
+                    let applet = &mut applets[i];
+                    let applet_response = applet.poll(&mut self.buffer);
+                    match applet_response {
+                        Ok(AppletResponse::Defer) => {
+                        }
+                        Ok(AppletResponse::Respond(response)) => {
+                            self.contactless_interchange.respond(Response::Data(response)).expect("cant respond");
+                        }
+                        Err(status) => {
+                            logging::info!("applet error").ok();
+                            self.contactless_interchange.respond(Response::Status(status)).expect("cant respond");
+                        }
+                    }
+                }
+                _ => {}
             }
         }
     }
