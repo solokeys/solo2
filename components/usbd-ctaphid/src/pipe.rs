@@ -211,6 +211,12 @@ pub enum State {
     Sending((Response, MessageState)),
 }
 
+pub enum CtapMappingError {
+    InvalidCommand(u8),
+    ParsingError(ctap_types::serde::error::Error),
+    NoData,
+}
+
 pub struct Pipe<'alloc, Bus: UsbBus> {
 
     read_endpoint: EndpointOut<'alloc, Bus>,
@@ -469,7 +475,27 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
 
             Command::Cbor => {
                 // hprintln!("command CBOR!").ok();
-                self.handle_cbor(request);
+                match handle_cbor(&mut self.interchange, &self.buffer[..request.length as usize]) {
+                    Ok(()) => {
+                        info!("handled cbor").ok();
+                        self.state = State::WaitingOnAuthenticator(request);
+                    }
+                    Err(CtapMappingError::InvalidCommand(cmd)) => {
+                        info!("authenticator command {:?}", cmd).ok();
+                        self.buffer[0] = AuthenticatorError::InvalidCommand as u8;
+                        let response = self::Response::from_request_and_size(request, 1);
+                        return self.start_sending(response);
+                    }
+                    Err(CtapMappingError::ParsingError(_error)) => {
+                        #[cfg(feature = "semihosting")]
+                        hprintln!("{} deser error {:?}", self.buffer[0], _error).ok();
+                        let response = self.response_from_error(request, AuthenticatorError::InvalidCbor);
+                        return self.start_sending(response);
+                    }
+                    Err(CtapMappingError::NoData) => {
+
+                    }
+                }
             },
 
             // Command::Msg => {
@@ -549,163 +575,6 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
 
         self.buffer[0] = 0;
         Response::from_request_and_size(request, size)
-    }
-
-    fn handle_cbor(&mut self, request: Request) {
-        let data = &self.buffer[..request.length as usize];
-        // hprintln!("data: {:?}", data).ok();
-
-        if data.len() < 1 {
-            return;
-        }
-
-        let operation_u8: u8 = data[0];
-
-        let operation = match Operation::try_from(operation_u8) {
-            Ok(operation) => {
-                operation
-            },
-            Err(_) => {
-                info!("authenticator command {:?}", operation_u8).ok();
-                self.buffer[0] = AuthenticatorError::InvalidCommand as u8;
-                let response = self::Response::from_request_and_size(request, 1);
-                return self.start_sending(response);
-            },
-        };
-
-        // use ctap_types::ctap2::*;
-        use ctap_types::authenticator::*;
-
-        match operation {
-            Operation::MakeCredential => {
-                info!("authenticatorMakeCredential").ok();
-                let params: ctap2::make_credential::Parameters = match cbor_deserialize(&mut self.buffer[1..])
-                {
-                    Ok(params) => params,
-                    Err(_error) => {
-                        // info!("MC deser error {:?}", error as u8).ok();
-                        // info!("MC deser error {:?}", error).ok();
-                        let response = self.response_from_error(request, AuthenticatorError::InvalidCbor);
-                        return self.start_sending(response);
-                    }
-                };
-                // TODO: ensure earlier that RPC send queue is empty
-                self.interchange.request(Request::Ctap2(ctap2::Request::MakeCredential(params))).unwrap();
-                self.state = State::WaitingOnAuthenticator(request);
-            }
-
-            Operation::GetAssertion => {
-                info!("authenticatorGetAssertion").ok();
-
-                let params: ctap2::get_assertion::Parameters = match cbor_deserialize(&mut self.buffer[1..])
-                {
-                    Ok(params) => params,
-                    Err(error) => {
-                        // info!("GA deser error {:?}", error as u8).ok();
-                        // info!("GA deser error {:?}", error).ok();
-                        #[cfg(feature = "semihosting")]
-                        hprintln!("GA deser error {:?}", error).ok();
-                        let response = self.response_from_error(request, AuthenticatorError::InvalidCbor);
-                        return self.start_sending(response);
-                    }
-                };
-                // TODO: ensure earlier that RPC send queue is empty
-                self.interchange.request(Request::Ctap2(ctap2::Request::GetAssertion(params))).unwrap();
-                self.state = State::WaitingOnAuthenticator(request);
-            }
-
-            Operation::GetNextAssertion => {
-                info!("authenticatorGetNextAssertion").ok();
-
-                // TODO: ensure earlier that RPC send queue is empty
-                self.interchange.request(Request::Ctap2(ctap2::Request::GetNextAssertion)).unwrap();
-                self.state = State::WaitingOnAuthenticator(request);
-            }
-
-            Operation::CredentialManagement => {
-                info!("authenticatorCredentialManagement").ok();
-
-                let params: ctap2::credential_management::Parameters = match cbor_deserialize(&mut self.buffer[1..])
-                {
-                    Ok(params) => params,
-                    Err(error) => {
-                        #[cfg(feature = "semihosting")]
-                        hprintln!("CM deser error {:?}", error).ok();
-                        let response = self.response_from_error(request, AuthenticatorError::InvalidCbor);
-                        return self.start_sending(response);
-                    }
-                };
-                // TODO: ensure earlier that RPC send queue is empty
-                self.interchange.request(Request::Ctap2(ctap2::Request::CredentialManagement(params))).unwrap();
-                self.state = State::WaitingOnAuthenticator(request);
-            }
-
-            Operation::Reset => {
-                info!("authenticatorReset").ok();
-
-                // TODO: ensure earlier that RPC send queue is empty
-                self.interchange.request(Request::Ctap2(ctap2::Request::Reset)).unwrap();
-                self.state = State::WaitingOnAuthenticator(request);
-            }
-
-            Operation::GetInfo => {
-                info!("authenticatorGetInfo").ok();
-                // TODO: ensure earlier that RPC send queue is empty
-                self.interchange.request(Request::Ctap2(ctap2::Request::GetInfo)).unwrap();
-                self.state = State::WaitingOnAuthenticator(request);
-            }
-
-            Operation::ClientPin => {
-                info!("authenticatorClientPin").ok();
-                let params: ctap2::client_pin::Parameters = match cbor_deserialize(&mut self.buffer[1..])
-                {
-                    Ok(params) => params,
-                    Err(_error) => {
-                        // info!("CP deser error {:?}", error as u8).ok();
-                        let response = self.response_from_error(request, AuthenticatorError::InvalidCbor);
-                        return self.start_sending(response);
-                    }
-                };
-                // TODO: ensure earlier that RPC send queue is empty
-                self.interchange.request(Request::Ctap2(ctap2::Request::ClientPin(params))).unwrap();
-                self.state = State::WaitingOnAuthenticator(request);
-            }
-
-            Operation::Vendor(vendor_operation) => {
-                info!("authenticatorVendor({:?})", &vendor_operation).ok();
-
-                let vo_u8: u8 = vendor_operation.into();
-                if vo_u8 == 0x41 {
-                    // copy-pasta for now
-                    let params: ctap2::credential_management::Parameters = match cbor_deserialize(&mut self.buffer[1..])
-                    {
-                        Ok(params) => params,
-                        Err(error) => {
-                            #[cfg(feature = "semihosting")]
-                            hprintln!("CM deser error {:?}", error).ok();
-                            let response = self.response_from_error(request, AuthenticatorError::InvalidCbor);
-                            return self.start_sending(response);
-                        }
-                    };
-                    // TODO: ensure earlier that RPC send queue is empty
-                    self.interchange.request(Request::Ctap2(ctap2::Request::CredentialManagement(params))).unwrap();
-                    self.state = State::WaitingOnAuthenticator(request);
-
-                } else {
-                    // TODO: ensure earlier that RPC send queue is empty
-                    self.interchange.request(Request::Ctap2(ctap2::Request::Vendor(vendor_operation))).unwrap();
-                    self.state = State::WaitingOnAuthenticator(request);
-                }
-            }
-
-            unknown => {
-                let unknown: u8 = unknown.into();
-                info!("authenticator command {:?}", unknown).ok();
-                self.buffer[0] = AuthenticatorError::InvalidCommand as u8;
-                let response = self::Response::from_request_and_size(request, 1);
-                self.start_sending(response);
-            }
-        }
     }
 
     pub fn handle_response(&mut self) {
@@ -893,6 +762,144 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
             // nothing to send
             _ => {
             },
+        }
+    }
+}
+
+
+pub fn handle_cbor(interchange: &mut Requester<CtapInterchange>, data: &[u8]) -> Result<(), CtapMappingError> {
+    // let data = &buffer[..request.length as usize];
+    // hprintln!("data: {:?}", data).ok();
+
+    if data.len() < 1 {
+        return Err(CtapMappingError::NoData);
+    }
+
+    let operation_u8: u8 = data[0];
+
+    let operation = match Operation::try_from(operation_u8) {
+        Ok(operation) => {
+            operation
+        },
+        _ => {
+            return Err(CtapMappingError::InvalidCommand(operation_u8));
+        }
+    };
+
+    // use ctap_types::ctap2::*;
+    use ctap_types::authenticator::*;
+
+    match operation {
+        Operation::MakeCredential => {
+            info!("authenticatorMakeCredential").ok();
+            match cbor_deserialize(&data[1..]) {
+                Ok(params) => {
+                    interchange.request(Request::Ctap2(ctap2::Request::MakeCredential(params))).unwrap();
+                    Ok(())
+                },
+                Err(error) => {
+                    Err(CtapMappingError::ParsingError(error))
+                }
+            }
+            // TODO: ensure earlier that RPC send queue is empty
+        }
+
+        Operation::GetAssertion => {
+            info!("authenticatorGetAssertion").ok();
+
+            match cbor_deserialize(&data[1..]) {
+                Ok(params) => {
+                    interchange.request(Request::Ctap2(ctap2::Request::GetAssertion(params))).unwrap();
+                    Ok(())
+                },
+                Err(error) => {
+                    Err(CtapMappingError::ParsingError(error))
+                }
+            }
+            // TODO: ensure earlier that RPC send queue is empty
+        }
+
+        Operation::GetNextAssertion => {
+            info!("authenticatorGetNextAssertion").ok();
+
+            // TODO: ensure earlier that RPC send queue is empty
+            interchange.request(Request::Ctap2(ctap2::Request::GetNextAssertion)).unwrap();
+            Ok(())
+        }
+
+        Operation::CredentialManagement => {
+            info!("authenticatorCredentialManagement").ok();
+
+            match cbor_deserialize(&data[1..]) {
+                Ok(params) => {
+                    interchange.request(Request::Ctap2(ctap2::Request::CredentialManagement(params))).unwrap();
+                    Ok(())
+                },
+                Err(error) => {
+                    Err(CtapMappingError::ParsingError(error))
+                }
+            }
+            // TODO: ensure earlier that RPC send queue is empty
+        }
+
+        Operation::Reset => {
+            info!("authenticatorReset").ok();
+
+            // TODO: ensure earlier that RPC send queue is empty
+            interchange.request(Request::Ctap2(ctap2::Request::Reset)).unwrap();
+            Ok(())
+        }
+
+        Operation::GetInfo => {
+            info!("authenticatorGetInfo").ok();
+            // TODO: ensure earlier that RPC send queue is empty
+            interchange.request(Request::Ctap2(ctap2::Request::GetInfo)).unwrap();
+            Ok(())
+        }
+
+        Operation::ClientPin => {
+            info!("authenticatorClientPin").ok();
+            match cbor_deserialize(&data[1..])
+            {
+                Ok(params) => {
+
+                    interchange.request(Request::Ctap2(ctap2::Request::ClientPin(params))).unwrap();
+                    Ok(())
+                },
+                Err(error) => {
+
+                    Err(CtapMappingError::ParsingError(error))
+                }
+            }
+            // TODO: ensure earlier that RPC send queue is empty
+        }
+
+        Operation::Vendor(vendor_operation) => {
+            info!("authenticatorVendor({:?})", &vendor_operation).ok();
+
+            let vo_u8: u8 = vendor_operation.into();
+            if vo_u8 == 0x41 {
+                // copy-pasta for now
+                match cbor_deserialize(&data[1..])
+                {
+                    Ok(params) => {
+                        interchange.request(Request::Ctap2(ctap2::Request::CredentialManagement(params))).unwrap();
+                        Ok(())
+                    },
+                    Err(error) => {
+                        Err(CtapMappingError::ParsingError(error))
+                    }
+                }
+                // TODO: ensure earlier that RPC send queue is empty
+
+            } else {
+                // TODO: ensure earlier that RPC send queue is empty
+                interchange.request(Request::Ctap2(ctap2::Request::Vendor(vendor_operation))).unwrap();
+                Ok(())
+            }
+        }
+        _ => {
+            Err(CtapMappingError::InvalidCommand(operation_u8))
         }
     }
 }
