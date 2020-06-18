@@ -1757,6 +1757,7 @@ impl<UP: UserPresence> Authenticator<UP> {
         let mut versions = Vec::<String<consts::U12>, consts::U3>::new();
         versions.push(String::from_str("U2F_V2").unwrap()).unwrap();
         versions.push(String::from_str("FIDO_2_0").unwrap()).unwrap();
+        #[cfg(not(feature = "disable-fido-pre"))]
         versions.push(String::from_str("FIDO_2_1_PRE").unwrap()).unwrap();
 
         let mut extensions = Vec::<String<consts::U11>, consts::U4>::new();

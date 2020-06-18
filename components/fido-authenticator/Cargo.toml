@@ -24,3 +24,4 @@ ufmt = "0.1.0"
 [features]
 debug-logs = []
 semihosting = ["cortex-m-semihosting"]
+disable-fido-pre = []
