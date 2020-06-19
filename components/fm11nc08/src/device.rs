@@ -2,8 +2,6 @@ use nb::{block};
 
 use lpc55_hal as hal;
 
-
-
 use hal::{
 
     traits::wg::{
@@ -28,7 +26,7 @@ use hal::{
         ctimer::Ctimer,
     }
 };
-
+use crate::traits::nfc;
 use logging::hex;
 use logging::hex::*;
 
@@ -37,13 +35,7 @@ use funnel::{
     info,
 };
 
-use crate::traits::{
-    NfcDevice,
-    NfcState,
-    NfcError,
-};
-
-pub enum Fm11Mode {
+pub enum Mode {
     Write = 0b000,
     Read = 0b001,
     WriteEeprom = 0b010,
@@ -96,7 +88,7 @@ pub enum FifoInterrupt {
 macro_rules! FM11_CMD {
     ($mode:expr, $addr:expr) => {
         match $mode {
-            Fm11Mode::WriteEeprom | Fm11Mode::ReadEeprom=> {
+            Mode::WriteEeprom | Mode::ReadEeprom=> {
                 (( ($mode as u8) & 0x07) << 5) | (((($addr as u16) & 0x300) >> 8) as u8)
             }
             _ => {
@@ -106,7 +98,7 @@ macro_rules! FM11_CMD {
     }
 }
 
-pub struct Fm11Configuration {
+pub struct Configuration {
     pub regu: u8,
     pub ataq: u16,
     pub sak1: u8,
@@ -152,7 +144,7 @@ where
     pub fn write_reg(&mut self, addr: Register, data: u8) {
         self.cs.set_low().ok();
 
-        block!( self.spi.send(FM11_CMD!(Fm11Mode::Write, addr)) ).ok();
+        block!( self.spi.send(FM11_CMD!(Mode::Write, addr)) ).ok();
         block!( self.spi.send(data) ).ok();
 
         block!( self.spi.read() ).ok();
@@ -164,7 +156,7 @@ where
     pub fn read_reg(&mut self, addr: Register) -> u8 {
         self.cs.set_low().ok();
 
-        block!( self.spi.send(FM11_CMD!(Fm11Mode::Read, addr)) ).ok();
+        block!( self.spi.send(FM11_CMD!(Mode::Read, addr)) ).ok();
         block!( self.spi.send(0) ).ok();
 
         block!( self.spi.read() ).ok();
@@ -178,7 +170,7 @@ where
     pub fn read_reg_raw(&mut self, addr: u8) -> u8 {
         self.cs.set_low().ok();
 
-        block!( self.spi.send(FM11_CMD!(Fm11Mode::Read, addr)) ).ok();
+        block!( self.spi.send(FM11_CMD!(Mode::Read, addr)) ).ok();
         block!( self.spi.send(0) ).ok();
 
         block!( self.spi.read() ).ok();
@@ -193,7 +185,7 @@ where
 
     fn start_write(&mut self, addr: u16){
 
-        let cmd : u8  = FM11_CMD!(Fm11Mode::WriteEeprom, addr);
+        let cmd : u8  = FM11_CMD!(Mode::WriteEeprom, addr);
 
         self.cs.set_low().ok();
 
@@ -230,7 +222,7 @@ where
     }
 
     /// Configure the eeprom in FM11 chip.  Should only need to do this once per device.
-    pub fn configure(&mut self, config: Fm11Configuration, timer: &mut Timer<impl Ctimer<init_state::Enabled>>){
+    pub fn configure(&mut self, config: Configuration, timer: &mut Timer<impl Ctimer<init_state::Enabled>>){
 
         // Clear all aux interrupts
         self.write_reg(Register::AuxIrq, 0);
@@ -276,7 +268,7 @@ where
     pub fn read_eeprom(&mut self, addr: u16, array: &mut [u8]) {
         assert!(array.len() <= 16);
 
-        let cmd = FM11_CMD!(Fm11Mode::ReadEeprom, addr);
+        let cmd = FM11_CMD!(Mode::ReadEeprom, addr);
         let addr = (addr & 0xff) as u8;
         self.cs.set_low().ok();
         block!( self.spi.send( cmd )).ok();
@@ -296,7 +288,7 @@ where
         self
     }
 
-    pub fn has_interrupt(&mut self, ) -> nb::Result<(), NfcError> {
+    pub fn has_interrupt(&mut self, ) -> nb::Result<(), nfc::Error> {
         if self.int.is_low().ok().unwrap() {
             Ok(())
         } else {
@@ -311,7 +303,7 @@ where
         }
         self.cs.set_low().ok();
 
-        block!( self.spi.send(FM11_CMD!(Fm11Mode::WriteFifo, 0)) ).ok();
+        block!( self.spi.send(FM11_CMD!(Mode::WriteFifo, 0)) ).ok();
 
         // Put extra byte in to ensure spi RX fifo operates continuously.
         // (assumes count >= 1)
@@ -334,7 +326,7 @@ where
         let buf: &mut [u8] = &mut self.packet[self.offset..];
         self.cs.set_low().ok();
 
-        block!( self.spi.send(FM11_CMD!(Fm11Mode::ReadFifo, 0)) ).ok();
+        block!( self.spi.send(FM11_CMD!(Mode::ReadFifo, 0)) ).ok();
 
         // Put extra byte in to ensure spi RX fifo operates continuously.
         // (assumes count >= 1)
@@ -354,7 +346,7 @@ where
         self.cs.set_high().ok();
     }
 
-    pub fn read_packet(&mut self, buf: &mut [u8]) -> Result<NfcState, NfcError>{
+    pub fn read_packet(&mut self, buf: &mut [u8]) -> Result<nfc::State, nfc::Error>{
 
         let main_irq = self.read_reg(Register::MainIrq);
         let mut new_session = false;
@@ -426,9 +418,9 @@ where
                     self.write_reg(Register::FifoFlush, 0xaa);
                 }
                 if new_session {
-                    return Ok(NfcState::NewSession(l as u8));
+                    return Ok(nfc::State::NewSession(l as u8));
                 } else {
-                    return Ok(NfcState::Continue(l as u8));
+                    return Ok(nfc::State::Continue(l as u8));
                 }
             }
         }
@@ -457,9 +449,9 @@ where
         ).ok();
 
         if new_session {
-            Err(NfcError::NewSession)
+            Err(nfc::Error::NewSession)
         } else {
-            Err(NfcError::NoActivity)
+            Err(nfc::Error::NoActivity)
         }
 
     }
@@ -514,7 +506,7 @@ where
         Ok(())
     }
 
-    pub fn send_packet(&mut self, buf: &[u8]) -> Result<(), NfcError>{
+    pub fn send_packet(&mut self, buf: &[u8]) -> Result<(), nfc::Error>{
 
         // Write in chunks of 24
         for i in 0 .. buf.len()/24 {
@@ -522,7 +514,7 @@ where
             self.write_fifo(&buf[i * 24 .. i * 24 + 24]);
 
             if ! self.wait_for_transmission().is_ok() {
-                return Err(NfcError::NoActivity);
+                return Err(nfc::Error::NoActivity);
             }
         }
 
@@ -541,17 +533,17 @@ where
 
 }
 
-impl<SPI, CS, INT> NfcDevice for FM11NC08 <SPI, CS, INT>
+impl<SPI, CS, INT> nfc::Device for FM11NC08 <SPI, CS, INT>
 where
     SPI: FullDuplex<u8>,
     CS: OutputPin,
     INT: InputPin,
 {
-    fn read(&mut self, buf: &mut [u8]) -> Result<NfcState, NfcError>{
+    fn read(&mut self, buf: &mut [u8]) -> Result<nfc::State, nfc::Error>{
         self.read_packet(buf)
     }
 
-    fn send(&mut self,buf: &[u8]) -> Result<(), NfcError>{
+    fn send(&mut self,buf: &[u8]) -> Result<(), nfc::Error>{
         self.send_packet(buf)
     }
 
@@ -572,10 +564,8 @@ where
 }
 
 
-
-
 /// For logging
-pub struct Fm11Eeprom {
+pub struct Eeprom {
     regu_cfg: u8,
     atqa: u16,
     sak1: u8,
@@ -590,7 +580,33 @@ pub struct Fm11Eeprom {
     rblock_ack: u8,
     rblock_nack: u8,
 }
-impl ufmt::uDisplay for Fm11Eeprom {
+
+pub struct InterruptState {
+    main: u8,
+    fifo: u8,
+    aux: u8,
+    count: u8,
+}
+
+pub struct RegisterBlock {
+    fifo_count: u8,
+    rf_status: u8,
+    rf_txen: u8,
+    rf_baud: u8,
+    rf_rats: u8,
+    main_irq: u8,
+    fifo_irq: u8,
+    aux_irq: u8,
+    main_irq_mask: u8,
+    fifo_irq_mask: u8,
+    aux_irq_mask: u8,
+    nfc_cfg: u8,
+    regu_cfg: u8,
+}
+
+
+
+impl ufmt::uDisplay for Eeprom {
     fn fmt<W: ?Sized>(&self, f: &mut ufmt::Formatter<'_, W>) -> Result<(), W::Error>
     where
         W: ufmt::uWrite
@@ -609,70 +625,7 @@ impl ufmt::uDisplay for Fm11Eeprom {
     }
 }
 
-
-
-pub fn fm_dump_eeprom(fm: &mut FM11NC08<impl FullDuplex<u8>, impl OutputPin, impl InputPin>) -> Fm11Eeprom {
-
-
-    let mut arr = [0u8; 16];
-    let mut double_byte = [0u8 ; 2];
-    fm.read_eeprom(0x390, &mut arr);
-
-    let regu_cfg = arr[1];
-
-    fm.read_eeprom(0x3a0 + 0, &mut arr);
-
-    double_byte.clone_from_slice(&arr[0 .. 2]);
-    let atqa = u16::from_be_bytes(double_byte);
-    let sak1 = arr[2];
-    let sak2 = arr[3];
-
-    fm.read_eeprom(0x3b0 + 0, &mut arr);
-    let tl = arr[0];
-    let t0 = arr[1];
-    let nfc_cfg = arr[2];
-    let i2c_addr = arr[3];
-
-    let ta = arr[4];
-    let tb = arr[5];
-    let tc = arr[6];
-    let rblock_ack = arr[10];
-    let rblock_nack = arr[11];
-
-    Fm11Eeprom {
-        regu_cfg:regu_cfg,
-        atqa:atqa,
-        sak1: sak1,
-        sak2: sak2,
-        tl: tl,
-        t0: t0,
-        ta: ta,
-        tb: tb,
-        tc: tc,
-        i2c_addr: i2c_addr,
-        nfc_cfg: nfc_cfg,
-        rblock_ack: rblock_ack,
-        rblock_nack: rblock_nack,
-    }
-}
-
-pub struct Fm11RegisterBlock {
-    fifo_count: u8,
-    rf_status: u8,
-    rf_txen: u8,
-    rf_baud: u8,
-    rf_rats: u8,
-    main_irq: u8,
-    fifo_irq: u8,
-    aux_irq: u8,
-    main_irq_mask: u8,
-    fifo_irq_mask: u8,
-    aux_irq_mask: u8,
-    nfc_cfg: u8,
-    regu_cfg: u8,
-}
-
-impl ufmt::uDisplay for Fm11RegisterBlock {
+impl ufmt::uDisplay for RegisterBlock {
     fn fmt<W: ?Sized>(&self, f: &mut ufmt::Formatter<'_, W>) -> Result<(), W::Error>
     where
         W: ufmt::uWrite
@@ -697,39 +650,8 @@ impl ufmt::uDisplay for Fm11RegisterBlock {
 
 
 
-pub fn fm_dump_registers(fm: &mut FM11NC08<impl FullDuplex<u8>, impl OutputPin, impl InputPin>) -> Fm11RegisterBlock {
 
-    let mut regs = [0u8; 15];
-
-    for i in 2 .. 15 {
-        regs[i] = fm.read_reg_raw(i as u8);
-    }
-
-    Fm11RegisterBlock {
-        fifo_count: regs[2],
-        rf_status: regs[3],
-        rf_txen: regs[4],
-        rf_baud: regs[5],
-        rf_rats: regs[6],
-        main_irq: regs[7],
-        fifo_irq: regs[8],
-        aux_irq: regs[9],
-        main_irq_mask: regs[10],
-        fifo_irq_mask: regs[11],
-        aux_irq_mask: regs[12],
-        nfc_cfg: regs[13],
-        regu_cfg: regs[14],
-    }
-}
-
-pub struct Fm11InterruptState {
-    main: u8,
-    fifo: u8,
-    aux: u8,
-    count: u8,
-}
-
-impl ufmt::uDisplay for Fm11InterruptState {
+impl ufmt::uDisplay for InterruptState {
     fn fmt<W: ?Sized>(&self, f: &mut ufmt::Formatter<'_, W>) -> Result<(), W::Error>
     where
         W: ufmt::uWrite
@@ -777,23 +699,100 @@ impl ufmt::uDisplay for Fm11InterruptState {
     }
 }
 
+impl<SPI, CS, INT> FM11NC08 <SPI, CS, INT>
+where
+    SPI: FullDuplex<u8>,
+    CS: OutputPin,
+    INT: InputPin,
+{
+    pub fn dump_registers(&mut self) -> RegisterBlock {
+
+        let mut regs = [0u8; 15];
+
+        for i in 2 .. 15 {
+            regs[i] = self.read_reg_raw(i as u8);
+        }
+
+        RegisterBlock {
+            fifo_count: regs[2],
+            rf_status: regs[3],
+            rf_txen: regs[4],
+            rf_baud: regs[5],
+            rf_rats: regs[6],
+            main_irq: regs[7],
+            fifo_irq: regs[8],
+            aux_irq: regs[9],
+            main_irq_mask: regs[10],
+            fifo_irq_mask: regs[11],
+            aux_irq_mask: regs[12],
+            nfc_cfg: regs[13],
+            regu_cfg: regs[14],
+        }
+    }
+
+    pub fn dump_interrupts(&mut self) -> InterruptState {
+        let main = self.read_reg(Register::MainIrq);
+        let fifo = self.read_reg(Register::FifoIrq);
+        let aux = self.read_reg(Register::AuxIrq);
+        let count = self.read_reg(Register::FifoCount);
+
+        self.write_reg(Register::MainIrq, 0);
+        self.write_reg(Register::FifoIrq, 0);
+        self.write_reg(Register::AuxIrq, 0);
+
+        InterruptState{
+            main:main,
+            fifo:fifo,
+            aux: aux,
+            count:count,
+        }
+    }
 
 
-pub fn fm_dump_interrupts(fm: &mut FM11NC08<impl FullDuplex<u8>, impl OutputPin, impl InputPin>) -> Fm11InterruptState {
-    let main = fm.read_reg(Register::MainIrq);
-    let fifo = fm.read_reg(Register::FifoIrq);
-    let aux = fm.read_reg(Register::AuxIrq);
-    let count = fm.read_reg(Register::FifoCount);
 
-    fm.write_reg(Register::MainIrq, 0);
-    fm.write_reg(Register::FifoIrq, 0);
-    fm.write_reg(Register::AuxIrq, 0);
+    pub fn dump_eeprom(&mut self) -> Eeprom {
 
-    Fm11InterruptState{
-        main:main,
-        fifo:fifo,
-        aux: aux,
-        count:count,
+
+        let mut arr = [0u8; 16];
+        let mut double_byte = [0u8 ; 2];
+        self.read_eeprom(0x390, &mut arr);
+
+        let regu_cfg = arr[1];
+
+        self.read_eeprom(0x3a0 + 0, &mut arr);
+
+        double_byte.clone_from_slice(&arr[0 .. 2]);
+        let atqa = u16::from_be_bytes(double_byte);
+        let sak1 = arr[2];
+        let sak2 = arr[3];
+
+        self.read_eeprom(0x3b0 + 0, &mut arr);
+        let tl = arr[0];
+        let t0 = arr[1];
+        let nfc_cfg = arr[2];
+        let i2c_addr = arr[3];
+
+        let ta = arr[4];
+        let tb = arr[5];
+        let tc = arr[6];
+        let rblock_ack = arr[10];
+        let rblock_nack = arr[11];
+
+        Eeprom {
+            regu_cfg:regu_cfg,
+            atqa:atqa,
+            sak1: sak1,
+            sak2: sak2,
+            tl: tl,
+            t0: t0,
+            ta: ta,
+            tb: tb,
+            tc: tc,
+            i2c_addr: i2c_addr,
+            nfc_cfg: nfc_cfg,
+            rblock_ack: rblock_ack,
+            rblock_nack: rblock_nack,
+        }
     }
 }
 

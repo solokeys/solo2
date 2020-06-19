@@ -12,6 +12,7 @@
 use crate::{
     Applet,
     AppletResponse,
+    types,
 };
 
 use iso7816::{
@@ -24,10 +25,6 @@ use heapless::ByteBuf;
 use logging;
 
 use interchange::Responder;
-use iso14443::types::ApduInterchange as ContactlessInterchange;
-use usbd_ccid::types::ApduInterchange as ContactInterchange;
-
-// type AidBuffer = [u8; 16];
 
 struct AidBuffer {
     pub aid: Option<ByteBuf<heapless::consts::U16>>,
@@ -48,30 +45,26 @@ impl Default for AidBuffer {
     }
 }
 
-pub enum ApduStatus {
-    NotSelect,
-}
-
 pub struct ApduManager {
     selected_aid: AidBuffer,
-    contact_interchange: Responder<ContactInterchange>,
-    contactless_interchange: Responder<ContactlessInterchange>,
+    contact_interchange: Responder<types::ContactInterchange>,
+    contactless_interchange: Responder<types::ContactlessInterchange>,
     buffer: [u8; 4096]
 }
 
 impl ApduManager
 {
-    fn is_select(apdu: &Command) -> Result<AidBuffer, ApduStatus> {
-        if apdu.instruction() == Instruction::Select && (apdu.p1 & 0x04) != 0{
-            Ok(AidBuffer::new(apdu.data()))
+    fn is_select(apdu: &Command) -> Option<AidBuffer> {
+        if apdu.instruction() == Instruction::Select && (apdu.p1 & 0x04) != 0 {
+            Some(AidBuffer::new(apdu.data()))
         } else {
-            Err(ApduStatus::NotSelect)
+            None
         }
     }
 
     pub fn new(
-        contact_interchange: Responder<ContactInterchange>,
-        contactless_interchange: Responder<ContactlessInterchange>,
+        contact_interchange: Responder<types::ContactInterchange>,
+        contactless_interchange: Responder<types::ContactlessInterchange>,
     ) -> ApduManager {
         ApduManager{
             selected_aid: Default::default(),
@@ -132,10 +125,10 @@ impl ApduManager
 
             // logging::info!("apdu ok").ok();
             let maybe_aid = Self::is_select(&apdu);
-            let is_select = maybe_aid.is_ok();
+            let is_select = maybe_aid.is_some();
 
             let index = match maybe_aid {
-                Ok(aid) => {
+                Some(aid) => {
                     Self::pick_applet(&aid, applets)
                 },
                 _ => {
