@@ -2,7 +2,7 @@ use core::mem::MaybeUninit;
 use core::time::Duration;
 use heapless::ByteBuf;
 use fm11nc08::traits::{
-    NfcDevice, NfcState, NfcError
+    nfc,
 };
 use iso7816::{Response, Command, command::FromSliceError, Status};
 use interchange::Requester;
@@ -90,7 +90,7 @@ impl Block {
     }
 }
 
-pub struct Iso14443<DEV: NfcDevice> {
+pub struct Iso14443<DEV: nfc::Device> {
     device: DEV,
 
     state: Iso14443State,
@@ -111,7 +111,7 @@ pub struct Iso14443<DEV: NfcDevice> {
 
 impl<DEV> Iso14443<DEV>
 where
-    DEV: NfcDevice
+    DEV: nfc::Device
 {
     pub fn new(device: DEV, interchange: Requester<ApduInterchange>) -> Self {
         Self {
@@ -343,12 +343,12 @@ where
 
         let res = self.device.read(packet);
         let packet_len = match res {
-            Ok(NfcState::NewSession(x)) => {
+            Ok(nfc::State::NewSession(x)) => {
                 self.reset_state();
                 x
             },
-            Ok(NfcState::Continue(x)) => x,
-            Err(NfcError::NewSession) => {
+            Ok(nfc::State::Continue(x)) => x,
+            Err(nfc::Error::NewSession) => {
                 self.reset_state();
                 return Err(SourceError::NoActivity)
             },

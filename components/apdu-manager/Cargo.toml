@@ -20,4 +20,4 @@ iso14443 = {path = "../iso14443"}
 
 [features]
 default = []
-std = []
+std = ["logging/std"]
