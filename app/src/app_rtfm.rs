@@ -6,11 +6,11 @@
 #![no_main]
 
 use app::{board, hal};
-// use fido_authenticator::{
-//     Authenticator,
-// };
+use lpc55_hal::drivers::timer::Lap;
+use hal::traits::wg::timer::Cancel;
+use hal::traits::wg::timer::CountDown;
+use hal::time::*;
 
-// use rtfm::Exclusive;
 use funnel::info;
 
 #[cfg(feature = "debug-app")]
@@ -22,95 +22,156 @@ extern crate funnel;
 macro_rules! debug { ($($tt:tt)*) => {{ core::result::Result::<(), core::convert::Infallible>::Ok(()) }} }
 
 use rtfm::cyccnt::{Instant, U32Ext as _};
-const PERIOD: u32 = 1*48_000_000;
+
+const CLOCK_FREQ: u32 = 96_000_000;
+const PERIOD: u32 = CLOCK_FREQ/2;
 
 #[rtfm::app(device = app::hal::raw, peripherals = true, monotonic = rtfm::cyccnt::CYCCNT)]
 const APP: () = {
 
     struct Resources {
         authnr: app::types::Authenticator,
-        ccid: app::types::CcidClass,
-        crypto: app::types::CryptoService,
-        ctaphid: app::types::CtapHidClass,
+        apdu_manager: app::types::ApduManager,
+        trussed: app::types::CryptoService,
+
         piv: app::types::Piv,
+        fido: Option<app::types::FidoApplet>,
+        ndef: applet_ndef::NdefApplet<'static>,
+
+        usb_wrapper: Option<app::types::UsbWrapper>,
+        contactless: Option<app::types::Iso14443>,
+
+        perf_timer: app::types::PerfTimer,
         rgb: board::led::RgbLed,
-        serial: app::types::SerialClass,
-        usbd: app::types::Usbd,
-        // os_channels: fido_authenticator::OsChannels,
+        three_buttons: board::button::ThreeButtons,
     }
 
     #[init(schedule = [toggle_red])]
     fn init(c: init::Context) -> init::LateResources {
 
-        let (authnr, ccid, crypto, ctaphid, piv, rgb, serial, usbd) = app::init_board(c.device, c.core);
+        let (
+            authnr,
+            apdu_manager,
+            trussed,
+
+            piv,
+            fido,
+            ndef,
+
+            usb_wrapper,
+            contactless,
+
+            perf_timer,
+            rgb,
+            three_buttons,
+        ) = app::init_board(c.device, c.core);
+
 
         c.schedule.toggle_red(Instant::now() + PERIOD.cycles()).unwrap();
 
         init::LateResources {
             authnr,
-            ccid,
-            crypto,
-            ctaphid,
+            apdu_manager,
+            trussed,
+
             piv,
+            fido,
+            ndef,
+
+            usb_wrapper,
+            contactless,
+
+            perf_timer,
             rgb,
-            serial,
-            usbd,
+            three_buttons,
         }
     }
 
-    #[idle(resources = [authnr, ccid, ctaphid, piv, serial, usbd])]
+    #[idle(resources = [authnr, usb_wrapper, apdu_manager, ndef, piv, fido, contactless, perf_timer])]
     fn idle(c: idle::Context) -> ! {
-        let idle::Resources { authnr, mut ccid, mut ctaphid, piv, mut serial, mut usbd }
+        let idle::Resources {
+            authnr,
+            mut usb_wrapper,
+            apdu_manager,
+            ndef,
+            piv,
+            fido,
+            mut contactless,
+            mut perf_timer,
+        }
             = c.resources;
 
         loop {
-            // not sure why we can't use `Exclusive` here, should we? how?
-            // https://rtfm.rs/0.5/book/en/by-example/tips.html#generics
-            // Important: do not pass unlocked serial :)
-            // cortex_m_semihosting::hprintln!("idle loop").ok();
-            #[cfg(feature = "log-serial")]
-            app::drain_log_to_serial(&mut serial);
-            #[cfg(feature = "log-semihosting")]
-            app::drain_log_to_semihosting();
 
-            usbd.lock(|usbd| ccid.lock(|ccid| ctaphid.lock(|ctaphid| serial.lock(|serial| {
-                ctaphid.check_for_responses();
-                // the `usbd.poll` only calls its classes if
-                // there is activity on the bus. hence we need
-                // to kick ccid to pick up responses...
-                ccid.sneaky_poll();
-                usbd.poll(&mut [ccid, ctaphid, serial])
-            } ))));
+            let mut time = 0;
+            perf_timer.lock(|perf_timer|{
+                time = perf_timer.lap().0;
+            });
+            if time > 1_000_000 {
+                // Only drain outside of a 1s window of any NFC activity.
+                #[cfg(feature = "log-serial")]
+                app::drain_log_to_serial(&mut serial);
+                #[cfg(feature = "log-semihosting")]
+                app::drain_log_to_semihosting();
+            }
+
+            match fido.as_mut() {
+                Some(fido) => {
+                    apdu_manager.poll(&mut [ndef, piv, fido]);
+                }
+                _ => {
+                    apdu_manager.poll(&mut [ndef, piv]);
+                }
+            }
+
+            contactless.lock(|contactless|  {
+                match contactless.as_ref() {
+                    Some(contactless) => {
+                        if contactless.is_ready_to_transmit() {
+                            rtfm::pend(lpc55_hal::raw::Interrupt::PIN_INT0);
+                        }
+                    }
+                    _ => {}
+                }
+            });
+
+            usb_wrapper.lock(|usb_wrapper_maybe| {
+                match usb_wrapper_maybe.as_mut() {
+                    Some(usb_wrapper) => {
+                        usb_wrapper.ctaphid.check_for_responses();
+                        // the `usbd.poll` only calls its classes if
+                        // there is activity on the bus. hence we need
+                        // to kick ccid to pick up responses...
+                        usb_wrapper.ccid.sneaky_poll();
+                        usb_wrapper.usbd.poll(&mut [
+                            &mut usb_wrapper.ccid,
+                            &mut usb_wrapper.ctaphid,
+                            &mut usb_wrapper.serial
+                        ]);
+                    }
+                    _ => {}
+                }
+            } );
 
             authnr.poll();
-            piv.poll();
-
-
-            // // NEW
-            // if let Some(request) = ctaphid.lock(|ctaphid| ctaphid.request()) {
-            //     // the potentially time-consuming part
-            //     let response = authenticator.pre_process(request);
-            //     ctaphid.lock(|ctaphid| ctaphid.response(response));
-            //     rtfm::pend(Interrupt::USB0);
-            // }
+            // piv.poll();
         }
     }
 
-    #[task(binds = USB0_NEEDCLK, resources = [ccid, ctaphid, serial, usbd], priority=5)]
+    #[task(binds = USB0_NEEDCLK, resources = [usb_wrapper], priority=5)]
     fn usb0_needclk(c: usb0_needclk::Context) {
-        c.resources.usbd.poll(&mut [c.resources.ccid, c.resources.ctaphid, c.resources.serial]);
+        let usb_wrapper = c.resources.usb_wrapper.as_mut().unwrap();
+        usb_wrapper.usbd.poll(&mut [&mut usb_wrapper.ccid, &mut usb_wrapper.ctaphid, &mut usb_wrapper.serial]);
     }
 
-    #[task(binds = USB0, resources = [ccid, ctaphid, serial, usbd], priority=5)]
+    #[task(binds = USB0, resources = [usb_wrapper], priority=5)]
     fn usb0(c: usb0::Context) {
         let usb = unsafe { hal::raw::Peripherals::steal().USB0 } ;
-        // cortex_m_semihosting::hprintln!("handler intstat = {:x}", usb0.intstat.read().bits()).ok();
-        // cortex_m_semihosting::hprintln!("handler inten = {:x}", usb0.inten.read().bits()).ok();
-        // c.resources.usbd.clear_interrupt();
         let before = Instant::now();
+        let usb_wrapper = c.resources.usb_wrapper.as_mut().unwrap();
 
         //////////////
-        c.resources.usbd.poll(&mut [c.resources.ccid, c.resources.ctaphid, c.resources.serial]);
+        usb_wrapper.usbd.poll(&mut [&mut usb_wrapper.ccid, &mut usb_wrapper.ctaphid, &mut usb_wrapper.serial]);
         //////////////
 
         let after = Instant::now();
@@ -139,23 +200,12 @@ const APP: () = {
 
     }
 
-    #[task(binds = OS_EVENT, resources = [crypto], priority = 7)]
+    #[task(binds = OS_EVENT, resources = [trussed], priority = 7)]
     fn os_event(c: os_event::Context) {
-        c.resources.crypto.process();
+        c.resources.trussed.process();
     }
 
-    // #[task(binds = OS_EVENT, resources = [os_channels], priority = 7)]
-    // fn os_event(c: os_event::Context) {
-    //     let os_event::Resources { mut os_channels, .. } = c.resources;
-    //     if let Some(msg) = os_channels.recv.dequeue() {
-    //         match msg {
-    //             AuthnrToOsMessages::Heya(string) => { hprintln!("got a syscall: {}", &string).ok(); }
-    //             _ => { hprintln!("got a syscall!").ok(); }
-    //         }
-    //     }
-    // }
-
-    #[task(resources = [ctaphid, rgb], schedule = [toggle_red], priority = 1)]
+    #[task(resources = [rgb], schedule = [toggle_red], priority = 1)]
     fn toggle_red(c: toggle_red::Context) {
 
         static mut TOGGLES: u32 = 1;
@@ -168,19 +218,69 @@ const APP: () = {
             c.resources.rgb.red(200);
             *ON = true;
         }
-        c.schedule.toggle_red(Instant::now() + PERIOD.cycles()).unwrap();
-        // debug!("{}:{} toggled red LED #{}", file!(), line!(), TOGGLES).ok();
-        debug!("toggled red LED #{}", TOGGLES).ok();
 
-        // let sig_count = c.resources.ctaphid.borrow_mut_authenticator()
-        //     .signature_counter().expect("issue reading sig count");
-        // hprintln!("sigs: {}", sig_count).ok();
+        c.schedule.toggle_red(Instant::now() + PERIOD.cycles()).unwrap();
+        info!("toggled red LED #{}", TOGGLES).ok();
+
         *TOGGLES += 1;
     }
+
+    #[task(resources = [contactless, perf_timer], schedule = [nfc_wait_extension], priority = 7)]
+    fn nfc_wait_extension(c: nfc_wait_extension::Context) {
+        let nfc_wait_extension::Resources {
+            contactless,
+            perf_timer,
+        }
+            = c.resources;
+        let contactless = contactless.as_mut().unwrap();
+        let schedule = c.schedule;
+
+        info!("<{}", perf_timer.lap().0/100).ok();
+        let status = contactless.poll_wait_extensions();
+        match status {
+            iso14443::Iso14443Status::Idle => {}
+            iso14443::Iso14443Status::ReceivedData(duration) => {
+                let div = 1000/duration.subsec_millis();
+                schedule.nfc_wait_extension(Instant::now() + (CLOCK_FREQ/div).cycles()).ok();
+            }
+        }
+        info!(" {}>", perf_timer.lap().0/100).ok();
+    }
+
+    #[task(binds = PIN_INT0, resources = [
+            contactless, perf_timer,
+        ], priority = 7,
+        schedule = [nfc_wait_extension],
+    )]
+    fn nfc_irq(c: nfc_irq::Context) {
+
+        let nfc_irq::Resources {
+            contactless,
+            perf_timer,
+            }
+            = c.resources;
+        let contactless = contactless.as_mut().unwrap();
+
+        info!("[{}", perf_timer.lap().0/100).ok();
+        let status = contactless.poll();
+        match status {
+            iso14443::Iso14443Status::Idle => {}
+            iso14443::Iso14443Status::ReceivedData(duration) => {
+                let div = 1000/duration.subsec_millis();
+                c.schedule.nfc_wait_extension(Instant::now() + (CLOCK_FREQ/div).cycles()).ok();
+            }
+        }
+        info!(" {}]", perf_timer.lap().0/100).ok();
+
+        perf_timer.cancel().ok();
+        perf_timer.start(60_000.ms());
+    }
+
 
     // something to dispatch software tasks from
     extern "C" {
         fn PLU();
+        fn PIN_INT7();
     }
 
 };
