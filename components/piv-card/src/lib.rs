@@ -7,7 +7,6 @@ use core::convert::{TryFrom, TryInto};
 
 use cortex_m_semihosting::{dbg, hprintln};
 use heapless::consts;
-use interchange::Responder;
 use iso7816::{
     Command, Instruction, Status,
     response::{
@@ -15,6 +14,7 @@ use iso7816::{
         Data as ResponseData,
     },
 };
+use apdu_manager::{Aid, Applet, Result as AppletResult, AppletResponse};
 use trussed::Client as Trussed;
 use trussed::{block, syscall};
 
@@ -22,14 +22,12 @@ use usbd_ccid::{
     // constants::*,
     der::Der,
     derp,
-    types::ApduInterchange,
 };
 
 use constants::*;
 
 pub struct App
 {
-    interchange: Responder<ApduInterchange>,
     state: state::State,
     trussed: Trussed,
     // trussed: RefCell<Trussed>,
@@ -39,7 +37,6 @@ impl App
 {
     pub fn new(
         trussed: Trussed,
-        interchange: Responder<ApduInterchange>,
     )
         -> Self
     {
@@ -47,24 +44,10 @@ impl App
         // which can be cloned and injected into other parts of the App that use Trussed.
         // let trussed = RefCell::new(trussed);
         Self {
-            interchange,
             // state: state::State::new(trussed.clone()),
             state: Default::default(),
             trussed,
         }
-    }
-
-    pub fn poll(&mut self) {
-        if let Some(request) = self.interchange.take_request() {
-            self.handle(&request);
-        }
-    }
-
-    fn handle(&mut self, command: &Command) {
-
-        let result = self.try_handle(command);
-
-        self.interchange.respond(result.into()).expect("can respond");
     }
 
     fn try_handle(&mut self, command: &Command) -> ResponseResult {
@@ -127,7 +110,6 @@ impl App
 
         // hprintln!("INS = {:?}" &command.instruction()).ok();
         match command.instruction() {
-            Instruction::Select => self.select(command),
             Instruction::GetData => self.get_data(command),
             Instruction::PutData => self.put_data(command),
             Instruction::Verify => self.verify(command),
@@ -935,36 +917,52 @@ impl App
         }
     }
 
-    fn select(&mut self, command: &Command) -> ResponseResult {
-        use state::Aid;
+}
 
-        if command.data().starts_with(state::PivAid::rid()) {
-            hprintln!("got PIV!").ok();
 
-            if command.p1 != 0x04 || command.p2 != 0x00 {
-                return Err(Status::IncorrectP1OrP2Parameter);
+impl Aid for App {
+
+    fn aid(&self) -> &'static [u8] {
+        &constants::PIV_AID
+    }
+
+    fn right_truncated_length(&self) -> usize {
+        11
+    }
+}
+
+
+impl Applet for App {
+    fn select(&mut self, _apdu: Command) -> AppletResult {
+        let mut der: Der<consts::U256> = Default::default();
+        der.nested(0x61, |der| {
+            // Application identifier of application:
+            // -> PIX (without RID, with version)
+            der.raw_tlv(0x4f, &PIV_PIX)?;
+
+            // Coexistent tag allocation authority
+            der.nested(0x79, |der| {
+                // Application identifier
+                der.raw_tlv(0x4f, NIST_RID)
+            // })?;
+            })
+        }).unwrap();
+
+        return Ok(AppletResponse::Respond(der.to_byte_buf()));
+    }
+
+    fn deselect(&mut self) -> core::result::Result<(), Status> {
+        Ok(())
+    }
+
+    fn send_recv(&mut self, apdu: Command) -> AppletResult {
+        match self.try_handle(&apdu) {
+            Ok(data) => {
+                Ok(AppletResponse::Respond(data))
             }
-
-            let mut der: Der<consts::U256> = Default::default();
-            der.nested(0x61, |der| {
-                // Application identifier of application:
-                // -> PIX (without RID, with version)
-                der.raw_tlv(0x4f, &PIV_PIX)?;
-
-                // Coexistent tag allocation authority
-                der.nested(0x79, |der| {
-                    // Application identifier
-                    der.raw_tlv(0x4f, NIST_RID)
-                // })?;
-                })
-            }).unwrap();
-
-
-            return Ok(der.to_byte_buf());
+            Err(status) => {
+                Err(status)
+            }
         }
-
-        // if command.data().starts_with(
-        hprintln!("got not PIV: {:?}", &command.data()).ok();
-        Err(Status::NotFound)
     }
 }
