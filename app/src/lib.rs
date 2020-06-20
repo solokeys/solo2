@@ -1,5 +1,6 @@
 #![no_std]
 
+use cortex_m_semihosting::{heprintln};
 // panic handler, depending on debug/release build
 // BUT: need to run in release anyway, to have USB work
 // #[cfg(debug_assertions)]
@@ -25,13 +26,16 @@ use c_stubs as _;
 pub use board::hal;
 pub use board::rt::entry;
 
-
 pub mod types;
 use types::{
     EnabledUsbPeripheral,
     ExternalStorage,
     VolatileStorage,
     Store,
+};
+
+use fm11nc08::{
+    FM11NC08, Configuration, Register,
 };
 
 //
@@ -42,7 +46,10 @@ use hal::drivers::{
     flash::FlashGordon,
     pins,
     UsbBus,
+    Timer,
+    Pwm,
 };
+
 use interchange::Interchange;
 use usbd_ccid::Ccid;
 use usbd_ctaphid::CtapHid;
@@ -50,22 +57,84 @@ use usbd_ctaphid::CtapHid;
 use usb_device::device::{UsbDeviceBuilder, UsbVidPid};
 // bring traits in scope
 use hal::prelude::*;
+use funnel::info;
+use hal::traits::wg::digital::v2::InputPin;
+
+#[cfg(feature = "nfc")]
+fn configure_fm11_if_needed(
+    fm: &mut types::NfcChip,
+    timer: &mut Timer<impl hal::peripherals::ctimer::Ctimer<hal::typestates::init_state::Enabled>>){
+    //    no limit      2mA resistor    3.3V
+    // let regu = (0b11 << 4) | (0b10 << 2) | (0b11 << 0);
+    let regu = 0;
+
+    if fm.read_reg(fm11nc08::Register::ReguCfg) != regu {
+    // if true {
+        info!("{}", fm.dump_eeprom() ).ok();
+        info!("{}", fm.dump_registers() ).ok();
+
+        info!("writing EEPROM").ok();
+
+        fm.configure(Configuration{
+            //    no limit      2mA resistor    3.3V
+            regu: regu,
+            ataq: 0x4400,
+            sak1: 0x04,
+            sak2: 0x20,
+            tl: 0x05,
+            // (x[7:4], FSDI[3:0]) . FSDI[2] == 32 byte frame, FSDI[8] == 256 byte frame, 7==128byte
+            t0: 0x77,
+            ta: 0x91,
+            // (FWI[b4], SFGI[b4]), (256 * 16 / fc) * 2 ^ value
+            tb: 0x78,
+            tc: 0x02,
+                // disable P-on IRQ    14443-4 mode
+            nfc:    (0b1 << 1) |       (0b00 << 2),
+        }, timer);
+    } else {
+        info!("EEPROM already initialized.").ok();
+    }
+
+    // disable all interrupts except RxStart
+    fm.write_reg(Register::AuxIrqMask, 0x00);
+    fm.write_reg(Register::FifoIrqMask,
+        // 0x0
+        0xff
+        ^ (1 << 3) /* water-level */
+        ^ (1 << 1) /* fifo-full */
+    );
+    fm.write_reg(Register::MainIrqMask,
+        // 0x0
+        0xff
+        ^ fm11nc08::device::Interrupt::RxStart as u8
+        ^ fm11nc08::device::Interrupt::RxDone as u8
+        ^ fm11nc08::device::Interrupt::TxDone as u8
+        ^ fm11nc08::device::Interrupt::Fifo as u8
+        ^ fm11nc08::device::Interrupt::Active as u8
+    );
+}
 
 // // filesystem starting at 320KB
 // // this needs to be synchronized with contents of `memory.x`
 // const FS_BASE: usize = 0x50_000;
 
 // TODO: move board-specifics to BSPs
-#[cfg(feature = "board-lpcxpresso")]
+// #[cfg(feature = "board-lpcxpresso")]
 pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: rtfm::Peripherals) -> (
     types::Authenticator,
-    types::CcidClass,
+    types::ApduManager,
     types::CryptoService,
-    types::CtapHidClass,
+
     types::Piv,
+    Option<types::FidoApplet>,
+    applet_ndef::NdefApplet<'static>,
+
+    Option<types::UsbWrapper>,
+    Option<types::Iso14443>,
+
+    types::PerfTimer,
     board::led::RgbLed,
-    types::SerialClass,
-    types::Usbd,
+    board::button::ThreeButtons,
 ) {
     let hal = hal::Peripherals::from((device_peripherals, core_peripherals));
 
@@ -73,134 +142,60 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     let mut pmc = hal.pmc;
     let mut syscon = hal.syscon;
 
-    // let mut gpio = hal.gpio.enabled(&mut syscon);
+    let mut gpio = hal.gpio.enabled(&mut syscon);
     let mut iocon = hal.iocon.enabled(&mut syscon);
 
     let usb0_vbus_pin = pins::Pio0_22::take().unwrap()
         .into_usb0_vbus_pin(&mut iocon);
 
-    // let clocks = hal::ClockRequirements::default()
-    //     #[cfg(not(feature = "highspeed"))]
-    //     .support_usbfs()
-    //     #[cfg(feature = "highspeed")]
-    //     .support_usbhs()
-    //     .system_frequency(96.mhz())
-    //     .configure(&mut anactrl, &mut pmc, &mut syscon)
-    //     .expect("Clock configuration failed");
+    let rng = hal.rng.enabled(&mut syscon);
 
-    #[cfg(not(feature = "highspeed"))]
-    let clocks = hal::ClockRequirements::default()
-        .support_usbfs()
-        .system_frequency(96.mhz())
-        .configure(&mut anactrl, &mut pmc, &mut syscon)
-        .expect("Clock configuration failed");
+    use littlefs2::fs::{Allocation, Filesystem};
 
-    #[cfg(feature = "highspeed")]
+    let flash = hal::drivers::flash::FlashGordon::new(hal.flash.enabled(&mut syscon));
+
+    static mut INTERNAL_STORAGE: Option<FlashGordon> = None;
+    unsafe { INTERNAL_STORAGE = Some(flash); }
+    static mut INTERNAL_FS_ALLOC: Option<Allocation<FlashGordon>> = None;
+    unsafe { INTERNAL_FS_ALLOC = Some(Filesystem::allocate()); }
+
+    static mut EXTERNAL_STORAGE: ExternalStorage = ExternalStorage::new();
+    static mut EXTERNAL_FS_ALLOC: Option<Allocation<ExternalStorage>> = None;
+    unsafe { EXTERNAL_FS_ALLOC = Some(Filesystem::allocate()); }
+
+    static mut VOLATILE_STORAGE: VolatileStorage = VolatileStorage::new();
+    static mut VOLATILE_FS_ALLOC: Option<Allocation<VolatileStorage>> = None;
+    unsafe { VOLATILE_FS_ALLOC = Some(Filesystem::allocate()); }
+
+    heprintln!("formatting storage...").ok();
+
+    let store = Store::claim().unwrap();
+    store.mount(
+        unsafe { INTERNAL_FS_ALLOC.as_mut().unwrap() },
+        // unsafe { &mut INTERNAL_STORAGE },
+        unsafe { INTERNAL_STORAGE.as_mut().unwrap() },
+        unsafe { EXTERNAL_FS_ALLOC.as_mut().unwrap() },
+        unsafe { &mut EXTERNAL_STORAGE },
+        unsafe { VOLATILE_FS_ALLOC.as_mut().unwrap() },
+        unsafe { &mut VOLATILE_STORAGE },
+        // to trash existing data, set to true
+        true,
+    ).unwrap();
+
+    heprintln!("formatted storage").ok();
+
     let clocks = hal::ClockRequirements::default()
         .support_usbhs()
         .system_frequency(96.mhz())
         .configure(&mut anactrl, &mut pmc, &mut syscon)
         .expect("Clock configuration failed");
 
-    #[cfg(feature = "board-lpcxpresso")]
-    let rgb = board::led::RgbLed::new(
-        board::led::RedLedPin::take().unwrap().into_match_output(&mut iocon),
-        board::led::GreenLedPin::take().unwrap().into_match_output(&mut iocon),
-        board::led::BlueLedPin::take().unwrap().into_match_output(&mut iocon),
-        hal::drivers::Pwm::new(hal.ctimer.2.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap())),
-    );
-
-    #[cfg(feature = "board-prototype")]
-    let rgb = board::led::RgbLed::new(
-        board::led::RedLedPin::take().unwrap().into_match_output(&mut iocon),
-        board::led::GreenLedPin::take().unwrap().into_match_output(&mut iocon),
-        board::led::BlueLedPin::take().unwrap().into_match_output(&mut iocon),
-        Pwm::new(hal.ctimer.3.enabled(&mut syscon)),
-    );
-
-    iocon.disabled(&mut syscon).release(); // save the environment :)
-
-    #[cfg(feature = "highspeed")]
-    let mut delay_timer = Timer::new(hal.ctimer.0.enabled(&mut syscon));
-
-    #[cfg(feature = "highspeed")]
-    let usbd = hal.usbhs.enabled_as_device(
-        &mut anactrl,
-        &mut pmc,
-        &mut syscon,
-        &mut delay_timer,
-        clocks.support_usbhs_token().unwrap(),
-    );
-
-    #[cfg(not(feature = "highspeed"))]
-    let usbd = hal.usbfs.enabled_as_device(
-        &mut anactrl,
-        &mut pmc,
-        &mut syscon,
-        clocks.support_usbfs_token().unwrap(),
-    );
-
-    let _: EnabledUsbPeripheral = usbd;
-    // alternatives: OnceCell...
-    static mut USB_BUS: Option<usb_device::bus::UsbBusAllocator<UsbBus<EnabledUsbPeripheral>>> = None;
-    let usb_bus = unsafe { USB_BUS.get_or_insert(hal::drivers::UsbBus::new(usbd, usb0_vbus_pin)) };
-
-    // use littlefs2::fs::{Filesystem, FilesystemWith};
-    // let mut alloc = Filesystem::allocate();
-    // let mut fs = match FilesystemWith::mount(&mut alloc, &mut storage) {
-    //     Ok(fs) => fs,
-    //     Err(_) => {
-    //         Filesystem::format(&mut storage).expect("format failed");
-    //         FilesystemWith::mount(&mut alloc, &mut storage).unwrap()
-    //     }
-    // };
-
-    let rng = hal.rng.enabled(&mut syscon);
+    let mut delay_timer = Timer::new(hal.ctimer.0.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap()));
 
     let (fido_trussed_requester, fido_trussed_responder) = trussed::pipe::TrussedInterchange::claim(0)
         .expect("could not setup FIDO TrussedInterchange");
     let mut fido_client_id = littlefs2::path::PathBuf::new();
     fido_client_id.push(b"fido2\0".try_into().unwrap());
-
-    // static mut INTERNAL_STORAGE: InternalStorage = InternalStorage::new();
-    // static mut INTERNAL_FS_ALLOC: Option<Allocation<InternalStorage>> = None;
-    // unsafe { INTERNAL_FS_ALLOC = Some(Filesystem::allocate()); }
-    //
-    use littlefs2::fs::{Allocation, Filesystem};
-
-    let flash = hal.flash.enabled(&mut syscon);
-    static mut INTERNAL_STORAGE: Option<FlashGordon> = None;
-    let internal_storage = unsafe { INTERNAL_STORAGE.get_or_insert(hal::drivers::flash::FlashGordon::new(flash)) };
-    static mut INTERNAL_FS_ALLOC: Option<Allocation<FlashGordon>> = None;
-    let internal_fs_alloc = unsafe { INTERNAL_FS_ALLOC.get_or_insert(Filesystem::allocate()) };
-
-    static mut EXTERNAL_STORAGE: ExternalStorage = ExternalStorage::new();
-    static mut EXTERNAL_FS_ALLOC: Option<Allocation<ExternalStorage>> = None;
-    let external_fs_alloc = unsafe { EXTERNAL_FS_ALLOC.get_or_insert(Filesystem::allocate()) };
-
-    static mut VOLATILE_STORAGE: VolatileStorage = VolatileStorage::new();
-    static mut VOLATILE_FS_ALLOC: Option<Allocation<VolatileStorage>> = None;
-    let volatile_fs_alloc = unsafe { VOLATILE_FS_ALLOC.get_or_insert(Filesystem::allocate()) };
-
-
-    let store = Store::claim().unwrap();
-    store.mount(
-        internal_fs_alloc,
-        internal_storage,
-        external_fs_alloc,
-        unsafe { &mut EXTERNAL_STORAGE },
-        volatile_fs_alloc,
-        unsafe { &mut VOLATILE_STORAGE },
-        // to trash existing data, set to true
-        cfg!(feature = "format-storage")
-    ).unwrap();
-
-    // // just testing, remove again obviously
-    // use trussed::store::Store as _;
-    // let tmp_file = b"tmp.file\0".try_into().unwrap();
-    // store.ifs().write(tmp_file, b"test data").unwrap();
-    // let data: heapless::Vec<_, heapless::consts::U64> = store.ifs().read(tmp_file).unwrap();
-    // cortex_m_semihosting::hprintln!("data: {:?}", &data).ok();
 
     let mut trussed = trussed::service::Service::new(rng, store);
 
@@ -208,35 +203,23 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
     let syscaller = trussed::client::TrussedSyscall::default();
     let crypto_client = trussed::client::Client::new(fido_trussed_requester, syscaller);
-
     let (ctap_requester, ctap_responder) = ctap_types::rpc::CtapInterchange::claim(0)
         .expect("could not setup CtapInterchange");
-    // static mut AUTHNR_REQUESTS: ctap_types::rpc::RequestPipe = heapless::spsc::Queue(heapless::i::Queue::u8());
-    // static mut AUTHNR_RESPONSES: ctap_types::rpc::ResponsePipe = heapless::spsc::Queue(heapless::i::Queue::u8());
-    // let (transport_pipe, authenticator_pipe) = ctap_types::rpc::new_endpoints(
-    //     unsafe { &mut AUTHNR_REQUESTS },
-    //     unsafe { &mut AUTHNR_RESPONSES },
-    // );
-
-    // static mut PIV_REQUESTS: ctap_types::rpc::RequestPipe = heapless::spsc::Queue(heapless::i::Queue::u8());
-    // static mut PIV_RESPONSES: ctap_types::rpc::ResponsePipe = heapless::spsc::Queue(heapless::i::Queue::u8());
-    // let (ccid_pipe, piv_pipe) = ctap_types::rpc::new_endpoints(
-    //     unsafe { &mut PIV_REQUESTS },
-    //     unsafe { &mut PIV_RESPONSES },
-    // );
 
     let authnr = fido_authenticator::Authenticator::new(
         crypto_client, ctap_responder,
         fido_authenticator::SilentAuthenticator {},
-        );
+    );
 
-    // setup PIV
-    let (requester, responder) =
-        usbd_ccid::types::ApduInterchange::claim(0)
-        .expect("could not setup ApduInterchange");
+    let (contact_requester, contact_responder) = usbd_ccid::types::ApduInterchange::claim(0)
+        .expect("could not setup ccid ApduInterchange");
+
+    let (contactless_requester, contactless_responder) = iso14443::types::ApduInterchange::claim(0)
+        .expect("could not setup iso14443 ApduInterchange");
 
     let (piv_trussed_requester, piv_trussed_responder) = trussed::pipe::TrussedInterchange::claim(1)
         .expect("could not setup PIV TrussedInterchange");
+
     let mut piv_client_id = littlefs2::path::PathBuf::new();
     piv_client_id.push(b"piv2\0".try_into().unwrap());
     assert!(trussed.add_endpoint(piv_trussed_responder, piv_client_id).is_ok());
@@ -247,32 +230,162 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         syscaller,
     );
 
-    let piv = piv_card::App::new(
-        piv_trussed,
-        responder,
+
+    let usb_wrapper =
+    {
+        #[cfg(not(feature = "nfc"))]
+        {
+            let mut usbd = hal.usbhs.enabled_as_device(
+                &mut anactrl,
+                &mut pmc,
+                &mut syscon,
+                &mut delay_timer,
+                clocks.support_usbhs_token().unwrap(),
+            );
+            #[cfg(not(feature = "highspeed"))]
+            usbd.disable_high_speed();
+            let _: EnabledUsbPeripheral = usbd;
+
+            // ugh, what's the nice way?
+            static mut USB_BUS: Option<usb_device::bus::UsbBusAllocator<UsbBus<EnabledUsbPeripheral>>> = None;
+            unsafe { USB_BUS = Some(hal::drivers::UsbBus::new(usbd, usb0_vbus_pin)); }
+            let usb_bus = unsafe { USB_BUS.as_ref().unwrap() };
+
+
+            // our USB classes (must be allocated in order that they're passed in `.poll(...)` later!)
+            let ccid = Ccid::new(usb_bus, contact_requester);
+            let ctaphid = CtapHid::new(usb_bus, ctap_requester);
+            let serial = usbd_serial::SerialPort::new(usb_bus);
+
+            // our composite USB device
+            let usbd = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0x1209, 0xbeee))
+                .manufacturer("Solo")
+                .product("Solo 🐝")
+                .serial_number("20/20")
+                .device_release(0x0123)
+                .max_packet_size_0(64)
+                .build();
+
+            Some(types::UsbWrapper::new(usbd, ccid, ctaphid, serial))
+        }
+        #[cfg(feature = "nfc")]
+        None
+    };
+
+    // feature gated fido app since it can't share yet with usbd-ctaphid
+    #[cfg(feature = "nfc")]
+    let fido = Some(applet_fido::Fido::new(ctap_requester));
+    #[cfg(not(feature = "nfc"))]
+    let fido = None;
+
+    let piv = piv_card::App::new(piv_trussed);
+    let ndef = applet_ndef::NdefApplet::new();
+
+    let apdu_manager = apdu_manager::ApduManager::new(contact_responder, contactless_responder);
+
+    #[cfg(feature = "board-lpcxpresso")]
+    let rgb = board::led::RgbLed::new(
+        board::led::RedLedPin::take().unwrap().into_match_output(&mut iocon),
+        board::led::GreenLedPin::take().unwrap().into_match_output(&mut iocon),
+        board::led::BlueLedPin::take().unwrap().into_match_output(&mut iocon),
+        Pwm::new(hal.ctimer.2.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap())),
     );
 
-    // our USB classes
-    let ctaphid = CtapHid::new(usb_bus, ctap_requester);
-    let ccid = Ccid::new(usb_bus, requester);//, ccid_pipe);
-    let serial = usbd_serial::SerialPort::new(usb_bus);
+    #[cfg(feature = "board-lpcxpresso")]
+    let three_buttons = board::button::ThreeButtons::new(
+        Timer::new(hal.ctimer.1.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap())),
+        board::button::UserButtonPin::take().unwrap().into_gpio_pin(&mut iocon, &mut gpio).into_input(),
+        board::button::WakeupButtonPin::take().unwrap().into_gpio_pin(&mut iocon, &mut gpio).into_input(),
+    );
 
-    // our composite USB device
-    let usbd = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0x1209, 0xBEEE))
-    // let usbd = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0x072f, 0x2200))
-    // no longer need to fake it, see README.md for how to get PCSC
-    // to identify us as a smartcard.
-    // let usbd = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0x072f, 0x90cc))
-        .manufacturer("SoloKeys")
-        // .product("Solo Bee")
-        .product("Solo 🐝")
-        .serial_number("20/20")
-        .device_release(0x0123)
-        // #[cfg(feature = "highspeed")]
-        .max_packet_size_0(64)
-        .build();
+    #[cfg(feature = "board-prototype")]
+    let rgb = board::led::RgbLed::new(
+        board::led::RedLedPin::take().unwrap().into_match_output(&mut iocon),
+        board::led::GreenLedPin::take().unwrap().into_match_output(&mut iocon),
+        board::led::BlueLedPin::take().unwrap().into_match_output(&mut iocon),
+        Pwm::new(hal.ctimer.3.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap())),
+    );
 
-    (authnr, ccid, trussed, ctaphid, piv, rgb, serial, usbd)
+    #[cfg(feature = "board-prototype")]
+    let three_buttons =
+    {
+        let mut dma = hal::Dma::from(hal.dma).enabled(&mut syscon);
+
+        board::button::ThreeButtons::new (
+            hal::Adc::from(hal.adc).enabled(&mut pmc, &mut syscon),
+            hal.ctimer.1.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap()),
+            hal.ctimer.2.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap()),
+            board::button::ChargeMatchPin::take().unwrap().into_match_output(&mut iocon),
+            board::button::ButtonTopPin::take().unwrap().into_analog_input(&mut iocon, &mut gpio),
+            board::button::ButtonBotPin::take().unwrap().into_analog_input(&mut iocon, &mut gpio),
+            board::button::ButtonMidPin::take().unwrap().into_analog_input(&mut iocon, &mut gpio),
+            &mut dma,
+            clocks.support_touch_token().unwrap(),
+        )
+    };
+
+    let iso14443 = {
+
+        #[cfg(feature = "nfc")]
+        {
+            let token = clocks.support_flexcomm_token().unwrap();
+            let spi = hal.flexcomm.0.enabled_as_spi(&mut syscon, &token);
+            let sck = types::NfcSckPin::take().unwrap().into_spi0_sck_pin(&mut iocon);
+            let mosi = types::NfcMosiPin::take().unwrap().into_spi0_mosi_pin(&mut iocon);
+            let miso = types::NfcMisoPin::take().unwrap().into_spi0_miso_pin(&mut iocon);
+            let spi_mode = hal::traits::wg::spi::Mode {
+                polarity: hal::traits::wg::spi::Polarity::IdleLow,
+                phase: hal::traits::wg::spi::Phase::CaptureOnSecondTransition,
+            };
+            let spi = SpiMaster::new(spi, (sck, mosi, miso, hal::typestates::pin::flexcomm::NoCs), 2.mhz(), spi_mode);
+
+            // Start unselected.
+            let nfc_cs = types::NfcCsPin::take().unwrap().into_gpio_pin(&mut iocon, &mut gpio).into_output_high();
+            let nfc_irq = types::NfcIrqPin::take().unwrap().into_gpio_pin(&mut iocon, &mut gpio).into_input();
+
+            let iocon = iocon.release();
+
+            // Need to enable pullup for NFC IRQ input.
+            iocon.pio0_19.modify(|_,w| { w.mode().pull_up() } );
+            hal::Iocon::from(iocon).disabled(&mut syscon).release(); // save the environment :)
+
+            // Set up external interrupt for NFC IRQ
+            let mut mux = hal.inputmux.enabled(&mut syscon);
+            let mut pint = hal.pint.enabled(&mut syscon);
+            pint.enable_interrupt(&mut mux, &nfc_irq, hal::peripherals::pint::Slot::Slot0, hal::peripherals::pint::Mode::ActiveLow);
+            mux.disabled(&mut syscon);
+
+            let _is_passive = nfc_irq.is_low().ok().unwrap();
+            let mut fm = FM11NC08::new(spi, nfc_cs, nfc_irq).enabled();
+            configure_fm11_if_needed(&mut fm, &mut delay_timer);
+
+            hal::enable_cycle_counter();
+
+            Some(iso14443::Iso14443::new(fm, contactless_requester))
+        }
+        #[cfg(not(feature = "nfc"))]
+        None
+    };
+
+    let mut perf_timer = Timer::new(hal.ctimer.4.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap()));
+    perf_timer.start(60_000.ms());
+
+    (
+        authnr,
+        apdu_manager,
+        trussed,
+
+        piv,
+        fido,
+        ndef,
+
+        usb_wrapper,
+        iso14443,
+
+        perf_timer,
+        rgb,
+        three_buttons,
+    )
 }
 
 //
@@ -281,13 +394,11 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
 use funnel::{funnel, Drain};
 use rtfm::Mutex;
-
 funnel!(NVIC_PRIO_BITS = hal::raw::NVIC_PRIO_BITS, {
     0: 2048,
     1: 1024,
-    2: 512,
-    3: 512,
-    7: 8192,
+    2: 1024,
+    3: 8192,
 });
 
 pub fn drain_log_to_serial(mut serial: impl Mutex<T = types::SerialClass>) {
@@ -301,44 +412,11 @@ pub fn drain_log_to_serial(mut serial: impl Mutex<T = types::SerialClass>) {
             if n == 0 {
                 break 'l;
             }
-
-            // cortex_m_semihosting::hprintln!("found {} bytes to log", n).ok();
-
-            // serial.lock(|serial: &mut types::SerialClass| {
-            //     match serial.write_packet(&buf[..n]) {
-            //         Ok(count) => {
-            //             cortex_m_semihosting::hprintln!("wrote {} to serial", count).ok();
-            //             // cortex_m_semihosting::hprintln!("namely {:?}", &buf[..n]).ok();
-            //         },
-            //         Err(err) => {
-            //             // not much we can do
-            //             cortex_m_semihosting::hprintln!("error {:?} to serial wanting {}", err, n).ok();
-            //             // cortex_m_semihosting::hprintln!("namely {:?}", &buf[..n]).ok();
-            //         },
-            //     }
-            // });
-
-            //     // not much we can do
-            //     serial.flush().ok();
-            // });
             serial.lock(|serial: &mut types::SerialClass| {
-                // let mut read_buf = [0u8; 64];
-                // match serial.read(&mut read_buf[..]) {
-                //     Ok(n) => {
-                //         cortex_m_semihosting::hprintln!("got {:?} on serial", &read_buf[..n]).ok();
-                //     },
-                //     Err(err) => {
-                //         cortex_m_semihosting::hprintln!("serial read error: {:?}", err).ok();
-                //     }
-                // };
-
                 match serial.write(&buf[..n]) {
                     Ok(_count) => {
-                        // cortex_m_semihosting::hprintln!("wrote {} to serial", count).ok();
                     },
                     Err(_err) => {
-                        // not much we can do
-                        // cortex_m_semihosting::hprintln!("error writing to serial {:?}", err).ok();
                     },
                 }
 
@@ -367,3 +445,4 @@ pub fn drain_log_to_semihosting() {
         }
     }
 }
+

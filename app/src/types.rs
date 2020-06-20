@@ -1,5 +1,5 @@
 use crate::hal;
-use hal::drivers::UsbBus;
+use hal::drivers::{pins,pins::Pin,SpiMaster, timer};
 use littlefs2::{
     const_ram_storage,
 };
@@ -7,6 +7,22 @@ use trussed::types::{LfsResult, LfsStorage};
 use trussed::store;
 use ctap_types::consts;
 use fido_authenticator::SilentAuthenticator;
+use fm11nc08::FM11NC08;
+use hal::{
+    typestates::{
+        pin::flexcomm::{
+            NoPio,
+        },
+        pin::{
+            state,
+            function,
+            gpio::{
+                direction,
+            }
+        }
+    },
+    peripherals::ctimer,
+};
 // use usbd_ctaphid::insecure::InsecureRamAuthenticator;
 
 pub type FlashStorage = hal::drivers::FlashGordon;
@@ -16,14 +32,9 @@ pub type Authenticator = fido_authenticator::Authenticator<SilentAuthenticator>;
 pub type Piv = piv_card::App;
 
 pub use trussed::client::TrussedSyscall;
-// #[derive(Default)]
-// pub struct CryptoSyscall {}
 
-// impl trussed::pipe::Syscall for CryptoSyscall {
-//     fn syscall(&mut self) {
-//         rtfm::pend(hal::raw::Interrupt::OS_EVENT);
-//     }
-// }
+pub mod usb;
+pub use usb::{UsbWrapper, EnabledUsbPeripheral, SerialClass, CcidClass, CtapHidClass};
 
 // 8KB of RAM
 const_ram_storage!(
@@ -59,16 +70,36 @@ pub type CryptoService = trussed::Service<
     Store,
 >;
 
-#[cfg(feature = "highspeed")]
-pub type EnabledUsbPeripheral = hal::peripherals::usbhs::EnabledUsbhsDevice;
-#[cfg(not(feature = "highspeed"))]
-pub type EnabledUsbPeripheral = hal::peripherals::usbfs::EnabledUsbfsDevice;
+pub type NfcSckPin = pins::Pio0_28;
+pub type NfcMosiPin = pins::Pio0_24;
+pub type NfcMisoPin = pins::Pio0_25;
+pub type NfcCsPin = pins::Pio1_20;
+pub type NfcIrqPin = pins::Pio0_19;
 
-pub type CcidClass = usbd_ccid::Ccid<UsbBus<EnabledUsbPeripheral>>;
-// pub type CtapHidClass = usbd_ctaphid::CtapHid<'static, InsecureRamAuthenticator, UsbBus>;
-pub type CtapHidClass = usbd_ctaphid::CtapHid<'static, UsbBus<EnabledUsbPeripheral>>;
+pub type NfcChip = FM11NC08<
+            SpiMaster<
+                NfcSckPin,
+                NfcMosiPin,
+                NfcMisoPin,
+                NoPio,
+                hal::peripherals::flexcomm::Spi0,
+                (
+                    Pin<NfcSckPin, state::Special<function::FC0_SCK>>,
+                    Pin<NfcMosiPin, state::Special<function::FC0_RXD_SDA_MOSI_DATA>>,
+                    Pin<NfcMisoPin, state::Special<function::FC0_TXD_SCL_MISO_WS>>,
+                    hal::typestates::pin::flexcomm::NoCs,
+                )
+                >,
+                Pin<NfcCsPin, state::Gpio<direction::Output>>,
+                Pin<NfcIrqPin, state::Gpio<direction::Input>>,
+            >;
+pub type Iso14443 = iso14443::Iso14443<NfcChip>;
 
-pub type SerialClass = usbd_serial::SerialPort<'static, UsbBus<EnabledUsbPeripheral>>;
-// pub type SerialClass = usbd_serial::CdcAcmClass<'static, UsbBus>;
-pub type Usbd = usb_device::device::UsbDevice<'static, UsbBus<EnabledUsbPeripheral>>;
+pub type ExternalInterrupt = hal::Pint<hal::typestates::init_state::Enabled>;
+
+pub type ApduManager = apdu_manager::ApduManager;
+
+pub type FidoApplet = applet_fido::Fido;
+
+pub type PerfTimer = timer::Timer<ctimer::Ctimer4<hal::typestates::init_state::Enabled>>;
 
