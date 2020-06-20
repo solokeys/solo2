@@ -21,6 +21,13 @@ use iso7816::{
     Instruction,
     Status,
 };
+
+#[derive(Copy, Clone)]
+pub enum InterfaceType{
+    Contact,
+    Contactless,
+}
+
 use heapless::ByteBuf;
 use logging;
 
@@ -49,6 +56,7 @@ pub struct ApduManager {
     selected_aid: AidBuffer,
     contact_interchange: Responder<types::ContactInterchange>,
     contactless_interchange: Responder<types::ContactlessInterchange>,
+    last_interface: InterfaceType,
     buffer: [u8; 4096]
 }
 
@@ -70,6 +78,8 @@ impl ApduManager
             selected_aid: Default::default(),
             contact_interchange: contact_interchange,
             contactless_interchange: contactless_interchange,
+
+            last_interface: InterfaceType::Contact,
 
             // not sure what to make max for nfc messages
             buffer: [0u8; 4096]
@@ -115,87 +125,107 @@ impl ApduManager
         None
     }
 
+    fn is_no_transaction_ongoing(&self) -> bool {
+        let state1 = self.contactless_interchange.state();
+        let state2 = self.contact_interchange.state();
+        (state1 == interchange::State::Idle || state1 == interchange::State::Requested) &&
+        (state2 == interchange::State::Idle || state2 == interchange::State::Requested)
+    }
+
     pub fn poll(
         &mut self,
         // buf: &mut [u8],
         applets: &mut [&mut dyn Applet],
     ) -> () {
 
-        if let Some(apdu) = self.contactless_interchange.take_request() {
-
-            // logging::info!("apdu ok").ok();
-            let maybe_aid = Self::is_select(&apdu);
-            let is_select = maybe_aid.is_some();
-
-            let index = match maybe_aid {
-                Some(aid) => {
-                    Self::pick_applet(&aid, applets)
-                },
-                _ => {
-                    Self::pick_applet(&self.selected_aid, applets)
+        // Only take on one transaction at a time.
+        let request =
+            if self.is_no_transaction_ongoing() {
+                if let Some(apdu) = self.contactless_interchange.take_request() {
+                    self.last_interface = InterfaceType::Contactless;
+                    Some(apdu)
+                } else if let Some(apdu) = self.contact_interchange.take_request() {
+                    self.last_interface = InterfaceType::Contact;
+                    Some(apdu)
+                } else {
+                    None
                 }
+
+            } else {
+                None
             };
 
-            match index {
-                Some(i) => {
-                    // logging::info!("applet? {}", i).ok();
-                    if is_select {
-                        self.deselect_if_already_selected(applets);
+        let response = match request {
+            Some(apdu) => {
+                let maybe_aid = Self::is_select(&apdu);
+                let is_select = maybe_aid.is_some();
+
+                let (index,aid) = match maybe_aid {
+                    Some(aid) => {
+                        (Self::pick_applet(&aid, applets), Some(aid))
+                    },
+                    _ => {
+                        (Self::pick_applet(&self.selected_aid, applets), None)
                     }
+                };
 
-                    let applet = &mut applets[i];
-                    let aid = AidBuffer::new(applet.aid());
-                    if is_select {
-                        self.selected_aid = aid;
-                    }
-
-
-                    let applet_response = if is_select {
-                        applet.select(apdu)
-                    } else {
-                        applet.send_recv(apdu)
-                    };
-
-                    match applet_response {
-                        Ok(AppletResponse::Defer) => {
-
-                        }
-                        Ok(AppletResponse::Respond(response)) => {
-                            self.contactless_interchange.respond(Response::Data(response)).expect("cant respond");
-                        }
-                        Err(status) => {
-                            logging::info!("applet error").ok();
-                            self.contactless_interchange.respond(Response::Status(status)).expect("cant respond");
+                let response = match index {
+                    Some(i) => {
+                        if is_select {
+                            self.deselect_if_already_selected(applets);
+                            let res = applets[i].select(apdu);
+                            if res.is_ok() {
+                                self.selected_aid = aid.unwrap();
+                                logging::info!("selected").ok();
+                            } else {
+                                logging::info!("select rejected by app").ok();
+                            }
+                            res
+                        } else {
+                            logging::info!("send recv").ok();
+                            applets[i].send_recv(apdu)
                         }
                     }
-                }
-                None => {
-                    logging::info!("No applet").ok();
-                    self.contactless_interchange.respond(
-                        Response::Status(Status::NotFound)
-                    ).expect("cant respond");
+                    _ => {
+                        Err(Status::NotFound)
+                    }
+                };
+
+                Some(response)
+            }
+            _ => {
+                if let Some(index) = Self::pick_applet(&self.selected_aid, applets) {
+                    let applet = &mut applets[index];
+                    Some(applet.poll(&mut self.buffer))
+                } else {
+                    None
                 }
             }
-        } else {
-            let index = Self::pick_applet(&self.selected_aid, applets);
-            match index {
-                Some(i) => {
-                    let applet = &mut applets[i];
-                    let applet_response = applet.poll(&mut self.buffer);
-                    match applet_response {
-                        Ok(AppletResponse::Defer) => {
-                        }
-                        Ok(AppletResponse::Respond(response)) => {
-                            self.contactless_interchange.respond(Response::Data(response)).expect("cant respond");
-                        }
-                        Err(status) => {
-                            logging::info!("applet error").ok();
-                            self.contactless_interchange.respond(Response::Status(status)).expect("cant respond");
-                        }
-                    }
+        };
+
+        match response {
+            Some(Ok(AppletResponse::Respond(response))) => {
+                match self.last_interface {
+                    InterfaceType::Contactless =>
+                        self.contactless_interchange.respond(Response::Data(response)).expect("cant respond"),
+                    InterfaceType::Contact=>
+                        self.contact_interchange.respond(Response::Data(response)).expect("cant respond"),
                 }
-                _ => {}
+            }
+            Some(Err(status)) => {
+                logging::info!("applet error").ok();
+                match self.last_interface {
+                    InterfaceType::Contactless =>
+                        self.contactless_interchange.respond(Response::Status(status)).expect("cant respond"),
+                    InterfaceType::Contact=>
+                        self.contact_interchange.respond(Response::Status(status)).expect("cant respond"),
+                }
+            }
+            Some(Ok(AppletResponse::Defer)) => {
+            }
+            None => {
             }
         }
     }
+
 }
