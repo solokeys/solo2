@@ -11,6 +11,7 @@ use crate::hal::{
         },
     },
     traits::wg::Pwm,
+    Iocon,
 };
 pub enum Color {
     Red,
@@ -28,6 +29,12 @@ type RedLed = hal::Pin<RedLedPin, pin::state::Special<function::MATCH_OUTPUT2<ct
 type GreenLed = hal::Pin<GreenLedPin, pin::state::Special<function::MATCH_OUTPUT0<ctimer::Ctimer3<init_state::Enabled>>>>;
 type BlueLed = hal::Pin<BlueLedPin, pin::state::Special<function::MATCH_OUTPUT1<ctimer::Ctimer3<init_state::Enabled>>>>;
 
+type RedLedUnenabled = hal::Pin<RedLedPin, pin::state::Unused>;
+type GreenLedUnenabled = hal::Pin<GreenLedPin,pin::state::Unused >;
+type BlueLedUnenabled = hal::Pin<BlueLedPin, pin::state::Unused>;
+
+
+
 type PwmDriver = pwm::Pwm<ctimer::Ctimer3<init_state::Enabled>>;
 
 pub struct RgbLed {
@@ -35,10 +42,13 @@ pub struct RgbLed {
 }
 
 impl RgbLed {
-    pub fn new(_red: RedLed, _green: GreenLed, _blue: BlueLed, mut pwm: PwmDriver,) -> RgbLed{
-
-        // Xpresso LED (they used same channel for two pins)
-        // So blue and red will always get turned on at same time and same intensity.
+    pub fn new(
+        red: RedLedUnenabled,
+        green: GreenLedUnenabled,
+        blue: BlueLedUnenabled,
+        mut pwm: PwmDriver,
+        iocon: &mut Iocon<init_state::Enabled>
+    ) -> RgbLed{
 
         pwm.set_duty(RedLed::CHANNEL,0);
         pwm.set_duty(GreenLed::CHANNEL, 0);
@@ -47,8 +57,14 @@ impl RgbLed {
         pwm.enable(GreenLed::CHANNEL);
         pwm.enable(BlueLed::CHANNEL);
 
+        // Don't set to output until after duty cycle is set to zero to save power.
+        red.into_match_output(iocon);
+        green.into_match_output(iocon);
+        blue.into_match_output(iocon);
+
+        pwm.scale_max_duty_by(8);
+
         Self {
-            // red, blue, green,
             pwm,
         }
     }
@@ -56,20 +72,15 @@ impl RgbLed {
 
 impl rgb_led::RgbLed for RgbLed {
     fn red(&mut self, intensity: u8){
-       self.pwm.set_duty(RedLed::CHANNEL, intensity/7 + 1);
+        self.pwm.set_duty(RedLed::CHANNEL, (intensity/2) as u16);
     }
 
     fn green(&mut self, intensity: u8){
-        let intensity: u16 = (intensity as u16) * 3/2;
-        if intensity > 255 {
-            self.pwm.set_duty(GreenLed::CHANNEL, 255);
-        } else {
-            self.pwm.set_duty(GreenLed::CHANNEL, intensity as u8);
-        }
+        self.pwm.set_duty(GreenLed::CHANNEL, (intensity as u16) * 3);
     }
 
     fn blue(&mut self, intensity: u8) {
-        self.pwm.set_duty(BlueLed::CHANNEL, intensity);
+        self.pwm.set_duty(BlueLed::CHANNEL, (intensity as u16) * 8);
     }
 }
 
