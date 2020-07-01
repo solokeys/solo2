@@ -312,7 +312,8 @@ where
                 panic!("Can only send iblock in reply to I or R blocks.");
             }
         };
-        let frame_size: usize = (self.device.frame_size() as usize) + 1;
+        // minus 2 to leave room for crc
+        let frame_size: usize = self.device.frame_size() - 2;
         let payload_len = core::cmp::min(frame_size - header_length, data.len());
 
         frame.extend_from_slice(&data[0 .. payload_len]).ok();

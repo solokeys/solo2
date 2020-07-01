@@ -200,7 +200,7 @@ impl PersistentState {
         ).map_err(|_| Error::Other)?.data;
 
         let previous_state = trussed::cbor_deserialize(&data).map_err(|_| Error::Other);
-        cortex_m_semihosting::hprintln!("previously persisted state:\n{:?}", &previous_state).ok();
+        // cortex_m_semihosting::hprintln!("previously persisted state:\n{:?}", &previous_state).ok();
         previous_state
     }
 
