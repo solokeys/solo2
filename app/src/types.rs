@@ -103,3 +103,9 @@ pub type FidoApplet = applet_fido::Fido;
 
 pub type PerfTimer = timer::Timer<ctimer::Ctimer4<hal::typestates::init_state::Enabled>>;
 
+pub type DynamicClockController = crate::clock_controller::DynamicClockController;
+
+pub type SignalPin = pins::Pio0_23;
+pub type SignalButton = Pin<SignalPin, state::Gpio<direction::Output>>;
+
+pub type HwScheduler = timer::Timer<ctimer::Ctimer0<hal::typestates::init_state::Enabled>>;
