@@ -122,6 +122,21 @@ where
     pub int: INT,
     packet: [u8; 256],
     offset: usize,
+    current_frame_size: usize,
+}
+
+fn fsdi_to_frame_size(fsdi: u8) -> usize {
+    match fsdi {
+        0 => 16,
+        1 => 24,
+        2 => 32,
+        3 => 40,
+        4 => 48,
+        5 => 64,
+        6 => 96,
+        7 => 128,
+        _ => 256,
+    }
 }
 
 
@@ -138,6 +153,7 @@ where
             int: int,
             packet: [0u8; 256],
             offset: 0usize,
+            current_frame_size: 128,
         }
     }
 
@@ -385,15 +401,16 @@ where
             // self.write_reg(Register::FifoFlush, 0xff);
         }
 
-        if main_irq & (Interrupt::Active as u8) != 0{
+        if main_irq & (Interrupt::Active as u8) != 0 {
             self.offset = 0;
             new_session = true;
-            info!("Active").ok();
         }
 
         if main_irq & (Interrupt::RxStart as u8) != 0{
             self.offset = 0;
-            info!("RxStart").ok();
+            let rf_rats = self.read_reg(Register::RfRats);
+            self.current_frame_size = fsdi_to_frame_size((rf_rats >> 4) & 0xf);
+            info!("RxStart {}", self.current_frame_size).ok();
         }
 
         if main_irq & (Interrupt::RxDone as u8) != 0 {
@@ -547,6 +564,9 @@ where
         self.send_packet(buf)
     }
 
+    fn frame_size(&self) -> usize {
+        self.current_frame_size
+    }
 
     // fn wait(&mut self) -> nb::Result<(), NfcError> {
         // self.wait_for_transmission_completion();

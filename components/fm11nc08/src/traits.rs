@@ -16,10 +16,7 @@ pub mod nfc {
 
         fn send(&mut self,buf: &[u8]) -> Result<(), Error>;
 
-        // fn wait(&mut self) -> nb::Result<(), NfcError>;
-
-        fn frame_size(&self) -> u8 { 127 }
-
-        // fn write_but_dont_send(&mut self,buf: &[u8]);
+        fn frame_size(&self) -> usize;
+        //  { 128 }
     }
 }
