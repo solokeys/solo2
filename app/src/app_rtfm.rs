@@ -43,7 +43,10 @@ const APP: () = {
 
         perf_timer: app::types::PerfTimer,
         rgb: board::led::RgbLed,
-        three_buttons: board::button::ThreeButtons,
+        three_buttons: Option<board::button::ThreeButtons>,
+
+        clock_ctrl: Option<app::types::DynamicClockController>,
+        hw_scheduler: app::types::HwScheduler,
     }
 
     #[init(schedule = [toggle_red])]
@@ -64,10 +67,14 @@ const APP: () = {
             perf_timer,
             rgb,
             three_buttons,
+            clock_ctrl,
+            hw_scheduler,
         ) = app::init_board(c.device, c.core);
 
-
-        c.schedule.toggle_red(Instant::now() + PERIOD.cycles()).unwrap();
+        // don't toggle LED in passive mode
+        if ! usb_wrapper.is_none() {
+            c.schedule.toggle_red(Instant::now() + PERIOD.cycles()).unwrap();
+        }
 
         init::LateResources {
             authnr,
@@ -84,6 +91,9 @@ const APP: () = {
             perf_timer,
             rgb,
             three_buttons,
+
+            clock_ctrl,
+            hw_scheduler,
         }
     }
 
@@ -153,6 +163,7 @@ const APP: () = {
                 }
             } );
 
+
             authnr.poll();
             // piv.poll();
         }
@@ -212,10 +223,10 @@ const APP: () = {
         static mut ON: bool = false;
         use solo_bee_traits::rgb_led::RgbLed;
         if *ON {
-            c.resources.rgb.red(0);
+            c.resources.rgb.turn_off();
             *ON = false;
         } else {
-            c.resources.rgb.red(200);
+            c.resources.rgb.green(150);
             *ON = true;
         }
 
@@ -225,38 +236,49 @@ const APP: () = {
         *TOGGLES += 1;
     }
 
-    #[task(resources = [contactless, perf_timer], schedule = [nfc_wait_extension], priority = 7)]
+    // #[task( binds = CTIMER0, resources = [hw_scheduler], priority = 7)]
+    // fn nfc_wait_extension(c: nfc_wait_extension::Context) {
+    //     info!("HW BLINK").ok();
+    //     let hw_blink::Resources {
+    //         hw_scheduler,
+    //     } = c.resources;
+    //     hw_scheduler.start(500.ms());
+    // }
+
+    #[task(binds = CTIMER0, resources = [contactless, perf_timer, hw_scheduler], priority = 7)]
     fn nfc_wait_extension(c: nfc_wait_extension::Context) {
         let nfc_wait_extension::Resources {
             contactless,
             perf_timer,
+            hw_scheduler,
         }
             = c.resources;
         let contactless = contactless.as_mut().unwrap();
-        let schedule = c.schedule;
+
+        // clear the interrupt
+        hw_scheduler.cancel().ok();
 
         info!("<{}", perf_timer.lap().0/100).ok();
         let status = contactless.poll_wait_extensions();
         match status {
             iso14443::Iso14443Status::Idle => {}
             iso14443::Iso14443Status::ReceivedData(duration) => {
-                let div = 1000/duration.subsec_millis();
-                schedule.nfc_wait_extension(Instant::now() + (CLOCK_FREQ/div).cycles()).ok();
+                hw_scheduler.start(duration.subsec_millis().ms());
             }
         }
         info!(" {}>", perf_timer.lap().0/100).ok();
     }
 
     #[task(binds = PIN_INT0, resources = [
-            contactless, perf_timer,
+            contactless, perf_timer, hw_scheduler,
         ], priority = 7,
-        schedule = [nfc_wait_extension],
     )]
     fn nfc_irq(c: nfc_irq::Context) {
 
         let nfc_irq::Resources {
             contactless,
             perf_timer,
+            hw_scheduler,
             }
             = c.resources;
         let contactless = contactless.as_mut().unwrap();
@@ -266,14 +288,21 @@ const APP: () = {
         match status {
             iso14443::Iso14443Status::Idle => {}
             iso14443::Iso14443Status::ReceivedData(duration) => {
-                let div = 1000/duration.subsec_millis();
-                c.schedule.nfc_wait_extension(Instant::now() + (CLOCK_FREQ/div).cycles()).ok();
+                hw_scheduler.start(duration.subsec_millis().ms());
             }
         }
         info!(" {}]", perf_timer.lap().0/100).ok();
 
         perf_timer.cancel().ok();
         perf_timer.start(60_000.ms());
+    }
+
+    #[task(binds = ADC0, resources = [clock_ctrl], priority = 8)]
+    fn adc_int(c: adc_int::Context) {
+        let adc_int::Resources {
+            clock_ctrl,
+        } = c.resources;
+        clock_ctrl.as_mut().unwrap().handle();
     }
 
 
