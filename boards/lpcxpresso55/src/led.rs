@@ -28,6 +28,10 @@ type RedLed = hal::Pin<RedLedPin, pin::state::Special<function::MATCH_OUTPUT1<ct
 type GreenLed = hal::Pin<GreenLedPin, pin::state::Special<function::MATCH_OUTPUT2<ctimer::Ctimer2<init_state::Enabled>>>>;
 type BlueLed = hal::Pin<BlueLedPin, pin::state::Special<function::MATCH_OUTPUT1<ctimer::Ctimer2<init_state::Enabled>>>>;
 
+type RedLedUnenabled = hal::Pin<RedLedPin, pin::state::Unused>;
+type GreenLedUnenabled = hal::Pin<GreenLedPin,pin::state::Unused >;
+type BlueLedUnenabled = hal::Pin<BlueLedPin, pin::state::Unused>;
+
 type PwmDriver = pwm::Pwm<ctimer::Ctimer2<init_state::Enabled>>;
 
 pub struct RgbLed {
@@ -38,10 +42,13 @@ pub struct RgbLed {
 }
 
 impl RgbLed {
-    pub fn new(_red: RedLed, _green: GreenLed, _blue: BlueLed, mut pwm: PwmDriver,) -> RgbLed {
-
-        // Xpresso LED (they used same channel for two pins)
-        // So blue and red will always get turned on at same time and same intensity.
+    pub fn new(
+        red: RedLedUnenabled,
+        green: GreenLedUnenabled,
+        blue: BlueLedUnenabled,
+        mut pwm: PwmDriver,
+        iocon: &mut Iocon<init_state::Enabled>
+    ) -> RgbLed{
 
         pwm.set_duty(RedLed::CHANNEL,0);
         pwm.set_duty(GreenLed::CHANNEL, 0);
@@ -50,8 +57,14 @@ impl RgbLed {
         pwm.enable(GreenLed::CHANNEL);
         pwm.enable(BlueLed::CHANNEL);
 
-        RgbLed {
-            // red, blue, green,
+        // Don't set to output until after duty cycle is set to zero to save power.
+        red.into_match_output(iocon);
+        green.into_match_output(iocon);
+        blue.into_match_output(iocon);
+
+        pwm.scale_max_duty_by(16);
+
+        Self {
             pwm,
         }
     }
