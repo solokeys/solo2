@@ -4,7 +4,7 @@ use crate::constants::*;
 
 
 pub type RawPacket = heapless::ByteBuf<PACKET_SIZE_TYPE>;
-pub type ExtPacket = heapless::ByteBuf<EXT_PACKET_SIZE_TYPE>;
+pub type ExtPacket = heapless::ByteBuf<MAX_MSG_LENGTH_TYPE>;
 
 pub trait RawPacketExt {
     fn packet_len(&self) -> usize;
@@ -47,7 +47,7 @@ pub trait PacketWithData: Packet {
         // let len = u32::from_le_bytes(self[1..5].try_into().unwrap()) as usize;
         let declared_len =
             u32::from_le_bytes(self[1..5].try_into().unwrap()) as usize;
-        let len = core::cmp::min(EXT_PACKET_SIZE - 10, declared_len);
+        let len = core::cmp::min(MAX_MSG_LENGTH - 10, declared_len);
         // hprintln!("delcared = {}, len = {}", declared_len, len).ok();
         &self[10..][..len]
     }
