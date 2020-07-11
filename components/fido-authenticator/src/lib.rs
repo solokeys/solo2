@@ -1627,10 +1627,10 @@ impl<UP: UserPresence> Authenticator<UP> {
         //
         // we should also directly support "none" format, it's a bit weird
         // how browsers firefox this
-        const SELF_SIGNED: bool = true;
+        let attestation_key = self.state.identity.attestation_key(&mut self.crypto);
 
         let (signature, attestation_algorithm) = {
-            if SELF_SIGNED {
+            if attestation_key.is_none() {
                 match algorithm {
                     SupportedAlgorithm::Ed25519 => {
                         let signature = syscall!(self.crypto.sign_ed25519(&private_key, &commitment)).signature;
@@ -1647,9 +1647,12 @@ impl<UP: UserPresence> Authenticator<UP> {
                         // return Err(Error::UnsupportedAlgorithm);
                         // micro-ecc is borked. let's self-sign anyway
                         let hash = syscall!(self.crypto.hash_sha256(&commitment.as_ref())).hash;
-                        let attestation_key = self.state.identity.attestation_key(&mut self.crypto);
+                        let tmp_key = syscall!(self.crypto
+                            .generate_p256_private_key(StorageLocation::Volatile))
+                            .key;
+
                         let signature = syscall!(self.crypto.sign_p256(
-                            &attestation_key,
+                            &tmp_key,
                             &hash,
                             SignatureSerialization::Asn1Der,
                         )).signature;
@@ -1657,11 +1660,10 @@ impl<UP: UserPresence> Authenticator<UP> {
                     }
                 }
             } else {
-                let hash = syscall!(self.crypto.hash_sha256(&commitment.as_ref())).hash;
-                let attestation_key = self.state.identity.attestation_key(&mut self.crypto);
+
                 let signature = syscall!(self.crypto.sign_p256(
-                    &attestation_key,
-                    &hash,
+                    attestation_key.as_ref().unwrap(),
+                    &commitment,
                     SignatureSerialization::Asn1Der,
                 )).signature;
                 (signature.try_to_byte_buf().map_err(|_| Error::Other)?, -7)
@@ -1676,15 +1678,18 @@ impl<UP: UserPresence> Authenticator<UP> {
         let packed_attn_stmt = ctap2::make_credential::PackedAttestationStatement {
             alg: attestation_algorithm,
             sig: signature,
-            x5c: match SELF_SIGNED {
-                true => None,
-                false => {
-                    // let mut x5c = Vec::new();
-                    // x5c.push(ByteBuf::from_slice(&SOLO_HACKER_ATTN_CERT).unwrap()).unwrap();
-                    //
+            x5c: match attestation_key.is_some() {
+                false => None,
+                true => {
                     // See: https://www.w3.org/TR/webauthn-2/#sctn-packed-attestation-cert-requirements
-                    //
-                    todo!("solve the cert conundrum");
+                    let mut x5c = Vec::new();
+                    let file = syscall!(self.crypto
+                        .read_file(
+                            StorageLocation::Internal,
+                            PathBuf::from(b"ATTN_CERT")
+                        ));
+                    x5c.push(file.data);
+                    Some(x5c)
                 }
             },
         };

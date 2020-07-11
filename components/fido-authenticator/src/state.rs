@@ -9,7 +9,9 @@ use trussed::{
     types::{
         self,
         ObjectHandle as Key,
+        UniqueId,
         StorageLocation,
+        Mechanism,
     },
 };
 use ctap_types::{
@@ -101,20 +103,17 @@ impl Identity {
         ByteBuf::from_slice(b"AAGUID0123456789").unwrap()
     }
 
-    pub fn attestation_key<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) -> Key
+    pub fn attestation_key<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) -> Option<Key>
     {
-        match self.attestation_key {
-            Some(key) => key,
-            None => self.load_attestation_key(crypto),
+        let key = Key {
+            object_id: UniqueId([0u8;16])
+        };
+        let attestation_key_exists = syscall!(crypto.exists(Mechanism::P256, key)).exists;
+        if attestation_key_exists {
+            Some(key)
+        } else {
+            None
         }
-    }
-
-    fn load_attestation_key<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) -> Key {
-        let key = syscall!(crypto
-            .generate_p256_private_key(StorageLocation::Internal))
-            .key;
-        self.attestation_key = Some(key);
-        key
     }
 
 }
