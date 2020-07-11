@@ -169,13 +169,13 @@ const APP: () = {
         }
     }
 
-    #[task(binds = USB0_NEEDCLK, resources = [usb_wrapper], priority=5)]
+    #[task(binds = USB1_NEEDCLK, resources = [usb_wrapper], priority=5)]
     fn usb0_needclk(c: usb0_needclk::Context) {
         let usb_wrapper = c.resources.usb_wrapper.as_mut().unwrap();
         usb_wrapper.usbd.poll(&mut [&mut usb_wrapper.ccid, &mut usb_wrapper.ctaphid, &mut usb_wrapper.serial]);
     }
 
-    #[task(binds = USB0, resources = [usb_wrapper], priority=5)]
+    #[task(binds = USB1, resources = [usb_wrapper], priority=5)]
     fn usb0(c: usb0::Context) {
         let usb = unsafe { hal::raw::Peripherals::steal().USB0 } ;
         let before = Instant::now();
