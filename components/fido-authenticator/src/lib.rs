@@ -1686,7 +1686,7 @@ impl<UP: UserPresence> Authenticator<UP> {
                     let file = syscall!(self.crypto
                         .read_file(
                             StorageLocation::Internal,
-                            PathBuf::from(b"ATTN_CERT")
+                            PathBuf::from(b"attestation.x5c")
                         ));
                     x5c.push(file.data);
                     Some(x5c)
