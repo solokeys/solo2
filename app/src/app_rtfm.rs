@@ -253,20 +253,21 @@ const APP: () = {
             hw_scheduler,
         }
             = c.resources;
-        let contactless = contactless.as_mut().unwrap();
+        if let Some(contactless) = contactless.as_mut() {
 
-        // clear the interrupt
-        hw_scheduler.cancel().ok();
+            // clear the interrupt
+            hw_scheduler.cancel().ok();
 
-        info!("<{}", perf_timer.lap().0/100).ok();
-        let status = contactless.poll_wait_extensions();
-        match status {
-            iso14443::Iso14443Status::Idle => {}
-            iso14443::Iso14443Status::ReceivedData(duration) => {
-                hw_scheduler.start(duration.subsec_millis().ms());
+            info!("<{}", perf_timer.lap().0/100).ok();
+            let status = contactless.poll_wait_extensions();
+            match status {
+                iso14443::Iso14443Status::Idle => {}
+                iso14443::Iso14443Status::ReceivedData(duration) => {
+                    hw_scheduler.start(duration.subsec_millis().ms());
+                }
             }
+            info!(" {}>", perf_timer.lap().0/100).ok();
         }
-        info!(" {}>", perf_timer.lap().0/100).ok();
     }
 
     #[task(binds = PIN_INT0, resources = [

@@ -11,6 +11,7 @@ use crate::hal::{
         },
     },
     traits::wg::Pwm,
+    Iocon,
 };
 pub enum Color {
     Red,
@@ -29,7 +30,7 @@ type GreenLed = hal::Pin<GreenLedPin, pin::state::Special<function::MATCH_OUTPUT
 type BlueLed = hal::Pin<BlueLedPin, pin::state::Special<function::MATCH_OUTPUT1<ctimer::Ctimer2<init_state::Enabled>>>>;
 
 type RedLedUnenabled = hal::Pin<RedLedPin, pin::state::Unused>;
-type GreenLedUnenabled = hal::Pin<GreenLedPin,pin::state::Unused >;
+type GreenLedUnenabled = hal::Pin<GreenLedPin,pin::state::Unused>;
 type BlueLedUnenabled = hal::Pin<BlueLedPin, pin::state::Unused>;
 
 type PwmDriver = pwm::Pwm<ctimer::Ctimer2<init_state::Enabled>>;
@@ -72,14 +73,14 @@ impl RgbLed {
 
 impl rgb_led::RgbLed for RgbLed {
     fn red(&mut self, intensity: u8){
-        self.pwm.set_duty(RedLed::CHANNEL, intensity);
+        self.pwm.set_duty(RedLed::CHANNEL, intensity.into());
     }
 
     fn green(&mut self, intensity: u8){
-        self.pwm.set_duty(GreenLed::CHANNEL, intensity);
+        self.pwm.set_duty(GreenLed::CHANNEL, intensity.into());
     }
 
     fn blue(&mut self, intensity: u8) {
-        self.pwm.set_duty(BlueLed::CHANNEL, intensity);
+        self.pwm.set_duty(BlueLed::CHANNEL, intensity.into());
     }
 }
