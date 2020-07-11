@@ -140,14 +140,14 @@ fn configure_fm11_if_needed(
 // #[cfg(feature = "board-lpcxpresso")]
 pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: rtfm::Peripherals) -> (
     types::Authenticator,
-    types::ApduManager,
+    types::ApduDispatch,
     types::CryptoService,
 
     types::Piv,
     Option<types::FidoApplet>,
     applet_ndef::NdefApplet<'static>,
 
-    Option<types::UsbWrapper>,
+    Option<types::UsbClasses>,
     Option<types::Iso14443>,
 
     types::PerfTimer,
@@ -311,7 +311,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     );
 
 
-    let usb_wrapper =
+    let usb_classes =
     {
         #[cfg(not(feature = "nfc"))]
         {
@@ -338,14 +338,14 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
             // our composite USB device
             let usbd = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0x1209, 0xbeee))
-                .manufacturer("Solo")
+                .manufacturer("SoloKeys")
                 .product("Solo 🐝")
                 .serial_number("20/20")
-                .device_release(0x0123)
+                .device_release(0x0001)
                 .max_packet_size_0(64)
                 .build();
 
-            Some(types::UsbWrapper::new(usbd, ccid, ctaphid, serial))
+            Some(types::UsbClasses::new(usbd, ccid, ctaphid, serial))
         }
         #[cfg(feature = "nfc")]
         None
@@ -360,7 +360,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     let piv = piv_card::App::new(piv_trussed);
     let ndef = applet_ndef::NdefApplet::new();
 
-    let apdu_manager = apdu_manager::ApduManager::new(contact_responder, contactless_responder);
+    let apdu_dispatch = types::ApduDispatch::new(contact_responder, contactless_responder);
 
     let iso14443 = {
 
@@ -440,14 +440,14 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
     (
         authnr,
-        apdu_manager,
+        apdu_dispatch,
         trussed,
 
         piv,
         fido,
         ndef,
 
-        usb_wrapper,
+        usb_classes,
         iso14443,
 
         perf_timer,

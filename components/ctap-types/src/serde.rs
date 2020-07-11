@@ -37,6 +37,13 @@ pub fn cbor_serialize_bytes<'a, 'b, N: heapless::ArrayLength<u8>, T: serde::Seri
 }
 
 
+pub fn cbor_serialize_bytebuf<N: heapless::ArrayLength<u8>, T: serde::Serialize>(object: &T) -> Result<heapless::ByteBuf<N>> {
+    let mut data = heapless::ByteBuf::<N>::new();
+    cbor_serialize_bytes(object, &mut data)?;
+    Ok(data)
+}
+
+
 pub fn cbor_deserialize<'de, T: serde::Deserialize<'de>>(
     buffer: &'de [u8],
 ) -> Result<T> {

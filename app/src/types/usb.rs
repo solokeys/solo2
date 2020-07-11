@@ -11,14 +11,14 @@ pub type SerialClass = usbd_serial::SerialPort<'static, UsbBus<EnabledUsbPeriphe
 // pub type SerialClass = usbd_serial::CdcAcmClass<'static, UsbBus>;
 type Usbd = usb_device::device::UsbDevice<'static, UsbBus<EnabledUsbPeripheral>>;
 
-pub struct UsbWrapper {
+pub struct UsbClasses {
     pub usbd: Usbd,
     pub ccid: CcidClass,
     pub ctaphid: CtapHidClass,
     pub serial: SerialClass,
 }
 
-impl UsbWrapper {
+impl UsbClasses {
     pub fn new(usbd: Usbd, ccid: CcidClass, ctaphid: CtapHidClass, serial: SerialClass) -> Self {
         Self{
             usbd, ccid, ctaphid, serial

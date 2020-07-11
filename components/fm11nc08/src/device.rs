@@ -65,22 +65,22 @@ pub enum Register {
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Interrupt {
-    Aux = (1 << 0),
-    Fifo = (1 << 1),
-    Arbitration = (1 << 2),
-    TxDone = (1 << 3),
-    RxDone = (1 << 4),
-    RxStart = (1 << 5),
-    Active = (1 << 6),
-    RfPower = (1 << 7),
+    Aux = 1 << 0,
+    Fifo = 1 << 1,
+    Arbitration = 1 << 2,
+    TxDone = 1 << 3,
+    RxDone = 1 << 4,
+    RxStart = 1 << 5,
+    Active = 1 << 6,
+    RfPower = 1 << 7,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum FifoInterrupt {
-    Empty = (1 << 0),
-    Full = (1 << 1),
-    OverFlow = (1 << 2),
-    WaterLevel = (1 << 3),
+    Empty = 1 << 0,
+    Full = 1 << 1,
+    OverFlow = 1 << 2,
+    WaterLevel = 1 << 3,
 }
 
 

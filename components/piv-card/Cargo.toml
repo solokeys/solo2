@@ -14,7 +14,7 @@ iso7816 = { path = "../iso7816" }
 serde = { version = "1.0", default-features = false }
 trussed = { path = "../trussed", package = "trussed" }
 usbd-ccid = { path = "../usbd-ccid" }
-apdu-manager = { path = "../apdu-manager" }
+apdu-dispatch = { path = "../apdu-dispatch" }
 
 [features]
 default = ["cortex-m-semihosting"]

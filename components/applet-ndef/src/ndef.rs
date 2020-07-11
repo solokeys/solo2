@@ -1,12 +1,7 @@
 use iso7816::{Command, Instruction, Status};
 use heapless::ByteBuf;
 
-use apdu_manager::{
-    Applet,
-    Aid,
-    AppletResponse,
-    Result as ResponseResult
-};
+use apdu_dispatch::applet;
 
 pub struct NdefApplet<'a>{
     reader: &'a [u8]
@@ -38,7 +33,7 @@ impl<'a> NdefApplet<'a> {
     }
 }
 
-impl<'a> Aid for NdefApplet<'a> {
+impl<'a> applet::Aid for NdefApplet<'a> {
     fn aid(&self) -> &'static [u8] {
         &[0xD2u8, 0x76, 0x00, 0x00,
             0x85, 0x01, 0x01, 0x00,
@@ -50,17 +45,15 @@ impl<'a> Aid for NdefApplet<'a> {
     }
 }
 
-impl<'a> Applet for NdefApplet<'a> {
+impl<'a> applet::Applet for NdefApplet<'a> {
 
-    fn select(&mut self, _apdu: Command) -> ResponseResult {
+    fn select(&mut self, _apdu: Command) -> applet::Result {
         Ok(Default::default())
     }
 
-    fn deselect(&mut self) -> Result<(), Status> {
-        Ok(())
-    }
+    fn deselect(&mut self) {}
 
-    fn send_recv(&mut self, apdu: Command) -> ResponseResult {
+    fn call(&mut self, apdu: Command) -> applet::Result {
         let instruction = apdu.instruction();
         let p1 = apdu.p1;
         let p2 = apdu.p2;
@@ -94,7 +87,7 @@ impl<'a> Applet for NdefApplet<'a> {
                         }
                     };
 
-                Ok(AppletResponse::Respond(ByteBuf::from_slice(
+                Ok(applet::Response::Respond(ByteBuf::from_slice(
                     & self.reader[offset .. offset + len_to_read]
                 ).unwrap()))
             }
