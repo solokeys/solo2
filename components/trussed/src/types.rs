@@ -416,7 +416,7 @@ pub enum SignatureSerialization {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq)]//, Deserialize, Serialize)]
-pub struct UniqueId(pub(crate) [u8; 16]);
+pub struct UniqueId(pub [u8; 16]);
 
 impl UniqueId {
     pub fn hex(&self) -> [u8; 32] {
