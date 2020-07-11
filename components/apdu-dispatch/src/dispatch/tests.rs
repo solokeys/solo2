@@ -4,7 +4,7 @@ use nb;
 #[cfg(test)]
 use crate::{
     Applet,
-    ApduManager,
+    ApduDispatch,
     AppletResponse,
     SourceError,
     Error,
@@ -259,10 +259,10 @@ impl Applet for AppletEchoPlusOne {
 
 #[cfg(test)]
 macro_rules! assert_exchanges{
-    ($manager:expr, $source:expr, $applets:expr) => {
+    ($dispatch:expr, $source:expr, $applets:expr) => {
         for i in 0 .. $source.exchanges_num() {
             $source.read_apdu().unwrap();
-            $manager.poll($applets);
+            $dispatch.poll($applets);
             $source.send_apdu().unwrap();
         }
     }
@@ -270,7 +270,7 @@ macro_rules! assert_exchanges{
 
 
 #[test]
-fn test_adpu_manager_select_1(){
+fn test_adpu_dispatch_select_1(){
     let (mut applet1, mut applet2) = (AppletTest1{}, AppletTest2{});
 
     let (mut source, mut contact, mut contactless) = DummySource::new( &[
@@ -280,13 +280,13 @@ fn test_adpu_manager_select_1(){
         &[0x90, 0x00],
     ] );
 
-   let mut manager = ApduManager::new(contact, contactless);
+   let mut dispatch = ApduDispatch::new(contact, contactless);
 
-   assert_exchanges!(&mut manager, &mut source, &mut[&mut applet1, &mut applet2]);
+   assert_exchanges!(&mut dispatch, &mut source, &mut[&mut applet1, &mut applet2]);
 }
 
 // #[test]
-// fn test_adpu_manager_select_2(){
+// fn test_adpu_dispatch_select_2(){
 //     let (mut applet1, mut applet2) = (AppletTest1{}, AppletTest2{});
 
 //     let mut source = DummySource::new( &[
@@ -296,15 +296,15 @@ fn test_adpu_manager_select_1(){
 //         &[0x90, 0x00],
 //     ] );
 
-//    let mut manager = ApduManager::new();
+//    let mut dispatch = ApduDispatch::new();
 
-//    assert_exchanges!(&mut manager, &mut source, &mut[&mut applet1, &mut applet2], 1);
+//    assert_exchanges!(&mut dispatch, &mut source, &mut[&mut applet1, &mut applet2], 1);
 // }
 
 
 
 // #[test]
-// fn test_adpu_manager_select_fail(){
+// fn test_adpu_dispatch_select_fail(){
 //     let (mut applet1, mut applet2) = (AppletTest1{}, AppletTest2{});
 
 //     let mut source = DummySource::new( &[
@@ -314,13 +314,13 @@ fn test_adpu_manager_select_1(){
 //         &[0x6A, 0x82],
 //     ] );
 
-//    let mut manager = ApduManager::new();
-//    assert_exchanges!(&mut manager, &mut source, &mut[&mut applet1, &mut applet2], 1);
+//    let mut dispatch = ApduDispatch::new();
+//    assert_exchanges!(&mut dispatch, &mut source, &mut[&mut applet1, &mut applet2], 1);
 
 // }
 
 // #[test]
-// fn test_adpu_manager_applet_1(){
+// fn test_adpu_dispatch_applet_1(){
 //     let (mut applet1, mut applet2) = (AppletTest1{}, AppletTest2{});
 
 //     let mut source = DummySource::new( &[
@@ -346,13 +346,13 @@ fn test_adpu_manager_select_1(){
 
 //     ] );
 
-//    let mut manager = ApduManager::new();
+//    let mut dispatch = ApduDispatch::new();
 
-//    assert_exchanges!(&mut manager, &mut source, &mut[&mut applet1, &mut applet2], 4);
+//    assert_exchanges!(&mut dispatch, &mut source, &mut[&mut applet1, &mut applet2], 4);
 // }
 
 // #[test]
-// fn test_adpu_manager_applet_2(){
+// fn test_adpu_dispatch_applet_2(){
 //     let (mut applet1, mut applet2) = (AppletTest1{}, AppletTest2{});
 
 //     let mut source = DummySource::new( &[
@@ -367,13 +367,13 @@ fn test_adpu_manager_select_1(){
 //         &[0xa8, 0x90u8, 0x00],
 //     ] );
 
-//    let mut manager = ApduManager::new();
+//    let mut dispatch = ApduDispatch::new();
 
-//    assert_exchanges!(&mut manager, &mut source, &mut[&mut applet1, &mut applet2], 2);
+//    assert_exchanges!(&mut dispatch, &mut source, &mut[&mut applet1, &mut applet2], 2);
 // }
 
 // #[test]
-// fn test_adpu_manager_applet_no_select(){
+// fn test_adpu_dispatch_applet_no_select(){
 //     let (mut applet1, mut applet2) = (AppletTest1{}, AppletTest2{});
 
 //     let mut source = DummySource::new( &[
@@ -384,13 +384,13 @@ fn test_adpu_manager_select_1(){
 //         &[0x6A, 0x82],
 //     ] );
 
-//    let mut manager = ApduManager::new();
+//    let mut dispatch = ApduDispatch::new();
 
-//    assert_exchanges!(&mut manager, &mut source, &mut[&mut applet1, &mut applet2], 1);
+//    assert_exchanges!(&mut dispatch, &mut source, &mut[&mut applet1, &mut applet2], 1);
 // }
 
 // #[test]
-// fn test_adpu_manager_applet_bad_ins(){
+// fn test_adpu_dispatch_applet_bad_ins(){
 //     let (mut applet1, mut applet2) = (AppletTest1{}, AppletTest2{});
 
 //     let mut source = DummySource::new( &[
@@ -406,13 +406,13 @@ fn test_adpu_manager_select_1(){
 //         &[0x6Du8, 0x00, ],
 //     ] );
 
-//    let mut manager = ApduManager::new();
+//    let mut dispatch = ApduDispatch::new();
 
-//    assert_exchanges!(&mut manager, &mut source, &mut[&mut applet1, &mut applet2], 2);
+//    assert_exchanges!(&mut dispatch, &mut source, &mut[&mut applet1, &mut applet2], 2);
 // }
 
 // #[test]
-// fn test_adpu_manager_applet_large_read(){
+// fn test_adpu_dispatch_applet_large_read(){
 //     let (mut applet1, mut applet2, mut applet3) = (AppletTest1{}, AppletTest2{}, AppletEchoPlusOne{});
 
 //     let mut source = DummySource::new( &[
@@ -441,15 +441,15 @@ fn test_adpu_manager_select_1(){
 //         ],
 //     ] );
 
-//    let mut manager = ApduManager::new();
+//    let mut dispatch = ApduDispatch::new();
 
-//    assert_exchanges!(&mut manager, &mut source, &mut[&mut applet1, &mut applet2, &mut applet3], 2);
+//    assert_exchanges!(&mut dispatch, &mut source, &mut[&mut applet1, &mut applet2, &mut applet3], 2);
 // }
 
 
 
 // #[test]
-// fn test_adpu_manager_applet_echo(){
+// fn test_adpu_dispatch_applet_echo(){
 //     let (mut applet1, mut applet2, mut applet3) = (AppletTest1{}, AppletTest2{}, AppletEchoPlusOne{});
 
 //     let mut source = DummySource::new( &[
@@ -464,13 +464,13 @@ fn test_adpu_manager_select_1(){
 //         &[0x01u8, 0x12, 0x23, 0x34, 0x05, 0x56, 0x67, 0x78, 0x89, 0x90u8, 0x00,],
 //     ] );
 
-//    let mut manager = ApduManager::new();
+//    let mut dispatch = ApduDispatch::new();
 
-//    assert_exchanges!(&mut manager, &mut source, &mut[&mut applet1, &mut applet2, &mut applet3], 2);
+//    assert_exchanges!(&mut dispatch, &mut source, &mut[&mut applet1, &mut applet2, &mut applet3], 2);
 // }
 
 // #[test]
-// fn test_adpu_manager_switch_applets(){
+// fn test_adpu_dispatch_switch_applets(){
 //     let (mut applet1, mut applet2, mut applet3) = (AppletTest1{}, AppletTest2{}, AppletEchoPlusOne{});
 
 //     let mut source = DummySource::new( &[
@@ -507,14 +507,14 @@ fn test_adpu_manager_select_1(){
 //         &[0x10, 0x90u8, 0x00],
 //     ] );
 
-//    let mut manager = ApduManager::new();
+//    let mut dispatch = ApduDispatch::new();
 
-//    assert_exchanges!(&mut manager, &mut source, &mut[&mut applet1, &mut applet2, &mut applet3], 6);
+//    assert_exchanges!(&mut dispatch, &mut source, &mut[&mut applet1, &mut applet2, &mut applet3], 6);
 // }
 
 
 // #[test]
-// fn test_adpu_manager_applet_echo_extended_length(){
+// fn test_adpu_dispatch_applet_echo_extended_length(){
 //     let (mut applet1, mut applet2, mut applet3) = (AppletTest1{}, AppletTest2{}, AppletEchoPlusOne{});
 
 //     let mut source = DummySource::new( &[
@@ -553,9 +553,9 @@ fn test_adpu_manager_select_1(){
 //         ],
 //     ] );
 
-//    let mut manager = ApduManager::new();
+//    let mut dispatch = ApduDispatch::new();
 
-//    assert_exchanges!(&mut manager, &mut source, &mut[&mut applet1, &mut applet2, &mut applet3], 2);
+//    assert_exchanges!(&mut dispatch, &mut source, &mut[&mut applet1, &mut applet2, &mut applet3], 2);
 // }
 
 

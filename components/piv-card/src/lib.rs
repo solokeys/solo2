@@ -14,7 +14,8 @@ use iso7816::{
         Data as ResponseData,
     },
 };
-use apdu_manager::{Aid, Applet, Result as AppletResult, AppletResponse};
+use apdu_dispatch::applet;
+// use apdu_dispatch::{Aid, Applet, Result as applet::Result, applet::Response};
 use trussed::Client as Trussed;
 use trussed::{block, syscall};
 
@@ -920,7 +921,7 @@ impl App
 }
 
 
-impl Aid for App {
+impl applet::Aid for App {
 
     fn aid(&self) -> &'static [u8] {
         &constants::PIV_AID
@@ -932,8 +933,8 @@ impl Aid for App {
 }
 
 
-impl Applet for App {
-    fn select(&mut self, _apdu: Command) -> AppletResult {
+impl applet::Applet for App {
+    fn select(&mut self, _apdu: Command) -> applet::Result {
         let mut der: Der<consts::U256> = Default::default();
         der.nested(0x61, |der| {
             // Application identifier of application:
@@ -948,17 +949,15 @@ impl Applet for App {
             })
         }).unwrap();
 
-        return Ok(AppletResponse::Respond(der.to_byte_buf()));
+        return Ok(applet::Response::Respond(der.to_byte_buf()));
     }
 
-    fn deselect(&mut self) -> core::result::Result<(), Status> {
-        Ok(())
-    }
+    fn deselect(&mut self) {}
 
-    fn send_recv(&mut self, apdu: Command) -> AppletResult {
+    fn call(&mut self, apdu: Command) -> applet::Result {
         match self.try_handle(&apdu) {
             Ok(data) => {
-                Ok(AppletResponse::Respond(data))
+                Ok(applet::Response::Respond(data))
             }
             Err(status) => {
                 Err(status)
