@@ -9,6 +9,7 @@ use trussed::{
     types::{
         self,
         ObjectHandle as Key,
+        SpecialId,
         UniqueId,
         StorageLocation,
         Mechanism,
@@ -106,7 +107,7 @@ impl Identity {
     pub fn attestation_key<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) -> Option<Key>
     {
         let key = Key {
-            object_id: UniqueId([0u8;16])
+            object_id: UniqueId::from(0)
         };
         let attestation_key_exists = syscall!(crypto.exists(Mechanism::P256, key)).exists;
         if attestation_key_exists {

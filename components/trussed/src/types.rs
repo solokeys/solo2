@@ -415,8 +415,24 @@ pub enum SignatureSerialization {
     // Sec1,
 }
 
+pub type SpecialId = u8;
+
+// TODO: We rely on the RNG being good, so 15 zero bytes are improbable, and there
+// are no clashes between trussed-generated and special (app-chosen) IDs.
+// We may or may not want to model this in more detail as enum { Special, Random },
+// and make sure the randomly generated IDs are never in the "special" range.
 #[derive(Copy, Clone, Eq, PartialEq)]//, Deserialize, Serialize)]
-pub struct UniqueId(pub [u8; 16]);
+pub struct UniqueId(pub(crate) [u8; 16]);
+
+impl From<SpecialId> for UniqueId {
+    fn from(special_id: u8) -> Self {
+        let mut unique_id = [0u8; 16];
+        // consider this a "little endian" u256, so "first" 256
+        // keys are "special" or "well-known"
+        unique_id[0] = special_id;
+        Self(unique_id)
+    }
+}
 
 impl UniqueId {
     pub fn hex(&self) -> [u8; 32] {
