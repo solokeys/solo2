@@ -1,4 +1,4 @@
-//! main app in cortex-m-rtfm version
+//! main app in cortex-m-rtic version
 //!
 //! See also `main_rt.rs` for a RT-only version.
 
@@ -21,12 +21,12 @@ extern crate funnel;
 #[macro_use]
 macro_rules! debug { ($($tt:tt)*) => {{ core::result::Result::<(), core::convert::Infallible>::Ok(()) }} }
 
-use rtfm::cyccnt::{Instant, U32Ext as _};
+use rtic::cyccnt::{Instant, U32Ext as _};
 
 const CLOCK_FREQ: u32 = 96_000_000;
 const PERIOD: u32 = CLOCK_FREQ/2;
 
-#[rtfm::app(device = app::hal::raw, peripherals = true, monotonic = rtfm::cyccnt::CYCCNT)]
+#[rtic::app(device = app::hal::raw, peripherals = true, monotonic = rtic::cyccnt::CYCCNT)]
 const APP: () = {
 
     struct Resources {
@@ -138,7 +138,7 @@ const APP: () = {
                 match contactless.as_ref() {
                     Some(contactless) => {
                         if contactless.is_ready_to_transmit() {
-                            rtfm::pend(lpc55_hal::raw::Interrupt::PIN_INT0);
+                            rtic::pend(lpc55_hal::raw::Interrupt::PIN_INT0);
                         }
                     }
                     _ => {}

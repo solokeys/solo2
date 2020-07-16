@@ -8,12 +8,12 @@ edition = "2018"
 name = "app"
 
 [[bin]]
-name = "rtfm"
-path = "src/app_rtfm.rs"
+name = "rtic"
+path = "src/app_rtic.rs"
 
 [dependencies]
 cortex-m-funnel = { version = "0.1.0-alpha.1" }
-cortex-m-rtfm = "0.5.1"
+cortex-m-rtic = "0.5.1"
 cortex-m-semihosting = { version = "0.3.5", optional = true }
 heapless = { version = "0.5.5", features = ["ufmt"] }
 nb = "1"

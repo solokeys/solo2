@@ -9,7 +9,7 @@
 //! - RequestPipe is a USB device class that handles de-packetization
 //! for some protocol, does some basic low-level error handling
 //! and decodes into specific requests that are modeled as Rust structs.
-//! ResponsePipe is the main program logic that runs in the RTFM idle loop.
+//! ResponsePipe is the main program logic that runs in the RTIC idle loop.
 //! - ResponsePipe is an OS service that provides for instance persistent
 //! flash storage, or cryptographic services.
 //!
