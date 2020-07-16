@@ -42,7 +42,7 @@ usbd-ccid = { path = "../components/usbd-ccid" }
 usbd-ctaphid = { path = "../components/usbd-ctaphid" }
 fm11nc08 = {path = "./../components/fm11nc08"}
 iso14443 = {path = "./../components/iso14443"}
-apdu-manager = {path = "./../components/apdu-manager"}
+apdu-dispatch = {path = "./../components/apdu-dispatch"}
 applet-ndef = {path = "./../components/applet-ndef"}
 applet-fido = {path = "./../components/applet-fido"}
 logging = {path = "./../components/logging"}

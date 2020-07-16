@@ -34,12 +34,10 @@ pub use error::Error;
 pub use client::Client;
 pub use service::Service;
 
-pub use ctap_types::{ArrayLength, ByteBuf, consts, serde::{cbor_serialize, cbor_serialize_bytes, cbor_deserialize}};
-pub fn cbor_serialize_bytebuf<N: heapless::ArrayLength<u8>, T: serde::Serialize>(object: &T) -> core::result::Result<ByteBuf<N>, ctap_types::serde::Error> {
-    let mut data = heapless::ByteBuf::<N>::new();
-    ctap_types::serde::cbor_serialize_bytes(object, &mut data)?;
-    Ok(data)
-}
+pub use ctap_types::{
+    ArrayLength, ByteBuf, consts,
+    serde::{cbor_serialize, cbor_serialize_bytes, cbor_serialize_bytebuf, cbor_deserialize},
+};
 
 // #[cfg(test)]
 // mod tests;

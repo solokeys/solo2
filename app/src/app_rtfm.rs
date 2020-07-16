@@ -31,14 +31,14 @@ const APP: () = {
 
     struct Resources {
         authnr: app::types::Authenticator,
-        apdu_manager: app::types::ApduManager,
+        apdu_dispatch: app::types::ApduDispatch,
         trussed: app::types::CryptoService,
 
         piv: app::types::Piv,
         fido: Option<app::types::FidoApplet>,
         ndef: applet_ndef::NdefApplet<'static>,
 
-        usb_wrapper: Option<app::types::UsbWrapper>,
+        usb_classes: Option<app::types::UsbClasses>,
         contactless: Option<app::types::Iso14443>,
 
         perf_timer: app::types::PerfTimer,
@@ -54,14 +54,14 @@ const APP: () = {
 
         let (
             authnr,
-            apdu_manager,
+            apdu_dispatch,
             trussed,
 
             piv,
             fido,
             ndef,
 
-            usb_wrapper,
+            usb_classes,
             contactless,
 
             perf_timer,
@@ -72,20 +72,20 @@ const APP: () = {
         ) = app::init_board(c.device, c.core);
 
         // don't toggle LED in passive mode
-        if ! usb_wrapper.is_none() {
+        if usb_classes.is_some() {
             c.schedule.toggle_red(Instant::now() + PERIOD.cycles()).unwrap();
         }
 
         init::LateResources {
             authnr,
-            apdu_manager,
+            apdu_dispatch,
             trussed,
 
             piv,
             fido,
             ndef,
 
-            usb_wrapper,
+            usb_classes,
             contactless,
 
             perf_timer,
@@ -97,12 +97,12 @@ const APP: () = {
         }
     }
 
-    #[idle(resources = [authnr, usb_wrapper, apdu_manager, ndef, piv, fido, contactless, perf_timer])]
+    #[idle(resources = [authnr, usb_classes, apdu_dispatch, ndef, piv, fido, contactless, perf_timer])]
     fn idle(c: idle::Context) -> ! {
         let idle::Resources {
             authnr,
-            mut usb_wrapper,
-            apdu_manager,
+            mut usb_classes,
+            apdu_dispatch,
             ndef,
             piv,
             fido,
@@ -127,10 +127,10 @@ const APP: () = {
 
             match fido.as_mut() {
                 Some(fido) => {
-                    apdu_manager.poll(&mut [ndef, piv, fido]);
+                    apdu_dispatch.poll(&mut [ndef, piv, fido]);
                 }
                 _ => {
-                    apdu_manager.poll(&mut [ndef, piv]);
+                    apdu_dispatch.poll(&mut [ndef, piv]);
                 }
             }
 
@@ -145,18 +145,18 @@ const APP: () = {
                 }
             });
 
-            usb_wrapper.lock(|usb_wrapper_maybe| {
-                match usb_wrapper_maybe.as_mut() {
-                    Some(usb_wrapper) => {
-                        usb_wrapper.ctaphid.check_for_responses();
+            usb_classes.lock(|usb_classes_maybe| {
+                match usb_classes_maybe.as_mut() {
+                    Some(usb_classes) => {
+                        usb_classes.ctaphid.check_for_responses();
                         // the `usbd.poll` only calls its classes if
                         // there is activity on the bus. hence we need
                         // to kick ccid to pick up responses...
-                        usb_wrapper.ccid.sneaky_poll();
-                        usb_wrapper.usbd.poll(&mut [
-                            &mut usb_wrapper.ccid,
-                            &mut usb_wrapper.ctaphid,
-                            &mut usb_wrapper.serial
+                        usb_classes.ccid.sneaky_poll();
+                        usb_classes.usbd.poll(&mut [
+                            &mut usb_classes.ccid,
+                            &mut usb_classes.ctaphid,
+                            &mut usb_classes.serial
                         ]);
                     }
                     _ => {}
@@ -170,19 +170,19 @@ const APP: () = {
     }
 
     #[task(binds = USB1_NEEDCLK, resources = [usb_wrapper], priority=5)]
-    fn usb0_needclk(c: usb0_needclk::Context) {
-        let usb_wrapper = c.resources.usb_wrapper.as_mut().unwrap();
-        usb_wrapper.usbd.poll(&mut [&mut usb_wrapper.ccid, &mut usb_wrapper.ctaphid, &mut usb_wrapper.serial]);
+    fn usb1_needclk(c: usb1_needclk::Context) {
+        let usb_classes = c.resources.usb_classes.as_mut().unwrap();
+        usb_classes.usbd.poll(&mut [&mut usb_classes.ccid, &mut usb_classes.ctaphid, &mut usb_classes.serial]);
     }
 
     #[task(binds = USB1, resources = [usb_wrapper], priority=5)]
-    fn usb0(c: usb0::Context) {
-        let usb = unsafe { hal::raw::Peripherals::steal().USB0 } ;
+    fn usb1(c: usb1::Context) {
+        let usb = unsafe { hal::raw::Peripherals::steal().USB1 } ;
         let before = Instant::now();
-        let usb_wrapper = c.resources.usb_wrapper.as_mut().unwrap();
+        let usb_classes = c.resources.usb_classes.as_mut().unwrap();
 
         //////////////
-        usb_wrapper.usbd.poll(&mut [&mut usb_wrapper.ccid, &mut usb_wrapper.ctaphid, &mut usb_wrapper.serial]);
+        usb_classes.usbd.poll(&mut [&mut usb_classes.ccid, &mut usb_classes.ctaphid, &mut usb_classes.serial]);
         //////////////
 
         let after = Instant::now();
@@ -226,7 +226,7 @@ const APP: () = {
             c.resources.rgb.turn_off();
             *ON = false;
         } else {
-            c.resources.rgb.green(150);
+            c.resources.rgb.green(10);
             *ON = true;
         }
 

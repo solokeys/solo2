@@ -1,19 +1,17 @@
 use iso7816::{Command, response::Data, Status};
 
-pub enum AppletResponse {
+pub type Result = core::result::Result<Response, Status>;
+
+pub enum Response {
     Respond(Data),
     Defer,
 }
 
-impl Default for AppletResponse {
+impl Default for Response {
     fn default() -> Self {
-        AppletResponse::Respond(Default::default())
+        Response::Respond(Default::default())
     }
 }
-
-pub type Result = core::result::Result<AppletResponse, Status>;
-
-pub type ScratchBuffer = [u8; 4096];
 
 /// The Aid is used to determine whether or not the App will be selected.
 /// Only `aid()` and `right_truncated_length()` need to be implemented.
@@ -46,24 +44,24 @@ pub trait Aid {
 
 
 
-/// An App can receive and respond APDUs at behest of the ApduManager.
+/// An App can receive and respond APDUs at behest of the ApduDispatch.
 pub trait Applet : Aid {
     /// Given parsed APDU for select command.
     /// Write response data back to buf, and return length of payload.  Return APDU Error code on error.
     /// Alternatively, the app can defer the response until later by returning it in `poll()`.
     fn select(&mut self, apdu: Command) -> Result;
 
-    /// Deselects the applet.  This may be as a result of another applet getting selected.
-    /// It would be a good idea for the applet to use this to reset any sensitive state.
-    fn deselect(&mut self) -> core::result::Result<(), Status>;
+    /// Deselects the applet. This is the result of another applet getting selected.
+    /// Applet should clear any sensitive state and reset security indicators.
+    fn deselect(&mut self);
 
     /// Given parsed APDU for applet when selected.
     /// Write response data back to buf, and return length of payload.  Return APDU Error code on error.
-    fn send_recv(&mut self, apdu: Command) -> Result;
+    fn call(&mut self, apdu: Command) -> Result;
 
     /// Called repeatedly for the selected applet.
     /// Applet could choose to defer a response in `send_recv`, and send a reply later here.
-    fn poll(&mut self, _buffer: &mut ScratchBuffer) -> Result {
-        Ok(AppletResponse::Defer)
+    fn poll(&mut self) -> Result {
+        Ok(Response::Defer)
     }
 }

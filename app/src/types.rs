@@ -34,7 +34,7 @@ pub type Piv = piv_card::App;
 pub use trussed::client::TrussedSyscall;
 
 pub mod usb;
-pub use usb::{UsbWrapper, EnabledUsbPeripheral, SerialClass, CcidClass, CtapHidClass};
+pub use usb::{UsbClasses, EnabledUsbPeripheral, SerialClass, CcidClass, CtapHidClass};
 
 // 8KB of RAM
 const_ram_storage!(
@@ -97,7 +97,7 @@ pub type Iso14443 = iso14443::Iso14443<NfcChip>;
 
 pub type ExternalInterrupt = hal::Pint<hal::typestates::init_state::Enabled>;
 
-pub type ApduManager = apdu_manager::ApduManager;
+pub type ApduDispatch = apdu_dispatch::dispatch::ApduDispatch;
 
 pub type FidoApplet = applet_fido::Fido;
 

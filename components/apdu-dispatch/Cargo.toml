@@ -1,5 +1,5 @@
 [package]
-name = "apdu-manager"
+name = "apdu-dispatch"
 version = "0.0.1"
 authors = ["Conor Patrick <conor@solokeys.com>", "Nicolas Stalder <n@stalder.io>"]
 edition = "2018"
@@ -21,3 +21,6 @@ iso14443 = {path = "../iso14443"}
 [features]
 default = []
 std = ["logging/std"]
+
+[patch.crates-io]
+heapless = { git = "https://github.com/nicolas-solokeys/heapless", branch = "bytebuf" }
