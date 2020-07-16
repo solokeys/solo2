@@ -138,7 +138,7 @@ fn configure_fm11_if_needed(
 
 // TODO: move board-specifics to BSPs
 // #[cfg(feature = "board-lpcxpresso")]
-pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: rtfm::Peripherals) -> (
+pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: rtic::Peripherals) -> (
     types::Authenticator,
     types::ApduDispatch,
     types::CryptoService,
@@ -463,7 +463,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 //
 
 use funnel::{funnel, Drain};
-use rtfm::Mutex;
+use rtic::Mutex;
 funnel!(NVIC_PRIO_BITS = hal::raw::NVIC_PRIO_BITS, {
     0: 2048,
     1: 1024,

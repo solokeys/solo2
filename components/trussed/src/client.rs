@@ -177,7 +177,7 @@ pub struct TrussedSyscall {}
 impl crate::pipe::Syscall for TrussedSyscall {
     #[inline]
     fn syscall(&mut self) {
-        rtfm::pend(lpc55_hal::raw::Interrupt::OS_EVENT);
+        rtic::pend(lpc55_hal::raw::Interrupt::OS_EVENT);
     }
 }
 
