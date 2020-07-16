@@ -7,10 +7,6 @@ edition = "2018"
 [lib]
 name = "app"
 
-# [[bin]]
-# name = "rt"
-# path = "src/app_rt.rs"
-
 [[bin]]
 name = "rtfm"
 path = "src/app_rtfm.rs"
