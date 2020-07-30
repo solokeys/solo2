@@ -370,7 +370,7 @@ where
         let do_flush = if main_irq & (Interrupt::TxDone as u8) != 0 {
             // Need to turn off transmit mode
             let count = self.read_reg(Register::FifoCount);
-            info!("off transmit (-{}) {}", count, logging::hex!(main_irq)).ok();
+            info!("off transmit (-{}) {}", count, main_irq.hex()).ok();
             self.write_reg(Register::RfTxEn, 0x00);
             true
         } else {
@@ -393,9 +393,9 @@ where
         if (fifo_irq & (1 << 2)) != 0 {
             info!("!OF! {} @{}", self.read_reg(Register::FifoCount), hal::get_cycle_count()/96_00).ok();
             info!("{} {} {}",
-                    logging::hex!(main_irq),
-                    logging::hex!(fifo_irq),
-                    logging::hex!(aux_irq),
+                    main_irq.hex(),
+                    fifo_irq.hex(),
+                    aux_irq.hex(),
                 ).ok();
 
             // self.write_reg(Register::FifoFlush, 0xff);
@@ -460,9 +460,9 @@ where
 
         info!(". {},{},{}",
             // logging::hex!(rf_status),
-            logging::hex!(main_irq),
-            logging::hex!(fifo_irq),
-            logging::hex!(aux_irq),
+            main_irq.hex(),
+            fifo_irq.hex(),
+            aux_irq.hex(),
         ).ok();
 
         if new_session {
@@ -509,9 +509,9 @@ where
             info!("tx {}->{}. {} {} {}",
                 initial_count,
                 current_count,
-                logging::hex!(rf_status),
-                logging::hex!(aux_irq),
-                logging::hex!(fifo_irq),
+                rf_status.hex(),
+                aux_irq.hex(),
+                fifo_irq.hex(),
             ).ok();
 
             if (fifo_irq & (FifoInterrupt::WaterLevel as u8)) != 0 {
@@ -633,15 +633,15 @@ impl ufmt::uDisplay for Eeprom {
     {
         use ufmt::uwriteln;
         uwriteln!(f, "").ok();
-        uwriteln!(f, "  regu_cfg         = x{}", hex!(self.regu_cfg)).ok();
-        uwriteln!(f, "  atqa             = x{}", hex!(self.atqa)).ok();
-        uwriteln!(f, "  sak1,sak2        = x{} {}", hex!(self.sak1), hex!(self.sak2)).ok();
+        uwriteln!(f, "  regu_cfg         = x{}", self.regu_cfg.hex()).ok();
+        uwriteln!(f, "  atqa             = x{}", self.atqa.hex()).ok();
+        uwriteln!(f, "  sak1,sak2        = x{} {}", self.sak1.hex(), self.sak2.hex()).ok();
         uwriteln!(f, "  tl t0 ta tb tc   = x{} {} {} {} {}",
-            hex!(self.tl), hex!(self.t0), hex!(self.ta), hex!(self.tb), hex!(self.tc)
+            self.tl.hex(), self.t0.hex(), self.ta.hex(), self.tb.hex(), self.tc.hex()
         ).ok();
-        uwriteln!(f, "  nfc_cfg          = x{}", hex!(self.nfc_cfg)).ok();
-        uwriteln!(f, "  i2c_addr         = x{}", hex!(self.i2c_addr)).ok();
-        uwriteln!(f, "  rblock ack,nack  = x{} {}", hex!(self.rblock_ack), hex!(self.rblock_nack))
+        uwriteln!(f, "  nfc_cfg          = x{}", self.nfc_cfg.hex()).ok();
+        uwriteln!(f, "  i2c_addr         = x{}", self.i2c_addr.hex()).ok();
+        uwriteln!(f, "  rblock ack,nack  = x{} {}", self.rblock_ack.hex(), self.rblock_nack.hex())
     }
 }
 
@@ -652,19 +652,19 @@ impl ufmt::uDisplay for RegisterBlock {
     {
         use ufmt::uwriteln;
         uwriteln!(f, "").ok();
-        uwriteln!(f, "  fifo_count   = x{}", hex!(self.fifo_count)).ok();
-        uwriteln!(f, "  rf_status    = x{}", hex!(self.rf_status)).ok();
-        uwriteln!(f, "  rf_txen      = x{}", hex!(self.rf_txen)).ok();
-        uwriteln!(f, "  rf_baud      = x{}", hex!(self.rf_baud)).ok();
-        uwriteln!(f, "  rf_rats      = x{}", hex!(self.rf_rats)).ok();
-        uwriteln!(f, "  main_irq     = x{}", hex!(self.main_irq)).ok();
-        uwriteln!(f, "  fifo_irq     = x{}", hex!(self.fifo_irq)).ok();
-        uwriteln!(f, "  aux_irq      = x{}", hex!(self.aux_irq)).ok();
-        uwriteln!(f, "  main_irq_mask= x{}", hex!(self.main_irq_mask)).ok();
-        uwriteln!(f, "  fifo_irq_mask= x{}", hex!(self.fifo_irq_mask)).ok();
-        uwriteln!(f, "  aux_irq_mask = x{}", hex!(self.aux_irq_mask)).ok();
-        uwriteln!(f, "  nfc_cfg      = x{}", hex!(self.nfc_cfg)).ok();
-        uwriteln!(f, "  regu_cfg     = x{}", hex!(self.regu_cfg))
+        uwriteln!(f, "  fifo_count   = x{}", self.fifo_count.hex()).ok();
+        uwriteln!(f, "  rf_status    = x{}", self.rf_status.hex()).ok();
+        uwriteln!(f, "  rf_txen      = x{}", self.rf_txen.hex()).ok();
+        uwriteln!(f, "  rf_baud      = x{}", self.rf_baud.hex()).ok();
+        uwriteln!(f, "  rf_rats      = x{}", self.rf_rats.hex()).ok();
+        uwriteln!(f, "  main_irq     = x{}", self.main_irq.hex()).ok();
+        uwriteln!(f, "  fifo_irq     = x{}", self.fifo_irq.hex()).ok();
+        uwriteln!(f, "  aux_irq      = x{}", self.aux_irq.hex()).ok();
+        uwriteln!(f, "  main_irq_mask= x{}", self.main_irq_mask.hex()).ok();
+        uwriteln!(f, "  fifo_irq_mask= x{}", self.fifo_irq_mask.hex()).ok();
+        uwriteln!(f, "  aux_irq_mask = x{}", self.aux_irq_mask.hex()).ok();
+        uwriteln!(f, "  nfc_cfg      = x{}", self.nfc_cfg.hex()).ok();
+        uwriteln!(f, "  regu_cfg     = x{}", self.regu_cfg.hex())
     }
 }
 
