@@ -37,9 +37,9 @@ impl HexRepresentation2 for u8 {
     }
 
     fn hex(self) -> &'static str{
-        static mut mem: [u8; 2] = [0,0];
-        unsafe{ mem = self.as_bytes() };
-        unsafe{ core::str::from_utf8_unchecked(&mem) }
+        static mut MEM: [u8; 2] = [0,0];
+        unsafe{ MEM = self.as_bytes() };
+        unsafe{ core::str::from_utf8_unchecked(&MEM) }
     }
 
 }
@@ -59,9 +59,9 @@ impl HexRepresentation4 for u16{
         hex
     }
     fn hex(self) -> &'static str{
-        static mut mem: [u8; 4] = [0,0,0,0];
-        unsafe{ mem = self.as_bytes() };
-        unsafe{ core::str::from_utf8_unchecked(&mem) }
+        static mut MEM: [u8; 4] = [0,0,0,0];
+        unsafe{ MEM = self.as_bytes() };
+        unsafe{ core::str::from_utf8_unchecked(&MEM) }
     }
 
 
