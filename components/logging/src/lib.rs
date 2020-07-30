@@ -17,7 +17,7 @@ mod print_functions {
         let mut logger = Logger::get().unwrap();
         if funnel::is_enabled(funnel::Level::Info) {
             for i in 0 .. len {
-                uwrite!(logger, "{} ", hex!( bin[i] )).ok();
+                uwrite!(logger, "{} ", bin[i].hex()).ok();
             }
             uwriteln!(logger,"").ok();
         }
@@ -56,12 +56,12 @@ mod print_functions {
     macro_rules! debug { ($($tt:tt)*) => {{
         info!($($tt)*)
     }}}
-         
+
     pub fn dump_hex(bin: &[u8], len: usize){
         use super::*;
 
         for i in 0 .. len {
-            std::print!("{} ", hex!( bin[i] ));
+            std::print!("{} ",  bin[i].hex() );
         }
         std::println!("");
     }

@@ -1,16 +1,26 @@
 
 pub trait HexRepresentation2 {
-    fn hex(self) -> [u8; 2];
+    fn as_bytes(self) -> [u8; 2];
+    // fn hex_string(self) -> &'static str{
+        // unsafe{ core::str::from_utf8_unchecked(&(self).hex()) }
+    // }
+    fn hex(self) -> &'static str;
+
 }
 pub trait HexRepresentation4 {
-    fn hex(self) -> [u8; 4];
+    fn as_bytes(self) -> [u8; 4];
+    // fn hex_string(self) -> &'static str{
+        // unsafe{ core::str::from_utf8_unchecked(&(self).hex()) }
+    // }
+    fn hex(self) -> &'static str;
 }
 pub trait HexRepresentation8 {
-    fn hex(self) -> [u8; 4];
+    fn as_bytes(self) -> [u8; 4];
+    fn hex(self) -> &'static str;
 }
 
 impl HexRepresentation2 for u8 {
-    fn hex(self) -> [u8; 2] {
+    fn as_bytes(self) -> [u8; 2] {
         let mut hex = [0x30, 0x30];
 
         for i in 0 .. 2 {
@@ -25,14 +35,21 @@ impl HexRepresentation2 for u8 {
         }
         hex
     }
+
+    fn hex(self) -> &'static str{
+        static mut mem: [u8; 2] = [0,0];
+        unsafe{ mem = self.as_bytes() };
+        unsafe{ core::str::from_utf8_unchecked(&mem) }
+    }
+
 }
 
 impl HexRepresentation4 for u16{
-    fn hex(self) -> [u8; 4] {
+    fn as_bytes(self) -> [u8; 4] {
         let mut hex = [0x30, 0x30, 0x30, 0x30];
 
-        let bottom = ((self & 0xff) as u8).hex();
-        let top = (((self & 0xff00)>>8) as u8).hex();
+        let bottom = ((self & 0xff) as u8).as_bytes();
+        let top = (((self & 0xff00)>>8) as u8).as_bytes();
 
         hex[0] = top[0];
         hex[1] = top[1];
@@ -41,12 +58,11 @@ impl HexRepresentation4 for u16{
 
         hex
     }
-}
-
-#[macro_export]
-macro_rules! hex {
-    ($byte:expr) => {
-        unsafe{ core::str::from_utf8_unchecked(&($byte).hex()) }
+    fn hex(self) -> &'static str{
+        static mut mem: [u8; 4] = [0,0,0,0];
+        unsafe{ mem = self.as_bytes() };
+        unsafe{ core::str::from_utf8_unchecked(&mem) }
     }
-}
 
+
+}

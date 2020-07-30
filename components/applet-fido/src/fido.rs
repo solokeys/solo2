@@ -102,7 +102,7 @@ impl applet::Applet for Fido {
                         }
                     }
                     _ => {
-                        info!("Unsupported ins for fido app {}", logging::hex!(ins)).ok();
+                        info!("Unsupported ins for fido app {}", ins.hex()).ok();
                         Err(Status::InstructionNotSupportedOrInvalid)
                     }
                 }
