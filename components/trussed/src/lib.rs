@@ -7,18 +7,6 @@
 // #[cfg(test)]
 // extern crate std;
 
-#[cfg(not(feature = "debug-logs"))]
-#[macro_use(info)]
-extern crate funnel;
-
-#[cfg(feature = "debug-logs")]
-#[macro_use(debug,info)]
-extern crate funnel;
-
-#[cfg(not(feature = "debug-logs"))]
-#[macro_use]
-macro_rules! debug { ($($tt:tt)*) => {{ core::result::Result::<(), core::convert::Infallible>::Ok(()) }} }
-
 pub mod api;
 pub mod client;
 pub mod config;
@@ -39,5 +27,6 @@ pub use ctap_types::{
     serde::{cbor_serialize, cbor_serialize_bytes, cbor_serialize_bytebuf, cbor_deserialize},
 };
 
+logging::add!(logger);
 // #[cfg(test)]
 // mod tests;

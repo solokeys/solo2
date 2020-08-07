@@ -1,7 +1,6 @@
 use core::convert::{TryFrom, TryInto};
 
-use cortex_m_semihosting::{dbg, hprintln};
-
+use crate::logger::{blocking};
 use crate::api::*;
 // use crate::config::*;
 use crate::error::Error;
@@ -47,7 +46,7 @@ Agree<R, S> for super::P256
         let public_key = load_public_key(resources, &public_id)?;
 
         // THIS IS THE CORE
-        hprintln!("free/total RAMFS blocks: {:?}/{:?}",
+        blocking::info!("free/total RAMFS blocks: {:?}/{:?}",
             resources.store.vfs().available_blocks(),
             resources.store.vfs().total_blocks(),
         ).ok();
@@ -249,7 +248,7 @@ Exists<R, S> for super::P256
 fn load_keypair<R: RngRead, S: Store>(resources: &mut ServiceResources<R, S>, key_id: &UniqueId)
     -> Result<nisty::Keypair, Error> {
 
-    // hprintln!("loading keypair").ok();
+    // blocking::info!("loading keypair").ok();
     let seed: [u8; 32] = resources
         .load_key(KeyType::Secret, Some(KeyKind::P256), &key_id)?
         .value.as_slice()
@@ -257,7 +256,7 @@ fn load_keypair<R: RngRead, S: Store>(resources: &mut ServiceResources<R, S>, ke
         .map_err(|_| Error::InternalError)?;
 
     let keypair = nisty::Keypair::generate_patiently(&seed);
-    // hprintln!("seed: {:?}", &seed).ok();
+    // blocking::info!("seed: {:?}", &seed).ok();
     Ok(keypair)
 }
 
@@ -270,7 +269,7 @@ Sign<R, S> for super::P256
     {
         let key_id = request.key.object_id;
 
-        // hprintln!("loading keypair");
+        // blocking::info!("loading keypair");
         let keypair = load_keypair(resources, &key_id)?;
 
         let native_signature = keypair.sign(&request.message);
@@ -285,11 +284,11 @@ Sign<R, S> for super::P256
         };
         // #[cfg(all(test, feature = "verbose-tests"))]
         // println!("p256 sig = {:?}", &native_signature);
-        // cortex_m_semihosting::hprintln!("p256 sig = {:?}", &our_signature).ok();
+        // blocking::info!("p256 sig = {:?}", &our_signature).ok();
 
-        hprintln!("P256 signature:").ok();
-        // hprintln!("msg: {:?}", &request.message).ok();
-        // hprintln!("sig: {:?}", &our_signature).ok();
+        blocking::info!("P256 signature:").ok();
+        // blocking::info!("msg: {:?}", &request.message).ok();
+        // blocking::info!("sig: {:?}", &our_signature).ok();
 
         // return signature
         Ok(reply::Sign { signature: our_signature })
@@ -306,21 +305,21 @@ Sign<R, S> for super::P256Prehashed
         let key_id = request.key.object_id;
 
         let keypair = load_keypair(resources, &key_id).map_err(|e| {
-            dbg!("load keypair error {:?}", e);
+            blocking::info!("load keypair error {:?}", e).ok();
             e
         })?;
 
-        // hprintln!("keypair loaded").ok();
+        // blocking::info!("keypair loaded").ok();
 
         if request.message.len() != nisty::DIGEST_LENGTH {
-            hprintln!("wrong length").ok();
+            blocking::info!("wrong length").ok();
             return Err(Error::WrongMessageLength);
         }
         let message: [u8; 32] = request.message.as_slice().try_into().unwrap();
-        hprintln!("cast to 32B array").ok();
+        blocking::info!("cast to 32B array").ok();
 
         let native_signature = keypair.sign_prehashed(&message);
-        hprintln!("signed").ok();
+        blocking::info!("signed").ok();
 
         let our_signature = match request.format {
             SignatureSerialization::Asn1Der => {
@@ -332,11 +331,11 @@ Sign<R, S> for super::P256Prehashed
         };
         // #[cfg(all(test, feature = "verbose-tests"))]
         // println!("p256 sig = {:?}", &native_signature);
-        // cortex_m_semihosting::hprintln!("p256 sig = {:?}", &our_signature).ok();
+        // blocking::info!("p256 sig = {:?}", &our_signature).ok();
 
-        hprintln!("P256 ph signature:").ok();
-        // hprintln!("msg: {:?}", &request.message).ok();
-        // hprintln!("sig: {:?}", &our_signature).ok();
+        blocking::info!("P256 ph signature:").ok();
+        // blocking::info!("msg: {:?}", &request.message).ok();
+        // blocking::info!("sig: {:?}", &our_signature).ok();
 
         // return signature
         Ok(reply::Sign { signature: our_signature })

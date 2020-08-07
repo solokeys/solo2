@@ -1,7 +1,6 @@
 use core::convert::{TryFrom, TryInto};
 
-#[cfg(feature = "semihosting")]
-use cortex_m_semihosting::hprintln;
+use crate::logger::{info, blocking};
 pub use embedded_hal::blocking::rng::Read as RngRead;
 use heapless::ByteBuf;
 use interchange::Responder;
@@ -112,14 +111,13 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
     pub fn reply_to(&mut self, request: Request) -> Result<Reply, Error> {
         // TODO: what we want to do here is map an enum to a generic type
         // Is there a nicer way to do this?
-        // hprintln!("trussed request: {:?}", &request).ok();
-        // hprintln!("IFS/EFS/VFS available BEFORE: {}/{}/{}",
+        // blocking::info!("trussed request: {:?}", &request).ok();
+        // blocking::info!("IFS/EFS/VFS available BEFORE: {}/{}/{}",
         //       self.store.ifs().available_blocks().unwrap(),
         //       self.store.efs().available_blocks().unwrap(),
         //       self.store.vfs().available_blocks().unwrap(),
         // ).ok();
-        #[cfg(feature = "deep-semihosting-logs")]
-        hprintln!("trussed request: {:?}", &request).ok();
+        blocking::debug!("trussed request: {:?}", &request).ok();
         match request {
             Request::DummyRequest => {
                 // #[cfg(test)]
@@ -248,7 +246,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
                 };
                 let base_path = self.dataspace_path(&user_dir);
                 let base_path = self.namespace_path(&base_path);
-                hprintln!("base path {:?}", &base_path).ok();
+                blocking::info!("base path {:?}", &base_path).ok();
 
                 fn recursively_locate<S: 'static + crate::types::LfsStorage>(
                     fs: &'static crate::store::Fs<S>,
@@ -257,17 +255,17 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
                 )
                     -> Result<Option<PathBuf>, littlefs2::io::Error>
                 {
-                    // hprintln!("entering `rec-loc` with path {:?} and filename {:?}",
+                    // blocking::info!("entering `rec-loc` with path {:?} and filename {:?}",
                               // &path, filename).ok();
                     // let fs = store.vfs();
                     fs.read_dir_and_then(&path, |dir| {
-                        // hprintln!("looking in {:?}", &path).ok();
+                        // blocking::info!("looking in {:?}", &path).ok();
                         for (i, entry) in dir.enumerate() {
                             let entry = entry.unwrap();
                             let mut is_special_dir = PathBuf::from(entry.file_name()) == PathBuf::from(b".");
                             is_special_dir |= PathBuf::from(entry.file_name()) == PathBuf::from(b"..");
                             if (i < 2) != is_special_dir {
-                                // hprintln!("i = {}, is_special_dir = {:?}", i, is_special_dir).ok();
+                                // blocking::info!("i = {}, is_special_dir = {:?}", i, is_special_dir).ok();
                                 panic!("i = {}, is_special_dir = {:?}, filename = {:?}",
                                     i,
                                     is_special_dir,
@@ -276,19 +274,19 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
 
                             }
                             if i < 2 {
-                                // hprintln!(":: skipping {:?}", &entry.path()).ok();
+                                // blocking::info!(":: skipping {:?}", &entry.path()).ok();
                                 continue;
                             }
                             if entry.file_type().is_file() {
-                                // hprintln!(":: comparing with {:?}", entry.file_name()).ok();
+                                // blocking::info!(":: comparing with {:?}", entry.file_name()).ok();
                                 if PathBuf::from(entry.file_name()) == PathBuf::from(filename) {
-                                    hprintln!("found it").ok();
+                                    blocking::info!("found it").ok();
                                     return Ok(Some(PathBuf::from(entry.path())));
                                 }
                                 continue;
                             }
                             if entry.file_type().is_dir() {
-                                // hprintln!("recursing into {:?} with path {:?}",
+                                // blocking::info!("recursing into {:?} with path {:?}",
                                 //           &entry.file_name(),
                                 //           &entry.path(),
                                 //           ).ok();
@@ -315,10 +313,10 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
 
             Request::DebugDumpStore(_request) => {
 
-                hprintln!(":: PERSISTENT").ok();
+                blocking::info!(":: PERSISTENT").ok();
                 recursively_list(self.store.ifs(), PathBuf::from(b"/"));
 
-                hprintln!(":: VOLATILE").ok();
+                blocking::info!(":: VOLATILE").ok();
                 recursively_list(self.store.vfs(), PathBuf::from(b"/"));
 
                 fn recursively_list<S: 'static + crate::types::LfsStorage>(fs: &'static crate::store::Fs<S>, path: PathBuf) {
@@ -327,17 +325,17 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
                         for (i, entry) in dir.enumerate() {
                             let entry = entry.unwrap();
                             if i < 2 {
-                                // hprintln!("skipping {:?}", &entry.path()).ok();
+                                // blocking::info!("skipping {:?}", &entry.path()).ok();
                                 continue;
                             }
-                            hprintln!("{:?}", entry.path()).ok();
+                            blocking::info!("{:?}", entry.path()).ok();
                             if entry.file_type().is_dir() {
                                 recursively_list(fs, PathBuf::from(entry.path()));
                             }
                             if entry.file_type().is_file() {
                                 let _contents: Vec<u8, consts::U256> = fs.read(entry.path()).unwrap();
-                                // hprintln!("{} ?= {}", entry.metadata().len(), contents.len()).ok();
-                                // hprintln!("{:?}", &contents).ok();
+                                // blocking::info!("{} ?= {}", entry.metadata().len(), contents.len()).ok();
+                                // blocking::info!("{:?}", &contents).ok();
                             }
                         }
                         Ok(())
@@ -535,18 +533,17 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
 
                         if !found_last {
                             let name: PathBuf = name.into();
-                            // hprintln!("comparing {:} with last {:?}", &name, &last).ok();
+                            // blocking::info!("comparing {:} with last {:?}", &name, &last).ok();
                             // TODO: This failed when all bytes (including trailing null) were
                             // compared. It turned out that `last` had a trailing 240 instead.
                             if last == name {
                                 found_last = true;
-                                // hprintln!("found last").ok();
+                                // blocking::info!("found last").ok();
                             }
                             continue;
                         }
 
-                        // #[cfg(feature = "semihosting")]
-                        // hprintln!("next file found: {:?}", name.as_ref()).ok();
+                        // blocking::info!("next file found: {:?}", name.as_ref()).ok();
 
                         if let Some(user_attribute) = request.user_attribute.as_ref() {
                             let mut path = path.clone();
@@ -745,7 +742,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
     }
 
     pub fn denamespace_path(&self, path: &Path) -> PathBuf {
-        // hprintln!("denamespacing {:?}", path).ok();
+        // blocking::info!("denamespacing {:?}", path).ok();
         let bytes = path.as_ref().as_bytes();
         let absolute = bytes[0] == b'/';
         let offset = if absolute { 1 } else { 0 };
@@ -754,12 +751,12 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
             // oh oh oh
             .unwrap();
         let buf = PathBuf::from(&bytes[end_of_namespace + 1 + offset..]);
-        // hprintln!("buf out: {:?}", &buf).ok();
+        // blocking::info!("buf out: {:?}", &buf).ok();
         buf
     }
 
     pub fn dedataspace_path(&self, path: &Path) -> PathBuf {
-        // hprintln!("dedataspacing {:?}", path).ok();
+        // blocking::info!("dedataspacing {:?}", path).ok();
         let bytes = path.as_ref().as_bytes();
         let absolute = bytes[0] == b'/';
         let offset = if absolute { 1 } else { 0 };
@@ -768,7 +765,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
             // oh oh oh
             .unwrap();
         let buf = PathBuf::from(&bytes[end_of_dataspace + 1 + offset..]);
-        // hprintln!("buf out: {:?}", &buf).ok();
+        // blocking::info!("buf out: {:?}", &buf).ok();
         buf
     }
 
@@ -791,12 +788,11 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
     }
 
     pub fn store_key(&mut self, location: StorageLocation, key_type: KeyType, key_kind: KeyKind, key_material: &[u8]) -> Result<UniqueId, Error> {
-        // hprintln!("STORING {:?}", &key_kind).ok();
+        // blocking::info!("STORING {:?}", &key_kind).ok();
         let serialized_key = SerializedKey::try_from((key_kind, key_material))?;
 
         let mut buf = [0u8; 128];
         let serialized_bytes = crate::cbor_serialize(&serialized_key, &mut buf).map_err(|_| Error::CborError)?;
-
         let key_id = self.generate_unique_id()?;
         let path = self.key_path(key_type, &key_id);
 
@@ -844,7 +840,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
     pub fn load_key(&self, key_type: KeyType, key_kind: Option<KeyKind>, key_id: &UniqueId)
         -> Result<SerializedKey, Error>  {
 
-        // hprintln!("LOADING {:?}", &key_kind).ok();
+        // blocking::info!("LOADING {:?}", &key_kind).ok();
         let path = self.key_path(key_type, key_id);
 
         let location = match self.key_id_location(key_type, key_id) {
@@ -858,11 +854,10 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
 
         if let Some(kind) = key_kind {
             if serialized_key.kind != kind {
-                // hprintln!("wrong key kind, expected {:?} got {:?}", &kind, &serialized_key.kind).ok();
+                blocking::info!("wrong key kind, expected {:?} got {:?}", &kind, &serialized_key.kind).ok();
                 Err(Error::WrongKeyKind)?;
             }
         }
-
         Ok(serialized_key)
     }
 
@@ -911,8 +906,7 @@ impl<R: RngRead, S: Store> Service<R, S> {
 
             }
         }
-        #[cfg(feature = "deep-semihosting-logs")]
-        hprintln!("IFS/EFS/VFS available AFTER: {}/{}/{}",
+        blocking::debug!("IFS/EFS/VFS available AFTER: {}/{}/{}",
               self.resources.store.ifs().available_blocks().unwrap(),
               self.resources.store.efs().available_blocks().unwrap(),
               self.resources.store.vfs().available_blocks().unwrap(),

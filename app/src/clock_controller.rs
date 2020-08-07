@@ -11,7 +11,6 @@ use crate::hal::{
     drivers::clocks::Clocks,
 };
 use crate::types;
-use cortex_m_semihosting::{heprintln};
 use logging::info;
 
 // pub type DynamicClockController = Adc<hal::typestates::init_state::Enabled>;
@@ -119,7 +118,7 @@ impl DynamicClockController {
 
     /// Used for debugging to tune the ADC points
     pub fn evaluate(&mut self){
-        heprintln!("status = {:02X}", self.adc.stat.read().bits()).ok();
+        crate::logger::blocking::info!("status = {:02X}", self.adc.stat.read().bits()).ok();
         self.adc.cmdh1.modify(|_,w| unsafe { w
                                     .cmpen().bits(0)
                                 } );
@@ -130,7 +129,7 @@ impl DynamicClockController {
             }
             let result = self.adc.resfifo[0].read().bits();
             let sample = (result & 0xffff) as u16;
-            heprintln!("Vref bias = {}",sample).ok();
+            crate::logger::blocking::info!("Vref bias = {}",sample).ok();
         }
         self.adc.cmdh1.modify(|_,w| unsafe { w
                                     .cmpen().bits(0b11)

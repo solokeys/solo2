@@ -1,7 +1,6 @@
 use core::convert::{TryFrom, TryInto};
 
-// use cortex_m_semihosting::hprintln;
-
+use crate::logger::{debug};
 use crate::api::*;
 // use crate::config::*;
 use crate::error::Error;

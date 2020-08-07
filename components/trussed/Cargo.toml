@@ -12,8 +12,6 @@ block-modes = { version = "0.3.3", default-features = false }
 block-cipher-trait = { version = "0.6.2" }
 chacha20 = { version = "0.3.4" }
 chacha20poly1305 = { version = "0.3.3", default-features = false, features = ["heapless", "reduced-round"] }
-cortex-m-funnel = { version = "0.1.0-alpha.1" }
-cortex-m-semihosting = { version = "0.3.5", optional = true }
 # ctapcbor = { git = "https://github.com/nickray/ctapcbor", branch = "main" }
 # TODO: Currently, only depend on this for cose::P256PublicKey
 # --> would be good to remove dependency
@@ -37,6 +35,7 @@ ufmt = "0.1.0"
 cortex-m-rtic = "0.5.1"
 # lpc55-hal = "0.0.3"
 lpc55-hal = { git = "https://github.com/nickray/lpc55-hal", branch = "main" }
+logging = { path = "../logging" }
 
 [dependencies.heapless-bytes]
 # version = "0.1.0"
@@ -67,10 +66,13 @@ features = ["cose"]
 default = ["default-mechanisms"]
 verbose-tests = ["littlefs2/ll-assertions"]
 verbose-lfs = ["littlefs2/ll-assertions", "littlefs2/ll-trace"]
-debug-logs = []
-deep-semihosting-logs = ["semihosting"]
-semihosting = ["cortex-m-semihosting"]
-no-semihosting = ["cortex-m-semihosting/no-semihosting"]
+
+log-all = []
+log-none = []
+log-info = []
+log-debug = []
+log-warn = []
+log-error = []
 
 # mechanisms
 # default-mechanisms = ["aes256-cbc", "chacha8-poly1305", "ed25519", "hmac-sha256", "p256", "sha256", "trng"]
@@ -104,7 +106,3 @@ clients-5 = []
 [patch.crates-io]
 # heapless = { git = "https://github.com/nicolas-solokeys/heapless", branch = "bytebuf" }
 heapless = { path = "../../../heapless" }
-# cortex-m-semihosting = { git = "https://github.com/rust-embedded/cortex-m-semihosting" }
-cortex-m-semihosting = { path = "../../../cortex-m-semihosting" }
-ufmt = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty-enums" }
-ufmt-macros = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty-enums" }

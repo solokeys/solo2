@@ -9,3 +9,5 @@ pub use device::{
     Configuration,
     Register,
 };
+
+logging::add!(logger);

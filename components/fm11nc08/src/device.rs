@@ -27,11 +27,9 @@ use hal::{
     }
 };
 use crate::traits::nfc;
-use logging::hex;
 use logging::hex::*;
 
-// use cortex_m_semihosting::{dbg, hprint, hprintln, heprintln};
-use funnel::{
+use crate::logger::{
     info,
 };
 
@@ -448,7 +446,7 @@ where
             let count = self.read_reg(Register::FifoCount);
             info!("WL {}", count).ok();
             self.read_fifo(count);
-            logging::dump_hex(&self.packet[self.offset ..], count as usize);
+            logging::dump_hex(&self.packet[self.offset ..], count as usize).ok();
             self.offset += count as usize;
             if count == 32 {
                 info!("warning: potential ovflw").ok();

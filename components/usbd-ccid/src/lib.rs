@@ -15,3 +15,5 @@ pub mod types;
 // pub mod piv;
 
 pub use class::Ccid;
+
+logging::add!(logger);

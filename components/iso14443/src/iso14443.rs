@@ -8,7 +8,7 @@ use iso7816::{Response, Command, command::FromSliceError, Status};
 use interchange::Requester;
 use crate::types::ApduInterchange;
 use logging;
-use funnel::{
+use crate::logger::{
     info,
 };
 
@@ -365,7 +365,7 @@ where
         self.handle_block(&packet[.. packet_len as usize])?;
 
         info!(">>").ok();
-        logging::dump_hex(&self.buffer, self.buffer.len());
+        logging::dump_hex(&self.buffer, self.buffer.len()).ok();
         // logging::dump_hex(packet, l as usize);
 
         match Command::try_from(&self.buffer) {
@@ -487,7 +487,7 @@ where
         }
 
         info!("<<").ok();
-        if buffer.len() > 0 { logging::dump_hex(buffer, buffer.len()); }
+        if buffer.len() > 0 { logging::dump_hex(buffer, buffer.len()).ok(); }
 
         Ok(())
     }

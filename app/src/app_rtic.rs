@@ -11,20 +11,14 @@ use hal::traits::wg::timer::Cancel;
 use hal::traits::wg::timer::CountDown;
 use hal::time::*;
 
-use funnel::info;
-
-#[cfg(feature = "debug-app")]
-#[macro_use(debug)]
-extern crate funnel;
-
-#[cfg(not(feature = "debug-app"))]
-#[macro_use]
-macro_rules! debug { ($($tt:tt)*) => {{ core::result::Result::<(), core::convert::Infallible>::Ok(()) }} }
-
 use rtic::cyccnt::{Instant, U32Ext as _};
 
 const CLOCK_FREQ: u32 = 96_000_000;
 const PERIOD: u32 = CLOCK_FREQ/2;
+
+use logging::hex::*;
+logging::add!(logger);
+use logger::{info,debug};
 
 #[rtic::app(device = app::hal::raw, peripherals = true, monotonic = rtic::cyccnt::CYCCNT)]
 const APP: () = {
@@ -121,7 +115,7 @@ const APP: () = {
                 // Only drain outside of a 1s window of any NFC activity.
                 #[cfg(feature = "log-serial")]
                 app::drain_log_to_serial(&mut serial);
-                #[cfg(feature = "log-semihosting")]
+                #[cfg(not(feature = "log-serial"))]
                 app::drain_log_to_semihosting();
             }
 
@@ -194,13 +188,13 @@ const APP: () = {
         let intstat = usb.intstat.read().bits();
         let mask = inten & intstat;
         if mask != 0 {
-            debug!("uncleared interrupts: {:?}", mask).ok();
+            info!("uncleared interrupts: {:?}", mask).ok();
             for i in 0..5 {
                 if mask & (1 << 2*i) != 0 {
-                    debug!("EP{}OUT", i).ok();
+                    info!("EP{}OUT", i).ok();
                 }
                 if mask & (1 << (2*i + 1)) != 0 {
-                    debug!("EP{}IN", i).ok();
+                    info!("EP{}IN", i).ok();
                 }
             }
             // Serial sends a stray 0x70 ("p") to CDC-ACM "data" OUT endpoint (3)
@@ -231,7 +225,7 @@ const APP: () = {
         }
 
         c.schedule.toggle_red(Instant::now() + PERIOD.cycles()).unwrap();
-        info!("toggled red LED #{}", TOGGLES).ok();
+        info!("toggled red LED #{}", *TOGGLES).ok();
 
         *TOGGLES += 1;
     }

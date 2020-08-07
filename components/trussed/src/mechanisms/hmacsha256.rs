@@ -1,8 +1,6 @@
 use core::convert::TryInto;
 
-#[cfg(feature = "semihosting")]
-use cortex_m_semihosting::hprintln;
-
+use crate::logger::blocking;
 use crate::api::*;
 // use crate::config::*;
 use crate::error::Error;
@@ -29,7 +27,7 @@ Sign<R, S> for super::HmacSha256
         // let shared_secret = &serialized_key.value;
         let l = shared_secret.as_slice().len();
         if (l & 0xf) != 0 {
-            hprintln!("wrong key length, expected multiple of 16, got {}", l).ok();
+            blocking::info!("wrong key length, expected multiple of 16, got {}", l).ok();
             Err(Error::WrongKeyKind)?;
         }
         // resources.load_key(&path, KeyKind::SharedSecret32, &mut shared_secret)?;

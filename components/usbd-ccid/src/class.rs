@@ -1,6 +1,6 @@
 use core::convert::TryFrom;
 
-use cortex_m_semihosting::hprintln;
+use crate::logger::{blocking};
 use interchange::Requester;
 
 use crate::{
@@ -77,7 +77,7 @@ where
     }
 
     fn poll(&mut self) {
-        // hprintln!("poll of ccid").ok();
+        // blocking::info!("poll of ccid").ok();
         self.pipe.poll_app();
         self.pipe.maybe_send_packet();
     }
@@ -134,7 +134,7 @@ where
                 }
 
                 Err(()) => {
-                    hprintln!("unexpected request: {}", request).ok();
+                    blocking::info!("unexpected request: {}", request).ok();
                 }
             }
         }
@@ -167,7 +167,7 @@ where
                 }
 
                 Err(()) => {
-                    hprintln!("unexpected request: {}", request).ok();
+                    blocking::info!("unexpected request: {}", request).ok();
                 }
             }
         }

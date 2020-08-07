@@ -2,3 +2,5 @@
 
 pub mod applet;
 pub mod dispatch;
+
+logging::add!(logger);

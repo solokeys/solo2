@@ -25,7 +25,7 @@ pub enum InterfaceType{
     Contactless,
 }
 
-use logging;
+use crate::logger::info;
 
 use interchange::Responder;
 
@@ -206,7 +206,7 @@ impl ApduDispatch
             Ok(AppletResponse::Defer) => {}
 
             Err(status) => {
-                logging::info!("applet error").ok();
+                info!("applet error").ok();
                 use InterfaceType::*;
                 match self.current_interface {
                     Contactless =>
