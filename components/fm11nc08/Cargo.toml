@@ -8,10 +8,8 @@ edition = "2018"
 
 [dependencies]
 # cortex-m-funnel = "0.1.0-alpha.1"
-cortex-m-funnel = { git = "https://github.com/conorpp/cortex-m-funnel" }
 cortex-m = "0.6.1"
 cortex-m-rt = "0.6.10"
-cortex-m-semihosting = "0.3.5"
 nb = "0.1"
 ufmt = "0.1.0"
 
@@ -20,3 +18,11 @@ logging = {path = "../logging"}
 [dependencies.lpc55-hal]
 git = "https://github.com/nickray/lpc55-hal"
 branch = "main"
+
+[features]
+log-all = []
+log-none = []
+log-info = []
+log-debug = []
+log-warn = []
+log-error = []

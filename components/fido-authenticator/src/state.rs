@@ -1,6 +1,6 @@
 use core::cmp::Ordering;
 
-use cortex_m_semihosting::hprintln;
+use crate::logger::{blocking};
 
 use trussed::{
     block, syscall,
@@ -9,7 +9,6 @@ use trussed::{
     types::{
         self,
         ObjectHandle as Key,
-        SpecialId,
         UniqueId,
         StorageLocation,
         Mechanism,
@@ -200,7 +199,7 @@ impl PersistentState {
         ).map_err(|_| Error::Other)?.data;
 
         let previous_state = trussed::cbor_deserialize(&data).map_err(|_| Error::Other);
-        // cortex_m_semihosting::hprintln!("previously persisted state:\n{:?}", &previous_state).ok();
+        // cortex_m_semihosting::blocking::info!("previously persisted state:\n{:?}", &previous_state).ok();
         previous_state
     }
 
@@ -240,7 +239,7 @@ impl PersistentState {
         let now = self.timestamp;
         self.timestamp += 1;
         self.save(crypto)?;
-        // cortex_m_semihosting::hprintln!("https://time.is/{}", now).ok();
+        // cortex_m_semihosting::blocking::info!("https://time.is/{}", now).ok();
         Ok(now)
     }
 
@@ -382,7 +381,7 @@ impl RuntimeState {
 
     pub fn rotate_pin_token<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) -> Key {
         // TODO: need to rotate key agreement key?
-        hprintln!("rotatating pin token!!").ok();
+        blocking::info!("rotatating pin token!!").ok();
         if let Some(token) = self.pin_token { syscall!(crypto.delete(token)); }
         let token = syscall!(crypto.generate_hmacsha256_key(StorageLocation::Volatile)).key;
         self.pin_token = Some(token);

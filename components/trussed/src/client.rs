@@ -2,6 +2,7 @@ use core::marker::PhantomData;
 
 use interchange::Requester;
 
+use crate::logger::{info, blocking};
 use crate::api::*;
 // use crate::config::*;
 use crate::error::*;
@@ -554,7 +555,7 @@ impl<Syscall: crate::pipe::Syscall> Client<Syscall> {
     pub fn unsafe_inject_totp_key<'c>(&'c mut self, raw_key: &[u8; 20], persistence: StorageLocation)
         -> core::result::Result<FutureResult<'c, reply::UnsafeInjectKey>, ClientError>
     {
-        cortex_m_semihosting::hprintln!("{}B: raw key: {:X?}", raw_key.len(), raw_key).ok();
+        blocking::info!("{}B: raw key: {:X?}", raw_key.len(), raw_key).ok();
         self.raw.request(request::UnsafeInjectKey {
             mechanism: Mechanism::Totp,
             raw_key: ShortData::from_slice(raw_key).unwrap(),

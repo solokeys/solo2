@@ -1,7 +1,7 @@
 use core::convert::TryFrom;
 
-use cortex_m_semihosting::hprintln;
 use interchange::Requester;
+use crate::logger::{blocking};
 
 use crate::{
     constants::*,
@@ -133,20 +133,20 @@ where
             if self.long_packet_missing > 0 {
                 return;
             } else {
-                // hprintln!("pl {}, p {}, missing {}, in_chain {}", self.packet_len, packet.len(), self.long_packet_missing, self.in_chain).ok();
-                // hprintln!("packet: {:X?}", &self.ext_packet).ok();
+                // blocking::info!("pl {}, p {}, missing {}, in_chain {}", self.packet_len, packet.len(), self.long_packet_missing, self.in_chain).ok();
+                // blocking::info!("packet: {:X?}", &self.ext_packet).ok();
                 self.receiving_long = false;
             }
         }
 
-        // hprintln!("handle packet").ok();
-        // hprintln!("{:X?}", &packet).ok();
+        // blocking::info!("handle packet").ok();
+        // blocking::info!("{:X?}", &packet).ok();
         // let p = packet.clone();
         // match PacketCommand::try_from(packet) {
         match PacketCommand::try_from(self.ext_packet.clone()) {
             Ok(command) => {
                 self.seq = command.seq();
-                // hprintln!("{:?}", &command).ok();
+                // blocking::info!("{:?}", &command).ok();
 
                 // happy path
                 match command {
@@ -169,7 +169,7 @@ where
             }
 
             Err(PacketError::UnknownCommand(_c)) => {
-                // hprintln!("{:X?}", &p).ok();
+                // blocking::info!("{:X?}", &p).ok();
                 // panic!("unknown command byte 0x{:x}", c);
 
             }
@@ -182,15 +182,15 @@ where
         //
         // conts: BeginsAndEnds, Begins, Ends, Continues, ExpectDataBlock,
 
-        // hprintln!("handle xfrblock").ok();
-        // hprintln!("{:X?}", &command).ok();
+        // blocking::info!("handle xfrblock").ok();
+        // blocking::info!("{:X?}", &command).ok();
         match self.state {
 
             State::Idle => {
                 // invariant: BUFFER_SIZE >= PACKET_SIZE
                 match command.chain() {
                     Chain::BeginsAndEnds => {
-                        hprintln!("begins and ends").ok();
+                        blocking::info!("begins and ends").ok();
                         self.message.clear();
                         self.message.extend_from_slice(command.data()).unwrap();
                         self.call_app();
@@ -198,7 +198,7 @@ where
                         // self.send_empty_datablock();
                     }
                     Chain::Begins => {
-                        hprintln!("begins").ok();
+                        blocking::info!("begins").ok();
                         self.message.clear();
                         self.message.extend_from_slice(command.data()).unwrap();
                         self.state = State::Receiving;
@@ -211,13 +211,13 @@ where
             State::Receiving => {
                 match command.chain() {
                     Chain::Continues => {
-                        hprintln!("continues").ok();
+                        blocking::info!("continues").ok();
                         assert!(command.data().len() + self.message.len() <= MAX_MSG_LENGTH);
                         self.message.extend_from_slice(command.data()).unwrap();
                         self.send_empty_datablock(Chain::ExpectingMore);
                     }
                     Chain::Ends => {
-                        hprintln!("ends").ok();
+                        blocking::info!("ends").ok();
                         assert!(command.data().len() + self.message.len() <= MAX_MSG_LENGTH);
                         self.message.extend_from_slice(command.data()).unwrap();
                         self.call_app();
@@ -228,8 +228,8 @@ where
             }
 
             State::Processing => {
-                // hprintln!("handle xfrblock").ok();
-                // hprintln!("{:X?}", &command).ok();
+                // blocking::info!("handle xfrblock").ok();
+                // blocking::info!("{:X?}", &command).ok();
                 panic!("ccid pipe unexpectedly received command while in processing state: {:?}", &command);
             }
 
@@ -249,19 +249,19 @@ where
     }
 
     fn call_app(&mut self) {
-        hprintln!("called piv app").ok();
+        blocking::info!("called piv app").ok();
         let command = match iso7816::Command::try_from(&self.message) {
             Ok(command) => command,
             Err(_error) => {
-                hprintln!("could not parse command from APDU, ignoring {:?}", &self.message).ok();
-                hprintln!("{:?}", &_error).ok();
+                blocking::info!("could not parse command from APDU, ignoring {:?}", &self.message).ok();
+                blocking::info!("{:?}", &_error).ok();
                 return;
             }
         };
         self.interchange.request(command).expect("could not deposit command");
             // apdu::Command::try_from(&self.message).unwrap()
         // ).expect("could not deposit command");
-        // hprintln!("set ccid state to processing").ok();
+        // blocking::info!("set ccid state to processing").ok();
         self.state = State::Processing;
         // todo!("have message of length {} to dispatch", self.message.len());
     }
@@ -272,11 +272,11 @@ where
         //     if i < 100 {
         //         i += 1;
         //     } else {
-        //         hprintln!(".").ok();
+        //         blocking::info!(".").ok();
         //     }
         // }
         if let State::Processing = self.state {
-            // hprintln!("processing, checking for response, interchange state {:?}",
+            // blocking::info!("processing, checking for response, interchange state {:?}",
             //           self.interchange.state()).ok();
 
             if let Some(response) = self.interchange.take_response() {
@@ -314,7 +314,7 @@ where
         };
 
         let primed_packet = DataBlock::new(self.seq, chain, chunk);
-        // hprintln!("priming {:?}", &primed_packet).ok();
+        // blocking::info!("priming {:?}", &primed_packet).ok();
         self.outbox = Some(primed_packet.into());
 
         // fast-lane response attempt
@@ -412,13 +412,13 @@ where
             match self.write.write(packet) {
                 Ok(n) if n == packet.len() => {
                     // if packet.len() > 8 {
-                    //     hprintln!("--> sent {:?}... successfully", &packet[..8]).ok();
+                    //     blocking::info!("--> sent {:?}... successfully", &packet[..8]).ok();
                     // } else {
-                    //     hprintln!("--> sent {:?} successfully", packet).ok();
+                    //     blocking::info!("--> sent {:?} successfully", packet).ok();
                     // }
 
                     if needs_zlp {
-                        // hprintln!("sending ZLP").ok();
+                        // blocking::info!("sending ZLP").ok();
                         self.outbox = Some(RawPacket::new());
                     } else {
                         self.outbox = None;
@@ -430,7 +430,7 @@ where
                 Err(UsbError::WouldBlock) => {
                     // fine, can't write try later
                     // this shouldn't happen probably
-                    hprintln!("waiting to send").ok();
+                    blocking::info!("waiting to send").ok();
                 },
 
                 Err(_) => panic!("unexpected send error"),
@@ -446,9 +446,9 @@ where
     //     self.write.address()
     // }
 
-    pub fn expect_abort(&mut self, slot: u8, seq: u8) {
+    pub fn expect_abort(&mut self, slot: u8, _seq: u8) {
         debug_assert!(slot == 0);
-        hprintln!("ABORT expected for seq = {}", seq).ok();
+        blocking::info!("ABORT expected for seq = {}", _seq).ok();
         todo!();
     }
 

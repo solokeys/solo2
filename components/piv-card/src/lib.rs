@@ -3,9 +3,11 @@
 pub mod constants;
 pub mod state;
 
+logging::add!(logger);
+use logger::{blocking};
+
 use core::convert::{TryFrom, TryInto};
 
-use cortex_m_semihosting::{dbg, hprintln};
 use heapless::consts;
 use iso7816::{
     Command, Instruction, Status,
@@ -54,7 +56,7 @@ impl App
     fn try_handle(&mut self, command: &Command) -> ResponseResult {
 
         // TEMP
-        // dbg!(self.state.persistent(&mut self.trussed).timestamp(&mut self.trussed));
+        // blocking::dbg!(self.state.persistent(&mut self.trussed).timestamp(&mut self.trussed));
 
         // handle CLA
         // - command chaining not supported
@@ -102,14 +104,14 @@ impl App
             return Err(Status::LogicalChannelNotSupported);
         }
 
-        // hprintln!("CLA = {:?}", &command.class()).ok();
-        hprintln!("INS = {:?}, P1 = {:X}, P2 = {:X}",
+        // blocking::info!("CLA = {:?}", &command.class()).ok();
+        blocking::info!("INS = {:?}, P1 = {:X}, P2 = {:X}",
                   &command.instruction(),
                   command.p1, command.p2,
                   ).ok();
-        // hprintln!("extended = {:?}", command.extended).ok();
+        // blocking::info!("extended = {:?}", command.extended).ok();
 
-        // hprintln!("INS = {:?}" &command.instruction()).ok();
+        // blocking::info!("INS = {:?}" &command.instruction()).ok();
         match command.instruction() {
             Instruction::GetData => self.get_data(command),
             Instruction::PutData => self.put_data(command),
@@ -249,10 +251,10 @@ impl App
 
         let mechanism = trussed::types::Mechanism::Ed25519;
         let commitment = data; // 32B of data // 150B for ed25519
-        // dbg!(commitment);
+        // blocking::dbg!(commitment);
         let serialization = trussed::types::SignatureSerialization::Asn1Der; // ed25519 disregards
 
-        hprintln!("looking for keyreference").ok();
+        blocking::info!("looking for keyreference").ok();
         let key_handle = match self.state.persistent(&mut self.trussed).keys.authentication_key {
             Some(key) => key,
             None => return Err(Status::KeyReferenceNotFound),
@@ -261,11 +263,11 @@ impl App
         let signature = block!(self.trussed.sign(mechanism, key_handle, commitment, serialization).unwrap())
             .map_err(|error| {
                 // NoSuchKey
-                dbg!(error);
+                blocking::dbg!(error).ok();
                 Status::UnspecifiedNonpersistentExecutionError }
             )?
             .signature;
-        // dbg!(&signature);
+        // blocking::dbg!(&signature);
 
         let mut der: Der<consts::U256> = Default::default();
         // 7c = Dynamic Authentication Template tag
@@ -273,13 +275,13 @@ impl App
             // 82 = response
             der.raw_tlv(0x82, &signature)
         }).unwrap();
-        // dbg!(&der);
+        // blocking::dbg!(&der);
 
         let response_data: ResponseData = der.to_byte_buf();
-        // dbg!(&response_data);
+        // blocking::dbg!(&response_data);
         return Ok(response_data);
 
-        // dbg!("NOW WE SHOULD WORK");
+        // blocking::dbg!("NOW WE SHOULD WORK");
         // Err(Status::FunctionNotSupported)
     }
 
@@ -310,7 +312,7 @@ impl App
         self.state.runtime.command_cache = None;
 
         if &our_challenge != response {
-            dbg!(our_challenge, response);
+            blocking::dbg!(our_challenge, response).ok();
             return Err(Status::IncorrectDataParameter);
         }
 
@@ -334,7 +336,7 @@ impl App
         }).unwrap();
 
         let response_data: ResponseData = der.to_byte_buf();
-        // dbg!(&response_data);
+        // blocking::dbg!(&response_data);
         return Ok(response_data);
     }
 
@@ -568,7 +570,7 @@ impl App
                 ))
             })
         }).map_err(|e| {
-                hprintln!("error parsing GenerateAsymmetricKeypair: {:?}", &e).ok();
+                blocking::info!("error parsing GenerateAsymmetricKeypair: {:?}", &e).ok();
                 Status::IncorrectDataParameter
         })?;
 
@@ -595,20 +597,20 @@ impl App
         // let mechanism = trussed::types::Mechanism::P256Prehashed;
         // let mechanism = trussed::types::Mechanism::P256;
         // let commitment = &[37u8; 32];
-        // // dbg!(commitment);
+        // // blocking::dbg!(commitment);
         // let serialization = trussed::types::SignatureSerialization::Asn1Der;
-        // // dbg!(&key);
+        // // blocking::dbg!(&key);
         // let signature = block!(self.trussed.sign(mechanism, key.clone(), commitment, serialization).map_err(|e| {
-        //     dbg!(e);
+        //     blocking::dbg!(e);
         //     e
         // }).unwrap())
         //     .map_err(|error| {
         //         // NoSuchKey
-        //         dbg!(error);
+        //         blocking::dbg!(error);
         //         Status::UnspecifiedNonpersistentExecutionError }
         //     )?
         //     .signature;
-        // dbg!(&signature);
+        // blocking::dbg!(&signature);
 
         self.state.persistent(&mut self.trussed).keys.authentication_key = Some(key);
         self.state.persistent(&mut self.trussed).save(&mut self.trussed);
@@ -626,7 +628,7 @@ impl App
             trussed::types::KeySerialization::Raw,
         )).serialized_key;
 
-        // hprintln!("supposed SEC1 pubkey, len {}: {:X?}", serialized_public_key.len(), &serialized_public_key).ok();
+        // blocking::info!("supposed SEC1 pubkey, len {}: {:X?}", serialized_public_key.len(), &serialized_public_key).ok();
 
         // P256 SEC1 has 65 bytes, Ed25519 pubkeys have 32
         // let l2 = 65;
@@ -640,7 +642,7 @@ impl App
     }
 
     fn put_data(&mut self, command: &Command) -> ResponseResult {
-        hprintln!("PutData").ok();
+        blocking::info!("PutData").ok();
         if command.p1 != 0x3f || command.p2 != 0xff {
             return Err(Status::IncorrectP1OrP2Parameter);
         }
@@ -666,11 +668,11 @@ impl App
             Ok((data_object.as_slice_less_safe(), data.as_slice_less_safe()))
         // }).unwrap();
         }).map_err(|e| {
-                hprintln!("error parsing PutData: {:?}", &e).ok();
+                blocking::info!("error parsing PutData: {:?}", &e).ok();
                 Status::IncorrectDataParameter
         })?;
 
-        // hprintln!("PutData in {:?}: {:?}", data_object, data).ok();
+        // blocking::info!("PutData in {:?}: {:?}", data_object, data).ok();
 
         if data_object == &[0x5f, 0xc1, 0x09] {
             // "Printed Information", supposedly
@@ -753,7 +755,7 @@ impl App
         }
 
         // lookup what is asked for
-        hprintln!("looking up {:?}", data).ok();
+        blocking::info!("looking up {:?}", data).ok();
 
         // TODO: check security status, else return Status::SecurityStatusNotSatisfied
 
@@ -797,7 +799,7 @@ impl App
             DataObjects::X509CertificateForPivAuthentication => {
                 // return Err(Status::NotFound);
 
-                // hprintln!("loading 9a cert").ok();
+                // blocking::info!("loading 9a cert").ok();
                 // it seems like fetching this certificate is the way Filo's agent decides
                 // whether the key is "already setup":
                 // https://github.com/FiloSottile/yubikey-agent/blob/8781bc0082db5d35712a2244e3ab3086f415dd59/setup.go#L69-L70
@@ -805,10 +807,10 @@ impl App
                     trussed::types::StorageLocation::Internal,
                     trussed::types::PathBuf::from(b"authentication-key.x5c"),
                 ).unwrap()).map_err(|_| {
-                    // hprintln!("error loading: {:?}", &e).ok();
+                    // blocking::info!("error loading: {:?}", &e).ok();
                     Status::NotFound
                 } )?.data;
-                // hprintln!("got the data: {:?}", &data).ok();
+                // blocking::info!("got the data: {:?}", &data).ok();
 
                 let mut der: Der<consts::U1024> = Default::default();
                 der.raw_tlv(0x53, &data).unwrap();
@@ -826,7 +828,7 @@ impl App
     }
 
     fn yubico_piv_extension(&mut self, command: &Command, instruction: YubicoPivExtension) -> ResponseResult {
-        hprintln!("yubico extension: {:?}", &instruction).ok();
+        blocking::info!("yubico extension: {:?}", &instruction).ok();
         match instruction {
             YubicoPivExtension::GetSerial => {
                 // make up a 4-byte serial

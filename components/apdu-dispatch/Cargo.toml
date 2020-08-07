@@ -22,5 +22,12 @@ iso14443 = {path = "../iso14443"}
 default = []
 std = ["logging/std"]
 
+log-all = []
+log-none = []
+log-info = []
+log-debug = []
+log-warn = []
+log-error = []
+
 [patch.crates-io]
 heapless = { git = "https://github.com/nicolas-solokeys/heapless", branch = "bytebuf" }

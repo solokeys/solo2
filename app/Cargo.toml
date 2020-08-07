@@ -12,11 +12,9 @@ name = "rtic"
 path = "src/app_rtic.rs"
 
 [dependencies]
-cortex-m-funnel = { version = "0.1.0-alpha.1" }
 cortex-m-rtic = "0.5.1"
-cortex-m-semihosting = { version = "0.3.5", optional = true }
 heapless = { version = "0.5.5", features = ["ufmt"] }
-nb = "1"
+nb = "0.1"
 ufmt = "0.1.0"
 usb-device = "0.2.3"
 usbd-serial = "0.1.0"
@@ -53,47 +51,30 @@ panic-semihosting = { version = "0.5.3", features = ["jlink-quirks"] }
 littlefs2 = { git = "https://github.com/nickray/littlefs2", branch = "closures-instead-of-ub" }
 
 [features]
-default = []
+default = ["board-lpcxpresso"]
 # use this to format internal flash filesystem,
 # for instance to hard reset
 format-storage = []
-no-semihosting = ["cortex-m-semihosting/no-semihosting"]
 
 board-lpcxpresso = ["lpcxpresso55"]
 board-prototype = ["prototype-bee"]
+
+log-serial = []
 
 highspeed = []
 serial = []
 nfc = []
 
-# log debug! level of app itself?
-debug-app = []
-# log debug! level of component libraries?
-debug-trussed = ["trussed/debug-logs"]
-debug-fido-authenticator = ["fido-authenticator/debug-logs"]
-
-# This would need funnel features to be additive, not subtractive
-# debug = [] # "cortex-m-funnel/release_max_level_debug"]
-
-# Not sure if this approach works either, code size doesn't seem to change
-disable-debug = ["cortex-m-funnel/release_max_level_info"]
-
-# destination for all logs, by default none
-# log-itm = []
-# log-rtt = []
-log-serial = []
-log-semihosting = ["cortex-m-semihosting"]
-
-trace-trussed-ram = ["trussed/deep-semihosting-logs"]
-trussed-semihosting = ["trussed/semihosting"]
-fido-authenticator-semihosting = ["fido-authenticator/semihosting"]
-semihost-raw-responses = ["usbd-ctaphid/semihost-responses"]
+log-all = []
+log-none = []
+log-info = []
+log-debug = []
+log-warn = []
+log-error = []
 
 # patch dependencies like so to test local changes
 
 [patch.crates-io]
-cortex-m-funnel = { git = "https://github.com/conorpp/cortex-m-funnel" }
-cortex-m-semihosting = { git = "https://github.com/rust-embedded/cortex-m-semihosting" }
 heapless = { git = "https://github.com/nicolas-solokeys/heapless", branch = "bytebuf" }
 ufmt = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty-enums" }
 ufmt-macros = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty-enums" }
@@ -101,6 +82,6 @@ ufmt-macros = { git = "https://github.com/nickray/ufmt", branch = "nickray-deriv
 [profile.release]
 codegen-units = 1
 # lto = true
-# opt-level = "s"
+opt-level = "s"
 incremental = false
 debug = true

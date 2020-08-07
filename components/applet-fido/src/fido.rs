@@ -9,7 +9,7 @@ use ctap_types::{
     serde::{cbor_serialize},
 };
 
-use logging::info;
+use crate::logger::info;
 use logging::hex::*;
 
 use interchange::Requester;

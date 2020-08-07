@@ -17,6 +17,8 @@ pub mod class;
 pub use class::CtapHid;
 pub mod pipe;
 
+logging::add!(logger);
+
 // #[cfg(feature = "insecure-ram-authenticator")]
 // pub mod insecure;
 

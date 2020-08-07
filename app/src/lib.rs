@@ -1,6 +1,5 @@
 #![no_std]
 
-// use cortex_m_semihosting::{heprintln};
 // panic handler, depending on debug/release build
 // BUT: need to run in release anyway, to have USB work
 // #[cfg(debug_assertions)]
@@ -19,6 +18,8 @@ pub use lpcxpresso55 as board;
 
 #[cfg(feature = "board-prototype")]
 pub use prototype_bee as board;
+
+logging::add!(logger);
 
 use c_stubs as _;
 
@@ -61,7 +62,6 @@ use usbd_ctaphid::CtapHid;
 use usb_device::device::{UsbDeviceBuilder, UsbVidPid};
 // bring traits in scope
 use hal::prelude::*;
-use funnel::info;
 use hal::traits::wg::digital::v2::InputPin;
 
 
@@ -77,16 +77,16 @@ fn configure_fm11_if_needed(
 
     if current_regu_config == 0xff {
         // No nfc chip connected
-        info!("No NFC chip connected").ok();
+        logger::info!("No NFC chip connected").ok();
         return Err(());
     }
 
     if  current_regu_config != REGU_CONFIG {
     // if true {
-        info!("{}", fm.dump_eeprom() ).ok();
-        info!("{}", fm.dump_registers() ).ok();
+        logger::info!("{}", fm.dump_eeprom() ).ok();
+        logger::info!("{}", fm.dump_registers() ).ok();
 
-        info!("writing EEPROM").ok();
+        logger::info!("writing EEPROM").ok();
 
         fm.configure(Configuration{
             regu: REGU_CONFIG,
@@ -104,7 +104,7 @@ fn configure_fm11_if_needed(
             nfc:    (0b0 << 1) |       (0b00 << 2),
         }, timer);
     } else {
-        info!("EEPROM already initialized.").ok();
+        logger::info!("EEPROM already initialized.").ok();
     }
 
     // disable all interrupts except RxStart
@@ -392,7 +392,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
                 Some(iso14443::Iso14443::new(fm, contactless_requester))
             } else {
                 if is_passive_mode {
-                    info!("Shouldn't get passive signal when there's no chip!").ok();
+                    logger::info!("Shouldn't get passive signal when there's no chip!").ok();
                 }
                 None
             }
@@ -436,7 +436,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
     rgb.turn_off();
     delay_timer.cancel().ok();
-    info!("init took {} ms",perf_timer.lap().0/1000).ok();
+    logger::info!("init took {} ms",perf_timer.lap().0/1000).ok();
 
     (
         authnr,
@@ -461,8 +461,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 //
 // Logging
 //
-
-use funnel::{funnel, Drain};
+use logging::{funnel,Drain};
 use rtic::Mutex;
 funnel!(NVIC_PRIO_BITS = hal::raw::NVIC_PRIO_BITS, {
     0: 2048,
@@ -499,7 +498,6 @@ pub fn drain_log_to_serial(mut serial: impl Mutex<T = types::SerialClass>) {
 }
 
 pub fn drain_log_to_semihosting() {
-    use cortex_m_semihosting::{hprint, hprintln};
     let drains = Drain::get_all();
     let mut buf = [0u8; 64];
 
@@ -510,8 +508,8 @@ pub fn drain_log_to_semihosting() {
                 break 'l;
             }
             match core::str::from_utf8(&buf[..n]) {
-                Ok(string) => hprint!(string).ok(),
-                Err(e) => hprintln!("ERROR {:?}", &e).ok(),
+                Ok(string) => logging::write!(string).ok(),
+                Err(e) => logging::blocking::error!("ERROR {:?}", &e).ok(),
             };
         }
     }

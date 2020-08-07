@@ -2,10 +2,9 @@
 
 use core::convert::{TryFrom, TryInto};
 
-#[cfg(feature = "semihosting")]
-#[allow(unused_imports)]
+logging::add!(logger);
 
-use logging::{info,debug};
+use logger::{info};
 
 use trussed::{
     block, syscall,
@@ -221,8 +220,7 @@ impl<UP: UserPresence> Authenticator<UP> {
                         // 0x6
                         ctap2::Request::ClientPin(parameters) => {
                             let response = self.client_pin(&parameters);
-                            // #[cfg(feature = "semihosting")]
-                            // hprintln!("{:?}", &response).ok();
+                            // blocking::info!("{:?}", &response).ok();
                             self.interchange.respond(
                                 match response {
                                     Ok(response) => Ok(Response::Ctap2(ctap2::Response::ClientPin(response))),
@@ -240,7 +238,7 @@ impl<UP: UserPresence> Authenticator<UP> {
                                 match response {
                                     Ok(response) => {
                                         // let mut buf = [0u8; 512];
-                                        // hprintln!("{:?}", ctap_types::serde::cbor_serialize(&response, &mut buf)).ok();
+                                        // blocking::info!("{:?}", ctap_types::serde::cbor_serialize(&response, &mut buf)).ok();
                                         Ok(Response::Ctap2(ctap2::Response::CredentialManagement(response)))
                                     }
                                     Err(error) => Err(error)
@@ -279,8 +277,7 @@ impl<UP: UserPresence> Authenticator<UP> {
     fn client_pin(&mut self, parameters: &ctap2::client_pin::Parameters) -> Result<ctap2::client_pin::Response> {
         use ctap2::client_pin::PinV1Subcommand as Subcommand;
         debug!("processing CP").ok();
-        // #[cfg(feature = "semihosting")]
-        // hprintln!("{:?}", parameters).ok();
+        // blocking::info!("{:?}", parameters).ok();
 
         if parameters.pin_protocol != 1{
             return Err(Error::InvalidParameter);
@@ -459,7 +456,7 @@ impl<UP: UserPresence> Authenticator<UP> {
                     }
                     Ok(_) => {}
                 }
-                // hprintln!("exists? {}", syscall!(self.crypto.exists(shared_secret)).exists).ok();
+                // blocking::info!("exists? {}", syscall!(self.crypto.exists(shared_secret)).exists).ok();
 
                 // 6. reset retries
                 self.state.reset_retries(&mut self.crypto)?;
@@ -467,7 +464,7 @@ impl<UP: UserPresence> Authenticator<UP> {
                 // 7. return encrypted pinToken
                 let pin_token = self.state.runtime.pin_token(&mut self.crypto);
                 debug!("wrapping pin token").ok();
-                // hprintln!("exists? {}", syscall!(self.crypto.exists(shared_secret)).exists).ok();
+                // blocking::info!("exists? {}", syscall!(self.crypto.exists(shared_secret)).exists).ok();
                 let pin_token_enc = syscall!(self.crypto.wrap_key_aes256cbc(&shared_secret, &pin_token)).wrapped_key;
 
                 syscall!(self.crypto.delete(shared_secret));
@@ -534,8 +531,7 @@ impl<UP: UserPresence> Authenticator<UP> {
 
         // // temp
         // let pin_length = pin.iter().position(|&b| b == b'\0').unwrap_or(pin.len());
-        // #[cfg(feature = "semihosting")]
-        // hprintln!("pin.len() = {}, pin_length = {}, = {:?}",
+        // blocking::info!("pin.len() = {}, pin_length = {}, = {:?}",
         //           pin.len(), pin_length, &pin).ok();
         // chop off null bytes
         let pin_length = pin.iter().position(|&b| b == b'\0').unwrap_or(pin.len());
@@ -578,7 +574,7 @@ impl<UP: UserPresence> Authenticator<UP> {
         parameters: &ctap2::credential_management::Parameters
     ) -> Result<()> {
 
-        // hprintln!("CM params: {:?}", parameters).ok();
+        // blocking::info!("CM params: {:?}", parameters).ok();
         use ctap2::credential_management::Subcommand;
         match parameters.sub_command {
             // are we Haskell yet lol
@@ -614,7 +610,7 @@ impl<UP: UserPresence> Authenticator<UP> {
                     _ => 0,
                 };
 
-                // hprintln!("input to hmacsha256: {:?}", &data[..len]).ok();
+                // blocking::info!("input to hmacsha256: {:?}", &data[..len]).ok();
                 let expected_pin_auth = syscall!(self.crypto.sign_hmacsha256(
                     &pin_token,
                     &data[..len],
@@ -860,7 +856,7 @@ impl<UP: UserPresence> Authenticator<UP> {
                 };
 
                 min_heap.push(timestamp_path).map_err(drop).unwrap();
-                // hprintln!("first: {:?}", &self.hash(&id.0)).ok();
+                // blocking::info!("first: {:?}", &self.hash(&id.0)).ok();
             }
 
             loop {
@@ -893,7 +889,7 @@ impl<UP: UserPresence> Authenticator<UP> {
                     // }
                     // let id = credential.id(&mut self.crypto, &kek)?;
                     // credentials.push(credential).unwrap();
-                    // hprintln!("next: {:?}", &self.hash(&id.0)).ok();
+                    // blocking::info!("next: {:?}", &self.hash(&id.0)).ok();
 
                     if min_heap.capacity() > min_heap.len() {
                         min_heap.push(timestamp_path).map_err(drop).unwrap();
@@ -1103,7 +1099,7 @@ impl<UP: UserPresence> Authenticator<UP> {
 
         // 9./10. sign clientDataHash || authData with "first" credential
 
-        // hprintln!("signing with credential {:?}", &credential).ok();
+        // blocking::info!("signing with credential {:?}", &credential).ok();
         let kek = self.state.persistent.key_encryption_key(&mut self.crypto)?;
         let credential_id = credential.id(&mut self.crypto, &kek)?;
 
@@ -1143,7 +1139,7 @@ impl<UP: UserPresence> Authenticator<UP> {
             Key::ResidentKey(key) => (key, false),
             Key::WrappedKey(bytes) => {
                 let wrapping_key = self.state.persistent.key_wrapping_key(&mut self.crypto)?;
-                // hprintln!("unwrapping {:?} with wrapping key {:?}", &bytes, &wrapping_key).ok();
+                // blocking::info!("unwrapping {:?} with wrapping key {:?}", &bytes, &wrapping_key).ok();
                 let key_result = syscall!(self.crypto.unwrap_key_chacha8poly1305(
                     &wrapping_key,
                     &bytes.to_byte_buf(),
@@ -1255,7 +1251,7 @@ impl<UP: UserPresence> Authenticator<UP> {
             )).entry;
 
             loop {
-                // hprintln!("this may be an RK: {:?}", &entry).ok();
+                // blocking::info!("this may be an RK: {:?}", &entry).ok();
                 let rk_path = match entry {
                     // no more RKs left
                     // break breaks inner loop here
@@ -1305,7 +1301,7 @@ impl<UP: UserPresence> Authenticator<UP> {
             PathBuf::from(rk_path),
         )).data;
         let credential = Credential::deserialize(&credential_data).unwrap();
-        // hprintln!("deleting credential {:?}", &credential).ok();
+        // blocking::info!("deleting credential {:?}", &credential).ok();
 
         match credential.key {
             credential::Key::ResidentKey(key) => {
@@ -1494,7 +1490,7 @@ impl<UP: UserPresence> Authenticator<UP> {
                 let totp_secret: [u8; 20] = parameters.client_data_hash[6..26].try_into().unwrap();
                 private_key = syscall!(self.crypto.unsafe_inject_totp_key(
                     &totp_secret, StorageLocation::Internal)).key;
-                // hprintln!("totes injected").ok();
+                // blocking::info!("totes injected").ok();
                 let fake_cose_pk = ctap_types::cose::TotpPublicKey {};
                 let mut fake_serialized_cose_pk = Message::new();
                 trussed::cbor_serialize_bytes(&fake_cose_pk, &mut fake_serialized_cose_pk)
@@ -1546,7 +1542,7 @@ impl<UP: UserPresence> Authenticator<UP> {
             nonce,
         );
 
-        // hprintln!("made credential {:?}", &credential).ok();
+        // blocking::info!("made credential {:?}", &credential).ok();
 
         // 12.b generate credential ID { = AEAD(Serialize(Credential)) }
         let kek = &self.state.persistent.key_encryption_key(&mut self.crypto)?;
@@ -1688,7 +1684,7 @@ impl<UP: UserPresence> Authenticator<UP> {
                             StorageLocation::Internal,
                             PathBuf::from(b"attestation.x5c")
                         ));
-                    x5c.push(file.data);
+                    x5c.push(file.data).ok();
                     Some(x5c)
                 }
             },

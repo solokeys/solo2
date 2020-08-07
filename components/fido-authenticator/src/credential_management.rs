@@ -2,7 +2,7 @@
 
 use core::convert::TryFrom;
 
-use cortex_m_semihosting::hprintln;
+use crate::logger::{blocking};
 
 use trussed::{
     syscall,
@@ -77,7 +77,7 @@ where
     UP: UserPresence
 {
     pub fn get_creds_metadata(&mut self) -> Result<Response> {
-        hprintln!("get metadata").ok();
+        blocking::info!("get metadata").ok();
         let mut response: ctap2::credential_management::Response =
             Default::default();
 
@@ -129,7 +129,7 @@ where
     }
 
     pub fn first_relying_party(&mut self) -> Result<Response> {
-        hprintln!("first rp").ok();
+        blocking::info!("first rp").ok();
 
         // rp (0x03): PublicKeyCredentialRpEntity
         // rpIDHash (0x04) : RP ID SHA-256 hash.
@@ -202,7 +202,7 @@ where
     }
 
     pub fn next_relying_party(&mut self) -> Result<Response> {
-        hprintln!("next rp").ok();
+        blocking::info!("next rp").ok();
 
         let (remaining, last_rp_id_hash) = match self.state.runtime.cache {
             Some(CommandCache::CredentialManagementEnumerateRps(
@@ -286,7 +286,7 @@ where
     }
 
     pub fn first_credential(&mut self, rp_id_hash: &ByteBuf32) -> Result<Response> {
-        hprintln!("first credential").ok();
+        blocking::info!("first credential").ok();
 
         self.state.runtime.cache = None;
 
@@ -320,7 +320,7 @@ where
     }
 
     pub fn next_credential(&mut self) -> Result<Response> {
-        hprintln!("next credential").ok();
+        blocking::info!("next credential").ok();
 
         let (remaining, rp_dir, prev_filename) = match self.state.runtime.cache {
             Some(CommandCache::CredentialManagementEnumerateCredentials(
@@ -443,7 +443,7 @@ where
     )
         -> Result<Response>
     {
-        hprintln!("delete credential").ok();
+        blocking::info!("delete credential").ok();
         let credential_id_hash = self.hash(&credential_descriptor.id[..]);
         let mut hex = [b'0'; 16];
         super::format_hex(&credential_id_hash[..8], &mut hex);
@@ -472,14 +472,14 @@ where
         )).entry;
 
         if maybe_first_remaining_rk.is_none() {
-            hprintln!("deleting parent {:?} as this was its last RK",
+            blocking::info!("deleting parent {:?} as this was its last RK",
                       &rp_path).ok();
             syscall!(self.crypto.remove_dir(
                 StorageLocation::Internal,
                 rp_path,
             ));
         } else {
-            hprintln!("not deleting deleting parent {:?} as there is {:?}",
+            blocking::info!("not deleting deleting parent {:?} as there is {:?}",
                       &rp_path,
                       &maybe_first_remaining_rk.unwrap().path(),
                       ).ok();
@@ -702,7 +702,7 @@ where
 //     )).entry;
 
 //     if maybe_first_remaining_rk.is_none() {
-//         // hprintln!("deleting parent {:?} as this was its last RK",
+//         // blocking::info!("deleting parent {:?} as this was its last RK",
 //         //           &rp_path).ok();
 //         syscall!(self.crypto.remove_dir(
 //             StorageLocation::Internal,
