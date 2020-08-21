@@ -1,27 +1,28 @@
 use core::convert::TryFrom;
 use iso7816::{Command, Instruction, Status};
 use heapless::ByteBuf;
-use usbd_ctaphid::pipe::Command as FidoCommand;
-use usbd_ctaphid::pipe::{handle_cbor, CtapMappingError};
+use hid_dispatch::command::Command as FidoCommand;
 use ctap_types::{
-    rpc::CtapInterchange,
     authenticator::Error as AuthenticatorError,
+    authenticator::Request as AuthenticatorRequest,
     serde::{cbor_serialize},
 };
 
-use crate::logger::info;
+use crate::cbor::{parse_cbor, CtapMappingError};
+use crate::logger::{info};
 use logging::hex::*;
 
-use interchange::Requester;
+use fido_authenticator::Authenticator;
 use apdu_dispatch::applet;
+use hid_dispatch::app as hid;
 
 pub struct Fido {
-    interchange: Requester<CtapInterchange>,
+    authenticator: Authenticator,
 }
 
 impl Fido {
-    pub fn new(interchange: Requester<CtapInterchange>) -> Fido {
-        Self { interchange }
+    pub fn new(authenticator: Authenticator) -> Fido {
+        Self { authenticator }
     }
 
     fn response_from_object<T: serde::Serialize>(&mut self, object: Option<T>) -> applet::Result {
@@ -48,6 +49,71 @@ impl Fido {
             Ok(applet::Response::Respond(buffer))
         }
     }
+
+    fn call_authenticator(&mut self, request: &AuthenticatorRequest) -> applet::Result {
+
+        let result = self.authenticator.call(request);
+        match &result {
+            Err(error) => {
+                info!("error {}", *error as u8).ok();
+                Ok(applet::Response::Respond(ByteBuf::from_slice(
+                    & [*error as u8]
+                ).unwrap()))
+            }
+
+            Ok(response) => {
+                use ctap_types::authenticator::Response;
+                match response {
+                    Response::Ctap1(_response) => {
+                        todo!("CTAP1 responses");
+                    }
+
+                    Response::Ctap2(response) => {
+                        use ctap_types::authenticator::ctap2::Response;
+                        // hprintln!("authnr c2 resp: {:?}", &response).ok();
+                        match response {
+                            Response::GetInfo(response) => {
+                                self.response_from_object(Some(response))
+                            },
+
+                            Response::MakeCredential(response) => {
+                                self.response_from_object(Some(response))
+                            },
+
+                            Response::ClientPin(response) => {
+                                self.response_from_object(Some(response))
+                            },
+
+                            Response::GetAssertion(response) => {
+                                self.response_from_object(Some(response))
+                            },
+
+                            Response::GetNextAssertion(response) => {
+                                self.response_from_object(Some(response))
+                            },
+
+                            Response::CredentialManagement(response) => {
+                                self.response_from_object(Some(response))
+                            },
+
+                            Response::Reset => {
+                                self.response_from_object::<()>(None)
+                            },
+
+                            Response::Vendor => {
+                                self.response_from_object::<()>(None)
+                            },
+                        }
+                    }
+                }
+            }
+        }
+
+
+
+    }
+
+
 
 }
 
@@ -79,10 +145,10 @@ impl applet::Applet for Fido {
             Instruction::Unknown(ins) => {
                 match FidoCommand::try_from(ins) {
                     Ok(FidoCommand::Cbor) => {
-                        match handle_cbor(&mut self.interchange, apdu.data()) {
-                            Ok(()) => {
+                        match parse_cbor(apdu.data()) {
+                            Ok(request) => {
                                 info!("handled cbor").ok();
-                                Ok(applet::Response::Defer)
+                                self.call_authenticator(&request)
                             }
                             Err(CtapMappingError::InvalidCommand(cmd)) => {
                                 info!("authenticator command {:?}", cmd).ok();
@@ -114,68 +180,55 @@ impl applet::Applet for Fido {
         }
     }
 
-    fn poll (&mut self) -> applet::Result {
+    // fn poll (&mut self) -> applet::Result {
+    // }
 
-        if let Some(result) = self.interchange.take_response() {
-            match result {
-                Err(error) => {
-                    info!("error {}", error as u8).ok();
-                    Ok(applet::Response::Respond(ByteBuf::from_slice(
-                        & [error as u8]
-                    ).unwrap()))
-                }
+}
 
-                Ok(response) => {
-                    use ctap_types::authenticator::Response;
-                    match response {
-                        Response::Ctap1(_response) => {
-                            todo!("CTAP1 responses");
-                        }
+impl hid::App for Fido {
 
-                        Response::Ctap2(response) => {
-                            use ctap_types::authenticator::ctap2::Response;
-                            // hprintln!("authnr c2 resp: {:?}", &response).ok();
-                            match response {
-                                Response::GetInfo(response) => {
-                                    self.response_from_object(Some(&response))
-                                },
+    fn commands(&self,) -> &'static [hid::Command] {
+        &[ hid::Command::Cbor,]
+    }
 
-                                Response::MakeCredential(response) => {
-                                    self.response_from_object(Some(&response))
-                                },
-
-                                Response::ClientPin(response) => {
-                                    self.response_from_object(Some(&response))
-                                },
-
-                                Response::GetAssertion(response) => {
-                                    self.response_from_object(Some(&response))
-                                },
-
-                                Response::GetNextAssertion(response) => {
-                                    self.response_from_object(Some(&response))
-                                },
-
-                                Response::CredentialManagement(response) => {
-                                    self.response_from_object(Some(&response))
-                                },
-
-                                Response::Reset => {
-                                    self.response_from_object::<()>(None)
-                                },
-
-                                Response::Vendor => {
-                                    self.response_from_object::<()>(None)
-                                },
-                            }
-                        }
+    #[inline(never)]
+    fn call(&mut self, _command: hid::Command, message: &mut hid::Message) -> hid::Response {
+    // Command::Cbor => {
+        match parse_cbor(message) {
+            Ok(request) => {
+                let response = self.call_authenticator(&request);
+                match &response {
+                    Ok(applet::Response::Respond(buffer)) => {
+                        message.clear();
+                        message.extend_from_slice(buffer).ok();
+                        Ok(())
+                    }
+                    _ => {
+                        info!("Authenticator ignoring request!").ok();
+                        Err(hid::Error::NoResponse)
                     }
                 }
             }
+            Err(CtapMappingError::InvalidCommand(cmd)) => {
+                info!("authenticator command {:?}", cmd).ok();
+                message.clear();
+                message.extend_from_slice(&[
+                    AuthenticatorError::InvalidCommand as u8
+                ]).ok();
+                Ok(())
+            }
+            Err(CtapMappingError::ParsingError(_error)) => {
+                info!("deser error ").ok();
 
-
-        } else {
-            Ok(applet::Response::Defer)
+                message.clear();
+                message.extend_from_slice(&[
+                    AuthenticatorError::InvalidCbor as u8
+                ]).ok();
+                Ok(())
+            }
+            Err(CtapMappingError::NoData) => {
+                Err(hid::Error::NoResponse)
+            }
         }
 
     }

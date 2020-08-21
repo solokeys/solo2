@@ -6,7 +6,6 @@ use littlefs2::{
 use trussed::types::{LfsResult, LfsStorage};
 use trussed::store;
 use ctap_types::consts;
-use fido_authenticator::SilentAuthenticator;
 use fm11nc08::FM11NC08;
 use hal::{
     typestates::{
@@ -26,8 +25,6 @@ use hal::{
 // use usbd_ctaphid::insecure::InsecureRamAuthenticator;
 
 pub type FlashStorage = hal::drivers::FlashGordon;
-
-pub type Authenticator = fido_authenticator::Authenticator<SilentAuthenticator>;
 
 pub type Piv = piv_card::App;
 
@@ -98,6 +95,8 @@ pub type Iso14443 = iso14443::Iso14443<NfcChip>;
 pub type ExternalInterrupt = hal::Pint<hal::typestates::init_state::Enabled>;
 
 pub type ApduDispatch = apdu_dispatch::dispatch::ApduDispatch;
+
+pub type HidDispatch = hid_dispatch::dispatch::Dispatch;
 
 pub type FidoApplet = applet_fido::Fido;
 

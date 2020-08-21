@@ -32,49 +32,38 @@ use littlefs2::path::{Path, PathBuf};
 use crate::{
     Authenticator,
     Result,
-    UserPresence,
     credential::Credential,
     state::CommandCache,
 };
 
-pub struct CredentialManagement<'a, UP>
-where
-    UP: UserPresence,
+pub struct CredentialManagement<'a>
 {
-    authnr: &'a mut Authenticator<UP>,
+    authnr: &'a mut Authenticator,
 }
 
-impl<'a, UP> core::ops::Deref for CredentialManagement<'a, UP>
-where
-    UP: UserPresence
+impl<'a> core::ops::Deref for CredentialManagement<'a>
 {
-    type Target = Authenticator<UP>;
+    type Target = Authenticator;
     fn deref(&self) -> &Self::Target {
         &self.authnr
     }
 }
 
-impl<'a, UP> core::ops::DerefMut for CredentialManagement<'a, UP>
-where
-    UP: UserPresence
+impl<'a> core::ops::DerefMut for CredentialManagement<'a>
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.authnr
     }
 }
 
-impl<'a, UP> CredentialManagement<'a, UP>
-where
-    UP: UserPresence
+impl<'a> CredentialManagement<'a>
 {
-    pub fn new(authnr: &'a mut Authenticator<UP>) -> Self {
+    pub fn new(authnr: &'a mut Authenticator) -> Self {
         Self { authnr }
     }
 }
 
-impl<UP> CredentialManagement<'_, UP>
-where
-    UP: UserPresence
+impl CredentialManagement<'_>
 {
     pub fn get_creds_metadata(&mut self) -> Result<Response> {
         blocking::info!("get metadata").ok();

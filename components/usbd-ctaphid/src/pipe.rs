@@ -14,13 +14,18 @@ No state is maintained between transactions.
 
 use core::convert::TryInto;
 use core::convert::TryFrom;
+// pub type ContactInterchange = usbd_ccid::types::ApduInterchange;
+// pub type ContactlessInterchange = iso14443::types::ApduInterchange;
+
+use hid_dispatch::types::HidInterchange;
+use hid_dispatch::command::Command;
 
 use ctap_types::{
     authenticator::Error as AuthenticatorError,
-    ctaphid::Operation,
-    rpc::CtapInterchange,
-    serde::{cbor_serialize, cbor_deserialize},
 };
+
+
+
 use interchange::Requester;
 
 // use serde::Serialize;
@@ -31,7 +36,7 @@ use usb_device::{
     // Result as UsbResult,
 };
 
-use crate::logger::{debug, info, blocking};
+use crate::logger::{debug, info};
 
 use crate::{
     constants::{
@@ -67,6 +72,13 @@ impl Response {
         }
     }
 
+    pub fn error_from_request(request: Request) -> Self {
+        Self {
+            channel: request.channel,
+            command: hid_dispatch::command::Command::Error,
+            length: 1,
+        }
+    }
 }
 
 #[derive(Copy,Clone,Debug,Eq,PartialEq)]
@@ -94,99 +106,6 @@ impl MessageState {
     }
 }
 
-#[derive(Copy,Clone,Debug,Eq,PartialEq)]
-pub enum Command {
-    // mandatory for CTAP1
-    Ping,
-    Msg,
-    Init,
-    Error,
-
-    // optional
-    Wink,
-    Lock,
-
-    // mandatory for CTAP2
-    Cbor,
-    Cancel,
-    KeepAlive,
-
-    // vendor-assigned range from 0x40 to 0x7f
-    Vendor(VendorCommand),
-}
-
-impl Command {
-    pub fn into_u8(self) -> u8 {
-        self.into()
-    }
-}
-
-impl TryFrom<u8> for Command {
-    type Error = ();
-
-    fn try_from(from: u8) -> core::result::Result<Command, ()> {
-        match from {
-            0x01 => Ok(Command::Ping),
-            0x03 => Ok(Command::Msg),
-            0x06 => Ok(Command::Init),
-            0x3f => Ok(Command::Error),
-            0x08 => Ok(Command::Wink),
-            0x04 => Ok(Command::Lock),
-            0x10 => Ok(Command::Cbor),
-            0x11 => Ok(Command::Cancel),
-            0x3b => Ok(Command::KeepAlive),
-            code => Ok(Command::Vendor(VendorCommand::try_from(code)?)),
-        }
-    }
-}
-
-/// Vendor CTAPHID commands, from 0x40 to 0x7f.
-#[derive(Copy,Clone,Debug,Eq,PartialEq)]
-pub struct VendorCommand(u8);
-
-impl VendorCommand {
-    pub const FIRST: u8 = 0x40;
-    pub const LAST: u8 = 0x7f;
-}
-
-
-impl TryFrom<u8> for VendorCommand {
-    type Error = ();
-
-    fn try_from(from: u8) -> core::result::Result<Self, ()> {
-        match from {
-            // code if code >= Self::FIRST && code <= Self::LAST => Ok(VendorCommand(code)),
-            code @ Self::FIRST..=Self::LAST => Ok(VendorCommand(code)),
-            // TODO: replace with Command::Unknown and infallible Try
-            _ => Err(()),
-        }
-    }
-}
-
-impl Into<u8> for VendorCommand {
-    fn into(self) -> u8 {
-        self.0
-    }
-}
-
-impl Into<u8> for Command {
-    fn into(self) -> u8 {
-        match self {
-            Command::Ping => 0x01,
-            Command::Msg => 0x03,
-            Command::Init => 0x06,
-            Command::Error => 0x3f,
-            Command::Wink => 0x08,
-            Command::Lock => 0x04,
-            Command::Cbor => 0x10,
-            Command::Cancel => 0x11,
-            Command::KeepAlive => 0x3b,
-            Command::Vendor(command) => command.into(),
-        }
-    }
-}
-
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[allow(unused)]
 pub enum State {
@@ -208,19 +127,13 @@ pub enum State {
     Sending((Response, MessageState)),
 }
 
-pub enum CtapMappingError {
-    InvalidCommand(u8),
-    ParsingError(ctap_types::serde::error::Error),
-    NoData,
-}
-
 pub struct Pipe<'alloc, Bus: UsbBus> {
 
     read_endpoint: EndpointOut<'alloc, Bus>,
     write_endpoint: EndpointIn<'alloc, Bus>,
     pub state: State,
 
-    pub interchange: Requester<CtapInterchange>,
+    pub interchange: Requester<HidInterchange>,
 
     // shared between requests and responses, due to size
     buffer: [u8; MESSAGE_SIZE],
@@ -229,6 +142,7 @@ pub struct Pipe<'alloc, Bus: UsbBus> {
     // TODO: move into "app"
     last_channel: u32,
 
+    pub implements: u8,
 }
 
 impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
@@ -240,7 +154,7 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
     pub(crate) fn new(
         read_endpoint: EndpointOut<'alloc, Bus>,
         write_endpoint: EndpointIn<'alloc, Bus>,
-        interchange: Requester<CtapInterchange>,
+        interchange: Requester<HidInterchange>,
     ) -> Self
     {
         Self {
@@ -250,6 +164,7 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
             interchange,
             buffer: [0u8; MESSAGE_SIZE],
             last_channel: 0,
+            implements: 0x80,
         }
     }
 
@@ -440,7 +355,7 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
                             // 0x4: implements CBOR
                             // 0x8: does not implement MSG
                             // self.buffer[16] = 0x01 | 0x08;
-                            self.buffer[16] = 0x01 | 0x04;
+                            self.buffer[16] = self.implements;
                             self.start_sending(response);
                         }
                     },
@@ -470,174 +385,43 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
                 self.start_sending(response);
             },
 
-            Command::Cbor => {
-                // blocking::info!("command CBOR!").ok();
-                match handle_cbor(&mut self.interchange, &self.buffer[..request.length as usize]) {
-                    Ok(()) => {
-                        info!("handled cbor").ok();
-                        self.state = State::WaitingOnAuthenticator(request);
-                    }
-                    Err(CtapMappingError::InvalidCommand(cmd)) => {
-                        info!("authenticator command {:?}", cmd).ok();
-                        self.buffer[0] = AuthenticatorError::InvalidCommand as u8;
-                        let response = self::Response::from_request_and_size(request, 1);
-                        return self.start_sending(response);
-                    }
-                    Err(CtapMappingError::ParsingError(_error)) => {
-                        blocking::info!("{} deser error {:?}", self.buffer[0], _error).ok();
-                        let response = self.response_from_error(request, AuthenticatorError::InvalidCbor);
-                        return self.start_sending(response);
-                    }
-                    Err(CtapMappingError::NoData) => {
-
-                    }
-                }
-            },
-
-            // Command::Msg => {
-            //     // blocking::info!("command MSG!").ok();
-            //     self.handle_msg(request);
-            // },
-
-            // TODO: handle other requests
             _ => {
-                // blocking::info!("unknown command {:?}", request.command).ok();
+                self.interchange.request(
+                    (request.command, heapless::ByteBuf::from_slice(&self.buffer[..request.length as usize]).unwrap())
+                ).unwrap();
+                self.state = State::WaitingOnAuthenticator(request);
             },
         }
-    }
-
-    // fn handle_msg(&mut self, request: Request) {
-    //     // this is the U2F/CTAP1 layer.
-    //     // we handle it by mapping to CTAP2, similar to how user agents
-    //     // map CTAP2 to CTAP1.
-    //     // blocking::info!("data = {:?}", &self.buffer[..request.length as usize]).ok();
-
-    //     let command = ctap1::Command::try_from(&self.buffer[..request.length as usize]);
-    //     match command {
-    //         Err(error) => {
-    //             // blocking::info!("ERROR").ok();
-    //             self.buffer[..2].copy_from_slice(&(error as u16).to_be_bytes());
-    //             let response = Response::from_request_and_size(request, 2);
-    //             self.start_sending(response);
-    //         },
-    //         Ok(command) => {
-    //             match command {
-    //                 ctap1::Command::Version => {
-    //                     // blocking::info!("U2F_VERSION").ok();
-    //                     // GetVersion
-    //                     // self.buffer[0] = 0;
-    //                     self.buffer[..6].copy_from_slice(b"U2F_V2");
-    //                     // self.buffer[6..][..2].copy_from_slice(ctap1::NoError::to_be_bytes());
-    //                     self.buffer[6..][..2].copy_from_slice(&(ctap1::NO_ERROR).to_be_bytes());
-    //                     let response = Response::from_request_and_size(request, 8);
-    //                     // blocking::info!("sending response: {:x?}", &self.buffer[..response.length as usize]).ok();
-    //                     self.start_sending(response);
-    //                 },
-    //                 ctap1::Command::Register(_register) => {
-    //                     // blocking::info!("command {:?}", &register).ok();
-    //                     self.buffer[..2].copy_from_slice(&(ctap1::Error::InsNotSupported as u16).to_be_bytes());
-    //                     let response = Response::from_request_and_size(request, 1);
-    //                     self.start_sending(response);
-    //                 },
-    //                 ctap1::Command::Authenticate(_authenticate) => {
-    //                     // blocking::info!("command {:?}", &authenticate).ok();
-    //                     self.buffer[..2].copy_from_slice(&(ctap1::Error::InsNotSupported as u16).to_be_bytes());
-    //                     let response = Response::from_request_and_size(request, 1);
-    //                     self.start_sending(response);
-    //                 }
-    //             }
-    //         }
-    //     }
-    // }
-
-    fn response_from_error(&mut self, request: Request, error: AuthenticatorError) -> Response {
-        self.buffer[0] = error as u8;
-        Response::from_request_and_size(request, 1)
-    }
-
-    fn response_from_object<T: serde::Serialize>(&mut self, request: Request, object: Option<T>) -> Response {
-        let size = if let Some(object) = object {
-            1 + match
-                cbor_serialize(&object, &mut self.buffer[1..])
-            {
-                Ok(ser) => ser.len(),
-                Err(_) => {
-                    return self.response_from_error(request, AuthenticatorError::Other);
-                }
-            }
-        } else {
-            1
-        };
-
-        self.buffer[0] = 0;
-        Response::from_request_and_size(request, size)
     }
 
     pub fn handle_response(&mut self) {
         if let State::WaitingOnAuthenticator(request) = self.state {
-            if let Some(result) = self.interchange.take_response() {
-                // blocking::info!("got response").ok();
-                match result {
-                    Err(error) => {
-                        info!("error {}", error as u8).ok();
-                        let response = self.response_from_error(request, error);
+            
+            
+            if let Some(response) = self.interchange.take_response() {
+                match response {
+
+                    Err(hid_dispatch::app::Error::InvalidCommand) => {
+                        info!("Got waiting reply from authenticator??").ok();
+                        self.buffer[0] = AuthenticatorError::InvalidCommand as u8;
+                        let response = Response::error_from_request(request);
                         self.start_sending(response);
                     }
+                    Err(hid_dispatch::app::Error::NoResponse) => {
+                        info!("Got waiting noresponse from authenticator??").ok();
+                    }
 
-                    Ok(response) => {
-                        use ctap_types::authenticator::Response;
-                        match response {
-                            Response::Ctap1(_response) => {
-                                todo!("CTAP1 responses");
-                            }
-
-                            Response::Ctap2(response) => {
-                                use ctap_types::authenticator::ctap2::Response;
-                                // blocking::info!("authnr c2 resp: {:?}", &response).ok();
-                                let response = match response {
-                                    Response::GetInfo(response) => {
-                                        self.response_from_object(request, Some(&response))
-                                    }
-
-                                    Response::MakeCredential(response) => {
-                                        self.response_from_object(request, Some(&response))
-                                    }
-
-                                    Response::ClientPin(response) => {
-                                        self.response_from_object(request, Some(&response))
-                                    }
-
-                                    Response::GetAssertion(response) => {
-                                        self.response_from_object(request, Some(&response))
-                                    }
-
-                                    Response::GetNextAssertion(response) => {
-                                        self.response_from_object(request, Some(&response))
-                                    }
-
-                                    Response::CredentialManagement(response) => {
-                                        self.response_from_object(request, Some(&response))
-                                    }
-
-                                    Response::Reset => {
-                                        self.response_from_object::<()>(request, None)
-                                    }
-
-                                    Response::Vendor => {
-                                        self.response_from_object::<()>(request, None)
-                                    }
-
-                                    // _ => {
-                                    //     todo!("what about all this");
-                                    // }
-                                };
-                                self.start_sending(response);
-                            }
-                        }
+                    Ok(message) => {
+                        info!("Got {} bytes response from authenticator, starting send", message.len()).ok();
+                        let response = Response::from_request_and_size(request, message.len());
+                        self.buffer[..message.len()]
+                            .copy_from_slice(&message);
+                        self.start_sending(response);
                     }
                 }
             }
         }
+
     }
 
     fn start_sending(&mut self, response: Response) {
@@ -763,139 +547,3 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
 }
 
 
-pub fn handle_cbor(interchange: &mut Requester<CtapInterchange>, data: &[u8]) -> Result<(), CtapMappingError> {
-    // let data = &buffer[..request.length as usize];
-    // blocking::info!("data: {:?}", data).ok();
-
-    if data.len() < 1 {
-        return Err(CtapMappingError::NoData);
-    }
-
-    let operation_u8: u8 = data[0];
-
-    let operation = match Operation::try_from(operation_u8) {
-        Ok(operation) => {
-            operation
-        },
-        _ => {
-            return Err(CtapMappingError::InvalidCommand(operation_u8));
-        }
-    };
-
-    // use ctap_types::ctap2::*;
-    use ctap_types::authenticator::*;
-
-    match operation {
-        Operation::MakeCredential => {
-            info!("authenticatorMakeCredential").ok();
-            match cbor_deserialize(&data[1..]) {
-                Ok(params) => {
-                    interchange.request(Request::Ctap2(ctap2::Request::MakeCredential(params))).unwrap();
-                    Ok(())
-                },
-                Err(error) => {
-                    Err(CtapMappingError::ParsingError(error))
-                }
-            }
-            // TODO: ensure earlier that RPC send queue is empty
-        }
-
-        Operation::GetAssertion => {
-            info!("authenticatorGetAssertion").ok();
-
-            match cbor_deserialize(&data[1..]) {
-                Ok(params) => {
-                    interchange.request(Request::Ctap2(ctap2::Request::GetAssertion(params))).unwrap();
-                    Ok(())
-                },
-                Err(error) => {
-                    Err(CtapMappingError::ParsingError(error))
-                }
-            }
-            // TODO: ensure earlier that RPC send queue is empty
-        }
-
-        Operation::GetNextAssertion => {
-            info!("authenticatorGetNextAssertion").ok();
-
-            // TODO: ensure earlier that RPC send queue is empty
-            interchange.request(Request::Ctap2(ctap2::Request::GetNextAssertion)).unwrap();
-            Ok(())
-        }
-
-        Operation::CredentialManagement => {
-            info!("authenticatorCredentialManagement").ok();
-
-            match cbor_deserialize(&data[1..]) {
-                Ok(params) => {
-                    interchange.request(Request::Ctap2(ctap2::Request::CredentialManagement(params))).unwrap();
-                    Ok(())
-                },
-                Err(error) => {
-                    Err(CtapMappingError::ParsingError(error))
-                }
-            }
-            // TODO: ensure earlier that RPC send queue is empty
-        }
-
-        Operation::Reset => {
-            info!("authenticatorReset").ok();
-
-            // TODO: ensure earlier that RPC send queue is empty
-            interchange.request(Request::Ctap2(ctap2::Request::Reset)).unwrap();
-            Ok(())
-        }
-
-        Operation::GetInfo => {
-            info!("authenticatorGetInfo").ok();
-            // TODO: ensure earlier that RPC send queue is empty
-            interchange.request(Request::Ctap2(ctap2::Request::GetInfo)).unwrap();
-            Ok(())
-        }
-
-        Operation::ClientPin => {
-            info!("authenticatorClientPin").ok();
-            match cbor_deserialize(&data[1..])
-            {
-                Ok(params) => {
-
-                    interchange.request(Request::Ctap2(ctap2::Request::ClientPin(params))).unwrap();
-                    Ok(())
-                },
-                Err(error) => {
-
-                    Err(CtapMappingError::ParsingError(error))
-                }
-            }
-            // TODO: ensure earlier that RPC send queue is empty
-        }
-
-        Operation::Vendor(vendor_operation) => {
-            info!("authenticatorVendor({:?})", &vendor_operation).ok();
-
-            let vo_u8: u8 = vendor_operation.into();
-            if vo_u8 == 0x41 {
-                // copy-pasta for now
-                match cbor_deserialize(&data[1..])
-                {
-                    Ok(params) => {
-                        interchange.request(Request::Ctap2(ctap2::Request::CredentialManagement(params))).unwrap();
-                        Ok(())
-                    },
-                    Err(error) => {
-                        Err(CtapMappingError::ParsingError(error))
-                    }
-                }
-                // TODO: ensure earlier that RPC send queue is empty
-
-            } else {
-                // TODO: ensure earlier that RPC send queue is empty
-                interchange.request(Request::Ctap2(ctap2::Request::Vendor(vendor_operation))).unwrap();
-                Ok(())
-            }
-        }
-        _ => {
-            Err(CtapMappingError::InvalidCommand(operation_u8))
-        }
-    }
-}

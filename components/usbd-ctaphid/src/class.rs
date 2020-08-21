@@ -8,9 +8,7 @@ use crate::{
     pipe::Pipe,
 };
 
-use ctap_types::{
-    rpc::CtapInterchange,
-};
+use hid_dispatch::types::HidInterchange;
 
 use usb_device::{
     bus::{InterfaceNumber, UsbBus, UsbBusAllocator},
@@ -31,7 +29,7 @@ impl<'alloc, Bus> CtapHid<'alloc, Bus>
 where
 	Bus: UsbBus
 {
-	pub fn new(allocate: &'alloc UsbBusAllocator<Bus>, interchange: Requester<CtapInterchange>)
+	pub fn new(allocate: &'alloc UsbBusAllocator<Bus>, interchange: Requester<HidInterchange>)
         -> Self
     {
         // 64 bytes, interrupt endpoint polled every 5 milliseconds
@@ -47,7 +45,25 @@ where
             interface: allocate.interface(),
             pipe,
         }
-	}
+    }
+    
+    /// Implements Wink command
+    pub fn implements_wink(mut self) -> Self {
+        self.pipe.implements |= 0x01;
+        self
+    }
+
+    /// Implements RawMsg command
+    pub fn implements_ctap1(mut self) -> Self {
+        self.pipe.implements &= !0x80;
+        self
+    }
+
+    /// Implements CBOR command
+    pub fn implements_ctap2(mut self) -> Self {
+        self.pipe.implements |= 0x04;
+        self
+    }
 
     // pub fn borrow_mut_authenticator(&mut self) -> &mut Authenticator {
     //     self.pipe.borrow_mut_authenticator()

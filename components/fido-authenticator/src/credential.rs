@@ -153,7 +153,7 @@ impl Credential {
     )
         -> Self
     {
-        logging::info!("credential for algorithm {}", algorithm).ok();
+        crate::logger::info!("credential for algorithm {}", algorithm).ok();
         let data = CredentialData {
             rp: parameters.rp.clone(),
             user: parameters.user.clone(),
@@ -219,14 +219,12 @@ impl Credential {
         }
     }
 
-    pub fn try_from<UP>(
-        authnr: &mut Authenticator<UP>,
+    pub fn try_from(
+        authnr: &mut Authenticator,
         rp_id_hash: &ByteBuf<consts::U32>,
         descriptor: &PublicKeyCredentialDescriptor,
     )
         -> Result<Self>
-    where
-        UP: crate::UserPresence
     {
         let encrypted_serialized = EncryptedSerializedCredential::try_from(
             CredentialId(descriptor.id.clone())

@@ -6,9 +6,9 @@
 #![no_main]
 
 use app::{board, hal};
-use lpc55_hal::drivers::timer::Lap;
 use hal::traits::wg::timer::Cancel;
 use hal::traits::wg::timer::CountDown;
+use hal::drivers::timer::Lap;
 use hal::time::*;
 
 use rtic::cyccnt::{Instant, U32Ext as _};
@@ -18,18 +18,18 @@ const PERIOD: u32 = CLOCK_FREQ/2;
 
 use logging::hex::*;
 logging::add!(logger);
-use logger::{info,debug};
+use logger::{info,debug, blocking};
 
 #[rtic::app(device = app::hal::raw, peripherals = true, monotonic = rtic::cyccnt::CYCCNT)]
 const APP: () = {
 
     struct Resources {
-        authnr: app::types::Authenticator,
         apdu_dispatch: app::types::ApduDispatch,
+        hid_dispatch: app::types::HidDispatch,
         trussed: app::types::CryptoService,
 
         piv: app::types::Piv,
-        fido: Option<app::types::FidoApplet>,
+        fido: app::types::FidoApplet,
         ndef: applet_ndef::NdefApplet<'static>,
 
         usb_classes: Option<app::types::UsbClasses>,
@@ -47,8 +47,8 @@ const APP: () = {
     fn init(c: init::Context) -> init::LateResources {
 
         let (
-            authnr,
             apdu_dispatch,
+            hid_dispatch,
             trussed,
 
             piv,
@@ -71,8 +71,8 @@ const APP: () = {
         }
 
         init::LateResources {
-            authnr,
             apdu_dispatch,
+            hid_dispatch,
             trussed,
 
             piv,
@@ -91,12 +91,12 @@ const APP: () = {
         }
     }
 
-    #[idle(resources = [authnr, usb_classes, apdu_dispatch, ndef, piv, fido, contactless, perf_timer])]
+    #[idle(resources = [usb_classes, apdu_dispatch, hid_dispatch, ndef, piv, fido, contactless, perf_timer])]
     fn idle(c: idle::Context) -> ! {
         let idle::Resources {
-            authnr,
             mut usb_classes,
             apdu_dispatch,
+            hid_dispatch,
             ndef,
             piv,
             fido,
@@ -119,14 +119,7 @@ const APP: () = {
                 app::drain_log_to_semihosting();
             }
 
-            match fido.as_mut() {
-                Some(fido) => {
-                    apdu_dispatch.poll(&mut [ndef, piv, fido]);
-                }
-                _ => {
-                    apdu_dispatch.poll(&mut [ndef, piv]);
-                }
-            }
+            apdu_dispatch.poll(&mut [ndef, piv, fido]);
 
             contactless.lock(|contactless|  {
                 match contactless.as_ref() {
@@ -157,9 +150,7 @@ const APP: () = {
                 }
             } );
 
-
-            authnr.poll();
-            // piv.poll();
+            hid_dispatch.poll(&mut [fido]);
         }
     }
 
@@ -229,15 +220,6 @@ const APP: () = {
 
         *TOGGLES += 1;
     }
-
-    // #[task( binds = CTIMER0, resources = [hw_scheduler], priority = 7)]
-    // fn nfc_wait_extension(c: nfc_wait_extension::Context) {
-    //     info!("HW BLINK").ok();
-    //     let hw_blink::Resources {
-    //         hw_scheduler,
-    //     } = c.resources;
-    //     hw_scheduler.start(500.ms());
-    // }
 
     #[task(binds = CTIMER0, resources = [contactless, perf_timer, hw_scheduler], priority = 7)]
     fn nfc_wait_extension(c: nfc_wait_extension::Context) {
