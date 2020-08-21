@@ -377,14 +377,6 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
                 self.start_sending(response);
             },
 
-            Command::Wink => {
-                // blocking::info!("received WINK!").ok();
-                // TODO: request.length should be zero
-                // TODO: callback "app"
-                let response = Response::from_request_and_size(request, 1);
-                self.start_sending(response);
-            },
-
             _ => {
                 self.interchange.request(
                     (request.command, heapless::ByteBuf::from_slice(&self.buffer[..request.length as usize]).unwrap())
