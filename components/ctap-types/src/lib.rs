@@ -28,7 +28,7 @@ pub mod authenticator;
 pub mod cose;
 pub mod ctap1;
 pub mod ctap2;
-pub mod ctaphid;
+pub mod operation;
 pub mod rpc;
 pub mod serde;
 pub mod sizes;

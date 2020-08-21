@@ -1,0 +1,28 @@
+[package]
+name = "hid-dispatch"
+version = "0.0.1"
+authors = ["Conor Patrick <conor@solokeys.com>", "Nicolas Stalder <n@stalder.io>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+heapless = { version = "0.5.5" }
+
+# Components
+logging = {path = "../logging"}
+interchange = {path = "../interchange"}
+
+[features]
+default = []
+std = ["logging/std"]
+
+log-all = []
+log-none = []
+log-info = []
+log-debug = []
+log-warn = []
+log-error = []
+
+[patch.crates-io]
+heapless = { git = "https://github.com/nicolas-solokeys/heapless", branch = "bytebuf" }

@@ -4,7 +4,7 @@ use core::convert::{TryFrom, TryInto};
 
 logging::add!(logger);
 
-use logger::{info};
+use logger::{info, debug};
 
 use trussed::{
     block, syscall,
@@ -24,12 +24,11 @@ use ctap_types::{
     ByteBuf, ByteBuf32, consts, String, Vec,
     // cose::EcdhEsHkdf256PublicKey as CoseEcdhEsHkdf256PublicKey,
     // cose::PublicKey as CosePublicKey,
-    ctaphid::VendorOperation,
-    rpc::CtapInterchange,
+    operation::VendorOperation,
+    // rpc::CtapInterchange,
     // authenticator::ctap1,
     authenticator::{ctap2, Error, Request, Response},
 };
-use interchange::Responder;
 
 use littlefs2::path::{Path, PathBuf};
 
@@ -75,10 +74,6 @@ fn rk_path(rp_id_hash: &ByteBuf<consts::U32>, credential_id_hash: &ByteBuf<const
 pub mod credential;
 pub use credential::*;
 
-#[cfg(not(feature = "debug-logs"))]
-#[macro_use]
-macro_rules! debug { ($($tt:tt)*) => {{ core::result::Result::<(), core::convert::Infallible>::Ok(()) }} }
-
 pub type Result<T> = core::result::Result<T, Error>;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -101,20 +96,7 @@ impl core::convert::TryFrom<i32> for SupportedAlgorithm {
     }
 }
 
-/// Idea is to maybe send a request over a queue,
-/// and return upon button press.
-/// TODO: Do we need a timeout?
-pub trait UserPresence {
-    fn user_present(&mut self) -> bool;
-}
 
-pub struct SilentAuthenticator {}
-
-impl UserPresence for SilentAuthenticator {
-    fn user_present(&mut self) -> bool {
-        true
-    }
-}
 
 fn cbor_serialize_message<T: serde::Serialize>(object: &T) -> core::result::Result<Message, ctap_types::serde::Error> {
     let mut message = Message::new();
@@ -122,33 +104,25 @@ fn cbor_serialize_message<T: serde::Serialize>(object: &T) -> core::result::Resu
     Ok(message)
 }
 
-pub struct Authenticator<UP>
-where
-    UP: UserPresence,
+pub struct Authenticator
 {
     crypto: CryptoClient,
-    interchange: Responder<CtapInterchange>,
     state: state::State,
-    up: UP,
 }
 
-impl<UP: UserPresence> Authenticator<UP> {
+impl Authenticator {
 
-    pub fn new(crypto: CryptoClient, interchange: Responder<CtapInterchange>, up: UP) -> Self {
+    pub fn new(crypto: CryptoClient) -> Self {
 
         let crypto = crypto;
         let state = state::State::new();
-        let authenticator = Authenticator { crypto, interchange, state, up };
+        let authenticator = Authenticator { crypto, state };
 
         authenticator
     }
 
-    fn respond(&mut self, response: Result<Response>) {
-        self.interchange.respond(response).expect("internal error");
-    }
-
-    pub fn poll(&mut self) {
-        if let Some(request) = self.interchange.take_request() {
+    pub fn call(&mut self, request: &Request) -> Result<Response> {
+        // if let Some(request) = self.interchange.take_request() {
             // debug!("request: {:?}", &request).ok();
 
             match request {
@@ -157,105 +131,84 @@ impl<UP: UserPresence> Authenticator<UP> {
 
                         // 0x4
                         ctap2::Request::GetInfo => {
-                            // debug!("GI").ok();
+                            debug!("GI").ok();
                             let response = self.get_info();
-                            self.interchange.respond(
-                                Ok(Response::Ctap2(ctap2::Response::GetInfo(response))))
-                                .expect("internal error");
+                            Ok(Response::Ctap2(ctap2::Response::GetInfo(response)))
                         }
 
                         // 0x2
                         ctap2::Request::MakeCredential(parameters) => {
-                            // debug!("MC: {:?}", &parameters).ok();
+                            debug!("MC request").ok();
                             let response = self.make_credential(&parameters);
-                            self.interchange.respond(
-                                match response {
-                                    Ok(response) => Ok(Response::Ctap2(ctap2::Response::MakeCredential(response))),
-                                    Err(error) => Err(error)
-                                })
-                                .expect("internal error");
-                            debug!("enqueued MC response").ok();
+                            match response {
+                                Ok(response) => Ok(Response::Ctap2(ctap2::Response::MakeCredential(response))),
+                                Err(error) => Err(error)
+                            }
                         }
 
                         // 0x1
                         ctap2::Request::GetAssertion(parameters) => {
-                            // debug!("GA: {:?}", &parameters).ok();
+                            debug!("GA request").ok();
                             let response = self.get_assertion(&parameters);
-                            self.interchange.respond(
-                                match response {
-                                    Ok(response) => Ok(Response::Ctap2(ctap2::Response::GetAssertion(response))),
-                                    Err(error) => Err(error)
-                                })
-                                .expect("internal error");
-                            debug!("enqueued GA response").ok();
+                            match response {
+                                Ok(response) => Ok(Response::Ctap2(ctap2::Response::GetAssertion(response))),
+                                Err(error) => Err(error)
+                            }
                         }
 
                         // 0x8
                         ctap2::Request::GetNextAssertion => {
-                            // debug!("GNA: {:?}", &parameters).ok();
+                            debug!("GNA request").ok();
                             let response = self.get_next_assertion();
-                            self.interchange.respond(
-                                match response {
-                                    Ok(response) => Ok(Response::Ctap2(ctap2::Response::GetNextAssertion(response))),
-                                    Err(error) => Err(error)
-                                })
-                                .expect("internal error");
-                            debug!("enqueued GA response").ok();
+                            match response {
+                                Ok(response) => Ok(Response::Ctap2(ctap2::Response::GetNextAssertion(response))),
+                                Err(error) => Err(error)
+                            }
                         }
 
                         // 0x7
                         ctap2::Request::Reset => {
-                            // debug!("RESET: {:?}", &parameters).ok();
+                            debug!("GA request").ok();
                             let response = self.reset();
-                            self.interchange.respond(
-                                match response {
-                                    Ok(()) => Ok(Response::Ctap2(ctap2::Response::Reset)),
-                                    Err(error) => Err(error)
-                                })
-                                .expect("internal error");
-                            debug!("enqueued GA response").ok();
+                            match response {
+                                Ok(()) => Ok(Response::Ctap2(ctap2::Response::Reset)),
+                                Err(error) => Err(error)
+                            }
                         }
 
 
                         // 0x6
                         ctap2::Request::ClientPin(parameters) => {
+                            debug!("CP request").ok();
                             let response = self.client_pin(&parameters);
-                            // blocking::info!("{:?}", &response).ok();
-                            self.interchange.respond(
-                                match response {
-                                    Ok(response) => Ok(Response::Ctap2(ctap2::Response::ClientPin(response))),
-                                    Err(error) => Err(error)
-                                })
-                                .expect("internal error");
-                            debug!("enqueued CP response").ok();
+                            match response {
+                                Ok(response) => Ok(Response::Ctap2(ctap2::Response::ClientPin(response))),
+                                Err(error) => Err(error)
+                            }
                         }
 
                         // 0xA
                         ctap2::Request::CredentialManagement(parameters) => {
-                            // debug!("CM: {:?}", &parameters).ok();
+                            debug!("CM request").ok();
                             let response = self.credential_management(&parameters);
-                            self.interchange.respond(
-                                match response {
-                                    Ok(response) => {
-                                        // let mut buf = [0u8; 512];
-                                        // blocking::info!("{:?}", ctap_types::serde::cbor_serialize(&response, &mut buf)).ok();
-                                        Ok(Response::Ctap2(ctap2::Response::CredentialManagement(response)))
-                                    }
-                                    Err(error) => Err(error)
-                                })
-                                .expect("internal error");
-                            debug!("enqueued GA response").ok();
+                            match response {
+                                Ok(response) => {
+                                    // let mut buf = [0u8; 512];
+                                    // blocking::info!("{:?}", ctap_types::serde::cbor_serialize(&response, &mut buf)).ok();
+                                    Ok(Response::Ctap2(ctap2::Response::CredentialManagement(response)))
+                                }
+                                Err(error) => Err(error)
+                            }
                         }
 
 
                         ctap2::Request::Vendor(op) => {
-                            let response = self.vendor(op);
-                            self.interchange.respond(
-                                match response {
-                                    Ok(()) => Ok(Response::Ctap2(ctap2::Response::Vendor)),
-                                    Err(error) => Err(error)
-                                })
-                                .expect("internal error");
+                            debug!("Vendor request").ok();
+                            let response = self.vendor(*op);
+                            match response {
+                                Ok(()) => Ok(Response::Ctap2(ctap2::Response::Vendor)),
+                                Err(error) => Err(error)
+                            }
                         }
 
                         // _ => {
@@ -267,11 +220,10 @@ impl<UP: UserPresence> Authenticator<UP> {
                 }
                 Request::Ctap1(_request) => {
                     debug!("ctap1 not implemented: {:?}", &_request).ok();
-                    // self.interchange.respond(Err(Error::InvalidCommand)).expect("internal error");
-                    self.respond(Err(Error::InvalidCommand));
+                    Err(Error::InvalidCommand)
                 }
             }
-        }
+        // }
     }
 
     fn client_pin(&mut self, parameters: &ctap2::client_pin::Parameters) -> Result<ctap2::client_pin::Response> {
@@ -633,6 +585,11 @@ impl<UP: UserPresence> Authenticator<UP> {
         }
     }
 
+    fn user_present(&mut self) -> bool {
+        // TODO use a trussed call here
+        true
+    }
+
     /// Returns whether UV was performed.
     fn pin_prechecks(&mut self,
         options: &Option<ctap2::AuthenticatorOptions>,
@@ -649,7 +606,7 @@ impl<UP: UserPresence> Authenticator<UP> {
         // wants to enforce PIN and needs to figure out which authnrs support PIN
         if let Some(pin_auth) = pin_auth.as_ref() {
             if pin_auth.len() == 0 {
-                if !self.up.user_present() {
+                if !self.user_present() {
                     return Err(Error::OperationDenied);
                 }
                 if !self.state.persistent.pin_is_set() {
@@ -1405,7 +1362,6 @@ impl<UP: UserPresence> Authenticator<UP> {
         //         _ => false,
         //     };
         // }
-
         let mut hmac_secret_requested = None;
         // let mut cred_protect_requested = CredentialProtectionPolicy::Optional;
         let mut cred_protect_requested = CredentialProtectionPolicy::default();
@@ -1451,7 +1407,7 @@ impl<UP: UserPresence> Authenticator<UP> {
         // debug!("hmac-secret = {:?}, credProtect = {:?}", hmac_secret_requested, cred_protect_requested).ok();
 
         // 10. get UP, if denied error OperationDenied
-        if !self.up.user_present() {
+        if !self.user_present() {
             return Err(Error::OperationDenied);
         }
 

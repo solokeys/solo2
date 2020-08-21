@@ -8,9 +8,12 @@ edition = "2018"
 [dependencies]
 ctap-types = { path = "../ctap-types" }
 interchange = { path = "../interchange" }
+hid-dispatch = { path = "../hid-dispatch" }
+heapless = { version = "0.5.5" }
 logging = { path = "../logging" }
 serde = { version = "1.0", default-features = false }
 usb-device = "0.2.3"
+
 
 # ufmt = { version = "0.1.0", optional = true }
 
@@ -23,3 +26,8 @@ log-info = []
 log-debug = []
 log-warn = []
 log-error = []
+
+
+[patch.crates-io]
+heapless = { git = "https://github.com/nicolas-solokeys/heapless", branch = "bytebuf" }
+

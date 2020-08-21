@@ -11,7 +11,9 @@ heapless = { version = "0.5.5" }
 ufmt = "0.1"
 serde = { version = "1.0", default-features = false }
 
+fido-authenticator = {path = "../fido-authenticator"}
 apdu-dispatch = {path = "../apdu-dispatch"}
+hid-dispatch = {path = "../hid-dispatch"}
 iso7816 = { path = "../iso7816" }
 interchange= { path = "../interchange" }
 ctap-types = { path = "../ctap-types" }

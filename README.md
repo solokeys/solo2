@@ -9,6 +9,16 @@ To make pcsclite on Linux work with the Bee, on Debian copy `Info.plist` to `/et
 [docs-image]: https://img.shields.io/badge/docs-book-green?style=flat-square
 [docs-link]: https://solo-bee.netlify.com
 
+## Building
+
+### Prerequisites
+
+On Ubuntu or Debian:
+
+```
+sudo apt-get install llvm clang
+```
+
 #### License
 
 <sup>`solo-bee` is licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or [MIT License](LICENSE-MIT) at your option.</sup>

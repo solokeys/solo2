@@ -56,7 +56,7 @@ pub mod ctap2 {
         CredentialManagement(credential_management::Parameters),
         // vendor, to be embellished
         // Q: how to handle the associated CBOR structures
-        Vendor(crate::ctaphid::VendorOperation),
+        Vendor(crate::operation::VendorOperation),
     }
 
     #[derive(Clone, Debug,uDebug, PartialEq)]
