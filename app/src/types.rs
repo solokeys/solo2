@@ -100,6 +100,8 @@ pub type HidDispatch = hid_dispatch::dispatch::Dispatch;
 
 pub type FidoApplet = applet_fido::Fido;
 
+pub type WinkApplet = crate::wink::Wink;
+
 pub type PerfTimer = timer::Timer<ctimer::Ctimer4<hal::typestates::init_state::Enabled>>;
 
 pub type DynamicClockController = crate::clock_controller::DynamicClockController;

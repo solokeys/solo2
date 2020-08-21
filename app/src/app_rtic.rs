@@ -18,7 +18,7 @@ const PERIOD: u32 = CLOCK_FREQ/2;
 
 use logging::hex::*;
 logging::add!(logger);
-use logger::{info,debug, blocking};
+use logger::{info,};
 
 #[rtic::app(device = app::hal::raw, peripherals = true, monotonic = rtic::cyccnt::CYCCNT)]
 const APP: () = {
@@ -31,6 +31,7 @@ const APP: () = {
         piv: app::types::Piv,
         fido: app::types::FidoApplet,
         ndef: applet_ndef::NdefApplet<'static>,
+        wink: app::types::WinkApplet,
 
         usb_classes: Option<app::types::UsbClasses>,
         contactless: Option<app::types::Iso14443>,
@@ -70,6 +71,8 @@ const APP: () = {
             c.schedule.toggle_red(Instant::now() + PERIOD.cycles()).unwrap();
         }
 
+        let wink = app::wink::Wink::new();
+
         init::LateResources {
             apdu_dispatch,
             hid_dispatch,
@@ -78,6 +81,7 @@ const APP: () = {
             piv,
             fido,
             ndef,
+            wink,
 
             usb_classes,
             contactless,
@@ -91,7 +95,7 @@ const APP: () = {
         }
     }
 
-    #[idle(resources = [usb_classes, apdu_dispatch, hid_dispatch, ndef, piv, fido, contactless, perf_timer])]
+    #[idle(resources = [usb_classes, apdu_dispatch, hid_dispatch, ndef, piv, fido, wink, contactless, perf_timer], schedule = [do_wink])]
     fn idle(c: idle::Context) -> ! {
         let idle::Resources {
             mut usb_classes,
@@ -100,6 +104,7 @@ const APP: () = {
             ndef,
             piv,
             fido,
+            wink,
             mut contactless,
             mut perf_timer,
         }
@@ -150,7 +155,11 @@ const APP: () = {
                 }
             } );
 
-            hid_dispatch.poll(&mut [fido]);
+            hid_dispatch.poll(&mut [fido, wink]);
+
+            if wink.wink() {
+                c.schedule.do_wink(Instant::now() + PERIOD.cycles()).unwrap();
+            }
         }
     }
 
@@ -219,6 +228,26 @@ const APP: () = {
         info!("toggled red LED #{}", *TOGGLES).ok();
 
         *TOGGLES += 1;
+    }
+
+    #[task(resources = [rgb], schedule = [do_wink], priority = 1)]
+    fn do_wink(c: do_wink::Context) {
+
+        static mut BLINKS: u32 = 0;
+        use solo_bee_traits::rgb_led::RgbLed;
+        if *BLINKS < 6 {
+            if *BLINKS & 1 == 0 {
+                c.resources.rgb.turn_off();
+            } else {
+                c.resources.rgb.blue(10);
+            }
+            c.schedule.do_wink(Instant::now() + PERIOD.cycles()).unwrap();
+            *BLINKS += 1;
+        } else {
+            c.resources.rgb.turn_off();
+            *BLINKS = 0;
+        }
+        info!("**WINK**").ok();
     }
 
     #[task(binds = CTIMER0, resources = [contactless, perf_timer, hw_scheduler], priority = 7)]

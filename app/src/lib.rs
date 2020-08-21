@@ -29,6 +29,7 @@ pub use board::rt::entry;
 
 pub mod types;
 pub mod clock_controller;
+pub mod wink;
 use types::{
     EnabledUsbPeripheral,
     ExternalStorage,
