@@ -29,6 +29,7 @@ impl Dispatch {
     // Using helper here to take potentially large stack burden off of call chain to application.
     #[inline(never)]
     fn reply_with_error(&mut self, error: Error){
+        let (_command, _message) = self.responder.take_request().unwrap();
         self.responder.respond(
             Err(error)
         ).expect("cant respond");
@@ -54,6 +55,8 @@ impl Dispatch {
             let tuple: &mut (Command, Message) = unsafe { self.responder.interchange.as_mut().unwrap().rq_mut() };
             let command = tuple.0;
             let message = &mut tuple.1;
+            let commandu8: u8 = command.into();
+            logger::blocking::info!("cmd: {}", commandu8);
             if let Some(app) = Self::find_app(command, apps) {
                 match app.call(command, message) {
                     Err(err) => {
