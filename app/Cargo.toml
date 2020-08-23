@@ -37,6 +37,7 @@ usbd-ctaphid = { path = "../components/usbd-ctaphid" }
 fm11nc08 = {path = "./../components/fm11nc08"}
 iso14443 = {path = "./../components/iso14443"}
 apdu-dispatch = {path = "./../components/apdu-dispatch"}
+hid-dispatch = {path = "./../components/hid-dispatch"}
 applet-ndef = {path = "./../components/applet-ndef"}
 applet-fido = {path = "./../components/applet-fido"}
 logging = {path = "./../components/logging"}
@@ -63,7 +64,6 @@ log-serial = []
 
 highspeed = []
 serial = []
-nfc = []
 
 log-all = []
 log-none = []
@@ -82,6 +82,6 @@ ufmt-macros = { git = "https://github.com/nickray/ufmt", branch = "nickray-deriv
 [profile.release]
 codegen-units = 1
 # lto = true
-opt-level = "s"
+opt-level = "z"
 incremental = false
 debug = true
