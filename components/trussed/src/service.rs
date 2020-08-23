@@ -722,9 +722,13 @@ impl<B: Board> ServiceResources<B> {
                     return Ok(Reply::RequestUserConsent(reply::RequestUserConsent { result } ))
                 }
                 assert_eq!(request.level, Level::Normal);
+
                 // TODO: decide where to handle "no buttons" setup (e.g. passively powered / NFC)
-                if let Some(buttons) = self.board.buttons() {
-                    nb::block!(buttons.wait_for_any_new_press());
+                let has_buttons = self.board.buttons().is_some();
+                if has_buttons {
+                    self.board.led().blue(10);
+                    nb::block!(self.board.buttons().as_mut().unwrap().wait_for_any_new_press());
+                    self.board.led().turn_off();
                 }
                 let result = Ok(());
                 Ok(Reply::RequestUserConsent(reply::RequestUserConsent { result } ))
@@ -900,6 +904,24 @@ impl<B: Board> Service<B> {
 
     pub fn add_endpoint(&mut self, interchange: Responder<TrussedInterchange>, client_id: ClientId) -> Result<(), ServiceEndpoint> {
         self.eps.push(ServiceEndpoint { interchange, client_id })
+    }
+
+    // currently, this just blinks the green heartbeat LED (former toggle_red in app_rtic.rs)
+    //
+    // in future, this would
+    // - generate more interesting LED visuals
+    // - return "when" next to be called
+    // - potentially read out button status and return "async"
+    pub fn update_ui(&mut self) /* -> u32 */ {
+        static mut ON: bool = false;
+        let on = unsafe { ON };
+        if on {
+            self.resources.board.led().turn_off();
+        } else {
+            self.resources.board.led().green(10);
+        }
+        unsafe { ON = !ON };
+        // 1
     }
 
     // process one request per client which has any

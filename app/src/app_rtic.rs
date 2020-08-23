@@ -37,13 +37,12 @@ const APP: () = {
         contactless: Option<app::types::Iso14443>,
 
         perf_timer: app::types::PerfTimer,
-        rgb: board::led::RgbLed,
 
         clock_ctrl: Option<app::types::DynamicClockController>,
         hw_scheduler: app::types::HwScheduler,
     }
 
-    #[init(schedule = [toggle_red])]
+    #[init(schedule = [update_ui])]
     fn init(c: init::Context) -> init::LateResources {
 
         let (
@@ -59,14 +58,13 @@ const APP: () = {
             contactless,
 
             perf_timer,
-            rgb,
             clock_ctrl,
             hw_scheduler,
         ) = app::init_board(c.device, c.core);
 
         // don't toggle LED in passive mode
         if usb_classes.is_some() {
-            c.schedule.toggle_red(Instant::now() + PERIOD.cycles()).unwrap();
+            c.schedule.update_ui(Instant::now() + PERIOD.cycles()).unwrap();
         }
 
         let wink = app::wink::Wink::new();
@@ -85,7 +83,6 @@ const APP: () = {
             contactless,
 
             perf_timer,
-            rgb,
 
             clock_ctrl,
             hw_scheduler,
@@ -212,24 +209,18 @@ const APP: () = {
         c.resources.trussed.process();
     }
 
-    #[task(resources = [rgb], schedule = [toggle_red], priority = 1)]
-    fn toggle_red(c: toggle_red::Context) {
+    #[task(resources = [trussed], schedule = [update_ui], priority = 1)]
+    fn update_ui(mut c: update_ui::Context) {
 
-        static mut TOGGLES: u32 = 1;
-        static mut ON: bool = false;
-        use trussed_board::rgb_led::RgbLed;
-        if *ON {
-            c.resources.rgb.turn_off();
-            *ON = false;
-        } else {
-            c.resources.rgb.green(10);
-            *ON = true;
-        }
+        static mut UPDATES: u32 = 1;
 
-        c.schedule.toggle_red(Instant::now() + PERIOD.cycles()).unwrap();
-        info!("toggled red LED #{}", *TOGGLES).ok();
+        // let wait_periods = c.resources.trussed.lock(|trussed| trussed.update_ui());
+        c.resources.trussed.lock(|trussed| trussed.update_ui());
+        // c.schedule.update_ui(Instant::now() + wait_periods * PERIOD.cycles()).unwrap();
+        c.schedule.update_ui(Instant::now() + PERIOD.cycles()).unwrap();
 
-        *TOGGLES += 1;
+        info!("updated UI #{}", *UPDATES).ok();
+        *UPDATES += 1;
     }
 
     #[task(resources = [rgb], schedule = [do_wink], priority = 1)]
