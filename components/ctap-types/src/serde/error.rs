@@ -61,6 +61,8 @@ pub enum Error {
     SerdeSerCustom,
     /// Serde Deserialization Error
     SerdeDeCustom,
+    /// Serde Missing required value
+    SerdeMissingField,
 }
 
 impl Display for Error {
@@ -99,6 +101,7 @@ impl Display for Error {
                 DeserializeNonMinimal => "Value may be valid, but not encoded in minimal way",
                 SerdeSerCustom => "Serde Serialization Error",
                 SerdeDeCustom => "Serde Deserialization Error",
+                SerdeMissingField => "Serde Missing Required Field"
             }
         )
     }
@@ -114,7 +117,7 @@ impl serde::ser::Error for Error {
 }
 
 impl serde::de::Error for Error {
-    fn custom<T>(_msg: T) -> Self
+    fn custom<T>(msg: T) -> Self
     where
         T: Display,
     {
@@ -132,8 +135,11 @@ impl serde::de::Error for Error {
         //
         // `invalid length 297, expected a sequence`
         //
-        // cortex_m_semihosting::hprintln!("Serde custom error: {}", &_msg).ok();
+        crate::logger::blocking::info!("deser error: {}",&msg);
         Error::SerdeDeCustom
+    }
+    fn missing_field(field: &'static str) -> Self {
+        Error::SerdeMissingField
     }
 }
 

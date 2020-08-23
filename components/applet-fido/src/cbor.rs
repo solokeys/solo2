@@ -1,25 +1,41 @@
+use core::convert::From;
 use core::convert::TryFrom;
 use ctap_types::{
-    authenticator::{Request},
+    authenticator::{Request, Error as AuthenticatorError},
     operation::Operation,
-    serde::{cbor_deserialize},
+    serde::{cbor_deserialize, error::Error as SerdeError},
 };
 
-use crate::logger::{info};
+use crate::logger::{info, blocking};
 
 pub enum CtapMappingError {
     InvalidCommand(u8),
-    ParsingError(ctap_types::serde::error::Error),
-    NoData,
+    ParsingError(SerdeError),
 }
 
+impl From<CtapMappingError> for AuthenticatorError {
+    fn from(mapping_error: CtapMappingError) -> AuthenticatorError {
+        match mapping_error {
+            CtapMappingError::InvalidCommand(_cmd) => {
+                AuthenticatorError::InvalidCommand
+            }
+            CtapMappingError::ParsingError(cbor_error) => {
+                match cbor_error {
+                    SerdeError::SerdeMissingField => AuthenticatorError::MissingParameter,
+                    _ => AuthenticatorError::InvalidCbor
+                }
+            }
+        }
+
+    }
+}
 
 pub fn parse_cbor(data: &[u8]) -> core::result::Result<Request, CtapMappingError> {
     // let data = &buffer[..request.length as usize];
     // blocking::info!("data: {:?}", data).ok();
 
     if data.len() < 1 {
-        return Err(CtapMappingError::NoData);
+        return Err(CtapMappingError::ParsingError(SerdeError::DeserializeUnexpectedEnd));
     }
 
     let operation_u8: u8 = data[0];

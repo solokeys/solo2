@@ -8,7 +8,7 @@ use ctap_types::{
     serde::{cbor_serialize},
 };
 
-use crate::cbor::{parse_cbor, CtapMappingError};
+use crate::cbor::{parse_cbor};
 use crate::logger::{info};
 use logging::hex::*;
 
@@ -150,20 +150,12 @@ impl applet::Applet for Fido {
                                 info!("handled cbor").ok();
                                 self.call_authenticator(&request)
                             }
-                            Err(CtapMappingError::InvalidCommand(cmd)) => {
-                                info!("authenticator command {:?}", cmd).ok();
+                            Err(mapping_error) => {
+                                let authenticator_error: AuthenticatorError = mapping_error.into();
+                                info!("cbor mapping error").ok();
                                 Ok(applet::Response::Respond(ByteBuf::from_slice(
-                                   & [AuthenticatorError::InvalidCommand as u8]
+                                   & [authenticator_error as u8]
                                 ).unwrap()))
-                            }
-                            Err(CtapMappingError::ParsingError(_error)) => {
-                                info!("parsing cbor error ").ok();
-                                Ok(applet::Response::Respond(ByteBuf::from_slice(
-                                   & [AuthenticatorError::InvalidCbor as u8]
-                                ).unwrap()))
-                            }
-                            Err(CtapMappingError::NoData) => {
-                                Err(Status::InstructionNotSupportedOrInvalid)
                             }
                         }
                     }
@@ -194,6 +186,8 @@ impl hid::App for Fido {
     #[inline(never)]
     fn call(&mut self, _command: hid::Command, message: &mut hid::Message) -> hid::Response {
     // Command::Cbor => {
+        info!("cbor:").ok();
+        crate::logger::dump_hex(message, message.len());
         match parse_cbor(message) {
             Ok(request) => {
                 let response = self.call_authenticator(&request);
@@ -209,25 +203,13 @@ impl hid::App for Fido {
                     }
                 }
             }
-            Err(CtapMappingError::InvalidCommand(cmd)) => {
-                info!("authenticator command {:?}", cmd).ok();
+            Err(mapping_error) => {
+                let authenticator_error: AuthenticatorError = mapping_error.into();
                 message.clear();
                 message.extend_from_slice(&[
-                    AuthenticatorError::InvalidCommand as u8
+                    authenticator_error as u8
                 ]).ok();
                 Ok(())
-            }
-            Err(CtapMappingError::ParsingError(_error)) => {
-                info!("deser error ").ok();
-
-                message.clear();
-                message.extend_from_slice(&[
-                    AuthenticatorError::InvalidCbor as u8
-                ]).ok();
-                Ok(())
-            }
-            Err(CtapMappingError::NoData) => {
-                Err(hid::Error::NoResponse)
             }
         }
 

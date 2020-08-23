@@ -33,7 +33,7 @@ impl PublicKeyCredentialUserEntity {
 pub struct PublicKeyCredentialParameters {
     pub alg: i32,
     #[serde(rename = "type")]
-    pub key_type: String<consts::U10>,
+    pub key_type: String<consts::U32>,
 }
 
 #[derive(Clone,Debug,uDebug,Eq,PartialEq,Serialize,Deserialize)]
@@ -43,7 +43,7 @@ pub struct PublicKeyCredentialDescriptor {
     // See serde::error/custom for more info
     pub id: ByteBuf<MAX_CREDENTIAL_ID_LENGTH>,
     #[serde(rename = "type")]
-    pub key_type: String<consts::U10>,
+    pub key_type: String<consts::U32>,
     // https://w3c.github.io/webauthn/#enumdef-authenticatortransport
     // transports: ...
 }
