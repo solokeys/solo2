@@ -25,11 +25,13 @@ generic-array = "0.12.3"  # "0.13.2"
 heapless = { version = "0.5.5", features = ["ufmt"] }
 hmac = "0.7.1"
 interchange = { path = "../interchange" }
+nb = "1"
 serde = { version = "1.0", default-features = false }
 serde_cbor = { version = "0.11.0", default-features = false }
 serde-indexed = "0.0.4"
 sha-1 = { version = "0.8.2", default-features = false, optional = true }
 sha2 = { version = "0.8.0", default-features = false }
+trussed-board = { path = "../trussed-board" }
 ufmt = "0.1.0"
 
 cortex-m-rtic = "0.5.1"

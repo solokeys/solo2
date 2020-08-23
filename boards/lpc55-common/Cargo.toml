@@ -7,7 +7,7 @@ edition = "2018"
 [dependencies]
 cortex-m = "0.6.1"
 cortex-m-rt = "0.6.10"
-nb = "0.1"
+nb = "1"
 trussed-board = {path = "../../components/trussed-board"}
 
 [dependencies.lpc55-hal]

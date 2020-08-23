@@ -8,7 +8,7 @@ edition = "2018"
 cortex-m = "0.6.1"
 cortex-m-rt = "0.6.10"
 embedded-hal = { version = "0.2", features = ["unproven"] }
-nb = "0.1"
+nb = "1"
 lpc55-common = {path = "../lpc55-common"}
 trussed-board = {path = "../../components/trussed-board"}
 

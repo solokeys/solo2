@@ -14,7 +14,7 @@ path = "src/app_rtic.rs"
 [dependencies]
 cortex-m-rtic = "0.5.1"
 heapless = { version = "0.5.5", features = ["ufmt"] }
-nb = "0.1"
+nb = "1"
 ufmt = "0.1.0"
 usb-device = "0.2.3"
 usbd-serial = "0.1.0"

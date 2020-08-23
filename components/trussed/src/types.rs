@@ -32,18 +32,24 @@ pub mod ui {
 
     // TODO: Consider whether a simple "language" to specify "patterns"
     // makes sense, vs. "semantic" indications with board-specific implementation
-    #[derive(Clone, Eq, PartialEq, Debug, uDebug, Serialize, Deserialize)]
+    #[derive(Copy, Clone, Eq, PartialEq, Debug, uDebug, Serialize, Deserialize)]
     pub enum VisualPattern {
         // BreathMajestically,
+        /// signals healthy heartbeat
         BlinkingGreen,
+        /// signals request for confirmation of user presence
         StaticBlue,
+        /// signals request for confirmation of user intent (e.g. "reset")
+        RainbowGlare,
+        /// something went horribly wrong :)
+        DeadRed,
     }
 }
 
 pub mod consent {
     use super::*;
 
-    #[derive(Clone, Eq, PartialEq, Debug, uDebug, Serialize, Deserialize)]
+    #[derive(Copy, Clone, Eq, PartialEq, Debug, uDebug, Serialize, Deserialize)]
     pub enum Level {
         /// Normal user presence check, currently implemented as "touch any of three buttons"
         Normal,
@@ -51,7 +57,7 @@ pub mod consent {
         Strong,
     }
 
-    #[derive(Clone, Eq, PartialEq, Debug, uDebug, Serialize, Deserialize)]
+    #[derive(Copy, Clone, Eq, PartialEq, Debug, uDebug, Serialize, Deserialize)]
     pub enum Urgency {
         /// Pending other user consent requests will fail as interrupted.
         InterruptOthers,
@@ -59,11 +65,12 @@ pub mod consent {
         FailIfOthers,
     }
 
-    #[derive(Clone, Eq, PartialEq, Debug, uDebug, Serialize, Deserialize)]
+    #[derive(Copy, Clone, Eq, PartialEq, Debug, uDebug, Serialize, Deserialize)]
     pub enum Error {
         FailedToInterrupt,
         Interrupted,
         TimedOut,
+        TimeoutNotImplemented,
     }
 
     pub type Result = core::result::Result<(), Error>;

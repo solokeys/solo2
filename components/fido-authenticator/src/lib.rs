@@ -8,7 +8,7 @@ use logger::{info, debug};
 
 use trussed::{
     block, syscall,
-    Client as CryptoClient,
+    Client as TrussedClient,
     types::{
         KeySerialization,
         Mechanism,
@@ -103,7 +103,31 @@ impl core::convert::TryFrom<i32> for SupportedAlgorithm {
     }
 }
 
+/// Idea is to maybe send a request over a queue,
+/// and return upon button press.
+/// TODO: Do we need a timeout?
+pub trait UserPresence: Copy {
+    fn user_present(self, trussed: &mut TrussedClient) -> bool;
+}
 
+#[derive(Copy, Clone)]
+pub struct SilentAuthenticator {}
+
+impl UserPresence for SilentAuthenticator {
+    fn user_present(self, _: &mut TrussedClient) -> bool {
+        true
+    }
+}
+
+#[derive(Copy, Clone)]
+pub struct NonSilentAuthenticator {}
+
+impl UserPresence for NonSilentAuthenticator {
+    fn user_present(self, trussed: &mut TrussedClient) -> bool {
+        let result = syscall!(trussed.confirm_user_present(None)).result;
+        result.is_ok()
+    }
+}
 
 fn cbor_serialize_message<T: serde::Serialize>(object: &T) -> core::result::Result<Message, ctap_types::serde::Error> {
     let mut message = Message::new();
@@ -113,23 +137,23 @@ fn cbor_serialize_message<T: serde::Serialize>(object: &T) -> core::result::Resu
 
 pub struct Authenticator
 {
-    crypto: CryptoClient,
+    trussed: CryptoClient,
     state: state::State,
 }
 
 impl Authenticator {
 
-    pub fn new(crypto: CryptoClient) -> Self {
+    pub fn new(trussed: CryptoClient) -> Self {
 
         let state = state::State::new();
-        let authenticator = Authenticator { crypto, state };
+        let authenticator = Authenticator { trussed, state };
 
         authenticator
     }
 
     pub fn call_u2f(&mut self, request: &U2fCommand) -> U2fResult<U2fResponse> {
         info!("called u2f").ok();
-        self.state.persistent.load_if_not_initialised(&mut self.crypto);
+        self.state.persistent.load_if_not_initialised(&mut self.trussed);
 
         let mut commitment = ByteBuf::<consts::U324>::new();
 
@@ -140,19 +164,19 @@ impl Authenticator {
                     return Err(U2fError::ConditionsOfUseNotSatisfied);
                 }
                 // Generate a new P256 key pair.
-                let private_key = syscall!(self.crypto.generate_p256_private_key(StorageLocation::Volatile)).key;
-                let public_key = syscall!(self.crypto.derive_p256_public_key(&private_key, StorageLocation::Volatile)).key;
+                let private_key = syscall!(self.trussed.generate_p256_private_key(StorageLocation::Volatile)).key;
+                let public_key = syscall!(self.trussed.derive_p256_public_key(&private_key, StorageLocation::Volatile)).key;
 
-                let serialized_cose_public_key = syscall!(self.crypto.serialize_key(
+                let serialized_cose_public_key = syscall!(self.trussed.serialize_key(
                     Mechanism::P256, public_key.clone(), KeySerialization::EcdhEsHkdf256
                 )).serialized_key;
-                let cose_key: ctap_types::cose::EcdhEsHkdf256PublicKey 
+                let cose_key: ctap_types::cose::EcdhEsHkdf256PublicKey
                     = trussed::cbor_deserialize(&serialized_cose_public_key).unwrap();
 
-                let wrapping_key = &self.state.persistent.key_wrapping_key(&mut self.crypto)
+                let wrapping_key = &self.state.persistent.key_wrapping_key(&mut self.trussed)
                     .map_err(|_| U2fError::UnspecifiedCheckingError)?;
                 debug!("wrapping u2f private key").ok();
-                let wrapped_key = syscall!(self.crypto.wrap_key_chacha8poly1305(
+                let wrapped_key = syscall!(self.trussed.wrap_key_chacha8poly1305(
                     &wrapping_key,
                     &private_key,
                     &reg.app_id,
@@ -160,7 +184,7 @@ impl Authenticator {
                 // debug!("wrapped_key = {:?}", &wrapped_key).ok();
 
                 let key = Key::WrappedKey(wrapped_key.try_to_byte_buf().map_err(|_| U2fError::UnspecifiedCheckingError)?);
-                let nonce = syscall!(self.crypto.random_bytes(12)).bytes.as_slice().try_into().unwrap();
+                let nonce = syscall!(self.trussed.random_bytes(12)).bytes.as_slice().try_into().unwrap();
 
                 let mut rp_id = heapless::String::new();
 
@@ -186,7 +210,7 @@ impl Authenticator {
 
                     SupportedAlgorithm::P256 as i32,
                     key,
-                    self.state.persistent.timestamp(&mut self.crypto).map_err(|_| U2fError::NotEnoughMemory)?,
+                    self.state.persistent.timestamp(&mut self.trussed).map_err(|_| U2fError::NotEnoughMemory)?,
                     None,
                     credential::CredentialProtectionPolicy::Optional,
                     nonce,
@@ -195,10 +219,10 @@ impl Authenticator {
                 // blocking::info!("made credential {:?}", &credential).ok();
 
                 // 12.b generate credential ID { = AEAD(Serialize(Credential)) }
-                let kek = &self.state.persistent.key_encryption_key(&mut self.crypto).map_err(|_| U2fError::NotEnoughMemory)?;
-                let credential_id = credential.id_using_hash(&mut self.crypto, &kek, &reg.app_id).map_err(|_| U2fError::NotEnoughMemory)?;
-                syscall!(self.crypto.delete(public_key));
-                syscall!(self.crypto.delete(private_key));
+                let kek = &self.state.persistent.key_encryption_key(&mut self.trussed).map_err(|_| U2fError::NotEnoughMemory)?;
+                let credential_id = credential.id_using_hash(&mut self.trussed, &kek, &reg.app_id).map_err(|_| U2fError::NotEnoughMemory)?;
+                syscall!(self.trussed.delete(public_key));
+                syscall!(self.trussed.delete(private_key));
 
                 commitment.push(0).unwrap();     // reserve byte
                 commitment.extend_from_slice(&reg.app_id).unwrap();
@@ -210,12 +234,12 @@ impl Authenticator {
                 commitment.extend_from_slice(&cose_key.x).unwrap();
                 commitment.extend_from_slice(&cose_key.y).unwrap();
 
-                let attestation_key = self.state.identity.attestation_key(&mut self.crypto);
+                let attestation_key = self.state.identity.attestation_key(&mut self.trussed);
 
                 let signature = match attestation_key {
                     Some(key) => {
                         syscall!(
-                            self.crypto.sign(Mechanism::P256, 
+                            self.trussed.sign(Mechanism::P256,
                             key,
                             &commitment,
                             SignatureSerialization::Asn1Der
@@ -227,7 +251,7 @@ impl Authenticator {
                     }
                 };
 
-                let file = syscall!(self.crypto
+                let file = syscall!(self.trussed
                     .read_file(
                         StorageLocation::Internal,
                         PathBuf::from(b"attestation.x5c")
@@ -248,12 +272,12 @@ impl Authenticator {
                 let user_presence_byte = match auth.control_byte {
                     ctap1::ControlByte::CheckOnly => {
                         // if the control byte is set to 0x07 by the FIDO Client,
-                        // the U2F token is supposed to simply check whether the 
+                        // the U2F token is supposed to simply check whether the
                         // provided key handle was originally created by this token
                         return if cred.is_ok() {
-                            Err(U2fError::ConditionsOfUseNotSatisfied) 
+                            Err(U2fError::ConditionsOfUseNotSatisfied)
                         } else {
-                            Err(U2fError::IncorrectDataParameter) 
+                            Err(U2fError::IncorrectDataParameter)
                         };
                     },
                     ctap1::ControlByte::EnforceUserPresenceAndSign => {
@@ -269,9 +293,9 @@ impl Authenticator {
 
                 let key = match &cred.key {
                     Key::WrappedKey(bytes) => {
-                        let wrapping_key = self.state.persistent.key_wrapping_key(&mut self.crypto)
+                        let wrapping_key = self.state.persistent.key_wrapping_key(&mut self.trussed)
                             .map_err(|_| U2fError::IncorrectDataParameter)?;
-                        let key_result = syscall!(self.crypto.unwrap_key_chacha8poly1305(
+                        let key_result = syscall!(self.trussed.unwrap_key_chacha8poly1305(
                             &wrapping_key,
                             &bytes.to_byte_buf(),
                             b"",
@@ -282,7 +306,7 @@ impl Authenticator {
                                 info!("loaded u2f key!").ok();
                                 key
                             }
-                            None => { 
+                            None => {
                                 info!("issue with unwrapping credential id key").ok();
                                 return Err(U2fError::IncorrectDataParameter);
                             }
@@ -296,7 +320,7 @@ impl Authenticator {
                     return Err(U2fError::IncorrectDataParameter);
                 }
 
-                let sig_count = self.state.persistent.timestamp(&mut self.crypto).
+                let sig_count = self.state.persistent.timestamp(&mut self.trussed).
                     map_err(|_| U2fError::UnspecifiedNonpersistentExecutionError)?;
 
                 commitment.extend_from_slice(&auth.app_id).unwrap();
@@ -305,7 +329,7 @@ impl Authenticator {
                 commitment.extend_from_slice(&auth.challenge).unwrap();
 
                 let signature = syscall!(
-                    self.crypto.sign(Mechanism::P256, 
+                    self.trussed.sign(Mechanism::P256,
                     key,
                     &commitment,
                     SignatureSerialization::Asn1Der
@@ -329,7 +353,7 @@ impl Authenticator {
     pub fn call(&mut self, request: &Request) -> Result<Response> {
         // if let Some(request) = self.interchange.take_request() {
             // debug!("request: {:?}", &request).ok();
-            self.state.persistent.load_if_not_initialised(&mut self.crypto);
+            self.state.persistent.load_if_not_initialised(&mut self.trussed);
 
             match request {
                 Request::Ctap2(request) => {
@@ -456,13 +480,13 @@ impl Authenticator {
             Subcommand::GetKeyAgreement => {
                 debug!("processing CP.GKA").ok();
 
-                let private_key = self.state.runtime.key_agreement_key(&mut self.crypto);
-                let public_key = syscall!(self.crypto.derive_p256_public_key(&private_key, StorageLocation::Volatile)).key;
-                let serialized_cose_key = syscall!(self.crypto.serialize_key(
+                let private_key = self.state.runtime.key_agreement_key(&mut self.trussed);
+                let public_key = syscall!(self.trussed.derive_p256_public_key(&private_key, StorageLocation::Volatile)).key;
+                let serialized_cose_key = syscall!(self.trussed.serialize_key(
                     Mechanism::P256, public_key.clone(), KeySerialization::EcdhEsHkdf256)).serialized_key;
                 let cose_key = trussed::cbor_deserialize(&serialized_cose_key).unwrap();
 
-                syscall!(self.crypto.delete(public_key));
+                syscall!(self.trussed.delete(public_key));
 
                 ctap2::client_pin::Response {
                     key_agreement: cose_key,
@@ -493,7 +517,7 @@ impl Authenticator {
                 }
 
                 // 3. generate shared secret
-                let shared_secret = self.state.runtime.generate_shared_secret(&mut self.crypto, platform_kek)?;
+                let shared_secret = self.state.runtime.generate_shared_secret(&mut self.trussed, platform_kek)?;
 
                 // TODO: there are moar early returns!!
                 // - implement Drop?
@@ -505,11 +529,11 @@ impl Authenticator {
                 // 5. decrypt and verify new PIN
                 let new_pin = self.decrypt_pin_check_length(&shared_secret, new_pin_enc)?;
 
-                syscall!(self.crypto.delete(shared_secret));
+                syscall!(self.trussed.delete(shared_secret));
 
                 // 6. store LEFT(SHA-256(newPin), 16), set retries to 8
                 self.hash_store_pin(&new_pin)?;
-                self.state.reset_retries(&mut self.crypto).map_err(|_| Error::Other)?;
+                self.state.reset_retries(&mut self.trussed).map_err(|_| Error::Other)?;
 
                 ctap2::client_pin::Response {
                     key_agreement: None,
@@ -543,7 +567,7 @@ impl Authenticator {
                 self.state.pin_blocked()?;
 
                 // 3. generate shared secret
-                let shared_secret = self.state.runtime.generate_shared_secret(&mut self.crypto, platform_kek)?;
+                let shared_secret = self.state.runtime.generate_shared_secret(&mut self.trussed, platform_kek)?;
 
                 // 4. verify pinAuth
                 let mut data = MediumData::new();
@@ -552,24 +576,24 @@ impl Authenticator {
                 self.verify_pin_auth(&shared_secret, &data, pin_auth)?;
 
                 // 5. decrement retries
-                self.state.decrement_retries(&mut self.crypto)?;
+                self.state.decrement_retries(&mut self.trussed)?;
 
                 // 6. decrypt pinHashEnc, compare with stored
                 match self.decrypt_pin_hash_and_maybe_escalate(&shared_secret, &pin_hash_enc) {
                     Err(e) => {
-                        syscall!(self.crypto.delete(shared_secret));
+                        syscall!(self.trussed.delete(shared_secret));
                         return Err(e);
                     }
                     Ok(_) => {}
                 }
 
                 // 7. reset retries
-                self.state.reset_retries(&mut self.crypto)?;
+                self.state.reset_retries(&mut self.trussed)?;
 
                 // 8. decrypt and verify new PIN
                 let new_pin = self.decrypt_pin_check_length(&shared_secret, new_pin_enc)?;
 
-                syscall!(self.crypto.delete(shared_secret));
+                syscall!(self.trussed.delete(shared_secret));
 
                 // 9. store hashed PIN
                 self.hash_store_pin(&new_pin)?;
@@ -598,31 +622,31 @@ impl Authenticator {
                 self.state.pin_blocked()?;
 
                 // 3. generate shared secret
-                let shared_secret = self.state.runtime.generate_shared_secret(&mut self.crypto, platform_kek)?;
+                let shared_secret = self.state.runtime.generate_shared_secret(&mut self.trussed, platform_kek)?;
 
                 // 4. decrement retires
-                self.state.decrement_retries(&mut self.crypto)?;
+                self.state.decrement_retries(&mut self.trussed)?;
 
                 // 5. decrypt and verify pinHashEnc
                 match self.decrypt_pin_hash_and_maybe_escalate(&shared_secret, &pin_hash_enc) {
                     Err(e) => {
-                        syscall!(self.crypto.delete(shared_secret));
+                        syscall!(self.trussed.delete(shared_secret));
                         return Err(e);
                     }
                     Ok(_) => {}
                 }
-                // blocking::info!("exists? {}", syscall!(self.crypto.exists(shared_secret)).exists).ok();
+                // blocking::info!("exists? {}", syscall!(self.trussed.exists(shared_secret)).exists).ok();
 
                 // 6. reset retries
-                self.state.reset_retries(&mut self.crypto)?;
+                self.state.reset_retries(&mut self.trussed)?;
 
                 // 7. return encrypted pinToken
-                let pin_token = self.state.runtime.pin_token(&mut self.crypto);
+                let pin_token = self.state.runtime.pin_token(&mut self.trussed);
                 debug!("wrapping pin token").ok();
-                // blocking::info!("exists? {}", syscall!(self.crypto.exists(shared_secret)).exists).ok();
-                let pin_token_enc = syscall!(self.crypto.wrap_key_aes256cbc(&shared_secret, &pin_token)).wrapped_key;
+                // blocking::info!("exists? {}", syscall!(self.trussed.exists(shared_secret)).exists).ok();
+                let pin_token_enc = syscall!(self.trussed.wrap_key_aes256cbc(&shared_secret, &pin_token)).wrapped_key;
 
-                syscall!(self.crypto.delete(shared_secret));
+                syscall!(self.trussed.delete(shared_secret));
 
                 // ble...
                 if pin_token_enc.len() != 16 {
@@ -643,7 +667,7 @@ impl Authenticator {
     fn decrypt_pin_hash_and_maybe_escalate(&mut self, shared_secret: &ObjectHandle, pin_hash_enc: &ByteBuf<consts::U64>)
         -> Result<()>
     {
-        let pin_hash = syscall!(self.crypto.decrypt_aes256cbc(
+        let pin_hash = syscall!(self.trussed.decrypt_aes256cbc(
             &shared_secret, pin_hash_enc)).plaintext.ok_or(Error::Other)?;
 
         let stored_pin_hash = match self.state.persistent.pin_hash() {
@@ -653,7 +677,7 @@ impl Authenticator {
 
         if &pin_hash != &stored_pin_hash {
             // I) generate new KEK
-            self.state.runtime.rotate_key_agreement_key(&mut self.crypto);
+            self.state.runtime.rotate_key_agreement_key(&mut self.trussed);
             if self.state.persistent.retries() == 0 {
                 return Err(Error::PinBlocked);
             }
@@ -667,9 +691,9 @@ impl Authenticator {
     }
 
     fn hash_store_pin(&mut self, pin: &Message) -> Result<()> {
-        let pin_hash_32 = syscall!(self.crypto.hash_sha256(&pin)).hash;
+        let pin_hash_32 = syscall!(self.trussed.hash_sha256(&pin)).hash;
         let pin_hash: [u8; 16] = pin_hash_32[..16].try_into().unwrap();
-        self.state.persistent.set_pin_hash(&mut self.crypto, pin_hash).unwrap();
+        self.state.persistent.set_pin_hash(&mut self.trussed, pin_hash).unwrap();
 
         Ok(())
     }
@@ -681,7 +705,7 @@ impl Authenticator {
             return Err(Error::PinPolicyViolation);
         }
 
-        let mut pin = syscall!(self.crypto.decrypt_aes256cbc(
+        let mut pin = syscall!(self.trussed.decrypt_aes256cbc(
             &shared_secret, &pin_enc)).plaintext.ok_or(Error::Other)?;
 
         // // temp
@@ -702,8 +726,8 @@ impl Authenticator {
 
     // fn verify_pin(&mut self, pin_auth: &ByteBuf<consts::U16>, client_data_hash: &ByteBuf<consts::U32>) -> bool {
     fn verify_pin(&mut self, pin_auth: &[u8; 16], data: &[u8]) -> Result<()> {
-        let key = self.state.runtime.pin_token(&mut self.crypto);
-        let tag = syscall!(self.crypto.sign_hmacsha256(&key, data)).signature;
+        let key = self.state.runtime.pin_token(&mut self.trussed);
+        let tag = syscall!(self.trussed.sign_hmacsha256(&key, data)).signature;
         if pin_auth == &tag[..16] {
             Ok(())
         } else {
@@ -714,7 +738,7 @@ impl Authenticator {
     fn verify_pin_auth(&mut self, shared_secret: &ObjectHandle, data: &[u8], pin_auth: &ByteBuf<consts::U16>)
         -> Result<()>
     {
-        let expected_pin_auth = syscall!(self.crypto.sign_hmacsha256(shared_secret, data)).signature;
+        let expected_pin_auth = syscall!(self.trussed.sign_hmacsha256(shared_secret, data)).signature;
 
         if &expected_pin_auth[..16] == &pin_auth[..] {
             Ok(())
@@ -747,7 +771,7 @@ impl Authenticator {
                 }
 
                 // check pinAuth
-                let pin_token = self.state.runtime.pin_token(&mut self.crypto);
+                let pin_token = self.state.runtime.pin_token(&mut self.trussed);
                 let mut data: ByteBuf<consts::U256> =
                     ByteBuf::from_slice(&[sub_command as u8]).unwrap();
                 let len = 1 + match sub_command {
@@ -766,7 +790,7 @@ impl Authenticator {
                 };
 
                 // blocking::info!("input to hmacsha256: {:?}", &data[..len]).ok();
-                let expected_pin_auth = syscall!(self.crypto.sign_hmacsha256(
+                let expected_pin_auth = syscall!(self.trussed.sign_hmacsha256(
                     &pin_token,
                     &data[..len],
                 )).signature;
@@ -779,7 +803,7 @@ impl Authenticator {
                     Ok(())
                 } else {
                     info!("failed pinauth!").ok();
-                    self.state.decrement_retries(&mut self.crypto)?;
+                    self.state.decrement_retries(&mut self.trussed)?;
                     self.state.pin_blocked()
                 }
             }
@@ -809,7 +833,7 @@ impl Authenticator {
         // wants to enforce PIN and needs to figure out which authnrs support PIN
         if let Some(pin_auth) = pin_auth.as_ref() {
             if pin_auth.len() == 0 {
-                if !self.user_present() {
+                if !self.up.user_present(&mut self.trussed) {
                     return Err(Error::OperationDenied);
                 }
                 if !self.state.persistent.pin_is_set() {
@@ -927,10 +951,10 @@ impl Authenticator {
                     Key::ResidentKey(key) => {
                         debug!("checking if ResidentKey {:?} exists", &key).ok();
                         match credential.algorithm {
-                            -7 => syscall!(self.crypto.exists(Mechanism::P256, key)).exists,
-                            -8 => syscall!(self.crypto.exists(Mechanism::Ed25519, key)).exists,
+                            -7 => syscall!(self.trussed.exists(Mechanism::P256, key)).exists,
+                            -8 => syscall!(self.trussed.exists(Mechanism::Ed25519, key)).exists,
                             -9 => {
-                                let exists = syscall!(self.crypto.exists(Mechanism::Totp, key)).exists;
+                                let exists = syscall!(self.trussed.exists(Mechanism::Totp, key)).exists;
                                 info!("found it").ok();
                                 exists
                             }
@@ -982,7 +1006,7 @@ impl Authenticator {
 
             // let mut credentials = CredentialList::new();
 
-            let data = syscall!(self.crypto.read_dir_files_first(
+            let data = syscall!(self.trussed.read_dir_files_first(
                 StorageLocation::Internal,
                 rp_rk_dir(&rp_id_hash),
                 None,
@@ -1002,10 +1026,10 @@ impl Authenticator {
                 Policy::Required => uv_performed,
             };
 
-            let kek = self.state.persistent.key_encryption_key(&mut self.crypto)?;
+            let kek = self.state.persistent.key_encryption_key(&mut self.trussed)?;
 
             if keep {
-                let id = credential.id_using_hash(&mut self.crypto, &kek, rp_id_hash)?;
+                let id = credential.id_using_hash(&mut self.trussed, &kek, rp_id_hash)?;
                 let credential_id_hash = self.hash(&id.0.as_ref());
 
                 let timestamp_path = TimestampPath {
@@ -1018,7 +1042,7 @@ impl Authenticator {
             }
 
             loop {
-                let data = syscall!(self.crypto.read_dir_files_next()).data;
+                let data = syscall!(self.trussed.read_dir_files_next()).data;
                 let data = match data {
                     Some(data) => data,
                     None => break,
@@ -1034,7 +1058,7 @@ impl Authenticator {
 
                 if keep {
 
-                    let id = credential.id_using_hash(&mut self.crypto, &kek, rp_id_hash)?;
+                    let id = credential.id_using_hash(&mut self.trussed, &kek, rp_id_hash)?;
                     let credential_id_hash = self.hash(&id.0.as_ref());
 
                     let timestamp_path = TimestampPath {
@@ -1045,7 +1069,7 @@ impl Authenticator {
                     // if credentials.len() == credentials.capacity() {
                     //     panic!("too many credentials! >{}", &credentials.len());
                     // }
-                    // let id = credential.id(&mut self.crypto, &kek)?;
+                    // let id = credential.id(&mut self.trussed, &kek)?;
                     // credentials.push(credential).unwrap();
                     // blocking::info!("next: {:?}", &self.hash(&id.0)).ok();
 
@@ -1112,7 +1136,7 @@ impl Authenticator {
         let max_heap = self.state.runtime.credential_heap();
         let timestamp_hash = max_heap.pop().unwrap();
         info!("{:?} @ {}", &timestamp_hash.path, timestamp_hash.timestamp).ok();
-        let data = syscall!(self.crypto.read_file(
+        let data = syscall!(self.trussed.read_file(
             StorageLocation::Internal,
             timestamp_hash.path,
         )).data;
@@ -1213,7 +1237,7 @@ impl Authenticator {
                 let max_heap = self.state.runtime.credential_heap();
                 let timestamp_hash = max_heap.pop().unwrap();
                 info!("{:?} @ {}", &timestamp_hash.path, timestamp_hash.timestamp).ok();
-                let data = syscall!(self.crypto.read_file(
+                let data = syscall!(self.trussed.read_file(
                     StorageLocation::Internal,
                     timestamp_hash.path,
                 )).data;
@@ -1283,12 +1307,12 @@ impl Authenticator {
         // 9./10. sign clientDataHash || authData with "first" credential
 
         // blocking::info!("signing with credential {:?}", &credential).ok();
-        let kek = self.state.persistent.key_encryption_key(&mut self.crypto)?;
-        let credential_id = credential.id(&mut self.crypto, &kek)?;
+        let kek = self.state.persistent.key_encryption_key(&mut self.trussed)?;
+        let credential_id = credential.id(&mut self.trussed, &kek)?;
 
         use ctap2::AuthenticatorDataFlags as Flags;
 
-        let sig_count = self.state.persistent.timestamp(&mut self.crypto)?;
+        let sig_count = self.state.persistent.timestamp(&mut self.trussed)?;
 
         let authenticator_data = ctap2::get_assertion::AuthenticatorData {
             rp_id_hash: ByteBuf::from_slice(&data.rp_id_hash).unwrap(),
@@ -1324,9 +1348,9 @@ impl Authenticator {
         let (key, is_rk) = match credential.key.clone() {
             Key::ResidentKey(key) => (key, true),
             Key::WrappedKey(bytes) => {
-                let wrapping_key = self.state.persistent.key_wrapping_key(&mut self.crypto)?;
+                let wrapping_key = self.state.persistent.key_wrapping_key(&mut self.trussed)?;
                 // blocking::info!("unwrapping {:?} with wrapping key {:?}", &bytes, &wrapping_key).ok();
-                let key_result = syscall!(self.crypto.unwrap_key_chacha8poly1305(
+                let key_result = syscall!(self.trussed.unwrap_key_chacha8poly1305(
                     &wrapping_key,
                     &bytes.to_byte_buf(),
                     b"",
@@ -1354,14 +1378,14 @@ impl Authenticator {
             Mechanism::Totp => {
                 let timestamp = u64::from_le_bytes(data.client_data_hash[..8].try_into().unwrap());
                 info!("TOTP with timestamp {:?}", &timestamp).ok();
-                syscall!(self.crypto.sign_totp(&key, timestamp)).signature.to_byte_buf()
+                syscall!(self.trussed.sign_totp(&key, timestamp)).signature.to_byte_buf()
             }
-            _ => syscall!(self.crypto.sign(mechanism, key.clone(), &commitment, serialization)).signature
+            _ => syscall!(self.trussed.sign(mechanism, key.clone(), &commitment, serialization)).signature
                      .to_byte_buf(),
         };
 
         if !is_rk {
-            syscall!(self.crypto.delete(key));
+            syscall!(self.trussed.delete(key));
         }
 
         let mut response = ctap2::get_assertion::Response {
@@ -1369,13 +1393,13 @@ impl Authenticator {
             auth_data: ByteBuf::from_slice(&serialized_auth_data).map_err(|_| Error::Other)?,
             signature,
             user: None,
-            number_of_credentials: num_credentials, 
+            number_of_credentials: num_credentials,
         };
 
         if is_rk {
             let mut user = credential.user.clone();
             // User identifiable information (name, DisplayName, icon) MUST not
-            // be returned if user verification is not done by the authenticator.  
+            // be returned if user verification is not done by the authenticator.
             // For single account per RP case, authenticator returns "id" field.
             if !data.uv_performed || !data.multiple_credentials {
                 user.icon = None;
@@ -1391,7 +1415,7 @@ impl Authenticator {
     fn vendor(&mut self, op: VendorOperation) -> Result<()> {
         info!("hello VO {:?}", &op).ok();
         match op.into() {
-            0x79 => syscall!(self.crypto.debug_dump_store()),
+            0x79 => syscall!(self.trussed.debug_dump_store()),
             _ => return Err(Error::InvalidCommand),
         };
 
@@ -1422,13 +1446,13 @@ impl Authenticator {
 
         // may revisit the dir-walking API, but currently
         // we can only traverse one directory at once.
-        
-        // syscall!(self.crypto.debug_dump_store());
+
+        // syscall!(self.trussed.debug_dump_store());
         loop {
             let dir = PathBuf::from(b"rk");
 
             info!("reset start: reading {:?}", &dir).ok();
-            let entry = syscall!(self.crypto.read_dir_first(
+            let entry = syscall!(self.trussed.read_dir_first(
                 StorageLocation::Internal,
                 dir,
                 None,
@@ -1442,7 +1466,7 @@ impl Authenticator {
             info!("got RP {:?}, looking for its RKs", &rp_path).ok();
 
             // delete all RKs for given RP
-            let mut entry = syscall!(self.crypto.read_dir_first(
+            let mut entry = syscall!(self.trussed.read_dir_first(
                 StorageLocation::Internal,
                 rp_path.clone(),
                 None,
@@ -1460,14 +1484,14 @@ impl Authenticator {
                 self.delete_resident_key_by_path(&rk_path)?;
 
                 // prepare for next loop iteration
-                entry = syscall!(self.crypto.read_dir_first(
+                entry = syscall!(self.trussed.read_dir_first(
                     StorageLocation::Internal,
                     rp_path.clone(),
                     None,
                 )).entry;
             }
 
-            syscall!(self.crypto.remove_dir(
+            syscall!(self.trussed.remove_dir(
                 StorageLocation::Internal,
                 rp_path,
             ));
@@ -1475,10 +1499,10 @@ impl Authenticator {
         }
 
         // b. delete persistent state
-        self.state.persistent.reset(&mut self.crypto)?;
+        self.state.persistent.reset(&mut self.trussed)?;
 
         // c. delete runtime state
-        self.state.runtime.reset(&mut self.crypto);
+        self.state.runtime.reset(&mut self.trussed);
 
         // Missed anything?
         // One secret key remains currently, the fake attestation key
@@ -1496,7 +1520,7 @@ impl Authenticator {
         -> Result<()>
     {
         info!("deleting RK {:?}", &rk_path).ok();
-        let credential_data = syscall!(self.crypto.read_file(
+        let credential_data = syscall!(self.trussed.read_file(
             StorageLocation::Internal,
             PathBuf::from(rk_path),
         )).data;
@@ -1506,7 +1530,7 @@ impl Authenticator {
         match credential.key {
             credential::Key::ResidentKey(key) => {
                 info!(":: deleting resident key").ok();
-                syscall!(self.crypto.delete(key));
+                syscall!(self.trussed.delete(key));
             }
             credential::Key::WrappedKey(_) => {}
         }
@@ -1515,14 +1539,14 @@ impl Authenticator {
             match secret {
                 credential::CredRandom::Resident(secret) => {
                     info!(":: deleting hmac secret").ok();
-                    syscall!(self.crypto.delete(secret));
+                    syscall!(self.trussed.delete(secret));
                 }
                 credential::CredRandom::Wrapped(_) => {}
             }
         }
 
         info!(":: deleting RK file {:?} itself", &rk_path).ok();
-        syscall!(self.crypto.remove_file(
+        syscall!(self.trussed.remove_file(
             StorageLocation::Internal,
             PathBuf::from(rk_path),
         ));
@@ -1532,7 +1556,7 @@ impl Authenticator {
     }
 
     fn hash(&mut self, data: &[u8]) -> ByteBuf<consts::U32> {
-        let hash = syscall!(self.crypto.hash_sha256(&data)).hash;
+        let hash = syscall!(self.trussed.hash_sha256(&data)).hash;
         hash.try_to_byte_buf().expect("hash should fit")
     }
 
@@ -1632,7 +1656,7 @@ impl Authenticator {
             if let Some(true) = extensions.hmac_secret {
                 // TODO: Generate "CredRandom" (a 32B random value, to be used
                 // later via HMAC-SHA256(cred_random, salt)
-                let cred_random = syscall!(self.crypto.generate_hmacsha256_key(
+                let cred_random = syscall!(self.trussed.generate_hmacsha256_key(
                     StorageLocation::Internal,
                 )).key;
 
@@ -1642,9 +1666,9 @@ impl Authenticator {
                     }
 
                     false => {
-                        let wrapping_key = &self.state.persistent.key_wrapping_key(&mut self.crypto)?;
+                        let wrapping_key = &self.state.persistent.key_wrapping_key(&mut self.trussed)?;
                         info!("wrapping credRandom").ok();
-                        let wrapped_key = syscall!(self.crypto.wrap_key_chacha8poly1305(
+                        let wrapped_key = syscall!(self.trussed.wrap_key_chacha8poly1305(
                             &wrapping_key,
                             &cred_random,
                             // &rp_id_hash,
@@ -1668,7 +1692,7 @@ impl Authenticator {
         // debug!("hmac-secret = {:?}, credProtect = {:?}", hmac_secret_requested, cred_protect_requested).ok();
 
         // 10. get UP, if denied error OperationDenied
-        if !self.user_present() {
+        if !self.up.user_present(&mut self.trussed) {
             return Err(Error::OperationDenied);
         }
 
@@ -1683,22 +1707,22 @@ impl Authenticator {
         let cose_public_key;
         match algorithm {
             SupportedAlgorithm::P256 => {
-                private_key = syscall!(self.crypto.generate_p256_private_key(location)).key;
-                public_key = syscall!(self.crypto.derive_p256_public_key(&private_key, StorageLocation::Volatile)).key;
-                cose_public_key = syscall!(self.crypto.serialize_key(
+                private_key = syscall!(self.trussed.generate_p256_private_key(location)).key;
+                public_key = syscall!(self.trussed.derive_p256_public_key(&private_key, StorageLocation::Volatile)).key;
+                cose_public_key = syscall!(self.trussed.serialize_key(
                     Mechanism::P256, public_key.clone(), KeySerialization::Cose
                 )).serialized_key;
-                let s = syscall!(self.crypto.delete(public_key)).success;
-                info!("deleted public P256 key: {}", s).ok();
+                let success = syscall!(self.trussed.delete(public_key)).success;
+                info!("deleted public P256 key: {}", success).ok();
             }
             SupportedAlgorithm::Ed25519 => {
-                private_key = syscall!(self.crypto.generate_ed25519_private_key(location)).key;
-                public_key = syscall!(self.crypto.derive_ed25519_public_key(&private_key, StorageLocation::Volatile)).key;
-                cose_public_key = syscall!(self.crypto.serialize_key(
+                private_key = syscall!(self.trussed.generate_ed25519_private_key(location)).key;
+                public_key = syscall!(self.trussed.derive_ed25519_public_key(&private_key, StorageLocation::Volatile)).key;
+                cose_public_key = syscall!(self.trussed.serialize_key(
                     Mechanism::Ed25519, public_key.clone(), KeySerialization::Cose
                 )).serialized_key;
-                let s = syscall!(self.crypto.delete(public_key)).success;
-                info!("deleted public Ed25519 key: {}", s).ok();
+                let success = syscall!(self.trussed.delete(public_key)).success;
+                info!("deleted public Ed25519 key: {}", success).ok();
             }
             SupportedAlgorithm::Totp => {
                 if parameters.client_data_hash.len() != 32 {
@@ -1706,7 +1730,7 @@ impl Authenticator {
                 }
                 // b'TOTP---W\x0e\xf1\xe0\xd7\x83\xfe\t\xd1\xc1U\xbf\x08T_\x07v\xb2\xc6--TOTP'
                 let totp_secret: [u8; 20] = parameters.client_data_hash[6..26].try_into().unwrap();
-                private_key = syscall!(self.crypto.unsafe_inject_totp_key(
+                private_key = syscall!(self.trussed.unsafe_inject_totp_key(
                     &totp_secret, StorageLocation::Internal)).key;
                 // blocking::info!("totes injected").ok();
                 let fake_cose_pk = ctap_types::cose::TotpPublicKey {};
@@ -1724,9 +1748,9 @@ impl Authenticator {
             true => Key::ResidentKey(private_key.clone()),
             false => {
                 // WrappedKey version
-                let wrapping_key = &self.state.persistent.key_wrapping_key(&mut self.crypto)?;
+                let wrapping_key = &self.state.persistent.key_wrapping_key(&mut self.trussed)?;
                 debug!("wrapping private key").ok();
-                let wrapped_key = syscall!(self.crypto.wrap_key_chacha8poly1305(
+                let wrapped_key = syscall!(self.trussed.wrap_key_chacha8poly1305(
                     &wrapping_key,
                     &private_key,
                     &rp_id_hash,
@@ -1746,7 +1770,7 @@ impl Authenticator {
         };
 
         // injecting this is a bit mehhh..
-        let nonce = syscall!(self.crypto.random_bytes(12)).bytes.as_slice().try_into().unwrap();
+        let nonce = syscall!(self.trussed.random_bytes(12)).bytes.as_slice().try_into().unwrap();
         info!("nonce = {:?}", &nonce).ok();
 
         let credential = Credential::new(
@@ -1755,7 +1779,7 @@ impl Authenticator {
             &parameters.user,
             algorithm as i32,
             key_parameter,
-            self.state.persistent.timestamp(&mut self.crypto)?,
+            self.state.persistent.timestamp(&mut self.trussed)?,
             hmac_secret_requested.clone(),
             cred_protect_requested,
             nonce,
@@ -1764,8 +1788,8 @@ impl Authenticator {
         // blocking::info!("made credential {:?}", &credential).ok();
 
         // 12.b generate credential ID { = AEAD(Serialize(Credential)) }
-        let kek = &self.state.persistent.key_encryption_key(&mut self.crypto)?;
-        let credential_id = credential.id_using_hash(&mut self.crypto, &kek, &rp_id_hash)?;
+        let kek = &self.state.persistent.key_encryption_key(&mut self.trussed)?;
+        let credential_id = credential.id_using_hash(&mut self.trussed, &kek, &rp_id_hash)?;
 
         // store it.
         // TODO: overwrite, error handling with KeyStoreFull
@@ -1775,7 +1799,7 @@ impl Authenticator {
 
         if rk_requested {
             let credential_id_hash = self.hash(&credential_id.0.as_ref());
-            block!(self.crypto.write_file(
+            block!(self.trussed.write_file(
                 StorageLocation::Internal,
                 rk_path(&rp_id_hash, &credential_id_hash),
                 serialized_credential.clone(),
@@ -1807,7 +1831,7 @@ impl Authenticator {
                 flags
             },
 
-            sign_count: self.state.persistent.timestamp(&mut self.crypto)?,
+            sign_count: self.state.persistent.timestamp(&mut self.trussed)?,
 
             attested_credential_data: {
                 // debug!("acd in, cid len {}, pk len {}", credential_id.0.len(), cose_public_key.len()).ok();
@@ -1846,31 +1870,31 @@ impl Authenticator {
         //
         // we should also directly support "none" format, it's a bit weird
         // how browsers firefox this
-        let attestation_key = self.state.identity.attestation_key(&mut self.crypto);
+        let attestation_key = self.state.identity.attestation_key(&mut self.trussed);
 
         let (signature, attestation_algorithm) = {
             if attestation_key.is_none() {
                 match algorithm {
                     SupportedAlgorithm::Ed25519 => {
-                        let signature = syscall!(self.crypto.sign_ed25519(&private_key, &commitment)).signature;
+                        let signature = syscall!(self.trussed.sign_ed25519(&private_key, &commitment)).signature;
                         (signature.try_to_byte_buf().map_err(|_| Error::Other)?, -8)
                     }
 
                     SupportedAlgorithm::P256 => {
                         // DO NOT prehash here, `trussed` does that
-                        let der_signature = syscall!(self.crypto.sign_p256(&private_key, &commitment, SignatureSerialization::Asn1Der)).signature;
+                        let der_signature = syscall!(self.trussed.sign_p256(&private_key, &commitment, SignatureSerialization::Asn1Der)).signature;
                         (der_signature.try_to_byte_buf().map_err(|_| Error::Other)?, -7)
                     }
                     SupportedAlgorithm::Totp => {
                         // maybe we can fake it here too, but seems kinda weird
                         // return Err(Error::UnsupportedAlgorithm);
                         // micro-ecc is borked. let's self-sign anyway
-                        let hash = syscall!(self.crypto.hash_sha256(&commitment.as_ref())).hash;
-                        let tmp_key = syscall!(self.crypto
+                        let hash = syscall!(self.trussed.hash_sha256(&commitment.as_ref())).hash;
+                        let tmp_key = syscall!(self.trussed
                             .generate_p256_private_key(StorageLocation::Volatile))
                             .key;
 
-                        let signature = syscall!(self.crypto.sign_p256(
+                        let signature = syscall!(self.trussed.sign_p256(
                             &tmp_key,
                             &hash,
                             SignatureSerialization::Asn1Der,
@@ -1880,7 +1904,7 @@ impl Authenticator {
                 }
             } else {
 
-                let signature = syscall!(self.crypto.sign_p256(
+                let signature = syscall!(self.trussed.sign_p256(
                     attestation_key.as_ref().unwrap(),
                     &commitment,
                     SignatureSerialization::Asn1Der,
@@ -1891,8 +1915,8 @@ impl Authenticator {
         // debug!("SIG = {:?}", &signature).ok();
 
         if !rk_requested {
-            let s = syscall!(self.crypto.delete(private_key)).success;
-            info!("deleted private credential key: {}", s).ok();
+            let success = syscall!(self.trussed.delete(private_key)).success;
+            info!("deleted private credential key: {}", success).ok();
         }
 
         let packed_attn_stmt = ctap2::make_credential::PackedAttestationStatement {
@@ -1903,7 +1927,7 @@ impl Authenticator {
                 true => {
                     // See: https://www.w3.org/TR/webauthn-2/#sctn-packed-attestation-cert-requirements
                     let mut x5c = Vec::new();
-                    let file = syscall!(self.crypto
+                    let file = syscall!(self.trussed
                         .read_file(
                             StorageLocation::Internal,
                             PathBuf::from(b"attestation.x5c")
@@ -1930,42 +1954,42 @@ impl Authenticator {
     // }
 
     // fn get_assertion(&mut self, ...)
-    //     // let unwrapped_key = syscall!(self.crypto.unwrap_key_chacha8poly1305(
+    //     // let unwrapped_key = syscall!(self.trussed.unwrap_key_chacha8poly1305(
     //     //     &wrapping_key,
     //     //     &wrapped_key,
     //     //     b"",
     //     //     StorageLocation::Volatile,
     //     // )).key;
         // // test public key ser/de
-        // let ser_pk = syscall!(self.crypto.serialize_key(
+        // let ser_pk = syscall!(self.trussed.serialize_key(
         //     Mechanism::P256, public_key.clone(), KeySerialization::Raw
         // )).serialized_key;
         // debug!("ser pk = {:?}", &ser_pk).ok();
 
-        // let cose_ser_pk = syscall!(self.crypto.serialize_key(
+        // let cose_ser_pk = syscall!(self.trussed.serialize_key(
         //     Mechanism::P256, public_key.clone(), KeySerialization::Cose
         // )).serialized_key;
         // debug!("COSE ser pk = {:?}", &cose_ser_pk).ok();
 
-        // let deser_pk = syscall!(self.crypto.deserialize_key(
+        // let deser_pk = syscall!(self.trussed.deserialize_key(
         //     Mechanism::P256, ser_pk.clone(), KeySerialization::Raw,
         //     StorageAttributes::new().set_persistence(StorageLocation::Volatile)
         // )).key;
         // debug!("deser pk = {:?}", &deser_pk).ok();
 
-        // let cose_deser_pk = syscall!(self.crypto.deserialize_key(
+        // let cose_deser_pk = syscall!(self.trussed.deserialize_key(
         //     Mechanism::P256, cose_ser_pk.clone(), KeySerialization::Cose,
         //     StorageAttributes::new().set_persistence(StorageLocation::Volatile)
         // )).key;
         // debug!("COSE deser pk = {:?}", &cose_deser_pk).ok();
         // debug!("raw ser of COSE deser pk = {:?}",
-        //           syscall!(self.crypto.serialize_key(Mechanism::P256, cose_deser_pk.clone(), KeySerialization::Raw)).
+        //           syscall!(self.trussed.serialize_key(Mechanism::P256, cose_deser_pk.clone(), KeySerialization::Raw)).
         //           serialized_key).ok();
 
         // debug!("priv {:?}", &private_key).ok();
         // debug!("pub {:?}", &public_key).ok();
 
-        // let _loaded_credential = syscall!(self.crypto.load_blob(
+        // let _loaded_credential = syscall!(self.trussed.load_blob(
         //     prefix.clone(),
         //     blob_id,
         //     StorageLocation::Volatile,
@@ -2017,7 +2041,7 @@ impl Authenticator {
         }
     }
 
-//     fn get_or_create_counter_handle(crypto_client: &mut CryptoClient) -> Result<ObjectHandle> {
+//     fn get_or_create_counter_handle(trussed_client: &mut TrussedClient) -> Result<ObjectHandle> {
 
 //         // there should be either 0 or 1 counters with this name. if not, it's a logic error.
 //         let attributes = Attributes {
@@ -2029,7 +2053,7 @@ impl Authenticator {
 
 //         let reply = block!(
 //             request::FindObjects { attributes }
-//                 .submit(&mut crypto_client)
+//                 .submit(&mut trussed_client)
 //                 // no pending requests
 //                 .map_err(drop)
 //                 .unwrap()
@@ -2044,7 +2068,7 @@ impl Authenticator {
 //             0 => {
 //                 let reply = block!(
 //                     request::FindObjects { attributes }
-//                         .submit(&mut crypto_client)
+//                         .submit(&mut trussed_client)
 //                         // no pending requests
 //                         .map_err(drop)
 //                         .unwrap()
@@ -2057,7 +2081,7 @@ impl Authenticator {
 //         }
 //     }
 
-//     fn get_or_create_counter_handle(crypto_client: &mut CryptoClient) -> Result<ObjectHandle> {
+//     fn get_or_create_counter_handle(trussed_client: &mut TrussedClient) -> Result<ObjectHandle> {
 //         todo!("not implemented yet, follow counter code");
 //     }
 
