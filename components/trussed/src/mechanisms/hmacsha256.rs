@@ -5,14 +5,13 @@ use crate::api::*;
 // use crate::config::*;
 use crate::error::Error;
 use crate::service::*;
-use crate::store::*;
 use crate::types::*;
 
 #[cfg(feature = "hmac-sha256")]
-impl<R: RngRead, S: Store>
-Sign<R, S> for super::HmacSha256
+impl<B: Board>
+Sign<B> for super::HmacSha256
 {
-    fn sign(resources: &mut ServiceResources<R, S>, request: request::Sign)
+    fn sign(resources: &mut ServiceResources<B>, request: request::Sign)
         -> Result<reply::Sign, Error>
     {
         use sha2::Sha256;
@@ -52,14 +51,14 @@ Sign<R, S> for super::HmacSha256
 }
 
 #[cfg(feature = "hmac-sha256")]
-impl<R: RngRead, S: Store>
-GenerateKey<R, S> for super::HmacSha256
+impl<B: Board>
+GenerateKey<B> for super::HmacSha256
 {
-    fn generate_key(resources: &mut ServiceResources<R, S>, request: request::GenerateKey)
+    fn generate_key(resources: &mut ServiceResources<B>, request: request::GenerateKey)
         -> Result<reply::GenerateKey, Error>
     {
         let mut seed = [0u8; 16];
-        resources.rng.read(&mut seed).map_err(|_| Error::EntropyMalfunction)?;
+        resources.board.rng().read(&mut seed).map_err(|_| Error::EntropyMalfunction)?;
 
         // let keypair = salty::Keypair::from(&seed);
         // #[cfg(all(test, feature = "verbose-tests"))]
@@ -79,4 +78,4 @@ GenerateKey<R, S> for super::HmacSha256
 
 
 #[cfg(not(feature = "hmac-sha256"))]
-impl<R: RngRead, S: Store> Sign<R, S> for super::HmacSha256 {}
+impl<B: Board> Sign<B> for super::HmacSha256 {}

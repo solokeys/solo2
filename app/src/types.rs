@@ -4,7 +4,7 @@ use littlefs2::{
     const_ram_storage,
 };
 use trussed::types::{LfsResult, LfsStorage};
-use trussed::store;
+use trussed::{board, store};
 use ctap_types::consts;
 use fm11nc08::FM11NC08;
 use hal::{
@@ -62,10 +62,12 @@ store!(Store,
     Volatile: VolatileStorage
 );
 
-pub type CryptoService = trussed::Service<
-    hal::peripherals::rng::Rng<hal::Enabled>,
-    Store,
->;
+board!(Board,
+    R: hal::peripherals::rng::Rng<hal::Enabled>,
+    S: Store,
+);
+
+pub type CryptoService = trussed::Service<Board>;
 
 pub type NfcSckPin = pins::Pio0_28;
 pub type NfcMosiPin = pins::Pio0_24;

@@ -10,7 +10,7 @@ use crate::hal::drivers::timer;
 use crate::hal::peripherals::{
     ctimer,
 };
-use solo_bee_traits::buttons::{
+use trussed_board::buttons::{
     Button,State,
     Press,Edge,
 };

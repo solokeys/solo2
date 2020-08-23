@@ -8,7 +8,7 @@ use crate::hal::{
 use crate::hal::peripherals::{
     ctimer,
 };
-use solo_bee_traits::buttons::{
+use trussed_board::buttons::{
     self,
     Button,
 };

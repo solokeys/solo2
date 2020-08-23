@@ -12,14 +12,14 @@ use block_cipher_trait::BlockCipher;
 use crate::api::*;
 use crate::error::Error;
 use crate::service::*;
-use crate::store::Store;
+use crate::board::Board;
 use crate::types::*;
 
 #[cfg(feature = "tdes")]
-impl<R: RngRead, S: Store> Encrypt<R, S> for super::Tdes
+impl<B: Board> Encrypt<B> for super::Tdes
 {
     /// Encrypts a single block. Let's hope we don't have to support ECB!!
-    fn encrypt(resources: &mut ServiceResources<R, S>, request: request::Encrypt)
+    fn encrypt(resources: &mut ServiceResources<B>, request: request::Encrypt)
         -> Result<reply::Encrypt, Error>
     {
         if request.message.len() != 8 { return Err(Error::WrongMessageLength); }
@@ -41,10 +41,10 @@ impl<R: RngRead, S: Store> Encrypt<R, S> for super::Tdes
 }
 
 #[cfg(feature = "tdes")]
-impl<R: RngRead, S: Store> Decrypt<R, S> for super::Tdes
+impl<B: Board> Decrypt<B> for super::Tdes
 {
     /// Decrypts a single block. Let's hope we don't have to support ECB!!
-    fn decrypt(resources: &mut ServiceResources<R, S>, request: request::Decrypt)
+    fn decrypt(resources: &mut ServiceResources<B>, request: request::Decrypt)
         -> Result<reply::Decrypt, Error>
     {
         if request.message.len() != 8 { return Err(Error::WrongMessageLength); }
@@ -66,10 +66,10 @@ impl<R: RngRead, S: Store> Decrypt<R, S> for super::Tdes
 }
 
 #[cfg(feature = "tdes")]
-impl<R: RngRead, S: Store>
-UnsafeInjectKey<R, S> for super::Tdes
+impl<B: Board>
+UnsafeInjectKey<B> for super::Tdes
 {
-    fn unsafe_inject_key(resources: &mut ServiceResources<R, S>, request: request::UnsafeInjectKey)
+    fn unsafe_inject_key(resources: &mut ServiceResources<B>, request: request::UnsafeInjectKey)
         -> Result<reply::UnsafeInjectKey, Error>
     {
         if request.raw_key.len() != 24 {

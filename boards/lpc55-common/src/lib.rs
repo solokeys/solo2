@@ -1,6 +1,6 @@
 #![no_std]
 use core::time::Duration;
-use solo_bee_traits::timer;
+use trussed_board::timer;
 use lpc55_hal as hal;
 
 use hal::traits::wg::timer::CountDown;

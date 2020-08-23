@@ -24,7 +24,50 @@ use ufmt::derive::uDebug;
 
 use crate::config::*;
 
+pub use crate::board::Board;
 pub use crate::client::FutureResult;
+
+pub mod ui {
+    use super::*;
+
+    // TODO: Consider whether a simple "language" to specify "patterns"
+    // makes sense, vs. "semantic" indications with board-specific implementation
+    #[derive(Clone, Eq, PartialEq, Debug, uDebug, Serialize, Deserialize)]
+    pub enum VisualPattern {
+        // BreathMajestically,
+        BlinkingGreen,
+        StaticBlue,
+    }
+}
+
+pub mod consent {
+    use super::*;
+
+    #[derive(Clone, Eq, PartialEq, Debug, uDebug, Serialize, Deserialize)]
+    pub enum Level {
+        /// Normal user presence check, currently implemented as "touch any of three buttons"
+        Normal,
+        /// Strong user intent check, currently implemented as "three finger squeeze"
+        Strong,
+    }
+
+    #[derive(Clone, Eq, PartialEq, Debug, uDebug, Serialize, Deserialize)]
+    pub enum Urgency {
+        /// Pending other user consent requests will fail as interrupted.
+        InterruptOthers,
+        /// If other user consent requests are pending, fail this request.
+        FailIfOthers,
+    }
+
+    #[derive(Clone, Eq, PartialEq, Debug, uDebug, Serialize, Deserialize)]
+    pub enum Error {
+        FailedToInterrupt,
+        Interrupted,
+        TimedOut,
+    }
+
+    pub type Result = core::result::Result<(), Error>;
+}
 
 // for counters use the pkcs#11 idea of
 // a monotonic incrementing counter that
@@ -232,7 +275,7 @@ pub struct ObjectHandle{
 
 // impl<S: crate::store::Store> core::ops::Drop for AutoDrop {
 //     fn drop(&mut self) {
-//         // crate::store::delete_volatile(self.store, &self.handle);
+//         // crate::store::delete_volatile(self.board.store(), &self.handle);
 //     }
 // }
 

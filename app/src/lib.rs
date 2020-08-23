@@ -31,6 +31,7 @@ pub mod types;
 pub mod clock_controller;
 pub mod wink;
 use types::{
+    Board,
     EnabledUsbPeripheral,
     ExternalStorage,
     VolatileStorage,
@@ -42,7 +43,7 @@ use fm11nc08::{
 };
 use hal::drivers::timer::Lap;
 use hal::traits::wg::timer::Cancel;
-use solo_bee_traits::rgb_led::RgbLed;
+use trussed_board::rgb_led::RgbLed;
 
 //
 // Board Initialization
@@ -297,7 +298,8 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     let mut fido_client_id = littlefs2::path::PathBuf::new();
     fido_client_id.push(b"fido2\0".try_into().unwrap());
 
-    let mut trussed = trussed::service::Service::new(rng, store);
+    let board = Board::new(rng, store);
+    let mut trussed = trussed::service::Service::new(board);
 
     assert!(trussed.add_endpoint(fido_trussed_responder, fido_client_id).is_ok());
 
