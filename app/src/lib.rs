@@ -154,7 +154,6 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
     types::PerfTimer,
     board::led::RgbLed,
-    Option<board::button::ThreeButtons>,
     Option<clock_controller::DynamicClockController>,
     types::HwScheduler,
 ) {
@@ -307,7 +306,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     let crypto_client = trussed::client::Client::new(fido_trussed_requester, syscaller);
 
     let authnr = fido_authenticator::Authenticator::new(
-        crypto_client, 
+        crypto_client,
     );
 
     let (contact_requester, contact_responder) = usbd_ccid::types::ApduInterchange::claim(0)
@@ -331,7 +330,6 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         piv_trussed_requester,
         syscaller,
     );
-
 
     let usb_classes =
     {
@@ -412,39 +410,6 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         }
     };
 
-    let (clock_controller, three_buttons) = if is_passive_mode {
-        let signal_pin = types::SignalPin::take().unwrap().into_gpio_pin(&mut iocon, &mut gpio).into_output_low();
-        let mut clock_controller = clock_controller::DynamicClockController::new(adc, signal_pin, clocks, pmc, syscon);
-        clock_controller.start_high_voltage_compare();
-        (Some(clock_controller), None)
-    } else {
-        #[cfg(feature = "board-lpcxpresso")]
-        let three_buttons = board::button::ThreeButtons::new(
-            Timer::new(hal.ctimer.1.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap())),
-            board::button::UserButtonPin::take().unwrap().into_gpio_pin(&mut iocon, &mut gpio).into_input(),
-            board::button::WakeupButtonPin::take().unwrap().into_gpio_pin(&mut iocon, &mut gpio).into_input(),
-        );
-
-        #[cfg(feature = "board-prototype")]
-        let three_buttons =
-        {
-            let mut dma = hal::Dma::from(hal.dma).enabled(&mut syscon);
-
-            board::button::ThreeButtons::new (
-                adc,
-                hal.ctimer.1.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap()),
-                hal.ctimer.2.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap()),
-                board::button::ChargeMatchPin::take().unwrap().into_match_output(&mut iocon),
-                board::button::ButtonTopPin::take().unwrap().into_analog_input(&mut iocon, &mut gpio),
-                board::button::ButtonBotPin::take().unwrap().into_analog_input(&mut iocon, &mut gpio),
-                board::button::ButtonMidPin::take().unwrap().into_analog_input(&mut iocon, &mut gpio),
-                &mut dma,
-                clocks.support_touch_token().unwrap(),
-            )
-        };
-        (None, Some(three_buttons))
-    };
-
     rgb.turn_off();
     delay_timer.cancel().ok();
     logger::info!("init took {} ms",perf_timer.lap().0/1000).ok();
@@ -463,7 +428,6 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
         perf_timer,
         rgb,
-        three_buttons,
         clock_controller,
         delay_timer,
     )

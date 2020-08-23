@@ -715,6 +715,20 @@ impl<B: Board> ServiceResources<B> {
                 }.map(|reply| Reply::WrapKey(reply))
             },
 
+            Request::RequestUserConsent(request) => {
+                use crate::types::consent::*;
+                if request.timeout_seconds.is_some() {
+                    let result = Err(Error::TimeoutNotImplemented);
+                    return Ok(Reply::RequestUserConsent(reply::RequestUserConsent { result } ))
+                }
+                assert_eq!(request.level, Level::Normal);
+                // TODO: decide where to handle "no buttons" setup (e.g. passively powered / NFC)
+                if let Some(buttons) = self.board.buttons() {
+                    nb::block!(buttons.wait_for_any_new_press());
+                }
+                let result = Ok(());
+                Ok(Reply::RequestUserConsent(reply::RequestUserConsent { result } ))
+            }
 
             _ => {
                 // #[cfg(test)]

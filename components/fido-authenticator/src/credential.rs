@@ -198,7 +198,7 @@ impl Credential {
 
     pub fn id<'a>(
         &self,
-        crypto: &mut CryptoClient,
+        trussed: &mut CryptoClient,
         key_encryption_key: &ObjectHandle,
     )
         -> Result<CredentialId>
@@ -207,14 +207,14 @@ impl Credential {
         let message = &serialized_credential;
         // info!("ser cred = {:?}", message).ok();
 
-        let rp_id_hash: ByteBuf32 = syscall!(crypto.hash_sha256(&self.rp.id.as_ref()))
+        let rp_id_hash: ByteBuf32 = syscall!(trussed.hash_sha256(&self.rp.id.as_ref()))
             .hash
             .try_to_byte_buf().map_err(|_| Error::Other)?;
 
         let associated_data = &rp_id_hash[..];
         let nonce: [u8; 12] = self.nonce.as_slice().try_into().unwrap();
         let encrypted_serialized_credential = EncryptedSerializedCredential(
-            syscall!(crypto.encrypt_chacha8poly1305(
+            syscall!(trussed.encrypt_chacha8poly1305(
                     key_encryption_key, message, associated_data, Some(&nonce))));
         let credential_id: CredentialId = encrypted_serialized_credential.try_into().unwrap();
 
@@ -266,9 +266,9 @@ impl Credential {
             CredentialId(cred)
         )?;
 
-        let kek = authnr.state.persistent.key_encryption_key(&mut authnr.crypto)?;
+        let kek = authnr.state.persistent.key_encryption_key(&mut authnr.trussed)?;
 
-        let serialized = block!(authnr.crypto.decrypt_chacha8poly1305(
+        let serialized = block!(authnr.trussed.decrypt_chacha8poly1305(
             // TODO: use RpId as associated data here?
             &kek,
             &encrypted_serialized.0.ciphertext,
@@ -293,7 +293,7 @@ impl Credential {
     //     let message = &serialized_credential;
     //     let associated_data = parameters.rp.id.as_bytes();
     //     let encrypted_serialized_credential = EncryptedSerializedCredential(
-    //         syscall!(self.crypto.encrypt_chacha8poly1305(key, message, associated_data)));
+    //         syscall!(self.trussed.encrypt_chacha8poly1305(key, message, associated_data)));
     //     let credential_id: CredentialId = encrypted_serialized_credential.try_into().unwrap();
     //     credential_id
     // }
@@ -303,7 +303,7 @@ impl Credential {
     //     let mut prefix = trussed::types::ShortData::new();
     //     prefix.extend_from_slice(b"rk").map_err(|_| Error::Other)?;
     //     let prefix = Some(trussed::types::Letters::try_from(prefix).map_err(|_| Error::Other)?);
-    //     let blob_id = syscall!(self.crypto.store_blob(
+    //     let blob_id = syscall!(self.trussed.store_blob(
     //         prefix.clone(),
     //         // credential_id.0.clone(),
     //         serialized_credential.clone(),

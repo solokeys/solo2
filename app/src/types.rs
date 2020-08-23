@@ -65,6 +65,7 @@ store!(Store,
 board!(Board,
     R: hal::peripherals::rng::Rng<hal::Enabled>,
     S: Store,
+    T: crate::board::button::ThreeButtons,
 );
 
 pub type CryptoService = trussed::Service<Board>;

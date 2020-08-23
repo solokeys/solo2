@@ -264,9 +264,10 @@ pub mod request {
 
         RequestUserConsent:
           - level: consent::Level
-          - urgency: consent::Urgency
-          - prompt: ui::VisualPattern
-          - timeout_seconds: u32
+          // - urgency: consent::Urgency
+          // - prompt: ui::VisualPattern
+          // use whatever type is used elsewhere, typical values will be tens of seconds
+          - timeout_seconds: Option<u32>
     }
 }
 
