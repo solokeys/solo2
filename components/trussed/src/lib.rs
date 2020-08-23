@@ -8,6 +8,7 @@
 // extern crate std;
 
 pub mod api;
+pub mod board;
 pub mod client;
 pub mod config;
 pub mod error;

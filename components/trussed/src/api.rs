@@ -19,8 +19,14 @@ mod macros;
 // At minimum, we don't want to list the indices (may need proc-macro)
 
 generate_enums! {
+
+    ////////////
+    // Crypto //
+    ////////////
+
     Agree: 1
     CreateObject: 2
+    // TODO: why do Decrypt and DeriveKey both have discriminant 3?!
     Decrypt: 3
     DeriveKey: 3
     DeserializeKey: 4
@@ -46,6 +52,10 @@ generate_enums! {
     Verify: 14
     WrapKey: 15
 
+    /////////////
+    // Storage //
+    /////////////
+
     // // CreateDir,    <-- implied by WriteFile
     ReadDirFirst: 21 //      <-- gets Option<FileType> to restrict to just dir/file DirEntries,
     ReadDirNext: 22 //      <-- gets Option<FileType> to restrict to just dir/file DirEntries,
@@ -58,7 +68,17 @@ generate_enums! {
     // RemoveDirAll: 28
     // WriteFile: 29
     LocateFile: 30
-    //
+
+    ////////
+    // UI //
+    ////////
+    
+    HeartBeat: 32
+    RequestUserConsent: 33
+
+    ///////////
+    // Other //
+    ///////////
     DebugDumpStore: 0x79
 }
 
@@ -234,6 +254,19 @@ pub mod request {
           - key: ObjectHandle
           - associated_data: Message
 
+        // UI
+        HeartBeat:
+          // TODO: configurability
+          - on: bool
+          // use whatever is used elsewhere, ideally want sub and super 1Hz
+          - frequency_hertz: u32
+          - pattern: ui::VisualPattern
+
+        RequestUserConsent:
+          - level: consent::Level
+          - urgency: consent::Urgency
+          - prompt: ui::VisualPattern
+          - timeout_seconds: u32
     }
 }
 
@@ -341,6 +374,12 @@ pub mod reply {
 
         WrapKey:
             - wrapped_key: Message
+
+        // UI
+        HeartBeat:
+
+        RequestUserConsent:
+            - result: consent::Result
 
     }
 

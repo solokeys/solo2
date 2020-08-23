@@ -16,7 +16,7 @@ use rtic::cyccnt::{Instant, U32Ext as _};
 const CLOCK_FREQ: u32 = 96_000_000;
 const PERIOD: u32 = CLOCK_FREQ/2;
 
-use logging::hex::*;
+// use logging::hex::*;
 logging::add!(logger);
 use logger::{info,};
 
@@ -220,7 +220,7 @@ const APP: () = {
 
         static mut TOGGLES: u32 = 1;
         static mut ON: bool = false;
-        use solo_bee_traits::rgb_led::RgbLed;
+        use trussed_board::rgb_led::RgbLed;
         if *ON {
             c.resources.rgb.turn_off();
             *ON = false;

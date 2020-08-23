@@ -5,11 +5,11 @@ authors = ["Nicolas Stalder <n@stalder.io>", "Conor Patrick <conor@solokeys.com>
 edition = "2018"
 
 [dependencies]
-nb = "0.1"
 cortex-m = "0.6.1"
 cortex-m-rt = "0.6.10"
-solo-bee-traits = {path = "../solo-bee-traits"}
 lpc55-common = {path = "../lpc55-common"}
+nb = "0.1"
+trussed-board = {path = "../../components/trussed-board"}
 
 [dependencies.lpc55-hal]
 git = "https://github.com/nickray/lpc55-hal"

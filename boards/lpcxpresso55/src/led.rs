@@ -19,7 +19,7 @@ pub enum Color {
     Blue,
 }
 
-use solo_bee_traits::rgb_led;
+use trussed_board::rgb_led;
 
 pub type RedLedPin = pins::Pio1_4;
 pub type GreenLedPin = pins::Pio1_7;

@@ -4,14 +4,13 @@ use crate::api::*;
 // use crate::config::*;
 use crate::error::Error;
 use crate::service::*;
-use crate::store::*;
 use crate::types::*;
 
 #[cfg(feature = "sha256")]
-impl<R: RngRead, S: Store>
-DeriveKey<R, S> for super::Sha256
+impl<B: Board>
+DeriveKey<B> for super::Sha256
 {
-    fn derive_key(resources: &mut ServiceResources<R, S>, request: request::DeriveKey)
+    fn derive_key(resources: &mut ServiceResources<B>, request: request::DeriveKey)
         -> Result<reply::DeriveKey, Error>
     {
         let base_id = &request.base_key.object_id;
@@ -41,10 +40,10 @@ DeriveKey<R, S> for super::Sha256
 }
 
 #[cfg(feature = "sha256")]
-impl<R: RngRead, S: Store>
-Hash<R, S> for super::Sha256
+impl<B: Board>
+Hash<B> for super::Sha256
 {
-    fn hash(_resources: &mut ServiceResources<R, S>, request: request::Hash)
+    fn hash(_resources: &mut ServiceResources<B>, request: request::Hash)
         -> Result<reply::Hash, Error>
     {
         use sha2::digest::Digest;
@@ -58,14 +57,14 @@ Hash<R, S> for super::Sha256
     }
 }
 
-// impl<R: RngRead, S: Store>
-// Agree<R, S> for super::P256 {}
+// impl<B: Board>
+// Agree<B> for super::P256 {}
 #[cfg(not(feature = "sha256"))]
-impl<R: RngRead, S: Store>
-DeriveKey<R, S> for super::Sha256 {}
-// impl<R: RngRead, S: Store>
-// GenerateKey<R, S> for super::P256 {}
-// impl<R: RngRead, S: Store>
-// Sign<R, S> for super::P256 {}
-// impl<R: RngRead, S: Store>
-// Verify<R, S> for super::P256 {}
+impl<B: Board>
+DeriveKey<B> for super::Sha256 {}
+// impl<B: Board>
+// GenerateKey<B> for super::P256 {}
+// impl<B: Board>
+// Sign<B> for super::P256 {}
+// impl<B: Board>
+// Verify<B> for super::P256 {}

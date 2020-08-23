@@ -5,10 +5,9 @@ use crate::api::*;
 // use crate::debug;
 use crate::error::Error;
 use crate::service::*;
-use crate::store::*;
 use crate::types::*;
 
-fn load_public_key<R: RngRead, S: Store>(resources: &mut ServiceResources<R, S>, key_id: &UniqueId)
+fn load_public_key<B: Board>(resources: &mut ServiceResources<B>, key_id: &UniqueId)
     -> Result<salty::PublicKey, Error> {
 
     let public_bytes: [u8; 32] = resources
@@ -22,7 +21,7 @@ fn load_public_key<R: RngRead, S: Store>(resources: &mut ServiceResources<R, S>,
     Ok(public_key)
 }
 
-fn load_keypair<R: RngRead, S: Store>(resources: &mut ServiceResources<R, S>, key_id: &UniqueId)
+fn load_keypair<B: Board>(resources: &mut ServiceResources<B>, key_id: &UniqueId)
     -> Result<salty::Keypair, Error> {
 
     let seed: [u8; 32] = resources
@@ -37,10 +36,10 @@ fn load_keypair<R: RngRead, S: Store>(resources: &mut ServiceResources<R, S>, ke
 }
 
 #[cfg(feature = "ed25519")]
-impl<R: RngRead, S: Store>
-DeriveKey<R, S> for super::Ed25519
+impl<B: Board>
+DeriveKey<B> for super::Ed25519
 {
-    fn derive_key(resources: &mut ServiceResources<R, S>, request: request::DeriveKey)
+    fn derive_key(resources: &mut ServiceResources<B>, request: request::DeriveKey)
         -> Result<reply::DeriveKey, Error>
     {
         let base_id = &request.base_key.object_id;
@@ -58,10 +57,10 @@ DeriveKey<R, S> for super::Ed25519
 }
 
 #[cfg(feature = "ed25519")]
-impl<R: RngRead, S: Store>
-DeserializeKey<R, S> for super::Ed25519
+impl<B: Board>
+DeserializeKey<B> for super::Ed25519
 {
-    fn deserialize_key(resources: &mut ServiceResources<R, S>, request: request::DeserializeKey)
+    fn deserialize_key(resources: &mut ServiceResources<B>, request: request::DeserializeKey)
         -> Result<reply::DeserializeKey, Error>
     {
           // - mechanism: Mechanism
@@ -92,14 +91,14 @@ DeserializeKey<R, S> for super::Ed25519
 }
 
 #[cfg(feature = "ed25519")]
-impl<R: RngRead, S: Store>
-GenerateKey<R, S> for super::Ed25519
+impl<B: Board>
+GenerateKey<B> for super::Ed25519
 {
-    fn generate_key(resources: &mut ServiceResources<R, S>, request: request::GenerateKey)
+    fn generate_key(resources: &mut ServiceResources<B>, request: request::GenerateKey)
         -> Result<reply::GenerateKey, Error>
     {
         let mut seed = [0u8; 32];
-        resources.rng.read(&mut seed).map_err(|_| Error::EntropyMalfunction)?;
+        resources.board.rng().read(&mut seed).map_err(|_| Error::EntropyMalfunction)?;
 
         // let keypair = salty::Keypair::from(&seed);
         // #[cfg(all(test, feature = "verbose-tests"))]
@@ -117,10 +116,10 @@ GenerateKey<R, S> for super::Ed25519
 }
 
 #[cfg(feature = "ed25519")]
-impl<R: RngRead, S: Store>
-SerializeKey<R, S> for super::Ed25519
+impl<B: Board>
+SerializeKey<B> for super::Ed25519
 {
-    fn serialize_key(resources: &mut ServiceResources<R, S>, request: request::SerializeKey)
+    fn serialize_key(resources: &mut ServiceResources<B>, request: request::SerializeKey)
         -> Result<reply::SerializeKey, Error>
     {
         let key_id = request.key.object_id;
@@ -150,10 +149,10 @@ SerializeKey<R, S> for super::Ed25519
 }
 
 #[cfg(feature = "ed25519")]
-impl<R: RngRead, S: Store>
-Exists<R, S> for super::Ed25519
+impl<B: Board>
+Exists<B> for super::Ed25519
 {
-    fn exists(resources: &mut ServiceResources<R, S>, request: request::Exists)
+    fn exists(resources: &mut ServiceResources<B>, request: request::Exists)
         -> Result<reply::Exists, Error>
     {
         let key_id = request.key.object_id;
@@ -164,10 +163,10 @@ Exists<R, S> for super::Ed25519
 }
 
 #[cfg(feature = "ed25519")]
-impl<R: RngRead, S: Store>
-Sign<R, S> for super::Ed25519
+impl<B: Board>
+Sign<B> for super::Ed25519
 {
-    fn sign(resources: &mut ServiceResources<R, S>, request: request::Sign)
+    fn sign(resources: &mut ServiceResources<B>, request: request::Sign)
         -> Result<reply::Sign, Error>
     {
         // Not so nice, expands to
@@ -198,10 +197,10 @@ Sign<R, S> for super::Ed25519
 }
 
 #[cfg(feature = "ed25519")]
-impl<R: RngRead, S: Store>
-Verify<R, S> for super::Ed25519
+impl<B: Board>
+Verify<B> for super::Ed25519
 {
-    fn verify(resources: &mut ServiceResources<R, S>, request: request::Verify)
+    fn verify(resources: &mut ServiceResources<B>, request: request::Verify)
         -> Result<reply::Verify, Error>
     {
         if let SignatureSerialization::Raw = request.format {
@@ -227,14 +226,14 @@ Verify<R, S> for super::Ed25519
 }
 
 #[cfg(not(feature = "ed25519"))]
-impl<R: RngRead, S: Store>
-DeriveKey<R, S> for super::Ed25519 {}
+impl<B: Board>
+DeriveKey<B> for super::Ed25519 {}
 #[cfg(not(feature = "ed25519"))]
-impl<R: RngRead, S: Store>
-GenerateKey<R, S> for super::Ed25519 {}
+impl<B: Board>
+GenerateKey<B> for super::Ed25519 {}
 #[cfg(not(feature = "ed25519"))]
-impl<R: RngRead, S: Store>
-Sign<R, S> for super::Ed25519 {}
+impl<B: Board>
+Sign<B> for super::Ed25519 {}
 #[cfg(not(feature = "ed25519"))]
-impl<R: RngRead, S: Store>
-Verify<R, S> for super::Ed25519 {}
+impl<B: Board>
+Verify<B> for super::Ed25519 {}

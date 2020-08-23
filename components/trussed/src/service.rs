@@ -8,6 +8,7 @@ use littlefs2::path::{Path, PathBuf};
 
 
 use crate::api::*;
+use crate::board::*;
 use crate::config::*;
 use crate::error::Error;
 use crate::mechanisms;
@@ -22,8 +23,8 @@ pub use crate::pipe::ServiceEndpoint;
 
 macro_rules! rpc_trait { ($($Name:ident, $name:ident,)*) => { $(
 
-    pub trait $Name<R: RngRead, S: Store> {
-        fn $name(_resources: &mut ServiceResources<R, S>, _request: request::$Name)
+    pub trait $Name<B: Board> {
+        fn $name(_resources: &mut ServiceResources<B>, _request: request::$Name)
         -> Result<reply::$Name, Error> { Err(Error::MechanismNotAvailable) }
     }
 )* } }
@@ -63,13 +64,10 @@ struct ReadDirState {
     last: usize,
 }
 
-pub struct ServiceResources<R, S>
-where
-    R: RngRead,
-	S: Store,
+pub struct ServiceResources<B>
+where B: Board
 {
-    pub(crate) rng: R,
-    pub(crate) store: S,
+    pub(crate) board: B,
     // Option?
     currently_serving: ClientId,
     // TODO: how/when to clear
@@ -77,16 +75,11 @@ where
     read_dir_state: Option<ReadDirState>,
 }
 
-impl<R: RngRead, S: Store> ServiceResources<R, S> {
+impl<B: Board> ServiceResources<B> {
 
-    pub fn new(
-        rng: R,
-        store: S,
-    ) -> Self {
-
+    pub fn new(board: B) -> Self {
         Self {
-            rng,
-            store,
+            board,
             currently_serving: PathBuf::new(),
             read_dir_files_state: None,
             read_dir_state: None,
@@ -94,28 +87,24 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
     }
 }
 
-pub struct Service<R, S>
-where
-    R: RngRead,
-    S: Store,
-{
+pub struct Service<B> where B: Board {
     eps: Vec<ServiceEndpoint, MAX_SERVICE_CLIENTS>,
-    resources: ServiceResources<R, S>,
+    resources: ServiceResources<B>,
 }
 
 // need to be able to send crypto service to an interrupt handler
-unsafe impl<R: RngRead, S: Store> Send for Service<R, S> {}
+unsafe impl<B: Board> Send for Service<B> {}
 
-impl<R: RngRead, S: Store> ServiceResources<R, S> {
+impl<B: Board> ServiceResources<B> {
 
     pub fn reply_to(&mut self, request: Request) -> Result<Reply, Error> {
         // TODO: what we want to do here is map an enum to a generic type
         // Is there a nicer way to do this?
         // blocking::info!("trussed request: {:?}", &request).ok();
         // blocking::info!("IFS/EFS/VFS available BEFORE: {}/{}/{}",
-        //       self.store.ifs().available_blocks().unwrap(),
-        //       self.store.efs().available_blocks().unwrap(),
-        //       self.store.vfs().available_blocks().unwrap(),
+        //       self.board.store().ifs().available_blocks().unwrap(),
+        //       self.board.store().efs().available_blocks().unwrap(),
+        //       self.board.store().vfs().available_blocks().unwrap(),
         // ).ok();
         blocking::debug!("trussed request: {:?}", &request).ok();
         match request {
@@ -193,7 +182,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
                 let success = key_types.iter().any(|key_type| {
                     let path = self.key_path(*key_type, &request.key.object_id);
                     locations.iter().any(|location| {
-                        store::delete(self.store, *location, &path)
+                        store::delete(self.board.store(), *location, &path)
                     })
                 });
 
@@ -300,7 +289,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
                 }
 
                 assert!(request.location == StorageLocation::Internal);
-                let path = recursively_locate(self.store.ifs(), base_path, &request.filename).unwrap();
+                let path = recursively_locate(self.board.store().ifs(), base_path, &request.filename).unwrap();
                 let path = match path.as_ref() {
                     Some(path) => Some(self.denamedataspace_path(path)),
                     None => None,
@@ -314,10 +303,10 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
             Request::DebugDumpStore(_request) => {
 
                 blocking::info!(":: PERSISTENT").ok();
-                recursively_list(self.store.ifs(), PathBuf::from(b"/"));
+                recursively_list(self.board.store().ifs(), PathBuf::from(b"/"));
 
                 blocking::info!(":: VOLATILE").ok();
-                recursively_list(self.store.vfs(), PathBuf::from(b"/"));
+                recursively_list(self.board.store().vfs(), PathBuf::from(b"/"));
 
                 fn recursively_list<S: 'static + crate::types::LfsStorage>(fs: &'static crate::store::Fs<S>, path: PathBuf) {
                     // let fs = store.vfs();
@@ -351,7 +340,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
 
                 let path = self.dataspace_path(&request.dir);
                 let path = self.namespace_path(&path);
-                let fs = self.store.ifs();
+                let fs = self.board.store().ifs();
 
                 let mut found_not_before = request.not_before_filename.is_none();
                 let outcome = fs.read_dir_and_then(&path, |dir| {
@@ -411,7 +400,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
                 // let path = self.namespace_path(&request.dir);
                 let path = self.dataspace_path(&request.dir);
                 let path = self.namespace_path(&path);
-                let fs = self.store.ifs();
+                let fs = self.board.store().ifs();
 
                 // let (i, entry) = fs.read_dir_and_then(&path, |dir| {
                 let outcome = fs.read_dir_and_then(&path, |dir| {
@@ -455,7 +444,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
                 let path = self.dataspace_path(&request.dir);
                 let path = self.namespace_path(&path);
 
-                let fs = self.store.ifs();
+                let fs = self.board.store().ifs();
 
                 let result = fs.read_dir_and_then(&path, |dir| {
                     for entry in dir {
@@ -491,14 +480,13 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
                     }
 
                     Err(littlefs2::io::Error::NoSuchEntry)
-
                 });
                 let entry = if result.is_err() {
                     let err = result.err().unwrap();
                     blocking::info!("read_dir error: {:?}", &err).ok();
                     return match err {
                         // Return no data if path is invalid
-                        littlefs2::io::Error::NoSuchEntry => 
+                        littlefs2::io::Error::NoSuchEntry =>
                             Ok(Reply::ReadDirFilesFirst(reply::ReadDirFilesFirst {
                                 data: None,
                             } )),
@@ -508,8 +496,8 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
                 } else {
                     result.unwrap()
                 };
-                
-                let data = store::read(self.store, request.location, entry.path())?;
+
+                let data = store::read(self.board.store(), request.location, entry.path())?;
 
                 self.read_dir_files_state = Some(ReadDirFilesState {
                     request,
@@ -532,7 +520,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
                 // let path = self.namespace_path(&request.dir);
                 let path = self.dataspace_path(&request.dir);
                 let path = self.namespace_path(&path);
-                let fs = self.store.ifs();
+                let fs = self.board.store().ifs();
 
                 let mut found_last = false;
                 let entry = fs.read_dir_and_then(&path, |dir| {
@@ -590,7 +578,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
                 let data = match entry {
                     Err(littlefs2::io::Error::NoSuchEntry) => None,
                     Ok(entry) => {
-                        let data = store::read(self.store, request.location, entry.path())?;
+                        let data = store::read(self.board.store(), request.location, entry.path())?;
 
                         self.read_dir_files_state = Some(ReadDirFilesState {
                             request,
@@ -616,9 +604,9 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
                 let mut data = Message::new();
                 data.resize_to_capacity();
                 match request.location {
-                    StorageLocation::Internal => self.store.ifs().remove_dir(&path),
-                    StorageLocation::External => self.store.efs().remove_dir(&path),
-                    StorageLocation::Volatile => self.store.vfs().remove_dir(&path),
+                    StorageLocation::Internal => self.board.store().ifs().remove_dir(&path),
+                    StorageLocation::External => self.board.store().efs().remove_dir(&path),
+                    StorageLocation::Volatile => self.board.store().vfs().remove_dir(&path),
                 }.map_err(|_| Error::InternalError)?;
                 // data.resize_default(size).map_err(|_| Error::InternalError)?;
                 Ok(Reply::RemoveDir(reply::RemoveDir {} ))
@@ -632,9 +620,9 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
                 let mut data = Message::new();
                 data.resize_to_capacity();
                 match request.location {
-                    StorageLocation::Internal => self.store.ifs().remove(&path),
-                    StorageLocation::External => self.store.efs().remove(&path),
-                    StorageLocation::Volatile => self.store.vfs().remove(&path),
+                    StorageLocation::Internal => self.board.store().ifs().remove(&path),
+                    StorageLocation::External => self.board.store().efs().remove(&path),
+                    StorageLocation::Volatile => self.board.store().vfs().remove(&path),
                 }.map_err(|_| Error::InternalError)?;
                 // data.resize_default(size).map_err(|_| Error::InternalError)?;
                 Ok(Reply::RemoveFile(reply::RemoveFile {} ))
@@ -647,9 +635,9 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
                 let mut data = Message::new();
                 data.resize_to_capacity();
                 let data: Message = match request.location {
-                    StorageLocation::Internal => self.store.ifs().read(&path),
-                    StorageLocation::External => self.store.efs().read(&path),
-                    StorageLocation::Volatile => self.store.vfs().read(&path),
+                    StorageLocation::Internal => self.board.store().ifs().read(&path),
+                    StorageLocation::External => self.board.store().efs().read(&path),
+                    StorageLocation::Volatile => self.board.store().vfs().read(&path),
                 }.map_err(|_| Error::InternalError)?.into();
                 // data.resize_default(size).map_err(|_| Error::InternalError)?;
                 Ok(Reply::ReadFile(reply::ReadFile { data } ))
@@ -659,7 +647,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
                 if request.count < 1024 {
                     let mut bytes = Message::new();
                     bytes.resize_default(request.count).unwrap();
-                    self.rng.read(&mut bytes)
+                    self.board.rng().read(&mut bytes)
                         .map_err(|_| Error::EntropyMalfunction)?;
                     Ok(Reply::RandomByteBuf(reply::RandomByteBuf { bytes } ))
                 } else {
@@ -694,7 +682,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
                 let path = self.dataspace_path(&request.path);
                 let path = self.namespace_path(&path);
                 info!("WriteFile of size {}", request.data.len()).ok();
-                store::store(self.store, request.location, &path, &request.data)?;
+                store::store(self.board.store(), request.location, &path, &request.data)?;
                 Ok(Reply::WriteFile(reply::WriteFile {}))
             }
 
@@ -811,7 +799,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
         let key_id = self.generate_unique_id()?;
         let path = self.key_path(key_type, &key_id);
 
-        store::store(self.store, location, &path, &serialized_bytes)?;
+        store::store(self.board.store(), location, &path, &serialized_bytes)?;
 
         Ok(key_id)
     }
@@ -824,7 +812,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
 
         let path = self.key_path(key_type, key_id);
 
-        store::store(self.store, location, &path, &serialized_bytes)?;
+        store::store(self.board.store(), location, &path, &serialized_bytes)?;
 
         Ok(())
     }
@@ -832,15 +820,15 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
     pub fn key_id_location(&self, key_type: KeyType, key_id: &UniqueId) -> Option<StorageLocation> {
         let path = self.key_path(key_type, key_id);
 
-        if path.exists(&self.store.vfs()) {
+        if path.exists(&self.board.store().vfs()) {
             return Some(StorageLocation::Volatile);
         }
 
-        if path.exists(&self.store.ifs()) {
+        if path.exists(&self.board.store().ifs()) {
             return Some(StorageLocation::Internal);
         }
 
-        if path.exists(&self.store.efs()) {
+        if path.exists(&self.board.store().efs()) {
             return Some(StorageLocation::External);
         }
 
@@ -863,7 +851,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
             None => return Err(Error::NoSuchKey),
         };
 
-        let bytes: ByteBuf<consts::U128> = store::read(self.store, location, &path)?;
+        let bytes: ByteBuf<consts::U128> = store::read(self.board.store(), location, &path)?;
 
         let serialized_key: SerializedKey = crate::cbor_deserialize(&bytes).map_err(|_| Error::CborError)?;
 
@@ -879,7 +867,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
     pub fn generate_unique_id(&mut self) -> Result<UniqueId, Error> {
         let mut unique_id = [0u8; 16];
 
-        self.rng.read(&mut unique_id)
+        self.board.rng().read(&mut unique_id)
             .map_err(|_| Error::EntropyMalfunction)?;
 
         // #[cfg(all(test, feature = "verbose-tests"))]
@@ -889,15 +877,10 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
 
 }
 
-impl<R: RngRead, S: Store> Service<R, S> {
+impl<B: Board> Service<B> {
 
-    pub fn new(
-        rng: R,
-        store: S,
-    )
-        -> Self
-    {
-        let resources = ServiceResources::new(rng, store);
+    pub fn new(board: B) -> Self {
+        let resources = ServiceResources::new(board);
         Self { eps: Vec::new(), resources }
     }
 
@@ -922,17 +905,15 @@ impl<R: RngRead, S: Store> Service<R, S> {
             }
         }
         blocking::debug!("I/E/V : {}/{}/{} >",
-              resources.store.ifs().available_blocks().unwrap(),
-              resources.store.efs().available_blocks().unwrap(),
-              resources.store.vfs().available_blocks().unwrap(),
+              self.resources.board.store().ifs().available_blocks().unwrap(),
+              self.resources.board.store().efs().available_blocks().unwrap(),
+              self.resources.board.store().vfs().available_blocks().unwrap(),
         ).ok();
     }
 }
 
-impl<R, S> crate::pipe::Syscall for &mut Service<R, S>
-where
-    R: RngRead,
-    S: Store,
+impl<B> crate::pipe::Syscall for &mut Service<B>
+where B: Board
 {
     fn syscall(&mut self) {
         self.process();
