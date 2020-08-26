@@ -923,7 +923,7 @@ impl Authenticator {
         // 7. reset timer
         // 8. increment credential counter (not applicable)
 
-        self.assert_with_credential(None, credential, None)
+        self.assert_with_credential(None, credential)
     }
 
     fn credential_management(&mut self, parameters: &ctap2::credential_management::Parameters)
@@ -1026,6 +1026,28 @@ impl Authenticator {
         info!("found {:?} applicable credentials", human_num_credentials).ok();
         info!("found {:?} applicable credentials", human_num_credentials).ok();
 
+        // 6. process any options present
+
+        // UP occurs by default, but option could specify not to.
+        let do_up = if parameters.options.is_some() {
+            parameters.options.as_ref().unwrap().up.unwrap_or(true)
+        } else {
+            true
+        };
+
+        // 7. process any extensions present
+
+        // 8. collect user presence
+        let up_performed = if do_up {
+            if self.user_present() {
+                true
+            } else {
+                return Err(Error::OperationDenied);
+            }
+        } else {
+            false
+        };
+
         self.state.runtime.active_get_assertion = Some(state::ActiveGetAssertionData {
             rp_id_hash: {
                 let mut buf = [0u8; 32];
@@ -1038,27 +1060,16 @@ impl Authenticator {
                 buf
             },
             uv_performed,
+            up_performed,
         });
 
-        self.assert_with_credential(num_credentials, credential, parameters.options.as_ref())
+        self.assert_with_credential(num_credentials, credential)
     }
 
-    fn assert_with_credential(&mut self, num_credentials: Option<u32>, credential: Credential,
-            options: Option<&ctap2::AuthenticatorOptions>)
+    fn assert_with_credential(&mut self, num_credentials: Option<u32>, credential: Credential)
         -> Result<ctap2::get_assertion::Response>
     {
         let data = self.state.runtime.active_get_assertion.clone().unwrap();
-
-        // 6. process any options present
-        let do_up = if options.is_some() {
-            options.unwrap().up.unwrap_or(true)
-        } else {
-            true
-        };
-
-        // 7. process any extensions present
-
-        // 8. collect user presence
 
         // 9./10. sign clientDataHash || authData with "first" credential
 
@@ -1075,7 +1086,7 @@ impl Authenticator {
 
             flags: {
                 let mut flags = Flags::EMPTY;
-                if do_up && self.user_present() {
+                if data.up_performed {
                     flags |= Flags::USER_PRESENCE;
                 }
                 if data.uv_performed {
@@ -1308,6 +1319,12 @@ impl Authenticator {
         let rp_id_hash = self.hash(&parameters.rp.id.as_ref());
 
         // 1-4.
+        if let Some(options) = parameters.options.as_ref() {
+            // up option is not valid for make_credential
+            if options.up.is_some() {
+                return Err(Error::InvalidOption);
+            }
+        }
         let uv_performed = self.pin_prechecks(
             &parameters.options, &parameters.pin_auth, &parameters.pin_protocol,
             &parameters.client_data_hash.as_ref(),
