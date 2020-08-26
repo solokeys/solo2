@@ -129,6 +129,7 @@ pub struct ActiveGetAssertionData {
     pub rp_id_hash: [u8; 32],
     pub client_data_hash: [u8; 32],
     pub uv_performed: bool,
+    pub up_performed: bool,
 }
 
 #[derive(Clone, Debug, /*uDebug,*/ Default, /*PartialEq,*/ serde::Deserialize, serde::Serialize)]
