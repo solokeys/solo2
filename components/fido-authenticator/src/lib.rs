@@ -701,9 +701,9 @@ impl Authenticator {
                         .ok()
                 } )
                 .collect();
-            if valid_allowed_credentials.len() < allow_list.len() {
+            if valid_allowed_credentials.len() == 0 {
                 debug!("invalid credential").ok();
-                return Err(Error::InvalidCredential);
+                return Err(Error::NoCredentials);
             }
             debug!("allowedList passed").ok();
             valid_allowed_credentials
@@ -923,7 +923,7 @@ impl Authenticator {
         // 7. reset timer
         // 8. increment credential counter (not applicable)
 
-        self.assert_with_credential(None, credential)
+        self.assert_with_credential(None, credential, None)
     }
 
     fn credential_management(&mut self, parameters: &ctap2::credential_management::Parameters)
@@ -1040,15 +1040,21 @@ impl Authenticator {
             uv_performed,
         });
 
-        self.assert_with_credential(num_credentials, credential)
+        self.assert_with_credential(num_credentials, credential, parameters.options.as_ref())
     }
 
-    fn assert_with_credential(&mut self, num_credentials: Option<u32>, credential: Credential)
+    fn assert_with_credential(&mut self, num_credentials: Option<u32>, credential: Credential,
+            options: Option<&ctap2::AuthenticatorOptions>)
         -> Result<ctap2::get_assertion::Response>
     {
         let data = self.state.runtime.active_get_assertion.clone().unwrap();
 
         // 6. process any options present
+        let do_up = if options.is_some() {
+            options.unwrap().up.unwrap_or(true)
+        } else {
+            true
+        };
 
         // 7. process any extensions present
 
@@ -1068,7 +1074,10 @@ impl Authenticator {
             rp_id_hash: ByteBuf::from_slice(&data.rp_id_hash).unwrap(),
 
             flags: {
-                let mut flags = Flags::USER_PRESENCE;
+                let mut flags = Flags::EMPTY;
+                if do_up && self.user_present() {
+                    flags |= Flags::USER_PRESENCE;
+                }
                 if data.uv_performed {
                     flags |= Flags::USER_VERIFIED;
                 }
@@ -1541,7 +1550,7 @@ impl Authenticator {
             rp_id_hash: rp_id_hash.try_to_byte_buf().map_err(|_| Error::Other)?,
 
             flags: {
-                let mut flags = Flags::USER_PRESENCE;
+                let mut flags = Flags::EMPTY;
                 if uv_performed {
                     flags |= Flags::USER_VERIFIED;
                 }

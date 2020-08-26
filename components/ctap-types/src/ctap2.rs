@@ -119,6 +119,7 @@ pub type PinAuth = ByteBuf<consts::U16>;
 
 bitflags! {
     pub struct AuthenticatorDataFlags: u8 {
+        const EMPTY = 0;
         const USER_PRESENCE = 1 << 0;
         const USER_VERIFIED = 1 << 2;
         const ATTESTED_CREDENTIAL_DATA = 1 << 6;
