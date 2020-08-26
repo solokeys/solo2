@@ -390,7 +390,7 @@ impl<Syscall: crate::pipe::Syscall> Client<Syscall> {
     pub fn remove_dir<'c>(&'c mut self, location: StorageLocation, path: PathBuf)
         -> core::result::Result<FutureResult<'c, reply::RemoveFile>, ClientError>
     {
-        self.raw.request(request::RemoveFile { location, path } )?;
+        self.raw.request(request::RemoveDir { location, path } )?;
         self.syscall.syscall();
         Ok(FutureResult::new(self))
     }
