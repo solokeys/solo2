@@ -695,15 +695,12 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         self.deserialize_str(visitor)
     }
 
-    fn deserialize_ignored_any<V>(self, _visitor: V) -> Result<V::Value>
+    fn deserialize_ignored_any<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        // TODO: ORLY?
-        // Will not support
-        // use cortex_m_semihosting::hprintln;
-        // hprintln!("ignored any").ok();// {:?}", &_visitor).ok();
-        Err(Error::WontImplement)
+        // Ignore extra fields/options
+        visitor.visit_none()
     }
 }
 

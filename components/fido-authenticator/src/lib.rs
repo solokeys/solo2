@@ -1308,6 +1308,19 @@ impl Authenticator {
 
         // 6. excludeList present, contains credential ID on this authenticator bound to RP?
         // --> wait for UP, error CredentialExcluded
+        if let Some(exclude_list) = &parameters.exclude_list {
+            for descriptor in exclude_list.iter() {
+                let result = Credential::try_from(self, &rp_id_hash, descriptor);
+                if result.is_ok() {
+                    info!("Excluded!");
+                    if self.user_present() {
+                        return Err(Error::CredentialExcluded);
+                    } else {
+                        return Err(Error::OperationDenied);
+                    }
+                }
+            }
+        }
 
         // 7. check pubKeyCredParams algorithm is valid + supported COSE identifier
 
