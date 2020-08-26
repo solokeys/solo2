@@ -4,7 +4,7 @@ use core::convert::{TryFrom, TryInto};
 
 logging::add!(logger);
 
-use logger::{info, debug};
+use logger::{info, debug, blocking};
 
 use trussed::{
     block, syscall,
@@ -1200,7 +1200,6 @@ impl Authenticator {
             info!("got RP {:?}, looking for its RKs", &rp_path).ok();
 
             // delete all RKs for given RP
-
             let mut entry = syscall!(self.crypto.read_dir_first(
                 StorageLocation::Internal,
                 rp_path.clone(),
@@ -1216,14 +1215,16 @@ impl Authenticator {
                     Some(entry) => PathBuf::from(entry.path()),
                 };
 
-                // prepare for next loop iteration
-                entry = syscall!(self.crypto.read_dir_next(
-                )).entry;
-
                 self.delete_resident_key_by_path(&rk_path)?;
+
+                // prepare for next loop iteration
+                entry = syscall!(self.crypto.read_dir_first(
+                    StorageLocation::Internal,
+                    rp_path.clone(),
+                    None,
+                )).entry;
             }
 
-            info!("deleting RP dir {:?}", &rp_path).ok();
             syscall!(self.crypto.remove_dir(
                 StorageLocation::Internal,
                 rp_path,
