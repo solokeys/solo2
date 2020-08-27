@@ -40,13 +40,13 @@ const_ram_storage!(
     erase_value=0xff,
     read_size=1,
     write_size=1,
-    cache_size_ty=consts::U104,
+    cache_size_ty=consts::U128,
     // this is a limitation of littlefs
     // https://git.io/JeHp9
     block_size=104,
     // block_size=128,
     block_count=8192/104,
-    lookaheadwords_size_ty=consts::U1,
+    lookaheadwords_size_ty=consts::U8,
     filename_max_plus_one_ty=consts::U256,
     path_max_plus_one_ty=consts::U256,
     result=LfsResult,
