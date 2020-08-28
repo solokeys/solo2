@@ -11,7 +11,7 @@ macro_rules! stub_log {($($tt:tt)*) => {{
     if false {
         // this is to mark all variables as used when logs are stubbed out.
         #[allow(unused_must_use)]
-        $crate::__blocking_dbg!($($tt)*);
+        ($($tt)*);
         core::result::Result::<(), core::convert::Infallible>::Ok(())
     } else {
         core::result::Result::<(), core::convert::Infallible>::Ok(())
@@ -31,6 +31,7 @@ pub use crate::funnel::*;
 pub mod print_functions {
     // For embedded use
     pub use super::{Result, funnel, hex, hex::*};
+    #[allow(unused_imports)]
     use funnel::Logger;
     pub use ufmt;
     pub use ufmt::{uwriteln, uwrite};
