@@ -96,8 +96,8 @@ impl<'de> Deserializer<'de> {
     fn expect_major(&mut self, major: u8) -> Result<u8> {
         let byte = self.try_take_n(1)?[0];
         if major != (byte >> 5) {
-            // hprintln!("expecting {}, got {} in byte {}", major, byte >> 5, byte);
-            // hprintln!("remaining data: {:?}", &self.input);
+            // logging::blocking::info!("expecting {}, got {} in byte {}", major, byte >> 5, byte).ok();
+            // logging::blocking::info!("remaining data: {:?}", &self.input).ok();
             return Err(Error::DeserializeBadMajor);
         }
         Ok(byte & ((1 << 5) - 1))
@@ -539,6 +539,8 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
+        // major type 4: "array"
+        let len = self.raw_deserialize_u32(4)? as usize;
         visitor.visit_seq(SeqAccess {
             deserializer: self,
             len,
