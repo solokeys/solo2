@@ -1,4 +1,5 @@
 use hid_dispatch::app::{App, Command, Message, Response};
+use hid_dispatch::command::VendorCommand;
 
 pub struct Wink{
     got_wink: bool,
@@ -20,14 +21,24 @@ impl Wink {
     }
 }
 
+const REBOOT_COMMAND: hid_dispatch::command::Command = Command::Vendor(VendorCommand::H53);
+
 impl App for Wink {
     fn commands(&self) -> &'static [Command] {
-        &[Command::Wink]
+        &[Command::Wink, REBOOT_COMMAND]
     }
 
-    fn call(&mut self, _command: Command, message: &mut Message) -> Response {
-        self.got_wink = true;
-        message.clear();
+    fn call(&mut self, command: Command, message: &mut Message) -> Response {
+        match command {
+            Command::Vendor(VendorCommand::H53) => {
+                // REBOOT
+                crate::hal::raw::SCB::sys_reset();
+            }
+            _ => {
+                self.got_wink = true;
+                message.clear();
+            }
+        }
         Ok(())
     }
 }
