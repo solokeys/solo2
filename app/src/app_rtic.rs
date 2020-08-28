@@ -115,6 +115,9 @@ const APP: () = {
             let mut time = 0;
             perf_timer.lock(|perf_timer|{
                 time = perf_timer.lap().0;
+                if time == 60_000_000 {
+                    perf_timer.start(60_000.ms());
+                }
             });
             if time > 1_000_000 {
                 // Only drain outside of a 1s window of any NFC activity.
@@ -150,15 +153,17 @@ const APP: () = {
                             &mut usb_classes.ctaphid,
                             &mut usb_classes.serial
                         ]);
+                        usb_classes.ctaphid.check_timeout(time/1000);
                     }
                     _ => {}
                 }
             } );
 
+
             hid_dispatch.poll(&mut [fido, wink]);
 
             if wink.wink() {
-                c.schedule.do_wink(Instant::now() + PERIOD.cycles()).unwrap();
+                c.schedule.do_wink(Instant::now() + PERIOD.cycles()).ok();
             }
         }
     }

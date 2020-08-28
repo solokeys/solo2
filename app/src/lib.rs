@@ -253,7 +253,9 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
             .reconfigure(clocks, &mut pmc, &mut syscon) };
     }
     let store = Store::claim().unwrap();
-    store.mount(
+
+
+    let result = store.mount(
         unsafe { INTERNAL_FS_ALLOC.as_mut().unwrap() },
         // unsafe { &mut INTERNAL_STORAGE },
         unsafe { INTERNAL_STORAGE.as_mut().unwrap() },
@@ -262,8 +264,25 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         unsafe { VOLATILE_FS_ALLOC.as_mut().unwrap() },
         unsafe { &mut VOLATILE_STORAGE },
         // to trash existing data, set to true
-        true,
-    ).unwrap();
+        false,
+    );
+
+    if result.is_err() {
+        logger::info!("Not yet formatted!  Formatting..").ok();
+        store.mount(
+            unsafe { INTERNAL_FS_ALLOC.as_mut().unwrap() },
+            // unsafe { &mut INTERNAL_STORAGE },
+            unsafe { INTERNAL_STORAGE.as_mut().unwrap() },
+            unsafe { EXTERNAL_FS_ALLOC.as_mut().unwrap() },
+            unsafe { &mut EXTERNAL_STORAGE },
+            unsafe { VOLATILE_FS_ALLOC.as_mut().unwrap() },
+            unsafe { &mut VOLATILE_STORAGE },
+            // to trash existing data, set to true
+            true,
+        ).unwrap();
+    }
+
+
     // return to slow freq
     if is_passive_mode {
         clocks = unsafe { hal::ClockRequirements::default()
@@ -332,7 +351,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
         // our USB classes (must be allocated in order that they're passed in `.poll(...)` later!)
         let ccid = Ccid::new(usb_bus, contact_requester);
-        let ctaphid = CtapHid::new(usb_bus, hid_requester)
+        let ctaphid = CtapHid::new(usb_bus, hid_requester, perf_timer.lap().0/1000)
                         .implements_ctap2()
                         .implements_wink();
         let serial = usbd_serial::SerialPort::new(usb_bus);

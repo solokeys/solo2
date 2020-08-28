@@ -56,7 +56,7 @@ impl Dispatch {
             let command = tuple.0;
             let message = &mut tuple.1;
             let commandu8: u8 = command.into();
-            logger::blocking::info!("cmd: {}", commandu8);
+            logger::blocking::info!("cmd: {}", commandu8).ok();
             if let Some(app) = Self::find_app(command, apps) {
                 match app.call(command, message) {
                     Err(err) => {

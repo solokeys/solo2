@@ -4,7 +4,7 @@ use core::convert::{TryFrom, TryInto};
 
 logging::add!(logger);
 
-use logger::{info, debug, blocking};
+use logger::{info, debug};
 
 use trussed::{
     block, syscall,
@@ -114,7 +114,6 @@ impl Authenticator {
 
     pub fn new(crypto: CryptoClient) -> Self {
 
-        let crypto = crypto;
         let state = state::State::new();
         let authenticator = Authenticator { crypto, state };
 
@@ -124,6 +123,7 @@ impl Authenticator {
     pub fn call(&mut self, request: &Request) -> Result<Response> {
         // if let Some(request) = self.interchange.take_request() {
             // debug!("request: {:?}", &request).ok();
+            self.state.persistent.load_if_not_initialised(&mut self.crypto);
 
             match request {
                 Request::Ctap2(request) => {
@@ -256,7 +256,6 @@ impl Authenticator {
                     Mechanism::P256, public_key.clone(), KeySerialization::EcdhEsHkdf256)).serialized_key;
                 let cose_key = trussed::cbor_deserialize(&serialized_cose_key).unwrap();
 
-                // TODO: delete public key
                 syscall!(self.crypto.delete(public_key));
 
                 ctap2::client_pin::Response {
@@ -267,6 +266,7 @@ impl Authenticator {
             }
 
             Subcommand::SetPin => {
+                debug!("processing CP.SP").ok();
                 // 1. check mandatory parameters
                 let platform_kek = match parameters.key_agreement.as_ref() {
                     Some(key) => key,
@@ -313,6 +313,7 @@ impl Authenticator {
             }
 
             Subcommand::ChangePin => {
+                debug!("processing CP.CP").ok();
 
                 // 1. check mandatory parameters
                 let platform_kek = match parameters.key_agreement.as_ref() {
@@ -333,9 +334,7 @@ impl Authenticator {
                 };
 
                 // 2. fail if no retries left
-                if self.state.persistent.retries() == 0 {
-                    return Err(Error::PinBlocked);
-                }
+                self.state.pin_blocked()?;
 
                 // 3. generate shared secret
                 let shared_secret = self.state.runtime.generate_shared_secret(&mut self.crypto, platform_kek)?;
@@ -377,7 +376,7 @@ impl Authenticator {
             }
 
             Subcommand::GetPinToken => {
-                debug!("processing CP.GKA").ok();
+                debug!("processing CP.GPT").ok();
 
                 // 1. check mandatory parameters
                 let platform_kek = match parameters.key_agreement.as_ref() {
@@ -390,9 +389,7 @@ impl Authenticator {
                 };
 
                 // 2. fail if no retries left
-                if self.state.persistent.retries() == 0 {
-                    return Err(Error::PinBlocked);
-                }
+                self.state.pin_blocked()?;
 
                 // 3. generate shared secret
                 let shared_secret = self.state.runtime.generate_shared_secret(&mut self.crypto, platform_kek)?;
@@ -445,7 +442,7 @@ impl Authenticator {
 
         let stored_pin_hash = match self.state.persistent.pin_hash() {
             Some(hash) => hash,
-            None => { return Err(Error::InvalidCommand); }
+            None => { return Err(Error::PinNotSet); }
         };
 
         if &pin_hash != &stored_pin_hash {
@@ -487,7 +484,7 @@ impl Authenticator {
         //           pin.len(), pin_length, &pin).ok();
         // chop off null bytes
         let pin_length = pin.iter().position(|&b| b == b'\0').unwrap_or(pin.len());
-        if pin_length < 4 {
+        if pin_length < 4 || pin_length >= 64 {
             return Err(Error::PinPolicyViolation);
         }
 
@@ -693,22 +690,15 @@ impl Authenticator {
     {
         // validate allowList
         let allowed_credentials = if let Some(allow_list) = allow_list.as_ref() {
-            let valid_allowed_credentials: CredentialList = allow_list.into_iter()
+            allow_list.into_iter()
                 // discard not properly serialized encrypted credentials
                 .filter_map(|credential_descriptor| {
                     Credential::try_from(
                         self, rp_id_hash, credential_descriptor)
                         .ok()
                 } )
-                .collect();
-            if valid_allowed_credentials.len() == 0 {
-                debug!("invalid credential").ok();
-                return Err(Error::NoCredentials);
-            }
-            debug!("allowedList passed").ok();
-            valid_allowed_credentials
+                .collect()
         } else {
-            debug!("no allowedList passed").ok();
             CredentialList::new()
         };
 
@@ -718,6 +708,7 @@ impl Authenticator {
             // "If an allowList is present and is non-empty,
             // locate all denoted credentials present on this authenticator
             // and bound to the specified rpId."
+            debug!("allowedList passed with {} creds", allowed_credentials.len()).ok();
             let mut applicable_credentials: CredentialList = allowed_credentials
                 .into_iter()
                 .filter(|credential| match credential.key.clone() {
@@ -776,6 +767,7 @@ impl Authenticator {
             // - these then go into a CredentialList
             // - (we don't need to keep that around even)
             //
+            debug!("no allowedList passed").ok();
 
             let mut min_heap = MinCredentialHeap::new();
 
@@ -987,10 +979,17 @@ impl Authenticator {
         let rp_id_hash = self.hash(&parameters.rp_id.as_ref());
 
         // 1-4.
-        let uv_performed = self.pin_prechecks(
-            &parameters.options, &parameters.pin_auth, &parameters.pin_protocol,
-            &parameters.client_data_hash.as_ref(),
-        )?;
+        let uv_performed = match self.pin_prechecks(
+                &parameters.options, &parameters.pin_auth, &parameters.pin_protocol,
+                &parameters.client_data_hash.as_ref(),
+        ) {
+            Ok(b) => b,
+            Err(Error::PinRequired) => {
+                // UV is optional for get_assertion
+                false
+            }
+            Err(err) => return Err(err),
+        };
 
         // 5. Locate eligible credentials
         //
@@ -1048,6 +1047,7 @@ impl Authenticator {
             false
         };
 
+        let multiple_credentials = human_num_credentials > 1;
         self.state.runtime.active_get_assertion = Some(state::ActiveGetAssertionData {
             rp_id_hash: {
                 let mut buf = [0u8; 32];
@@ -1061,6 +1061,7 @@ impl Authenticator {
             },
             uv_performed,
             up_performed,
+            multiple_credentials,
         });
 
         self.assert_with_credential(num_credentials, credential)
@@ -1112,8 +1113,8 @@ impl Authenticator {
         commitment.extend_from_slice(&serialized_auth_data).map_err(|_| Error::Other)?;
         commitment.extend_from_slice(&data.client_data_hash).map_err(|_| Error::Other)?;
 
-        let (key, gc) = match credential.key.clone() {
-            Key::ResidentKey(key) => (key, false),
+        let (key, is_rk) = match credential.key.clone() {
+            Key::ResidentKey(key) => (key, true),
             Key::WrappedKey(bytes) => {
                 let wrapping_key = self.state.persistent.key_wrapping_key(&mut self.crypto)?;
                 // blocking::info!("unwrapping {:?} with wrapping key {:?}", &bytes, &wrapping_key).ok();
@@ -1127,7 +1128,7 @@ impl Authenticator {
                 // debug!("key result: {:?}", &key_result).ok();
                 info!("key result").ok();
                 match key_result {
-                    Some(key) => (key, true),
+                    Some(key) => (key, false),
                     None => { return Err(Error::Other); }
                 }
             }
@@ -1151,19 +1152,30 @@ impl Authenticator {
                      .to_byte_buf(),
         };
 
-        if gc {
+        if !is_rk {
             syscall!(self.crypto.delete(key));
         }
 
-        let response = ctap2::get_assertion::Response {
+        let mut response = ctap2::get_assertion::Response {
             credential: Some(credential_id.into()),
-            // credential: None,
             auth_data: ByteBuf::from_slice(&serialized_auth_data).map_err(|_| Error::Other)?,
             signature,
             user: None,
-            // number_of_credentials: if num_credentials > 1 { Some(num_credentials as u32) } else { None },
-            number_of_credentials: num_credentials, //if num_credentials > 1 { Some(num_credentials as u32) } else { Some(1) },
+            number_of_credentials: num_credentials, 
         };
+
+        if is_rk {
+            let mut user = credential.user.clone();
+            // User identifiable information (name, DisplayName, icon) MUST not
+            // be returned if user verification is not done by the authenticator.  
+            // For single account per RP case, authenticator returns "id" field.
+            if !data.uv_performed || !data.multiple_credentials {
+                user.icon = None;
+                user.name = None;
+                user.display_name = None;
+            }
+            response.user = Some(user);
+        }
 
         Ok(response)
     }
@@ -1339,7 +1351,7 @@ impl Authenticator {
             for descriptor in exclude_list.iter() {
                 let result = Credential::try_from(self, &rp_id_hash, descriptor);
                 if result.is_ok() {
-                    info!("Excluded!");
+                    info!("Excluded!").ok();
                     if self.user_present() {
                         return Err(Error::CredentialExcluded);
                     } else {
@@ -1467,8 +1479,8 @@ impl Authenticator {
                 cose_public_key = syscall!(self.crypto.serialize_key(
                     Mechanism::P256, public_key.clone(), KeySerialization::Cose
                 )).serialized_key;
-
-                info!("deleted public P256 key: {}", syscall!(self.crypto.delete(public_key)).success).ok();
+                let s = syscall!(self.crypto.delete(public_key)).success;
+                info!("deleted public P256 key: {}", s).ok();
             }
             SupportedAlgorithm::Ed25519 => {
                 private_key = syscall!(self.crypto.generate_ed25519_private_key(location)).key;
@@ -1476,7 +1488,8 @@ impl Authenticator {
                 cose_public_key = syscall!(self.crypto.serialize_key(
                     Mechanism::Ed25519, public_key.clone(), KeySerialization::Cose
                 )).serialized_key;
-                info!("deleted public Ed25519 key: {}", syscall!(self.crypto.delete(public_key)).success).ok();
+                let s = syscall!(self.crypto.delete(public_key)).success;
+                info!("deleted public Ed25519 key: {}", s).ok();
             }
             SupportedAlgorithm::Totp => {
                 if parameters.client_data_hash.len() != 32 {
@@ -1550,14 +1563,16 @@ impl Authenticator {
 
         let serialized_credential = credential.serialize()?;
 
-        block!(self.crypto.write_file(
-            StorageLocation::Internal,
-            rk_path(&rp_id_hash, &credential_id_hash),
-            serialized_credential.clone(),
-            // user attribute for later easy lookup
-            // Some(rp_id_hash.clone()),
-            None,
-        ).unwrap()).map_err(|_| Error::KeyStoreFull)?;
+        if rk_requested {
+            block!(self.crypto.write_file(
+                StorageLocation::Internal,
+                rk_path(&rp_id_hash, &credential_id_hash),
+                serialized_credential.clone(),
+                // user attribute for later easy lookup
+                // Some(rp_id_hash.clone()),
+                None,
+            ).unwrap()).map_err(|_| Error::KeyStoreFull)?;
+        }
 
         // 13. generate and return attestation statement using clientDataHash
 
@@ -1664,7 +1679,8 @@ impl Authenticator {
         // debug!("SIG = {:?}", &signature).ok();
 
         if !rk_requested {
-            info!("deleted private credential key: {}", syscall!(self.crypto.delete(private_key)).success).ok();
+            let s = syscall!(self.crypto.delete(private_key)).success;
+            info!("deleted private credential key: {}", s).ok();
         }
 
         let packed_attn_stmt = ctap2::make_credential::PackedAttestationStatement {
@@ -1784,6 +1800,7 @@ impl Authenticator {
             options: Some(options),
             max_msg_size: Some(ctap_types::sizes::MESSAGE_SIZE),
             pin_protocols: Some(pin_protocols),
+            max_creds_in_list: Some(ctap_types::sizes::MAX_CREDENTIAL_COUNT_IN_LIST_VALUE),
             ..ctap2::get_info::Response::default()
         }
     }

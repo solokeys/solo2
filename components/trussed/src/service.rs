@@ -328,7 +328,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
                                 // blocking::info!("skipping {:?}", &entry.path()).ok();
                                 continue;
                             }
-                            blocking::info!("{:?}", entry.path()).ok();
+                            blocking::info!("{:?} p({:?})", entry.path(), &path).ok();
                             if entry.file_type().is_dir() {
                                 recursively_list(fs, PathBuf::from(entry.path()));
                             }
@@ -457,7 +457,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
 
                 let fs = self.store.ifs();
 
-                let entry = fs.read_dir_and_then(&path, |dir| {
+                let result = fs.read_dir_and_then(&path, |dir| {
                     for entry in dir {
                         // let entry = entry?;//.map_err(|_| Error::InternalError)?;
                         let entry = entry.unwrap();
@@ -492,8 +492,23 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
 
                     Err(littlefs2::io::Error::NoSuchEntry)
 
-                }).map_err(|_| Error::InternalError)?;
+                });
+                let entry = if result.is_err() {
+                    let err = result.err().unwrap();
+                    blocking::info!("read_dir error: {:?}", &err).ok();
+                    return match err {
+                        // Return no data if path is invalid
+                        littlefs2::io::Error::NoSuchEntry => 
+                            Ok(Reply::ReadDirFilesFirst(reply::ReadDirFilesFirst {
+                                data: None,
+                            } )),
 
+                        _ => Err(Error::InternalError),
+                    };
+                } else {
+                    result.unwrap()
+                };
+                
                 let data = store::read(self.store, request.location, entry.path())?;
 
                 self.read_dir_files_state = Some(ReadDirFilesState {
@@ -788,7 +803,7 @@ impl<R: RngRead, S: Store> ServiceResources<R, S> {
     }
 
     pub fn store_key(&mut self, location: StorageLocation, key_type: KeyType, key_kind: KeyKind, key_material: &[u8]) -> Result<UniqueId, Error> {
-        // blocking::info!("STORING {:?}", &key_kind).ok();
+        blocking::info!("STORING {:?} -> {:?}", &key_kind, location).ok();
         let serialized_key = SerializedKey::try_from((key_kind, key_material))?;
 
         let mut buf = [0u8; 128];
@@ -906,10 +921,10 @@ impl<R: RngRead, S: Store> Service<R, S> {
 
             }
         }
-        blocking::debug!("IFS/EFS/VFS available AFTER: {}/{}/{}",
-              self.resources.store.ifs().available_blocks().unwrap(),
-              self.resources.store.efs().available_blocks().unwrap(),
-              self.resources.store.vfs().available_blocks().unwrap(),
+        blocking::debug!("I/E/V : {}/{}/{} >",
+              resources.store.ifs().available_blocks().unwrap(),
+              resources.store.efs().available_blocks().unwrap(),
+              resources.store.vfs().available_blocks().unwrap(),
         ).ok();
     }
 }
