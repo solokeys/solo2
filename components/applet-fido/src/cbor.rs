@@ -6,7 +6,7 @@ use ctap_types::{
     serde::{cbor_deserialize, error::Error as SerdeError},
 };
 
-use crate::logger::{info, blocking};
+use crate::logger::{info};
 
 pub enum CtapMappingError {
     InvalidCommand(u8),
@@ -31,8 +31,6 @@ impl From<CtapMappingError> for AuthenticatorError {
 }
 
 pub fn parse_cbor(data: &[u8]) -> core::result::Result<Request, CtapMappingError> {
-    // let data = &buffer[..request.length as usize];
-    // blocking::info!("data: {:?}", data).ok();
 
     if data.len() < 1 {
         return Err(CtapMappingError::ParsingError(SerdeError::DeserializeUnexpectedEnd));

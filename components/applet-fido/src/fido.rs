@@ -185,9 +185,11 @@ impl hid::App for Fido {
 
     #[inline(never)]
     fn call(&mut self, _command: hid::Command, message: &mut hid::Message) -> hid::Response {
-    // Command::Cbor => {
-        info!("cbor:").ok();
-        crate::logger::dump_hex(message, message.len());
+
+        if message.len() < 1 {
+            return Err(hid::Error::InvalidLength);
+        }
+
         match parse_cbor(message) {
             Ok(request) => {
                 let response = self.call_authenticator(&request);
@@ -205,6 +207,7 @@ impl hid::App for Fido {
             }
             Err(mapping_error) => {
                 let authenticator_error: AuthenticatorError = mapping_error.into();
+                info!("authenticator_error: {}", authenticator_error as u8).ok();
                 message.clear();
                 message.extend_from_slice(&[
                     authenticator_error as u8

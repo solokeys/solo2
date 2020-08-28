@@ -3,6 +3,7 @@
 pub enum Error {
     NoResponse,
     InvalidCommand,
+    InvalidLength,
 }
 
 // 7609 bytes is max message size for ctaphid

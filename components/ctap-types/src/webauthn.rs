@@ -16,7 +16,7 @@ pub struct PublicKeyCredentialRpEntity {
 pub struct PublicKeyCredentialUserEntity {
     pub id: ByteBuf<consts::U64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub icon: Option<String<consts::U64>>,
+    pub icon: Option<String<consts::U128>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String<consts::U64>>,
     #[serde(skip_serializing_if = "Option::is_none")]

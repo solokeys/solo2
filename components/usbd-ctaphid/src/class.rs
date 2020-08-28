@@ -29,7 +29,7 @@ impl<'alloc, Bus> CtapHid<'alloc, Bus>
 where
 	Bus: UsbBus
 {
-	pub fn new(allocate: &'alloc UsbBusAllocator<Bus>, interchange: Requester<HidInterchange>)
+	pub fn new(allocate: &'alloc UsbBusAllocator<Bus>, interchange: Requester<HidInterchange>, initial_miliseconds: u32)
         -> Self
     {
         // 64 bytes, interrupt endpoint polled every 5 milliseconds
@@ -39,7 +39,7 @@ where
         let write_endpoint: EndpointIn<'alloc, Bus> =
             allocate.interrupt(PACKET_SIZE as u16, INTERRUPT_POLL_MILLISECONDS);
 
-        let pipe = Pipe::new(read_endpoint, write_endpoint, interchange);
+        let pipe = Pipe::new(read_endpoint, write_endpoint, interchange, initial_miliseconds);
 
         Self {
             interface: allocate.interface(),
@@ -72,6 +72,10 @@ where
     // implement DerefMut<Target = Pipe> instead
     pub fn pipe(&mut self) -> &mut Pipe<'alloc, Bus> {
         &mut self.pipe
+    }
+
+    pub fn check_timeout(&mut self, now_milliseconds: u32) {
+        self.pipe.check_timeout(now_milliseconds);
     }
 
 }

@@ -37,3 +37,5 @@ pub mod webauthn;
 #[cfg(test)]
 mod tests {
 }
+
+logging::add!(logger);

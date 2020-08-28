@@ -47,7 +47,7 @@ Agree<R, S> for super::P256
 
         // THIS IS THE CORE
         blocking::info!("free/total RAMFS blocks: {:?}/{:?}",
-            resources.store.vfs().available_blocks(),
+            resources.store.vfs().available_blocks().unwrap(),
             resources.store.vfs().total_blocks(),
         ).ok();
         let shared_secret = keypair.secret.agree(&public_key).map_err(|_| Error::InternalError)?.to_bytes();

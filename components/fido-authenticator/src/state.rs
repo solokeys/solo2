@@ -53,7 +53,7 @@ impl State {
 
     pub fn decrement_retries<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) -> Result<()> {
         self.persistent.decrement_retries(crypto)?;
-        self.runtime.decrement_retries();
+        self.runtime.decrement_retries()?;
         Ok(())
     }
 
@@ -130,6 +130,7 @@ pub struct ActiveGetAssertionData {
     pub client_data_hash: [u8; 32],
     pub uv_performed: bool,
     pub up_performed: bool,
+    pub multiple_credentials: bool,
 }
 
 #[derive(Clone, Debug, /*uDebug,*/ Default, /*PartialEq,*/ serde::Deserialize, serde::Serialize)]
@@ -193,13 +194,29 @@ impl PersistentState {
     pub fn load<S: Syscall>(crypto: &mut CryptoClient<S>) -> Result<Self> {
 
         // TODO: add "exists_file" method instead?
-        let data = block!(crypto.read_file(
+        let result = block!(crypto.read_file(
                 StorageLocation::Internal,
                 PathBuf::from(Self::FILENAME),
             ).unwrap()
-        ).map_err(|_| Error::Other)?.data;
+        ).map_err(|_| Error::Other);
 
-        let previous_state = trussed::cbor_deserialize(&data).map_err(|_| Error::Other);
+        if result.is_err() {
+            blocking::info!("err loading: {:?}", result.err().unwrap()).ok();
+            return Err(Error::Other);
+        }
+
+        let data = result.unwrap().data;
+
+        let result = trussed::cbor_deserialize(&data);
+
+        if result.is_err() {
+            blocking::info!("err deser'ing: {:?}", result.err().unwrap()).ok();
+            blocking::dump_hex(&data,data.len()).ok();
+            return Err(Error::Other);
+        }
+
+        let previous_state = result.map_err(|_| Error::Other);
+
         // cortex_m_semihosting::blocking::info!("previously persisted state:\n{:?}", &previous_state).ok();
         previous_state
     }
@@ -227,15 +244,20 @@ impl PersistentState {
 
     pub fn load_if_not_initialised<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) {
         if !self.initialised {
-            if let Ok(previous_self) = Self::load(crypto) {
-                *self = previous_self
+            match Self::load(crypto) {
+                Ok(previous_self) => {
+                    blocking::info!("loaded previous state!").ok();
+                    *self = previous_self
+                },
+                Err(err) => {
+                    blocking::info!("error with previous state! {:?}", err).ok();
+                }
             }
             self.initialised = true;
         }
     }
 
     pub fn timestamp<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) -> Result<u32> {
-        self.load_if_not_initialised(crypto);
 
         let now = self.timestamp;
         self.timestamp += 1;
@@ -246,7 +268,6 @@ impl PersistentState {
 
     pub fn key_encryption_key<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) -> Result<Key>
     {
-        self.load_if_not_initialised(crypto);
         match self.key_encryption_key {
             Some(key) => Ok(key),
             None => self.rotate_key_encryption_key(crypto),
@@ -254,7 +275,6 @@ impl PersistentState {
     }
 
     pub fn rotate_key_encryption_key<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) -> Result<Key> {
-        self.load_if_not_initialised(crypto);
         if let Some(key) = self.key_encryption_key { syscall!(crypto.delete(key)); }
         let key = syscall!(crypto.generate_chacha8poly1305_key(StorageLocation::Internal)).key;
         self.key_encryption_key = Some(key);
@@ -264,7 +284,6 @@ impl PersistentState {
 
     pub fn key_wrapping_key<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) -> Result<Key>
     {
-        self.load_if_not_initialised(crypto);
         match self.key_wrapping_key {
             Some(key) => Ok(key),
             None => self.rotate_key_wrapping_key(crypto),
@@ -293,7 +312,6 @@ impl PersistentState {
     }
 
      fn reset_retries<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) -> Result<()> {
-        self.load_if_not_initialised(crypto);
         if self.consecutive_pin_mismatches > 0 {
             self.consecutive_pin_mismatches = 0;
             self.save(crypto)?;
@@ -302,11 +320,13 @@ impl PersistentState {
     }
 
     fn decrement_retries<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) -> Result<()> {
-        self.load_if_not_initialised(crypto);
         // error to call before initialization
         if self.consecutive_pin_mismatches < Self::RESET_RETRIES {
             self.consecutive_pin_mismatches += 1;
             self.save(crypto)?;
+            if self.consecutive_pin_mismatches == 0 {
+                return Err(Error::PinBlocked);
+            }
         }
         Ok(())
     }
@@ -316,7 +336,6 @@ impl PersistentState {
     }
 
     pub fn set_pin_hash<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>, pin_hash: [u8; 16]) -> Result<()> {
-        self.load_if_not_initialised(crypto);
         self.pin_hash = Some(pin_hash);
         self.save(crypto)?;
         Ok(())
@@ -329,9 +348,14 @@ impl RuntimeState {
 
     const POWERCYCLE_RETRIES: u8 = 3;
 
-    fn decrement_retries(&mut self) {
+    fn decrement_retries(&mut self) -> Result<()> {
         if self.consecutive_pin_mismatches < Self::POWERCYCLE_RETRIES {
             self.consecutive_pin_mismatches += 1;
+        }
+        if self.consecutive_pin_mismatches == Self::POWERCYCLE_RETRIES {
+            Err(Error::PinAuthBlocked)
+        } else {
+            Ok(())
         }
     }
 
@@ -382,7 +406,6 @@ impl RuntimeState {
 
     pub fn rotate_pin_token<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) -> Key {
         // TODO: need to rotate key agreement key?
-        blocking::info!("rotatating pin token!!").ok();
         if let Some(token) = self.pin_token { syscall!(crypto.delete(token)); }
         let token = syscall!(crypto.generate_hmacsha256_key(StorageLocation::Volatile)).key;
         self.pin_token = Some(token);
