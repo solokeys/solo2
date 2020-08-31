@@ -234,6 +234,12 @@ impl PersistentState {
     }
 
     pub fn reset<S: Syscall>(&mut self, crypto: &mut CryptoClient<S>) -> Result<()> {
+        if let Some(key) = self.key_encryption_key { 
+            syscall!(crypto.delete(key));
+        }
+        if let Some(key) = self.key_wrapping_key { 
+            syscall!(crypto.delete(key));
+        }
         self.key_encryption_key = None;
         self.key_wrapping_key = None;
         self.consecutive_pin_mismatches = 0;
