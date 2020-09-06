@@ -34,6 +34,16 @@ pub enum State {
     Sending,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum Error {
+    CmdAborted = 0xff,
+    IccMute = 0xfe,
+    XfrParityError = 0xfd,
+    //..
+    CmdSlotBusy = 0xE0,
+    CommandNotSupported = 0x00,
+}
+
 pub struct Pipe<Bus>
 where
     Bus: UsbBus + 'static,
@@ -146,7 +156,7 @@ where
         match PacketCommand::try_from(self.ext_packet.clone()) {
             Ok(command) => {
                 self.seq = command.seq();
-                // blocking::info!("{:?}", &command).ok();
+                blocking::info!(">> {:?}", &command).ok();
 
                 // happy path
                 match command {
@@ -161,6 +171,7 @@ where
                     PacketCommand::Abort(_command) => {
                         todo!();
                     }
+                    PacketCommand::GetParameters(_command) => self.send_parameters(),
                 }
             }
 
@@ -168,10 +179,10 @@ where
                 panic!("short packet!");
             }
 
-            Err(PacketError::UnknownCommand(_c)) => {
-                // blocking::info!("{:X?}", &p).ok();
-                // panic!("unknown command byte 0x{:x}", c);
-
+            Err(PacketError::UnknownCommand(p)) => {
+                blocking::info!("unknown command {:X?}", &p).ok();
+                self.seq = self.ext_packet[6];
+                self.send_slot_status_error(Error::CommandNotSupported);
             }
         }
     }
@@ -183,7 +194,7 @@ where
         // conts: BeginsAndEnds, Begins, Ends, Continues, ExpectDataBlock,
 
         // blocking::info!("handle xfrblock").ok();
-        // blocking::info!("{:X?}", &command).ok();
+        blocking::info!("{:X?}", &command).ok();
         match self.state {
 
             State::Idle => {
@@ -326,13 +337,42 @@ where
         self.send_packet_assuming_possible(packet);
     }
 
-    fn send_slot_status_ok(&mut self)
-                           // , icc_status: u8, command_status: u8, error: u8)
-    {
+    fn send_slot_status_ok(&mut self) {
         let mut packet = RawPacket::new();
         packet.resize_default(10).ok();
         packet[0] = 0x81;
         packet[6] = self.seq;
+        self.send_packet_assuming_possible(packet);
+    }
+
+    fn send_slot_status_error(&mut self, error: Error) {
+        let mut packet = RawPacket::new();
+        packet.resize_default(10).ok();
+        packet[0] = 0x6c;
+        packet[6] = self.seq;
+        packet[7] = 1<<6;
+        packet[8] = error as u8;
+        self.send_packet_assuming_possible(packet);
+    }
+
+    fn send_parameters(&mut self) {
+        let mut packet = RawPacket::new();
+        packet.resize_default(17).ok();
+        packet[0] = 0x82;
+        packet[1] = 7;
+        packet[6] = self.seq;
+        packet[9] = 1; // T=1
+
+        // just picking the fastest values.
+        //              Fi = 1Mz    Di=1
+        packet[10] = (0b0001 << 4) | (0b0001);
+
+        // just taking default value from spec.
+        packet[11] = 0x10;
+        // not sure, taking default.
+        packet[13] = 0x15;
+        // set max waiting time
+        packet[15] = 0xfe;
         self.send_packet_assuming_possible(packet);
     }
 
