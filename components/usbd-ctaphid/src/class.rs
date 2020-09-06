@@ -29,7 +29,7 @@ impl<'alloc, Bus> CtapHid<'alloc, Bus>
 where
 	Bus: UsbBus
 {
-	pub fn new(allocate: &'alloc UsbBusAllocator<Bus>, interchange: Requester<HidInterchange>, initial_miliseconds: u32)
+	pub fn new(allocate: &'alloc UsbBusAllocator<Bus>, interchange: Requester<HidInterchange>, initial_milliseconds: u32)
         -> Self
     {
         // 64 bytes, interrupt endpoint polled every 5 milliseconds
@@ -39,7 +39,7 @@ where
         let write_endpoint: EndpointIn<'alloc, Bus> =
             allocate.interrupt(PACKET_SIZE as u16, INTERRUPT_POLL_MILLISECONDS);
 
-        let pipe = Pipe::new(read_endpoint, write_endpoint, interchange, initial_miliseconds);
+        let pipe = Pipe::new(read_endpoint, write_endpoint, interchange, initial_milliseconds);
 
         Self {
             interface: allocate.interface(),
@@ -47,27 +47,23 @@ where
         }
     }
     
-    /// Implements Wink command
+    /// Indicate in INIT response that Wink command is implemented.
     pub fn implements_wink(mut self) -> Self {
         self.pipe.implements |= 0x01;
         self
     }
 
-    /// Implements RawMsg command
+    /// Indicate in INIT response that RawMsg command is implemented.
     pub fn implements_ctap1(mut self) -> Self {
         self.pipe.implements &= !0x80;
         self
     }
 
-    /// Implements CBOR command
+    /// Indicate in INIT response that Cbor command is implemented.
     pub fn implements_ctap2(mut self) -> Self {
         self.pipe.implements |= 0x04;
         self
     }
-
-    // pub fn borrow_mut_authenticator(&mut self) -> &mut Authenticator {
-    //     self.pipe.borrow_mut_authenticator()
-    // }
 
     // implement DerefMut<Target = Pipe> instead
     pub fn pipe(&mut self) -> &mut Pipe<'alloc, Bus> {
