@@ -150,11 +150,11 @@ pub enum CommandType {
     PowerOn = 0x62,
     PowerOff = 0x63,
     GetSlotStatus = 0x65,
+    GetParameters = 0x6c,
     XfrBlock = 0x6f,
     Abort = 0x72,
 
     // unsupported
-    GetParameters = 0x6c,
     ResetParameters = 0x6d,
     SetParameters = 0x61,
     Escape = 0x6b,//  for vendor commands
@@ -273,6 +273,7 @@ command_message!(
     PowerOn: 0x62,
     PowerOff: 0x63,
     GetSlotStatus: 0x65,
+    GetParameters: 0x6c,
     XfrBlock: 0x6f,
     Abort: 0x72,
 );
