@@ -143,9 +143,10 @@ pub struct Pipe<'alloc, Bus: UsbBus> {
     // TODO: move into "app"
     last_channel: u32,
 
+    // Indicator of implemented commands in INIT response.
     pub implements: u8,
 
-    pub last_miliseconds: u32
+    pub last_milliseconds: u32
 }
 
 impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
@@ -158,7 +159,7 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
         read_endpoint: EndpointOut<'alloc, Bus>,
         write_endpoint: EndpointIn<'alloc, Bus>,
         interchange: Requester<HidInterchange>,
-        initial_miliseconds: u32,
+        initial_milliseconds: u32,
     ) -> Self
     {
         Self {
@@ -168,8 +169,9 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
             interchange,
             buffer: [0u8; MESSAGE_SIZE],
             last_channel: 0,
+            // Default to nothing implemented.
             implements: 0x80,
-            last_miliseconds: initial_miliseconds,
+            last_milliseconds: initial_milliseconds,
         }
     }
 
@@ -263,7 +265,7 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
             // can't actually fail
             let length = u16::from_be_bytes(packet[5..][..2].try_into().unwrap());
 
-            let timestamp = self.last_miliseconds;
+            let timestamp = self.last_milliseconds;
             let current_request = Request { channel, command, length, timestamp};
 
             if !(self.state == State::Idle) {
@@ -370,15 +372,15 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
         }
     }
     
-    pub fn check_timeout(&mut self, miliseconds: u32) {
+    pub fn check_timeout(&mut self, milliseconds: u32) {
         // At any point the RP application could crash or something,
         // so its up to the device to timeout those transactions.
-        self.last_miliseconds = miliseconds;
+        self.last_milliseconds = milliseconds;
         match self.state {
             State::Receiving((request, _message_state)) => {
                 // compare keeping in mind of possible overflow in timestamp.
-                if (miliseconds > request.timestamp && (miliseconds - request.timestamp) > 600)
-                || (miliseconds < request.timestamp && miliseconds > 600)
+                if (milliseconds > request.timestamp && (milliseconds - request.timestamp) > 600)
+                || (milliseconds < request.timestamp && milliseconds > 600)
                 {
                     info!("Channel timeout.").ok();
                     self.start_sending_error(request, AuthenticatorError::Timeout);
