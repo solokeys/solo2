@@ -11,7 +11,6 @@ use trussed::{
 pub(crate) use ctap_types::{
     ByteBuf, ByteBuf32, consts, String, Vec,
     // authenticator::{ctap1, ctap2, Error, Request, Response},
-    authenticator::ctap2,
     ctap2::make_credential::CredentialProtectionPolicy,
     sizes::*,
     webauthn::PublicKeyCredentialDescriptor,
@@ -143,7 +142,9 @@ impl Into<PublicKeyCredentialDescriptor> for CredentialId {
 impl Credential {
     pub fn new(
         ctap: CtapVersion,
-        parameters: &ctap2::make_credential::Parameters,
+        // parameters: &ctap2::make_credential::Parameters,
+        rp: &ctap_types::webauthn::PublicKeyCredentialRpEntity,
+        user: &ctap_types::webauthn::PublicKeyCredentialUserEntity,
         algorithm: i32,
         key: Key,
         timestamp: u32,
@@ -155,8 +156,8 @@ impl Credential {
     {
         crate::logger::info!("credential for algorithm {}", algorithm).ok();
         let data = CredentialData {
-            rp: parameters.rp.clone(),
-            user: parameters.user.clone(),
+            rp: rp.clone(),
+            user: user.clone(),
 
             creation_time: timestamp,
             use_counter: true,
@@ -172,6 +173,27 @@ impl Credential {
             data,
             nonce: ByteBuf::from_slice(&nonce).unwrap(),
         }
+    }
+
+    pub fn id_using_hash<'a>(
+        &self,
+        crypto: &mut CryptoClient,
+        key_encryption_key: &ObjectHandle,
+        rp_id_hash: &ByteBuf32,
+    )
+        -> Result<CredentialId>
+    {
+        let serialized_credential = self.serialize()?;
+        let message = &serialized_credential;
+
+        let associated_data = &rp_id_hash[..];
+        let nonce: [u8; 12] = self.nonce.as_slice().try_into().unwrap();
+        let encrypted_serialized_credential = EncryptedSerializedCredential(
+            syscall!(crypto.encrypt_chacha8poly1305(
+                    key_encryption_key, message, associated_data, Some(&nonce))));
+        let credential_id: CredentialId = encrypted_serialized_credential.try_into().unwrap();
+
+        Ok(credential_id)
     }
 
     pub fn id<'a>(
@@ -226,8 +248,22 @@ impl Credential {
     )
         -> Result<Self>
     {
+        Self::try_from_bytes(authnr, rp_id_hash, &descriptor.id)
+    }
+
+    pub fn try_from_bytes(
+        authnr: &mut Authenticator,
+        rp_id_hash: &ByteBuf<consts::U32>,
+        id: &[u8],
+    )
+        -> Result<Self>
+    {
+
+        let mut cred: ByteBuf<MAX_CREDENTIAL_ID_LENGTH> = ByteBuf::new();
+        cred.extend_from_slice(id).map_err(|_| Error::InvalidCredential)?;
+
         let encrypted_serialized = EncryptedSerializedCredential::try_from(
-            CredentialId(descriptor.id.clone())
+            CredentialId(cred)
         )?;
 
         let kek = authnr.state.persistent.key_encryption_key(&mut authnr.crypto)?;

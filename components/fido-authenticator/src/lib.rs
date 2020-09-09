@@ -28,6 +28,13 @@ use ctap_types::{
     // rpc::CtapInterchange,
     // authenticator::ctap1,
     authenticator::{ctap2, Error, Request, Response},
+    ctap1::{
+        self,
+        Command as U2fCommand,
+        Response as U2fResponse,
+        Result as U2fResult,
+        Error as U2fError,
+    },
 };
 
 use littlefs2::path::{Path, PathBuf};
@@ -118,6 +125,205 @@ impl Authenticator {
         let authenticator = Authenticator { crypto, state };
 
         authenticator
+    }
+
+    pub fn call_u2f(&mut self, request: &U2fCommand) -> U2fResult<U2fResponse> {
+        info!("called u2f").ok();
+        self.state.persistent.load_if_not_initialised(&mut self.crypto);
+
+        let mut commitment = ByteBuf::<consts::U324>::new();
+
+        match request {
+            U2fCommand::Register(reg) => {
+
+                if !self.user_present() {
+                    return Err(U2fError::ConditionsOfUseNotSatisfied);
+                }
+                // Generate a new P256 key pair.
+                let private_key = syscall!(self.crypto.generate_p256_private_key(StorageLocation::Volatile)).key;
+                let public_key = syscall!(self.crypto.derive_p256_public_key(&private_key, StorageLocation::Volatile)).key;
+
+                let serialized_cose_public_key = syscall!(self.crypto.serialize_key(
+                    Mechanism::P256, public_key.clone(), KeySerialization::EcdhEsHkdf256
+                )).serialized_key;
+                let cose_key: ctap_types::cose::EcdhEsHkdf256PublicKey 
+                    = trussed::cbor_deserialize(&serialized_cose_public_key).unwrap();
+
+                let wrapping_key = &self.state.persistent.key_wrapping_key(&mut self.crypto)
+                    .map_err(|_| U2fError::UnspecifiedCheckingError)?;
+                debug!("wrapping u2f private key").ok();
+                let wrapped_key = syscall!(self.crypto.wrap_key_chacha8poly1305(
+                    &wrapping_key,
+                    &private_key,
+                    &reg.app_id,
+                )).wrapped_key;
+                // debug!("wrapped_key = {:?}", &wrapped_key).ok();
+
+                let key = Key::WrappedKey(wrapped_key.try_to_byte_buf().map_err(|_| U2fError::UnspecifiedCheckingError)?);
+                let nonce = syscall!(self.crypto.random_bytes(12)).bytes.as_slice().try_into().unwrap();
+
+                let mut rp_id = heapless::String::new();
+
+                // We do not know the rpId string in U2F.  Just using placeholder.
+                rp_id.push_str("u2f").ok();
+                let rp = ctap_types::webauthn::PublicKeyCredentialRpEntity{
+                    id: rp_id,
+                    name: None,
+                    url: None,
+                };
+
+                let user = ctap_types::webauthn::PublicKeyCredentialUserEntity {
+                    id: ByteBuf::from_slice(&[0u8; 8]).unwrap(),
+                    icon: None,
+                    name: None,
+                    display_name: None,
+                };
+
+                let credential = Credential::new(
+                    credential::CtapVersion::U2fV2,
+                    &rp,
+                    &user,
+
+                    SupportedAlgorithm::P256 as i32,
+                    key,
+                    self.state.persistent.timestamp(&mut self.crypto).map_err(|_| U2fError::NotEnoughMemory)?,
+                    None,
+                    credential::CredentialProtectionPolicy::Optional,
+                    nonce,
+                );
+
+                // blocking::info!("made credential {:?}", &credential).ok();
+
+                // 12.b generate credential ID { = AEAD(Serialize(Credential)) }
+                let kek = &self.state.persistent.key_encryption_key(&mut self.crypto).map_err(|_| U2fError::NotEnoughMemory)?;
+                let credential_id = credential.id_using_hash(&mut self.crypto, &kek, &reg.app_id).map_err(|_| U2fError::NotEnoughMemory)?;
+                syscall!(self.crypto.delete(public_key));
+                syscall!(self.crypto.delete(private_key));
+
+                commitment.push(0).unwrap();     // reserve byte
+                commitment.extend_from_slice(&reg.app_id).unwrap();
+                commitment.extend_from_slice(&reg.challenge).unwrap();
+
+                commitment.extend_from_slice(&credential_id.0).unwrap();
+
+                commitment.push(0x04).unwrap();  // public key uncompressed byte
+                commitment.extend_from_slice(&cose_key.x).unwrap();
+                commitment.extend_from_slice(&cose_key.y).unwrap();
+
+                let attestation_key = self.state.identity.attestation_key(&mut self.crypto);
+
+                let signature = match attestation_key {
+                    Some(key) => {
+                        syscall!(
+                            self.crypto.sign(Mechanism::P256, 
+                            key,
+                            &commitment,
+                            SignatureSerialization::Asn1Der
+                        )).signature.to_byte_buf()
+                    },
+                    _ => {
+                        info!("Not provisioned with attestation key!").ok();
+                        return Err(U2fError::KeyReferenceNotFound);
+                    }
+                };
+
+                let file = syscall!(self.crypto
+                    .read_file(
+                        StorageLocation::Internal,
+                        PathBuf::from(b"attestation.x5c")
+                    ));
+
+                Ok(U2fResponse::Register(ctap1::RegisterResponse::new(
+                    0x05,
+                    &cose_key,
+                    &credential_id.0,
+                    signature,
+                    &file.data,
+                )))
+            }
+            U2fCommand::Authenticate(auth) => {
+
+                let cred = Credential::try_from_bytes(self, &auth.app_id, &auth.key_handle);
+
+                let user_presence_byte = match auth.control_byte {
+                    ctap1::ControlByte::CheckOnly => {
+                        // if the control byte is set to 0x07 by the FIDO Client,
+                        // the U2F token is supposed to simply check whether the 
+                        // provided key handle was originally created by this token
+                        return if cred.is_ok() {
+                            Err(U2fError::ConditionsOfUseNotSatisfied) 
+                        } else {
+                            Err(U2fError::IncorrectDataParameter) 
+                        };
+                    },
+                    ctap1::ControlByte::EnforceUserPresenceAndSign => {
+                        if !self.user_present() {
+                            return Err(U2fError::ConditionsOfUseNotSatisfied);
+                        }
+                        0x01
+                    },
+                    ctap1::ControlByte::DontEnforceUserPresenceAndSign => 0x00,
+                };
+
+                let cred = cred.map_err(|_| U2fError::IncorrectDataParameter)?;
+
+                let key = match &cred.key {
+                    Key::WrappedKey(bytes) => {
+                        let wrapping_key = self.state.persistent.key_wrapping_key(&mut self.crypto)
+                            .map_err(|_| U2fError::IncorrectDataParameter)?;
+                        let key_result = syscall!(self.crypto.unwrap_key_chacha8poly1305(
+                            &wrapping_key,
+                            &bytes.to_byte_buf(),
+                            b"",
+                            StorageLocation::Volatile,
+                        )).key;
+                        match key_result {
+                            Some(key) => {
+                                info!("loaded u2f key!").ok();
+                                key
+                            }
+                            None => { 
+                                info!("issue with unwrapping credential id key").ok();
+                                return Err(U2fError::IncorrectDataParameter);
+                            }
+                        }
+                    }
+                    _ => return Err(U2fError::IncorrectDataParameter),
+                };
+
+                if cred.algorithm != -7 {
+                    info!("Unexpected mechanism for u2f").ok();
+                    return Err(U2fError::IncorrectDataParameter);
+                }
+
+                let sig_count = self.state.persistent.timestamp(&mut self.crypto).
+                    map_err(|_| U2fError::UnspecifiedNonpersistentExecutionError)?;
+
+                commitment.extend_from_slice(&auth.app_id).unwrap();
+                commitment.push(user_presence_byte).unwrap();
+                commitment.extend_from_slice(&sig_count.to_be_bytes()).unwrap();
+                commitment.extend_from_slice(&auth.challenge).unwrap();
+
+                let signature = syscall!(
+                    self.crypto.sign(Mechanism::P256, 
+                    key,
+                    &commitment,
+                    SignatureSerialization::Asn1Der
+                )).signature.to_byte_buf();
+
+                Ok(U2fResponse::Authenticate(ctap1::AuthenticateResponse::new(
+                    user_presence_byte,
+                    sig_count,
+                    signature,
+                )))
+
+            }
+            U2fCommand::Version => {
+                // "U2F_V2"
+                Ok(U2fResponse::Version([0x55, 0x32, 0x46, 0x5f, 0x56, 0x32]))
+            }
+        }
+
     }
 
     pub fn call(&mut self, request: &Request) -> Result<Response> {
@@ -690,9 +896,12 @@ impl Authenticator {
     {
         // validate allowList
         let allowed_credentials = if let Some(allow_list) = allow_list.as_ref() {
+
             allow_list.into_iter()
                 // discard not properly serialized encrypted credentials
                 .filter_map(|credential_descriptor| {
+                    info!("GA try from cred id:").ok();
+                    logging::dump_hex(&credential_descriptor.id, credential_descriptor.id.len()).ok();
                     Credential::try_from(
                         self, rp_id_hash, credential_descriptor)
                         .ok()
@@ -796,7 +1005,7 @@ impl Authenticator {
             let kek = self.state.persistent.key_encryption_key(&mut self.crypto)?;
 
             if keep {
-                let id = credential.id(&mut self.crypto, &kek)?;
+                let id = credential.id_using_hash(&mut self.crypto, &kek, rp_id_hash)?;
                 let credential_id_hash = self.hash(&id.0.as_ref());
 
                 let timestamp_path = TimestampPath {
@@ -825,7 +1034,7 @@ impl Authenticator {
 
                 if keep {
 
-                    let id = credential.id(&mut self.crypto, &kek)?;
+                    let id = credential.id_using_hash(&mut self.crypto, &kek, rp_id_hash)?;
                     let credential_id_hash = self.hash(&id.0.as_ref());
 
                     let timestamp_path = TimestampPath {
@@ -1023,7 +1232,6 @@ impl Authenticator {
             None => 1,
         };
         info!("found {:?} applicable credentials", human_num_credentials).ok();
-        info!("found {:?} applicable credentials", human_num_credentials).ok();
 
         // 6. process any options present
 
@@ -1214,6 +1422,8 @@ impl Authenticator {
 
         // may revisit the dir-walking API, but currently
         // we can only traverse one directory at once.
+        
+        // syscall!(self.crypto.debug_dump_store());
         loop {
             let dir = PathBuf::from(b"rk");
 
@@ -1422,7 +1632,6 @@ impl Authenticator {
             if let Some(true) = extensions.hmac_secret {
                 // TODO: Generate "CredRandom" (a 32B random value, to be used
                 // later via HMAC-SHA256(cred_random, salt)
-
                 let cred_random = syscall!(self.crypto.generate_hmacsha256_key(
                     StorageLocation::Internal,
                 )).key;
@@ -1542,7 +1751,8 @@ impl Authenticator {
 
         let credential = Credential::new(
             credential::CtapVersion::Fido21Pre,
-            parameters,
+            &parameters.rp,
+            &parameters.user,
             algorithm as i32,
             key_parameter,
             self.state.persistent.timestamp(&mut self.crypto)?,
@@ -1555,15 +1765,16 @@ impl Authenticator {
 
         // 12.b generate credential ID { = AEAD(Serialize(Credential)) }
         let kek = &self.state.persistent.key_encryption_key(&mut self.crypto)?;
-        let credential_id = credential.id(&mut self.crypto, &kek)?;
-        let credential_id_hash = self.hash(&credential_id.0.as_ref());
+        let credential_id = credential.id_using_hash(&mut self.crypto, &kek, &rp_id_hash)?;
 
         // store it.
         // TODO: overwrite, error handling with KeyStoreFull
 
         let serialized_credential = credential.serialize()?;
 
+
         if rk_requested {
+            let credential_id_hash = self.hash(&credential_id.0.as_ref());
             block!(self.crypto.write_file(
                 StorageLocation::Internal,
                 rk_path(&rp_id_hash, &credential_id_hash),
@@ -1573,11 +1784,12 @@ impl Authenticator {
                 None,
             ).unwrap()).map_err(|_| Error::KeyStoreFull)?;
         }
-
         // 13. generate and return attestation statement using clientDataHash
 
         // 13.a AuthenticatorData and its serialization
         use ctap2::AuthenticatorDataFlags as Flags;
+        info!("MC created cred id:").ok();
+        logging::dump_hex(&credential_id.0, credential_id.0.len()).ok();
         let authenticator_data = ctap2::make_credential::AuthenticatorData {
             rp_id_hash: rp_id_hash.try_to_byte_buf().map_err(|_| Error::Other)?,
 
