@@ -1,24 +1,13 @@
-//! This is an interoperability layer,
-//! allowing authenticators to implement
-//! only CTAP2.
+use iso7816::{
+    Command as ApduCommand,
+    Instruction,
+};
 
-use core::convert::TryInto;
-
-// use cortex_m_semihosting::hprintln;
 use crate::{ByteBuf, consts};
 
-// pub struct WrongData;
 pub const NO_ERROR: u16 = 0x9000;
 
-#[repr(u16)]
-#[derive(Copy,Clone,Debug,uDebug,Eq,PartialEq)]
-pub enum Error {
-    ConditionsNotSatisfied = 0x6985,
-    WrongData = 0x6A80,
-    WrongLength = 0x6700,
-    ClaNotSupported = 0x6E00,
-    InsNotSupported = 0x6D00,
-}
+pub use iso7816::Status as Error;
 
 #[repr(u8)]
 #[derive(Copy,Clone,Debug,uDebug,Eq,PartialEq)]
@@ -41,91 +30,41 @@ impl core::convert::TryFrom<u8> for ControlByte {
             0x07 => Ok(ControlByte::CheckOnly),
             0x03 => Ok(ControlByte::EnforceUserPresenceAndSign),
             0x08 => Ok(ControlByte::DontEnforceUserPresenceAndSign),
-            _ => Err(Error::WrongData),
+            _ => Err(Error::IncorrectDataParameter),
         }
     }
 }
 
-// impl Into<[u8; 2]> for Error {
-//     fn into(self) -> [u8; 2] {
-//         (self as u16).to_be_bytes()
-//     }
-// }
-
-// #[derive(Clone,Debug,Eq,PartialEq)]
 pub type Result<T> = core::result::Result<T, Error>;
-
-// impl From<WrongData> for Error {
-//     fn from(_: WrongData) -> Error {
-//         Error::WrongData
-//     }
-// }
-
 
 #[derive(Clone,Debug,uDebug,Eq,PartialEq)]
 pub struct Register {
-    client_data_hash: ByteBuf<consts::U32>,
-    app_id_hash: ByteBuf<consts::U32>,
-    max_response: usize,
+    pub challenge: ByteBuf<consts::U32>,
+    pub app_id: ByteBuf<consts::U32>,
 }
 
-// impl From<ControlByte> for AuthenticatorOptions {
-//     fn from(control_byte: ControlByte) -> Self {
-//         AuthenticatorOptions {
-//             rk: Some(false),
-//             up: Some(match control_byte {
-//                 ControlByte::CheckOnly => false,
-//                 ControlByte::EnforceUserPresenceAndSign => true,
-//                 ControlByte::DontEnforceUserPresenceAndSign => false,
-//             }),
-//             // safety hole?
-//             uv: Some(false),
-//         }
-//     }
-// }
-
-// impl From<Register> for MakeCredentialParameters {
-//     fn from(register: Register) -> Self {
-//         let pub_key_cred_params = Vec::new();
-//         let key_type = String::new();
-//         key_type.push_str("public-key").unwrap();
-//         pub_key_cred_params.push(PublicKeyCredentialParameters {
-//             alg: -7,
-//             key_type,
-//         });
-
-//         MakeCredentialParameters {
-//             client_data_hash: register.client_data_hash,
-//             // uff
-//             rp: {
-//                 let id = String::new();
-//                 id.push_
-//                 PublicKeyCredentialRpEntity {
-//                     id: String::from(register.app_id_hash),
-//                     name: None, url: None,
-//                 }
-//             },
-//             user: PublicKeyCredentialUserEntity {
-//                 id: ByteBuf::new(),
-//                 icon: None, name: None, display_name: None,
-//             },
-//             pub_key_cred_params,
-//             exclude_list: None,
-//             extensions: None,
-//             options: None,
-//             pin_auth: None,
-//             pin_protocol: None,
-//         }
-//     }
-// }
+#[derive(Clone,Debug,uDebug,Eq,PartialEq)]
+pub struct RegisterResponse {
+    pub header_byte: u8,
+    pub public_key: ByteBuf<consts::U65>,
+    pub key_handle: ByteBuf<consts::U255>,
+    pub attestation_certificate: ByteBuf<consts::U1024>,
+    pub signature: ByteBuf<consts::U72>,
+}
 
 #[derive(Clone,Debug,uDebug,Eq,PartialEq)]
 pub struct Authenticate {
-    control_byte: ControlByte,
-    client_data_hash: ByteBuf<consts::U32>,
-    app_id_hash: ByteBuf<consts::U32>,
-    key_handle: ByteBuf<consts::U255>,
-    max_response: usize,
+    pub control_byte: ControlByte,
+    pub challenge: ByteBuf<consts::U32>,
+    pub app_id: ByteBuf<consts::U32>,
+    pub key_handle: ByteBuf<consts::U255>,
+}
+
+#[derive(Clone,Debug,uDebug,Eq,PartialEq)]
+pub struct AuthenticateResponse {
+    user_presence: u8,
+    count: u32,
+    signature: ByteBuf<consts::U72>,
 }
 
 #[derive(Clone,Debug,uDebug,Eq,PartialEq)]
@@ -135,81 +74,102 @@ pub enum Command {
     Version,
 }
 
-// U2FHID uses extended length encoding
-fn parse_apdu_data(mut remaining: &[u8]) -> Result<(&[u8], usize)> {
-    match remaining.len() {
-        // Lc = Le = 0
-        0 => Ok((&[], 0)),
-        // non-zero first byte would indicate short encoding,
-        // but U2FHID is always extended length encoding.
-        // extended length uses (0,upper byte,lower byte) for
-        // lengths; u16_be for the extended lengths, the leading
-        // zero to distinguish from short encoding.
-        // -> lengths 1 and 2 can't occur
-        1 => Err(Error::WrongLength),
-        2 => Err(Error::WrongLength),
-        _ => {
-            if remaining[0] != 0 {
-                return Err(Error::WrongData);
-            }
-            remaining = &remaining[1..];
+#[derive(Clone,Debug,uDebug,Eq,PartialEq)]
+pub enum Response {
+    Register(RegisterResponse),
+    Authenticate(AuthenticateResponse),
+    Version([u8; 6]),
+}
 
-            let request_length = {
-                let first_length = u16::from_be_bytes(remaining[..2].try_into().unwrap()) as usize;
-                remaining = &remaining[2..];
-                if remaining.len() == 0 {
-                    let expected = match first_length {
-                        0 => u16::max_value() as usize + 1,
-                        non_zero => non_zero,
-                    };
-                    return Ok((&[], expected));
-                }
-                first_length
-            };
+impl RegisterResponse {
+    pub fn new(
+        header_byte: u8, 
+        public_key: &crate::cose::EcdhEsHkdf256PublicKey,
+        key_handle: &[u8],
+        signature: ByteBuf<consts::U72>,
+        attestation_certificate: &[u8],
+    ) -> Self {
 
-            if remaining.len() < request_length {
-                return Err(Error::WrongLength);
-            }
-            let request = &remaining[..request_length];
+        debug_assert!(key_handle.len()<=255);
+        debug_assert!(attestation_certificate.len()<=1024);
+        debug_assert!(signature.len()<=72);
 
-            remaining = &remaining[request_length..];
-            if remaining.len() == 0 {
-                return Ok((request, 0));
-            }
-            // since Lc is given, Le has no leading zero.
-            // single byte would again be short encoding
-            if remaining.len() == 1 {
-                return Err(Error::WrongData);
-            }
-            if remaining.len() > 2 {
-                return Err(Error::WrongLength);
-            }
-            let expected = match u16::from_be_bytes(remaining.try_into().unwrap()) as usize {
-                0 => u16::max_value() as usize + 1,
-                non_zero => non_zero,
-            };
-            Ok((request, expected))
-        },
+        let mut public_key_bytes = ByteBuf::new();
+        let mut key_handle_bytes = ByteBuf::new();
+        let mut cert_bytes = ByteBuf::new();
+
+        public_key_bytes.push(0x04).unwrap();
+        public_key_bytes.extend_from_slice(&public_key.x).unwrap();
+        public_key_bytes.extend_from_slice(&public_key.y).unwrap();
+
+        key_handle_bytes.extend_from_slice(key_handle).unwrap();
+
+        cert_bytes.extend_from_slice(attestation_certificate).unwrap();
+
+        Self {
+            header_byte: header_byte,
+            public_key: public_key_bytes,
+            key_handle: key_handle_bytes,
+            attestation_certificate: cert_bytes,
+            signature: signature,
+        }
     }
 }
 
-// TODO: From<AssertionResponse> for ...
-// public key: 0x4 || uncompressed (x,y) of NIST P-256 public key
-// TODO: add "
-
-impl core::convert::TryFrom<&[u8]> for Command {
-    type Error = Error;
-    fn try_from(apdu: &[u8]) -> Result<Command> {
-        if apdu.len() < 4 {
-            return Err(Error::WrongData);
+impl AuthenticateResponse {
+    pub fn new(
+        user_presence: u8, 
+        count: u32,
+        signature: ByteBuf<consts::U72>,
+    ) -> Self {
+        Self {
+            user_presence: user_presence,
+            count: count,
+            signature: signature,
         }
-        let cla = apdu[0];
-        let ins = apdu[1];
-        let p1 = apdu[2];
-        let _p2 = apdu[3];
+    }
+}
+
+impl Response {
+    pub fn serialize(&self) -> iso7816::response::Data {
+        let mut buf = iso7816::response::Data::new();
+        match self {
+            Response::Register(reg) => {
+                buf.push(reg.header_byte).unwrap();
+                buf.extend_from_slice(&reg.public_key).unwrap();
+                buf.push(reg.key_handle.len() as u8).unwrap();
+                buf.extend_from_slice(&reg.key_handle).unwrap();
+                buf.extend_from_slice(&reg.attestation_certificate).unwrap();
+                buf.extend_from_slice(&reg.signature).unwrap();
+                buf
+            },
+            Response::Authenticate(auth) => {
+                buf.push(auth.user_presence).unwrap();
+                buf.extend_from_slice(&auth.count.to_be_bytes()).unwrap();
+                buf.extend_from_slice(&auth.signature).unwrap();
+                buf
+            },
+            Response::Version(version) => {
+                buf.extend_from_slice(version).unwrap();
+                buf
+            }
+        }
+    }
+}
+
+impl core::convert::TryFrom<&ApduCommand> for Command {
+    type Error = Error;
+    fn try_from(apdu: &ApduCommand) -> Result<Command> {
+        let cla = apdu.class().into_inner();
+        let ins = match apdu.instruction() {
+            Instruction::Unknown(ins) => ins,
+            _ins => 0,
+        };
+        let p1 = apdu.p1;
+        let _p2 = apdu.p2;
 
         if cla != 0 {
-            return Err(Error::ClaNotSupported);
+            return Err(Error::ClassNotSupported);
         }
 
         if ins == 0x3 {
@@ -218,19 +178,17 @@ impl core::convert::TryFrom<&[u8]> for Command {
             return Ok(Command::Version);
         };
 
-        // now we can expect extended length encoded APDUs
-        let (request, max_response) = parse_apdu_data(&apdu[4..])?;
+        let request = apdu.data();
 
         match ins {
             // register
             0x1 => {
                 if request.len() != 64 {
-                    return Err(Error::WrongData);
+                    return Err(Error::IncorrectDataParameter);
                 }
                 Ok(Command::Register(Register {
-                    client_data_hash: ByteBuf::from_slice(&request[..32]).unwrap(),
-                    app_id_hash: ByteBuf::from_slice(&request[32..]).unwrap(),
-                    max_response,
+                    challenge: ByteBuf::from_slice(&request[..32]).unwrap(),
+                    app_id: ByteBuf::from_slice(&request[32..]).unwrap(),
                 }))
             },
 
@@ -238,33 +196,26 @@ impl core::convert::TryFrom<&[u8]> for Command {
             0x2 => {
                 let control_byte = ControlByte::try_from(p1)?;
                 if request.len() < 65 {
-                    return Err(Error::WrongData);
+                    return Err(Error::IncorrectDataParameter);
                 }
                 let key_handle_length = request[64] as usize;
                 if request.len() != 65 + key_handle_length {
-                    return Err(Error::WrongData);
+                    return Err(Error::IncorrectDataParameter);
                 }
                 Ok(Command::Authenticate(Authenticate {
                     control_byte,
-                    client_data_hash: ByteBuf::from_slice(&request[..32]).unwrap(),
-                    app_id_hash: ByteBuf::from_slice(&request[32..]).unwrap(),
+                    challenge: ByteBuf::from_slice(&request[..32]).unwrap(),
+                    app_id: ByteBuf::from_slice(&request[32..64]).unwrap(),
                     key_handle: ByteBuf::from_slice(&request[65..]).unwrap(),
-                    max_response,
                 }))
             },
 
-            // 0x3 => {
-            //     Ok(Command::Version)
-            // }
-            _ => Err(Error::InsNotSupported),
+            // version
+            0x3 => {
+                Ok(Command::Version)
+            }
+
+            _ => Err(Error::InstructionNotSupportedOrInvalid),
         }
     }
 }
-
-// #[derive(Clone,Debug,Eq,PartialEq/*,Serialize,Deserialize*/)]
-// pub struct U2fRequest<'a> {
-//     pub command: U2fCommand,
-//     pub data: &'a [u8],
-//     pub expected_length: usize,
-// }
-

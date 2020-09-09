@@ -45,6 +45,7 @@ pub enum Status {
 ///////////////////////////////
 
     // 6700: wrong length, no further indication
+    WrongLength,
 
     // 68XX: functions in CLA not supported (cf. SW2)
     LogicalChannelNotSupported,
@@ -90,6 +91,8 @@ impl Into<u16> for Status {
 
             Self::UnspecifiedNonpersistentExecutionError => 0x6400,
             Self::UnspecifiedPersistentExecutionError => 0x6500,
+
+            Self::WrongLength => 0x6700,
 
             Self::LogicalChannelNotSupported => 0x6881,
             Self::SecureMessagingNotSupported => 0x6882,

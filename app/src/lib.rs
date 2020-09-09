@@ -352,6 +352,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         // our USB classes (must be allocated in order that they're passed in `.poll(...)` later!)
         let ccid = Ccid::new(usb_bus, contact_requester);
         let ctaphid = CtapHid::new(usb_bus, hid_requester, perf_timer.lap().0/1000)
+                        .implements_ctap1()
                         .implements_ctap2()
                         .implements_wink();
         let serial = usbd_serial::SerialPort::new(usb_bus);
