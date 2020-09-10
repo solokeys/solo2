@@ -194,7 +194,7 @@ impl PersistentState {
     pub fn load<S: Syscall>(trussed: &mut CryptoClient<S>) -> Result<Self> {
 
         // TODO: add "exists_file" method instead?
-        let data = block!(trussed.read_file(
+        let result = block!(trussed.read_file(
                 StorageLocation::Internal,
                 PathBuf::from(Self::FILENAME),
             ).unwrap()

@@ -135,18 +135,20 @@ fn cbor_serialize_message<T: serde::Serialize>(object: &T) -> core::result::Resu
     Ok(message)
 }
 
-pub struct Authenticator
+pub struct Authenticator<UP>
+where UP: UserPresence
 {
-    trussed: CryptoClient,
+    trussed: TrussedClient,
     state: state::State,
+    up: UP,
 }
 
-impl Authenticator {
+impl<UP: UserPresence> Authenticator<UP> {
 
-    pub fn new(trussed: CryptoClient) -> Self {
+    pub fn new(trussed: TrussedClient, up: UP) -> Self {
 
         let state = state::State::new();
-        let authenticator = Authenticator { trussed, state };
+        let authenticator = Self { trussed, state, up };
 
         authenticator
     }
