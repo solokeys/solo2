@@ -20,6 +20,7 @@ use crate::{
     Authenticator,
     Error,
     Result,
+    UserPresence,
 };
 
 
@@ -241,8 +242,8 @@ impl Credential {
         }
     }
 
-    pub fn try_from(
-        authnr: &mut Authenticator,
+    pub fn try_from<UP: UserPresence>(
+        authnr: &mut Authenticator<UP>,
         rp_id_hash: &ByteBuf<consts::U32>,
         descriptor: &PublicKeyCredentialDescriptor,
     )

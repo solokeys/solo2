@@ -63,7 +63,7 @@ store!(Store,
 );
 
 board!(Board,
-    L: crate::board::led::RgbLed, 
+    L: crate::board::led::RgbLed,
     R: hal::peripherals::rng::Rng<hal::Enabled>,
     S: Store,
     T: crate::board::button::ThreeButtons,
@@ -102,7 +102,7 @@ pub type ApduDispatch = apdu_dispatch::dispatch::ApduDispatch;
 
 pub type HidDispatch = hid_dispatch::dispatch::Dispatch;
 
-pub type FidoApplet = applet_fido::Fido;
+pub type FidoApplet<UP> = applet_fido::Fido<UP>;
 
 pub type WinkApplet = crate::wink::Wink;
 

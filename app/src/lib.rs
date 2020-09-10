@@ -146,7 +146,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     types::CryptoService,
 
     types::Piv,
-    types::FidoApplet,
+    types::FidoApplet<fido_authenticator::NonSilentAuthenticator>,
     applet_ndef::NdefApplet<'static>,
 
     Option<types::UsbClasses>,
@@ -295,18 +295,6 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     let mut fido_client_id = littlefs2::path::PathBuf::new();
     fido_client_id.push(b"fido2\0".try_into().unwrap());
 
-    let board = Board::new(rgb, rng, store, three_buttons);
-    let mut trussed = trussed::service::Service::new(board);
-
-    assert!(trussed.add_endpoint(fido_trussed_responder, fido_client_id).is_ok());
-
-    let syscaller = trussed::client::TrussedSyscall::default();
-    let crypto_client = trussed::client::Client::new(fido_trussed_requester, syscaller);
-
-    let authnr = fido_authenticator::Authenticator::new(
-        crypto_client,
-    );
-
     let (contact_requester, contact_responder) = usbd_ccid::types::ApduInterchange::claim(0)
         .expect("could not setup ccid ApduInterchange");
 
@@ -318,16 +306,6 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
     let (piv_trussed_requester, piv_trussed_responder) = trussed::pipe::TrussedInterchange::claim(1)
         .expect("could not setup PIV TrussedInterchange");
-
-    let mut piv_client_id = littlefs2::path::PathBuf::new();
-    piv_client_id.push(b"piv2\0".try_into().unwrap());
-    assert!(trussed.add_endpoint(piv_trussed_responder, piv_client_id).is_ok());
-
-    let syscaller = trussed::client::TrussedSyscall::default();
-    let piv_trussed = trussed::client::Client::new(
-        piv_trussed_requester,
-        syscaller,
-    );
 
     let usb_classes =
     {
@@ -367,14 +345,6 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         Some(types::UsbClasses::new(usbd, ccid, ctaphid, serial))
     };
 
-    let fido = applet_fido::Fido::new(authnr);
-
-    let piv = piv_card::App::new(piv_trussed);
-    let ndef = applet_ndef::NdefApplet::new();
-
-    let apdu_dispatch = types::ApduDispatch::new(contact_responder, contactless_responder);
-    let hid_dispatch = types::HidDispatch::new(hid_responder);
-
     let iso14443 = {
         let token = clocks.support_flexcomm_token().unwrap();
         let spi = hal.flexcomm.0.enabled_as_spi(&mut syscon, &token);
@@ -407,6 +377,70 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
             None
         }
     };
+
+    let (clock_controller, three_buttons) = if is_passive_mode {
+        let signal_pin = types::SignalPin::take().unwrap().into_gpio_pin(&mut iocon, &mut gpio).into_output_low();
+        let mut clock_controller = clock_controller::DynamicClockController::new(adc, signal_pin, clocks, pmc, syscon);
+        clock_controller.start_high_voltage_compare();
+        (Some(clock_controller), None)
+    } else {
+        #[cfg(feature = "board-lpcxpresso")]
+        let three_buttons = board::button::ThreeButtons::new(
+            Timer::new(hal.ctimer.1.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap())),
+            board::button::UserButtonPin::take().unwrap().into_gpio_pin(&mut iocon, &mut gpio).into_input(),
+            board::button::WakeupButtonPin::take().unwrap().into_gpio_pin(&mut iocon, &mut gpio).into_input(),
+        );
+
+        #[cfg(feature = "board-prototype")]
+        let three_buttons =
+        {
+            let mut dma = hal::Dma::from(hal.dma).enabled(&mut syscon);
+
+            board::button::ThreeButtons::new (
+                adc,
+                hal.ctimer.1.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap()),
+                hal.ctimer.2.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap()),
+                board::button::ChargeMatchPin::take().unwrap().into_match_output(&mut iocon),
+                board::button::ButtonTopPin::take().unwrap().into_analog_input(&mut iocon, &mut gpio),
+                board::button::ButtonBotPin::take().unwrap().into_analog_input(&mut iocon, &mut gpio),
+                board::button::ButtonMidPin::take().unwrap().into_analog_input(&mut iocon, &mut gpio),
+                &mut dma,
+                clocks.support_touch_token().unwrap(),
+            )
+        };
+        (None, Some(three_buttons))
+    };
+
+    let board = Board::new(rgb, rng, store, three_buttons);
+    let mut trussed = trussed::service::Service::new(board);
+
+    let mut piv_client_id = littlefs2::path::PathBuf::new();
+    piv_client_id.push(b"piv2\0".try_into().unwrap());
+    assert!(trussed.add_endpoint(piv_trussed_responder, piv_client_id).is_ok());
+
+    let syscaller = trussed::client::TrussedSyscall::default();
+    let piv_trussed = trussed::client::Client::new(
+        piv_trussed_requester,
+        syscaller,
+    );
+
+    assert!(trussed.add_endpoint(fido_trussed_responder, fido_client_id).is_ok());
+
+    let syscaller = trussed::client::TrussedSyscall::default();
+    let trussed_client = trussed::client::Client::new(fido_trussed_requester, syscaller);
+
+    let authnr = fido_authenticator::Authenticator::new(
+        trussed_client,
+        fido_authenticator::NonSilentAuthenticator {},
+    );
+
+    let fido = applet_fido::Fido::new(authnr);
+
+    let piv = piv_card::App::new(piv_trussed);
+    let ndef = applet_ndef::NdefApplet::new();
+
+    let apdu_dispatch = types::ApduDispatch::new(contact_responder, contactless_responder);
+    let hid_dispatch = types::HidDispatch::new(hid_responder);
 
     // rgb.turn_off();
     delay_timer.cancel().ok();

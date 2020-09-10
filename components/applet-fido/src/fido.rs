@@ -13,16 +13,18 @@ use crate::cbor::{parse_cbor};
 use crate::logger::{info, blocking};
 use logging::hex::*;
 
-use fido_authenticator::Authenticator;
+use fido_authenticator::{Authenticator, UserPresence};
 use apdu_dispatch::applet;
 use hid_dispatch::app as hid;
 
-pub struct Fido {
-    authenticator: Authenticator,
+pub struct Fido<UP>
+where UP: UserPresence
+{
+    authenticator: Authenticator<UP>,
 }
 
-impl Fido {
-    pub fn new(authenticator: Authenticator) -> Fido {
+impl<UP: UserPresence> Fido<UP> {
+    pub fn new(authenticator: Authenticator<UP>) -> Fido<UP> {
         Self { authenticator }
     }
 
@@ -139,7 +141,7 @@ impl Fido {
 
 }
 
-impl applet::Aid for Fido {
+impl<UP: UserPresence> applet::Aid for Fido<UP> {
     fn aid(&self) -> &'static [u8] {
         &[ 0xA0, 0x00, 0x00, 0x06, 0x47, 0x2F, 0x00, 0x01 ]
     }
@@ -148,7 +150,7 @@ impl applet::Aid for Fido {
     }
 }
 
-impl applet::Applet for Fido {
+impl<UP: UserPresence> applet::Applet for Fido<UP> {
 
 
     fn select(&mut self, _apdu: Command) -> applet::Result {
@@ -199,7 +201,7 @@ impl applet::Applet for Fido {
 
 }
 
-impl hid::App for Fido {
+impl<UP: UserPresence> hid::App for Fido<UP> {
 
     fn commands(&self,) -> &'static [hid::Command] {
         &[ hid::Command::Cbor, hid::Command::Msg ]
