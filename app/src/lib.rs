@@ -43,7 +43,6 @@ use fm11nc08::{
 };
 use hal::drivers::timer::Lap;
 use hal::traits::wg::timer::Cancel;
-use trussed_board::rgb_led::RgbLed;
 
 //
 // Board Initialization
@@ -201,7 +200,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     perf_timer.start(60_000.ms());
 
     #[cfg(feature = "board-lpcxpresso")]
-    let mut rgb = board::led::RgbLed::new(
+    let rgb = board::led::RgbLed::new(
         board::led::RedLedPin::take().unwrap(),
         board::led::GreenLedPin::take().unwrap(),
         board::led::BlueLedPin::take().unwrap(),
@@ -210,7 +209,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     );
 
     #[cfg(feature = "board-prototype")]
-    let mut rgb = board::led::RgbLed::new(
+    let rgb = board::led::RgbLed::new(
         board::led::RedLedPin::take().unwrap(),
         board::led::GreenLedPin::take().unwrap(),
         board::led::BlueLedPin::take().unwrap(),

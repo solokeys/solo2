@@ -4,8 +4,9 @@
 
 #![no_std]
 #![no_main]
+// #![deny(warnings)]
 
-use app::{board, hal};
+use app::hal;
 use hal::traits::wg::timer::Cancel;
 use hal::traits::wg::timer::CountDown;
 use hal::drivers::timer::Lap;

@@ -252,8 +252,8 @@ impl Credential {
         Self::try_from_bytes(authnr, rp_id_hash, &descriptor.id)
     }
 
-    pub fn try_from_bytes(
-        authnr: &mut Authenticator,
+    pub fn try_from_bytes<UP: UserPresence>(
+        authnr: &mut Authenticator<UP>,
         rp_id_hash: &ByteBuf<consts::U32>,
         id: &[u8],
     )
