@@ -710,8 +710,7 @@ impl<Syscall: crate::pipe::Syscall> Client<Syscall> {
     pub fn confirm_user_present<'c>(&'c mut self, timeout_seconds: Option<u32>)
         -> core::result::Result<FutureResult<'c, reply::RequestUserConsent>, ClientError>
     {
-        use crate::types::consent;
-        self.raw.request(request::RequestUserConsent { 
+        self.raw.request(request::RequestUserConsent {
             level: consent::Level::Normal,
             timeout_seconds,
         } )?;
