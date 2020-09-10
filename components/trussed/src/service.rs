@@ -727,7 +727,7 @@ impl<B: Board> ServiceResources<B> {
                 let has_buttons = self.board.buttons().is_some();
                 if has_buttons {
                     self.board.led().blue(10);
-                    nb::block!(self.board.buttons().as_mut().unwrap().wait_for_any_new_press());
+                    nb::block!(self.board.buttons().as_mut().unwrap().wait_for_any_new_press()).unwrap();
                     self.board.led().turn_off();
                 }
                 let result = Ok(());
