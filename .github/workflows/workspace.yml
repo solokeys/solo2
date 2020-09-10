@@ -1,0 +1,50 @@
+name: workspace
+
+on:
+  pull_request:
+    paths-ignore:
+      - README.md
+      - docs/**
+  push:
+    branches:
+      - dev
+      - main
+    paths-ignore:
+      - README.md
+      - docs/**
+
+env:
+  CARGO_INCREMENTAL: 0
+  RUSTFLAGS: "-Dwarnings"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust:
+          # - 1.44.0 # MSRV
+          - stable
+        target:
+          - thumbv8m.main-none-eabi
+          # - wasm32-unknown-unknown
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - run: |
+          sudo apt-get update -y
+          sudo apt-get install -y llvm
+      - uses: fiam/arm-none-eabi-gcc@v1
+        with:
+          # release: "9-2020-q2-update"
+          release: "9-2019-q4"
+      - uses: actions/checkout@v1
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.rust }}
+          target: ${{ matrix.target }}
+          override: true
+      - run: cargo build --release --target ${{ matrix.target }} --bin rtic
+

@@ -35,6 +35,7 @@ pub enum State {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[allow(dead_code)]
 enum Error {
     CmdAborted = 0xff,
     IccMute = 0xfe,
