@@ -53,7 +53,7 @@ impl State {
 
     pub fn decrement_retries<S: Syscall>(&mut self, trussed: &mut CryptoClient<S>) -> Result<()> {
         self.persistent.decrement_retries(trussed)?;
-        self.runtime.decrement_retries();
+        self.runtime.decrement_retries()?;
         Ok(())
     }
 

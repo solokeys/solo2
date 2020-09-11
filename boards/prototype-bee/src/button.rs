@@ -8,7 +8,7 @@ use crate::hal::{
 use crate::hal::peripherals::{
     ctimer,
 };
-use trussed_board::buttons::{
+use board_traits::buttons::{
     self,
     Button,
 };

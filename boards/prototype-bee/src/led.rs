@@ -19,7 +19,7 @@ pub enum Color {
     Blue,
 }
 
-use trussed_board::rgb_led;
+use board_traits::rgb_led;
 
 pub type RedLedPin = pins::Pio1_21;
 pub type GreenLedPin = pins::Pio0_5;
