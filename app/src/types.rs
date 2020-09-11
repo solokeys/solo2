@@ -62,11 +62,14 @@ store!(Store,
     Volatile: VolatileStorage
 );
 
+pub type ThreeButtons = crate::board::button::ThreeButtons;
+pub type RgbLed = crate::board::led::RgbLed;
+
 board!(Board,
-    L: crate::board::led::RgbLed,
     R: hal::peripherals::rng::Rng<hal::Enabled>,
     S: Store,
-    T: crate::board::button::ThreeButtons,
+    UT: crate::solo_trussed::UpTime,
+    UI: crate::solo_trussed::UserInterface<ThreeButtons, RgbLed>,
 );
 
 pub type CryptoService = trussed::Service<Board>;

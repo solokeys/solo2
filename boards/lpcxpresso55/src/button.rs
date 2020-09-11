@@ -10,7 +10,7 @@ use crate::hal::drivers::timer;
 use crate::hal::peripherals::{
     ctimer,
 };
-use trussed_board::buttons::{
+use board_traits::buttons::{
     Button,State,
     Press,Edge,
 };

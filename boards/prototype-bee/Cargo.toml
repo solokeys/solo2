@@ -10,7 +10,7 @@ cortex-m-rt = "0.6.10"
 embedded-hal = { version = "0.2", features = ["unproven"] }
 nb = "1"
 lpc55-common = {path = "../lpc55-common"}
-trussed-board = {path = "../../components/trussed-board"}
+board-traits = {path = "../board-traits"}
 
 [dependencies.lpc55-hal]
 git = "https://github.com/nickray/lpc55-hal"

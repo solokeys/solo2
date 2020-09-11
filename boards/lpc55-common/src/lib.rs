@@ -1,6 +1,6 @@
 #![no_std]
 use core::time::Duration;
-use trussed_board::timer;
+use board_traits::timer;
 use lpc55_hal as hal;
 
 use hal::traits::wg::timer::CountDown;

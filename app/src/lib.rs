@@ -30,6 +30,7 @@ pub use board::rt::entry;
 pub mod types;
 pub mod clock_controller;
 pub mod wink;
+pub mod solo_trussed;
 use types::{
     Board,
     EnabledUsbPeripheral,
@@ -377,6 +378,9 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         }
     };
 
+    let mut rtc = hal.rtc.enabled(&mut syscon, clocks.enable_32k_fro(&mut pmc));
+    rtc.reset();
+
     let (clock_controller, three_buttons) = if is_passive_mode {
         let signal_pin = types::SignalPin::take().unwrap().into_gpio_pin(&mut iocon, &mut gpio).into_output_low();
         let mut clock_controller = clock_controller::DynamicClockController::new(adc, signal_pin, clocks, pmc, syscon);
@@ -410,7 +414,16 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         (None, Some(three_buttons))
     };
 
-    let board = Board::new(rgb, rng, store, three_buttons);
+    let rgb = if is_passive_mode {
+        None
+    } else {
+        Some(rgb)
+    };
+
+    let solobee_interface = solo_trussed::UserInterface::new(three_buttons, rgb);
+    let solobee_uptime = solo_trussed::UpTime::new(rtc);
+
+    let board = Board::new(rng, store, solobee_uptime, solobee_interface);
     let mut trussed = trussed::service::Service::new(board);
 
     let mut piv_client_id = littlefs2::path::PathBuf::new();

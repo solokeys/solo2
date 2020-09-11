@@ -1,5 +1,5 @@
 [package]
-name = "trussed-board"
+name = "board-traits"
 version = "0.0.0-unreleased"
 authors = ["Conor Patrick <conor@solokeys.com>"]
 edition = "2018"
