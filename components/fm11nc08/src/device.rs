@@ -146,9 +146,9 @@ where
 {
     pub fn new(spi: SPI, cs: CS, int: INT) -> Self {
         Self {
-            spi: spi,
-            cs: cs,
-            int: int,
+            spi,
+            cs,
+            int,
             packet: [0u8; 256],
             offset: 0usize,
             current_frame_size: 128,
@@ -291,9 +291,9 @@ where
         block!( self.spi.read(  )).ok().unwrap();
         block!( self.spi.read(  )).ok().unwrap();
 
-        for i in 0 .. array.len() {
+        for item in array.iter_mut() {
             block!( self.spi.send( 0 )  ).ok();
-            array[i] = block!( self.spi.read(  )).ok().unwrap();
+            *item = block!( self.spi.read(  )).ok().unwrap();
         }
         self.cs.set_high().ok();
     }
@@ -312,7 +312,7 @@ where
 
     /// Write data to NFC FIFO as fast as possible.
     fn write_fifo(&mut self, buf: &[u8]){
-        if buf.len() == 0 {
+        if buf.is_empty() {
             return;
         }
         self.cs.set_low().ok();
@@ -528,7 +528,7 @@ where
             info!("24 chunk").ok();
             self.write_fifo(&buf[i * 24 .. i * 24 + 24]);
 
-            if ! self.wait_for_transmission().is_ok() {
+            if self.wait_for_transmission().is_err() {
                 return Err(nfc::Error::NoActivity);
             }
         }
@@ -727,7 +727,7 @@ where
 
         let mut regs = [0u8; 15];
 
-        for i in 2 .. 15 {
+        for i in 2..15 {
             regs[i] = self.read_reg_raw(i as u8);
         }
 
@@ -759,10 +759,10 @@ where
         self.write_reg(Register::AuxIrq, 0);
 
         InterruptState{
-            main:main,
-            fifo:fifo,
-            aux: aux,
-            count:count,
+            main,
+            fifo,
+            aux,
+            count,
         }
     }
 
@@ -797,19 +797,19 @@ where
         let rblock_nack = arr[11];
 
         Eeprom {
-            regu_cfg:regu_cfg,
-            atqa:atqa,
-            sak1: sak1,
-            sak2: sak2,
-            tl: tl,
-            t0: t0,
-            ta: ta,
-            tb: tb,
-            tc: tc,
-            i2c_addr: i2c_addr,
-            nfc_cfg: nfc_cfg,
-            rblock_ack: rblock_ack,
-            rblock_nack: rblock_nack,
+            regu_cfg,
+            atqa,
+            sak1,
+            sak2,
+            tl,
+            t0,
+            ta,
+            tb,
+            tc,
+            i2c_addr,
+            nfc_cfg,
+            rblock_ack,
+            rblock_nack,
         }
     }
 }

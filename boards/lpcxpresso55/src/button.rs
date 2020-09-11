@@ -42,16 +42,16 @@ impl <CTIMER> XpressoButtons <CTIMER>
 where CTIMER: ctimer::Ctimer<init_state::Enabled>
 {
     pub fn new (timer: timer::Timer<CTIMER>, user_button: UserButton, wakeup_button: WakeupButton) -> XpressoButtons<CTIMER> {
-        let buts = State {
+        let last_state = State {
             a: user_button.is_high().ok().unwrap(),
             b: wakeup_button.is_high().ok().unwrap(),
             middle: wakeup_button.is_high().ok().unwrap(),
         };
         Self {
-            user_button: user_button,
-            wakeup_button: wakeup_button,
-            last_state: buts,
-            timer: timer,
+            user_button,
+            wakeup_button,
+            last_state,
+            timer,
         }
     }
 }

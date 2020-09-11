@@ -1,5 +1,4 @@
 use core::convert::Infallible;
-use nb;
 
 /// Trio of buttons.
 ///

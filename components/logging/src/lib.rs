@@ -75,8 +75,8 @@ pub mod print_functions {
             if #[cfg(all(any(feature = "all", feature = "info"), not(feature = "none")))] {
                 {
                     let mut logger = Logger::get().unwrap();
-                    for i in 0 .. len {
-                        uwrite!(logger, "{} ", bin[i].hex()).ok();
+                    for item in bin.iter() {
+                        uwrite!(logger, "{} ", item.hex()).ok();
                     }
                     uwriteln!(logger,"");
                     Ok(())
@@ -98,8 +98,8 @@ pub mod print_functions {
                 if #[cfg(all(any(feature = "all", feature = "info"), not(feature = "none")))]
                 {
                     {
-                        for i in 0 .. len {
-                            crate::print_functions::blocking::hprint!("{} ", bin[i].hex()).ok();
+                        for item in bin.iter() {
+                            crate::print_functions::blocking::hprint!("{} ", item.hex()).ok();
                         }
                         crate::print_functions::blocking::hprintln!("").ok();
                         Ok(())

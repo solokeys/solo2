@@ -25,11 +25,9 @@ impl HexRepresentation2 for u8 {
 
         for i in 0 .. 2 {
             let nibble = (self >> (i * 4)) & 0xf;
-            hex[1-i] = if  nibble < 0x0a {
+            hex[1-i] = if nibble < 0x0a {
                 nibble + 0x30
-            }
-            else
-            {
+            } else {
                 nibble + 0x41 - 0x0A
             }
         }

@@ -55,7 +55,7 @@ where CTIMER: ctimer::Ctimer<Enabled>
     /// The time returned is only valid is the total running time hasn't elapsed yet.
     /// This returns an error if the running time has elapsed.
     fn lap(&mut self) -> nb::Result<Duration, timer::Error> {
-        if ! self.timer.wait().is_ok() {
+        if self.timer.wait().is_err() {
             Ok(Duration::from_micros(self.timer.lap().0 as u64))
         } else {
             Err(nb::Error::Other(timer::Error::TimerCompleted))

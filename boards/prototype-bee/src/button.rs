@@ -196,7 +196,7 @@ impl buttons::Edge for SoloThreeTouchButtons<ButtonTopPin, ButtonBotPin, ButtonM
             self.button_reset_state(Button::B, -1);
             Ok(())
         } else {
-            return Err(nb::Error::WouldBlock)
+            Err(nb::Error::WouldBlock)
         }
     }
 }

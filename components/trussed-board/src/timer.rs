@@ -1,5 +1,4 @@
 use core::time::Duration;
-use nb;
 use core::convert::Infallible;
 
 /// Timer trait for Trussed, with inspiration from

@@ -68,11 +68,11 @@ impl DynamicClockController {
                                 } );
 
         DynamicClockController {
-            adc: adc,
-            signal_button: signal_button,
-            pmc: pmc,
-            clocks: clocks,
-            syscon: syscon,
+            adc,
+            signal_button,
+            pmc,
+            clocks,
+            syscon,
         }
     }
 
