@@ -6,7 +6,7 @@ use fm11nc08::traits::{
 };
 use iso7816::{Response, Command, command::FromSliceError, Status};
 use interchange::Requester;
-use crate::types::ApduInterchange;
+use apdu_dispatch::types::ContactlessInterchange;
 use logging;
 use crate::logger::{
     info,
@@ -106,14 +106,14 @@ pub struct Iso14443<DEV: nfc::Device> {
 
     buffer: Iso7816Data,
 
-    interchange: Requester<ApduInterchange>,
+    interchange: Requester<ContactlessInterchange>,
 }
 
 impl<DEV> Iso14443<DEV>
 where
     DEV: nfc::Device
 {
-    pub fn new(device: DEV, interchange: Requester<ApduInterchange>) -> Self {
+    pub fn new(device: DEV, interchange: Requester<ContactlessInterchange>) -> Self {
         Self {
             device: device,
             state: Iso14443State::Receiving,
@@ -345,11 +345,13 @@ where
         let res = self.device.read(packet);
         let packet_len = match res {
             Ok(nfc::State::NewSession(x)) => {
+                info!("State::NewSession");
                 self.reset_state();
                 x
             },
             Ok(nfc::State::Continue(x)) => x,
             Err(nfc::Error::NewSession) => {
+                info!("Error::NewSession");
                 self.reset_state();
                 return Err(SourceError::NoActivity)
             },

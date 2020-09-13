@@ -35,6 +35,25 @@ impl core::convert::From<u8> for Instruction {
     }
 }
 
+impl core::convert::Into<u8> for Instruction {
+    fn into(self) -> u8 {
+        match self {
+            Instruction::Verify => 0x20,
+            Instruction::ChangeReferenceData => 0x24,
+            Instruction::ResetRetryCounter => 0x2c,
+            Instruction::GenerateAsymmetricKeyPair => 0x47,
+            Instruction::GeneralAuthenticate => 0x87,
+            Instruction::Select => 0xa4,
+            Instruction::GetResponse => 0xc0,
+            Instruction::GetData => 0xcb,
+            Instruction::PutData => 0xdb,
+            Instruction::ReadBinary => 0xb0,
+            Instruction::WriteBinary => 0xd0,
+            Instruction::Unknown(ins) => ins,
+        }
+    }
+}
+
 // impl core::convert::TryFrom<u8> for Instruction {
 //     type Error = UnknownInstruction;
 

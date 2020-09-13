@@ -9,9 +9,9 @@ impl From<u32> for Intensities {
     // set all LEDs using (R||G||B) formatted word.
     fn from(hex: u32) -> Self{
         Intensities {
-            red: ((hex & 0xff_000) >> 16) as _,
-            green: ((hex & 0xff00) >> 8) as _,
-            blue: (hex & 0xff) as _,
+            red:   ((hex & 0xff_00_00) >> 16) as _,
+            green: ((hex & 0x00_ff_00) >> 8) as _,
+            blue:   (hex & 0x00_00_ff) as _,
         }
     }
 }

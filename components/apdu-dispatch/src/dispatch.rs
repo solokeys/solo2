@@ -28,9 +28,7 @@ pub enum InterfaceType{
 use crate::logger::info;
 
 use interchange::Responder;
-
-pub type ContactInterchange = usbd_ccid::types::ApduInterchange;
-pub type ContactlessInterchange = iso14443::types::ApduInterchange;
+use crate::types::{ContactInterchange, ContactlessInterchange};
 
 pub struct ApduDispatch {
     // or currently_selected_aid, or...
@@ -97,30 +95,32 @@ impl ApduDispatch
         contactless_busy || contact_busy
     }
 
+    fn check_for_request(&mut self) -> Option<Command> {
+        if !self.busy() {
+
+            // prioritize contactless interface
+            if let Some(apdu) = self.contactless.take_request() {
+                self.current_interface = InterfaceType::Contactless;
+                Some(apdu)
+            } else if let Some(apdu) = self.contact.take_request() {
+                self.current_interface = InterfaceType::Contact;
+                Some(apdu)
+            } else {
+                None
+            }
+
+        } else {
+            None
+        }
+    }
+
     pub fn poll<'a>(
         &mut self,
         applets: &'a mut [&'a mut dyn Applet],
     ) {
 
         // Only take on one transaction at a time.
-        let request: Option<Command> =
-            if !self.busy() {
-
-                // prioritize contactless interface
-                if let Some(apdu) = self.contactless.take_request() {
-                    self.current_interface = InterfaceType::Contactless;
-                    Some(apdu)
-                } else if let Some(apdu) = self.contact.take_request() {
-                    self.current_interface = InterfaceType::Contact;
-                    Some(apdu)
-                } else {
-                    None
-                }
-
-            } else {
-                None
-            };
-
+        let request = self.check_for_request();
 
         // if there is a new request:
         // - if it's a select, handle appropriately

@@ -10,10 +10,6 @@ pub mod tlv;
 
 pub type MessageBuffer = ByteBuf<MAX_MSG_LENGTH_TYPE>;
 
-interchange::interchange! {
-    ApduInterchange: (iso7816::Command, iso7816::Response)
-}
-
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ClassRequest {
     Abort = 1,
