@@ -64,10 +64,10 @@ Now logs can be enabled or disabled in this sub crate by passing a feature flag,
 
 # Testing
 
-You will need to change your `--target` based on what your machine is.  See `rustc --print target-list`.
+You will need to change your `--target` based on what your machine is.  See `rustc --Vv` to see your target triple string.
 
 ```
-cargo test --features std,all --target x86_64-apple-darwin -- --nocapture
+cargo test --features std,all --target $(rustc -Vv | awk 'NR==5{print $2}') -- --nocapture
 ```
 
 

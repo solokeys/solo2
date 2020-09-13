@@ -295,10 +295,10 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     let mut fido_client_id = littlefs2::path::PathBuf::new();
     fido_client_id.push(b"fido2\0".try_into().unwrap());
 
-    let (contact_requester, contact_responder) = usbd_ccid::types::ApduInterchange::claim(0)
+    let (contact_requester, contact_responder) = apdu_dispatch::types::ContactInterchange::claim(0)
         .expect("could not setup ccid ApduInterchange");
 
-    let (contactless_requester, contactless_responder) = iso14443::types::ApduInterchange::claim(0)
+    let (contactless_requester, contactless_responder) = apdu_dispatch::types::ContactlessInterchange::claim(0)
         .expect("could not setup iso14443 ApduInterchange");
 
     let (hid_requester, hid_responder) = hid_dispatch::types::HidInterchange::claim(0)
@@ -479,14 +479,16 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 //
 // Logging
 //
+
+// For some reason, NFC prio #7 maps to 2..
 use logging::{funnel,Drain};
 use rtic::Mutex;
 funnel!(NVIC_PRIO_BITS = hal::raw::NVIC_PRIO_BITS, {
     0: 2048,
     1: 1024,
-    2: 1024,
-    3: 8192,
-    4: 1024,
+    2: 5112,
+    3: 512,
+    4: 512,
 });
 
 pub fn drain_log_to_serial(mut serial: impl Mutex<T = types::SerialClass>) {

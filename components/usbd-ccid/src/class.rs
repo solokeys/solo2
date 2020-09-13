@@ -2,11 +2,11 @@ use core::convert::TryFrom;
 
 use crate::logger::{blocking};
 use interchange::Requester;
+use apdu_dispatch::types::ContactInterchange;
 
 use crate::{
     constants::*,
     types::{
-        ApduInterchange,
         ClassRequest,
         packet::RawPacket,
     },
@@ -32,7 +32,7 @@ where
 {
     pub fn new(
         allocator: &'static UsbBusAllocator<Bus>,
-        request_pipe: Requester<ApduInterchange>,
+        request_pipe: Requester<ContactInterchange>,
     ) -> Self {
         let read = allocator.bulk(PACKET_SIZE as _);
         let write = allocator.bulk(PACKET_SIZE as _);

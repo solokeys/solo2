@@ -263,16 +263,18 @@ const APP: () = {
             }
             = c.resources;
         let contactless = contactless.as_mut().unwrap();
+        let starttime = perf_timer.lap().0/100;
 
-        info!("[{}", perf_timer.lap().0/100).ok();
+        info!("[").ok();
         let status = contactless.poll();
         match status {
             iso14443::Iso14443Status::Idle => {}
             iso14443::Iso14443Status::ReceivedData(duration) => {
+                hw_scheduler.cancel().ok();
                 hw_scheduler.start(duration.subsec_millis().ms());
             }
         }
-        info!(" {}]", perf_timer.lap().0/100).ok();
+        info!("{}-{}]", starttime,perf_timer.lap().0/100).ok();
 
         perf_timer.cancel().ok();
         perf_timer.start(60_000.ms());

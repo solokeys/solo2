@@ -21,13 +21,22 @@ pub enum Color {
 
 use board_traits::rgb_led;
 
-pub type RedLedPin = pins::Pio1_21;
-pub type GreenLedPin = pins::Pio0_5;
+pub type RedLedPin = pins::Pio0_5;
+pub type GreenLedPin = pins::Pio1_21;
 pub type BlueLedPin = pins::Pio1_19;
 
-type RedLed = hal::Pin<RedLedPin, pin::state::Special<function::MATCH_OUTPUT2<ctimer::Ctimer3<init_state::Enabled>>>>;
-type GreenLed = hal::Pin<GreenLedPin, pin::state::Special<function::MATCH_OUTPUT0<ctimer::Ctimer3<init_state::Enabled>>>>;
-type BlueLed = hal::Pin<BlueLedPin, pin::state::Special<function::MATCH_OUTPUT1<ctimer::Ctimer3<init_state::Enabled>>>>;
+type RedLed = hal::Pin<
+    RedLedPin,
+    pin::state::Special<function::MATCH_OUTPUT0<ctimer::Ctimer3<init_state::Enabled>>>
+>;
+type GreenLed = hal::Pin<
+    GreenLedPin, 
+    pin::state::Special<function::MATCH_OUTPUT2<ctimer::Ctimer3<init_state::Enabled>>>
+>;
+type BlueLed = hal::Pin<
+    BlueLedPin, 
+    pin::state::Special<function::MATCH_OUTPUT1<ctimer::Ctimer3<init_state::Enabled>>>
+>;
 
 type RedLedUnenabled = hal::Pin<RedLedPin, pin::state::Unused>;
 type GreenLedUnenabled = hal::Pin<GreenLedPin,pin::state::Unused >;

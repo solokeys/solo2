@@ -1,12 +1,12 @@
 use core::convert::TryFrom;
 
+use apdu_dispatch::types::ContactInterchange;
 use interchange::Requester;
 use crate::logger::{blocking};
 
 use crate::{
     constants::*,
     types::{
-        ApduInterchange,
         MessageBuffer,
         packet::{
             Chain,
@@ -55,7 +55,7 @@ where
     state: State,
     // TODO: remove, use interchange
     message: MessageBuffer,
-    interchange: Requester<ApduInterchange>,
+    interchange: Requester<ContactInterchange>,
     sent: usize,
     outbox: Option<RawPacket>,
 
@@ -72,7 +72,7 @@ where
 {
     pub(crate) fn new(
         write: EndpointIn<'static, Bus>,
-        request_pipe: Requester<ApduInterchange>,
+        request_pipe: Requester<ContactInterchange>,
     ) -> Self {
 
         assert!(MAX_MSG_LENGTH >= PACKET_SIZE);

@@ -5,8 +5,8 @@ use crate::hal::{
 use board_traits::buttons::{Press, Edge};
 use board_traits::rgb_led::RgbLed;
 use trussed::board::{
-    UserPresenceIndication,
-    Status,
+    ui,
+    consent,
 };
 
 pub struct UserInterface<BUTTONS, RGB>
@@ -24,7 +24,12 @@ BUTTONS: Press + Edge,
 RGB: RgbLed,
 {
     pub fn new(buttons: Option<BUTTONS>, rgb: Option<RGB>) -> Self {
-        Self { buttons, rgb }
+        #[cfg(not(feature = "no-buttons"))]
+        let ui = Self { buttons, rgb };
+        #[cfg(feature = "no-buttons")]
+        let ui = Self { buttons: None, rgb };
+
+        ui
     }
 }
 
@@ -44,7 +49,7 @@ where
 BUTTONS: Press + Edge,
 RGB: RgbLed,
 {
-    fn check_user_presence(&mut self) -> UserPresenceIndication {
+    fn check_user_presence(&mut self) -> consent::Level {
         match &mut self.buttons {
             Some(buttons) => {
                 // important to read state before checking for edge,
@@ -53,41 +58,42 @@ RGB: RgbLed,
                 let press_result = buttons.wait_for_any_new_press();
                 if press_result.is_ok() {
                     if state.a && state.b {
-                        UserPresenceIndication::Strong
+                        consent::Level::Strong
                     } else {
-                        UserPresenceIndication::Light
+                        consent::Level::Normal
                     }
                 } else {
-                    UserPresenceIndication::None
+                    consent::Level::None
                 }
             }
             None => {
-                UserPresenceIndication::CantTell
+                // With configured with no buttons, that means Solo is operating
+                // in passive NFC mode, which means user tapped to indicate presence.
+                consent::Level::Normal
             }
         }
     }
 
-    fn set_status(&mut self, status: Status) {
+    fn set_status(&mut self, status: ui::Status) {
 
         if let Some(rgb) = &mut self.rgb {
 
             match status {
-                Status::Idle => {
-                    // greenish
-                    rgb.set(0x015002.into());
+                ui::Status::Idle => {
+                    // green
+                    rgb.set(0x00_ff_02.into());
                 },
-                Status::Processing => {
-                    // tealish
-                    rgb.set(0x010152.into());
-
+                ui::Status::Processing => {
+                    // teal
+                    rgb.set(0x00_ff_5a.into());
                 }
-                Status::WaitingForUserPresence => {
-                    // Orange
-                    rgb.set(0x411112.into());
+                ui::Status::WaitingForUserPresence => {
+                    // orange
+                    rgb.set(0xff_7e_00.into());
                 },
-                Status::Error => {
+                ui::Status::Error => {
                     // Red
-                    rgb.set(0x510101.into());
+                    rgb.set(0xff_00_00.into());
                 },
             }
 
