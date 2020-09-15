@@ -4,7 +4,7 @@ use heapless::ByteBuf;
 use fm11nc08::traits::{
     nfc,
 };
-use iso7816::{Response, Command, command::FromSliceError, Status};
+use iso7816::command;
 use interchange::Requester;
 use apdu_dispatch::types::ContactlessInterchange;
 use logging;
@@ -345,13 +345,13 @@ where
         let res = self.device.read(packet);
         let packet_len = match res {
             Ok(nfc::State::NewSession(x)) => {
-                info!("State::NewSession");
+                info!("State::NewSession").ok();
                 self.reset_state();
                 x
             },
             Ok(nfc::State::Continue(x)) => x,
             Err(nfc::Error::NewSession) => {
-                info!("Error::NewSession");
+                info!("Error::NewSession").ok();
                 self.reset_state();
                 return Err(SourceError::NoActivity)
             },
@@ -370,42 +370,26 @@ where
         logging::dump_hex(&self.buffer, self.buffer.len()).ok();
         // logging::dump_hex(packet, l as usize);
 
-        match Command::try_from(&self.buffer) {
-            Ok(command) => {
-                if self.interchange.state() == interchange::State::Idle{
-                    self.interchange.request(command).expect("could not deposit command");
-                    self.buffer.clear();
-                    return Ok(());
-                } else {
-                    info!("Had to ignore iso7816 command!").ok();
-                }
-            },
-            Err(_error) => {
-                logging::info!("apdu bad").ok();
-                match _error {
-                    FromSliceError::TooShort => { info!("TooShort").ok(); },
-                    FromSliceError::InvalidClass => { info!("InvalidClass").ok(); },
-                    FromSliceError::InvalidFirstBodyByteForExtended => { info!("InvalidFirstBodyByteForExtended").ok(); },
-                    FromSliceError::CanThisReallyOccur => { info!("CanThisReallyOccur").ok(); },
-                }
+        let command = command::Data::from_slice(&self.buffer);
+        if command.is_ok() {
+            self.interchange.request(
+                command.unwrap()
+            ).expect("could not deposit command");
+            Ok(())
+        } else {
+            if let Some(last_iblock_recv) = self.last_iblock_recv {
+                let (frame, _) = self.construct_iblock(
+                    last_iblock_recv,
+                    // UnspecifiedCheckingError
+                    &[0x6F, 0x00]
+                );
 
-                if let Some(last_iblock_recv) = self.last_iblock_recv {
-
-                    let (frame, _) = self.construct_iblock(
-                        last_iblock_recv,
-                        &Response::Status(Status::UnspecifiedCheckingError).into_message()
-                    );
-
-                    self.send_frame( &frame )?;
-
-                } else {
-                    info!("Session dropped.  This shouldn't happen.").ok();
-                }
+                self.send_frame( &frame )?;
+            } else {
+                info!("Session dropped.  This shouldn't happen.").ok();
             }
-        };
-
-
-        return Err(SourceError::NoActivity)
+            Err(SourceError::NoActivity)
+        }
     }
 
     pub fn is_ready_to_transmit(&self) -> bool {
@@ -415,10 +399,9 @@ where
     pub fn poll(&mut self) -> Iso14443Status {
 
         if interchange::State::Responded == self.interchange.state() {
-            if let Some(response) = self.interchange.take_response() {
+            if let Some(msg) = self.interchange.take_response() {
                 if let Some(last_iblock_recv) = self.last_iblock_recv {
                     info!("send!").ok();
-                    let msg = response.into_message();
                     let (frame, data_used) = self.construct_iblock(last_iblock_recv, &msg);
                     self.send_frame(
                         &frame

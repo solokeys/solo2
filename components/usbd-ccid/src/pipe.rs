@@ -262,11 +262,10 @@ where
 
     fn call_app(&mut self) {
         blocking::info!("called piv app").ok();
-        let command = match iso7816::Command::try_from(&self.message) {
+        let command = match iso7816::command::Data::from_slice(&self.message) {
             Ok(command) => command,
-            Err(_error) => {
-                blocking::info!("could not parse command from APDU, ignoring {:?}", &self.message).ok();
-                blocking::info!("{:?}", &_error).ok();
+            Err(_) => {
+                blocking::info!("could fit payload into Apdu buffer. Ignoring. {:?}", &self.message).ok();
                 return;
             }
         };
@@ -291,8 +290,8 @@ where
             // blocking::info!("processing, checking for response, interchange state {:?}",
             //           self.interchange.state()).ok();
 
-            if let Some(response) = self.interchange.take_response() {
-                self.message = response.into_message();
+            if let Some(message) = self.interchange.take_response() {
+                self.message = message;
 
                 // crate::piv::fake_piv(&mut self.message);
 
