@@ -17,12 +17,20 @@ use iso7816::{
     Instruction,
     Response,
     Status,
+    response,
+    command::FromSliceError,
 };
 
 #[derive(Copy, Clone)]
 pub enum InterfaceType{
     Contact,
     Contactless,
+}
+
+pub enum ApduType{
+    Select(Aid),
+    GetResponse,
+    Other,
 }
 
 use crate::logger::info;
@@ -36,15 +44,20 @@ pub struct ApduDispatch {
     contact: Responder<ContactInterchange>,
     contactless: Responder<ContactlessInterchange>,
     current_interface: InterfaceType,
+
+    chain_buffer: response::Data,
+    is_chaining_response: bool,
 }
 
 impl ApduDispatch
 {
-    fn aid_to_select(apdu: &Command) -> Option<Aid> {
+    fn apdu_type(apdu: &Command) -> ApduType {
         if apdu.instruction() == Instruction::Select && (apdu.p1 & 0x04) != 0 {
-            Some(Aid::from_slice(apdu.data()).unwrap())
+            ApduType::Select(Aid::from_slice(apdu.data()).unwrap())
+        } else if apdu.instruction() == Instruction::GetResponse {
+            ApduType::GetResponse
         } else {
-            None
+            ApduType::Other
         }
     }
 
@@ -57,6 +70,8 @@ impl ApduDispatch
             contact: contact,
             contactless: contactless,
             current_interface: InterfaceType::Contact,
+            chain_buffer: response::Data::new(),
+            is_chaining_response: false,
         }
     }
 
@@ -95,18 +110,116 @@ impl ApduDispatch
         contactless_busy || contact_busy
     }
 
+    fn buffer_chained_apdu_if_needed(&mut self, command: Command, inferface: InterfaceType) -> Option<Command>{
+        self.current_interface = inferface;
+        // iso 7816-4 5.1.1
+        // check Apdu level chaining and buffer if necessary.
+        if command.class().chain().last_or_only() {
+            if self.chain_buffer.len() > 0 && !self.is_chaining_response{
+                // Merge the chained buffer with the new apdu.
+                self.chain_buffer.extend_from_slice(command.data()).unwrap();
+                let length: u16 = (self.chain_buffer.len() - 7) as u16;
+
+                self.chain_buffer[0] = command.class().into_inner();
+                self.chain_buffer[1] = command.instruction().into();
+                self.chain_buffer[2] = command.p1;
+                self.chain_buffer[3] = command.p2;
+                //   chain_buffer[4] == 0
+                self.chain_buffer[5] = ((length & 0xff00) >> 8) as u8;
+                self.chain_buffer[6] = (length & 0xff) as u8;
+
+                info!("merging {} bytes", length).ok();
+                let merged_apdu = Command::try_from(&self.chain_buffer).unwrap();
+                self.chain_buffer.clear();
+
+                // Response now needs to be chained.
+                self.is_chaining_response = true;
+
+                Some(merged_apdu)
+            } else {
+                Some(command)
+            }
+        } else {
+            match inferface {
+                // acknowledge
+                InterfaceType::Contact => {
+                    self.contact.respond(Response::Data(Default::default()).into_message())
+                        .expect("Could not respond");
+                }
+                InterfaceType::Contactless => {
+                    self.contactless.respond(Response::Data(Default::default()).into_message())
+                        .expect("Could not respond");
+                }
+            }
+            if self.is_chaining_response {
+                info!("Was chaining the last response, but aborting that now for this new request.").ok();
+                self.is_chaining_response = false;
+                self.chain_buffer.clear();
+            }
+            if self.chain_buffer.len() == 0 {
+                // Prepend an extended length apdu header.
+                self.chain_buffer.push(0x00).ok();   // cla
+                self.chain_buffer.push(0x00).ok();   // ins
+                self.chain_buffer.push(0x00).ok();   // p1
+                self.chain_buffer.push(0x00).ok();   // p2
+                self.chain_buffer.push(0x00).ok();   // 0x00
+                self.chain_buffer.push(0x00).ok();   // length upper byte
+                self.chain_buffer.push(0x00).ok();   // length lower byte
+            }
+            info!("chaining {} bytes", command.data().len()).ok();
+            self.chain_buffer.extend_from_slice(&command.data()).ok();
+            None
+        }
+    }
+
+    fn parse_apdu(message: &iso7816::command::Data) -> core::result::Result<Command,Response> {
+
+        match Command::try_from(message) {
+            Ok(command) => {
+                Ok(command)
+            },
+            Err(_error) => {
+                logging::info!("apdu bad").ok();
+                match _error {
+                    FromSliceError::TooShort => { info!("TooShort").ok(); },
+                    FromSliceError::InvalidClass => { info!("InvalidClass").ok(); },
+                    FromSliceError::InvalidFirstBodyByteForExtended => { info!("InvalidFirstBodyByteForExtended").ok(); },
+                    FromSliceError::CanThisReallyOccur => { info!("CanThisReallyOccur").ok(); },
+                }
+                Err(Response::Status(Status::UnspecifiedCheckingError))
+            }
+        }
+
+    }
+
     fn check_for_request(&mut self) -> Option<Command> {
         if !self.busy() {
 
-            // prioritize contactless interface
-            if let Some(apdu) = self.contactless.take_request() {
-                self.current_interface = InterfaceType::Contactless;
-                Some(apdu)
-            } else if let Some(apdu) = self.contact.take_request() {
-                self.current_interface = InterfaceType::Contact;
-                Some(apdu)
+            // Check to see if we have gotten a message, giving priority to contactless.
+            let (message, interface) = if let Some(message) = self.contactless.take_request() {
+                (message, InterfaceType::Contactless)
+            } else if let Some(message) = self.contact.take_request() {
+                (message, InterfaceType::Contact)
             } else {
-                None
+                return None;
+            };
+
+            // Parse the message as an APDU.
+            match Self::parse_apdu(message.as_ref()) {
+                Ok(command) => {
+                    // The Apdu may be standalone or part of a chain.
+                    self.buffer_chained_apdu_if_needed(command, interface)
+                },
+                Err(response) => {
+                    // If not a valid APDU, return error and don't pass to app.
+                    match self.current_interface {
+                        InterfaceType::Contactless =>
+                            self.contactless.respond(response.into_message()).expect("cant respond"),
+                        InterfaceType::Contact =>
+                            self.contact.respond(response.into_message()).expect("cant respond"),
+                    }
+                    None
+                }
             }
 
         } else {
@@ -129,10 +242,10 @@ impl ApduDispatch
         let response = match request {
             // have new command APDU
             Some(apdu) => {
-                // two cases: SELECT or not SELECT
-                match Self::aid_to_select(&apdu) {
+                // three cases: SELECT, GET RESPONSE, or Other
+                match Self::apdu_type(&apdu) {
                     // SELECT case
-                    Some(aid) => {
+                    ApduType::Select(aid) => {
                         // three cases:
                         // - currently selected app has different AID -> deselect it, to give it
                         //   the chance to clear sensitive state
@@ -166,8 +279,25 @@ impl ApduDispatch
 
                     }
 
-                    // command that is not a SELECT command
-                    None => {
+
+                    ApduType::GetResponse => {
+                        // The reader/host is using chaining.  On behalf of the app,
+                        // we will return the response in chunks.
+                        if self.chain_buffer.len() == 0 || !self.is_chaining_response {
+                            info!("Unexpected GetResponse").ok();
+                            Err(Status::UnspecifiedCheckingError)
+                        } else {
+                            // This is a bit unclear, but am returning this
+                            // just to continue the chaining response.
+                            Ok(AppletResponse::Respond(Default::default()))
+                        }
+                    }
+
+                    // command that is not a special command -- goes to applet.
+                    ApduType::Other => {
+                        // Invalidate the chain_buffer
+                        self.chain_buffer.clear();
+
                         // if there is a selected app, send it the command
                         if let Some(applet) = Self::find_applet(self.current_aid.as_ref(), applets) {
                             applet.call(apdu)
@@ -192,29 +322,62 @@ impl ApduDispatch
             }
         };
 
-        match response {
+        let message = match response {
             Ok(AppletResponse::Respond(response)) => {
-                use InterfaceType::*;
-                match self.current_interface {
-                    Contactless =>
-                        self.contactless.respond(Response::Data(response)).expect("cant respond"),
-                    Contact =>
-                        self.contact.respond(Response::Data(response)).expect("cant respond"),
+
+                // Consider if we need to reply via chaining method.
+                // If the reader is using chaining, we will simply
+                // reply 61XX, and put the response in a buffer.
+                // It is up to the reader to then send GetResponse
+                // requests, to which we will return up to 256 bytes at a time.
+                if self.is_chaining_response {
+                    if self.chain_buffer.len() == 0 {
+                        self.chain_buffer.extend_from_slice(&response).ok();
+                        info!("Putting response of {} bytes into chain buffer", response.len()).ok();
+                    }
+
+                    // Send 256 bytes max at a time.
+                    let boundary = core::cmp::min(256, self.chain_buffer.len());
+                    let to_send = &self.chain_buffer[..boundary];
+                    let remaining = &self.chain_buffer[boundary..];
+                    let mut message = response::Data::from_slice(to_send).unwrap();
+                    let return_code = if remaining.len() > 255 {
+                        // XX = 00 indicates more than 255 bytes of data
+                        0x6100u16
+                    } else if remaining.len() > 0 {
+                        0x6100u16 + (remaining.len() as u16)
+                    } else {
+                        // Last chunk has success code
+                        0x9000
+                    };
+                    message.extend_from_slice(&return_code.to_be_bytes()).ok();
+                    self.chain_buffer = response::Data::from_slice(remaining).unwrap();
+                    message
+
+                } else {
+                    // Just reply normally
+                    Response::Data(response).into_message()
                 }
             }
 
-            Ok(AppletResponse::Defer) => {}
+            Ok(AppletResponse::Defer) => {
+                return;
+            }
 
             Err(status) => {
                 info!("applet error").ok();
-                use InterfaceType::*;
-                match self.current_interface {
-                    Contactless =>
-                        self.contactless.respond(Response::Status(status)).expect("cant respond"),
-                    Contact =>
-                        self.contact.respond(Response::Status(status)).expect("cant respond"),
-                }
+                Response::Status(status).into_message()
             }
+        };
+
+        match self.current_interface {
+            InterfaceType::Contactless =>
+                self.contactless.respond(message).expect("cant respond"),
+            InterfaceType::Contact =>
+                self.contact.respond(message).expect("cant respond"),
         }
+
+
+
     }
 }
