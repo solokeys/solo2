@@ -7,8 +7,8 @@ use fm11nc08::traits::{
 use iso7816::command;
 use interchange::Requester;
 use apdu_dispatch::types::ContactlessInterchange;
-use logging;
 use crate::logger::{
+    self,
     info,
 };
 
@@ -22,7 +22,7 @@ pub enum SourceError {
 /// It is up to the application how this is scheduled.
 pub enum Iso14443Status {
     Idle,
-    ReceivedData(Duration)
+    ReceivedData(Duration),
 }
 
 // Max iso14443 frame is 256 bytes
@@ -356,6 +356,7 @@ where
                 return Err(SourceError::NoActivity)
             },
             _ => {
+                info!("nop").ok();
                 return Err(SourceError::NoActivity)
             }
         };
@@ -367,15 +368,21 @@ where
         self.handle_block(&packet[.. packet_len as usize])?;
 
         info!(">>").ok();
-        logging::dump_hex(&self.buffer, self.buffer.len()).ok();
+        logger::dump_hex(&self.buffer, self.buffer.len()).ok();
         // logging::dump_hex(packet, l as usize);
 
         let command = command::Data::from_slice(&self.buffer);
+        self.buffer.clear();
         if command.is_ok() {
-            self.interchange.request(
+            if self.interchange.request(
                 command.unwrap()
-            ).expect("could not deposit command");
-            Ok(())
+            ).is_ok() {
+                Ok(())
+            } else {
+                // Would be better to try canceling and taking on this apdu.
+                info!("Had to drop most recent Apdu!").ok();
+                Err(SourceError::NoActivity)
+            }
         } else {
             if let Some(last_iblock_recv) = self.last_iblock_recv {
                 let (frame, _) = self.construct_iblock(
@@ -431,22 +438,14 @@ where
 
     pub fn poll_wait_extensions(&mut self) -> Iso14443Status {
 
-            // wtx_requested: false,
-            // waiting_for_response: false,
         if self.wtx_requested {
             info!("warning: still awaiting wtx response.").ok();
+            return Iso14443Status::ReceivedData(Duration::from_millis(32));
         }
 
-        // self.interchange.state();
         match self.interchange.state() {
             interchange::State::Responded => {
                 info!("could-send-from-wtx!").ok();
-                // let msg = self.interchange.take_response().unwrap().into_message();
-                // let frame =
-                // self.send_frame(
-                //     &msg
-                // ).ok();
-                // Iso14443Status::Idle
                 Iso14443Status::ReceivedData(Duration::from_millis(32))
             }
             interchange::State::Requested | interchange::State::Processing => {
@@ -472,7 +471,7 @@ where
         }
 
         info!("<<").ok();
-        if buffer.len() > 0 { logging::dump_hex(buffer, buffer.len()).ok(); }
+        if buffer.len() > 0 { logger::dump_hex(buffer, buffer.len()).ok(); }
 
         Ok(())
     }
