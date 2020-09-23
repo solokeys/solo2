@@ -707,12 +707,12 @@ impl<Syscall: crate::pipe::Syscall> Client<Syscall> {
         self.wrap_key(Mechanism::Aes256Cbc, wrapping_key.clone(), key.clone(), &[])
     }
 
-    pub fn confirm_user_present<'c>(&'c mut self, timeout_seconds: Option<u32>)
+    pub fn confirm_user_present<'c>(&'c mut self, timeout_milliseconds: u32)
         -> core::result::Result<FutureResult<'c, reply::RequestUserConsent>, ClientError>
     {
         self.raw.request(request::RequestUserConsent {
             level: consent::Level::Normal,
-            timeout_seconds,
+            timeout_milliseconds,
         } )?;
         self.syscall.syscall();
         Ok(FutureResult::new(self))

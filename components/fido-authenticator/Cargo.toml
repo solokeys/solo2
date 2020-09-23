@@ -21,7 +21,7 @@ serde-indexed = "0.0.3"
 ufmt = "0.1.0"
 
 [features]
-disable-fido-pre = []
+enable-fido-pre = []
 
 log-all = []
 log-none = []

@@ -33,16 +33,11 @@ pub mod ui {
     // TODO: Consider whether a simple "language" to specify "patterns"
     // makes sense, vs. "semantic" indications with board-specific implementation
     #[derive(Copy, Clone, Eq, PartialEq, Debug, uDebug, Serialize, Deserialize)]
-    pub enum VisualPattern {
-        // BreathMajestically,
-        /// signals healthy heartbeat
-        BlinkingGreen,
-        /// signals request for confirmation of user presence
-        StaticBlue,
-        /// signals request for confirmation of user intent (e.g. "reset")
-        RainbowGlare,
-        /// something went horribly wrong :)
-        DeadRed,
+    pub enum Status {
+        Idle,
+        WaitingForUserPresence,
+        Processing,
+        Error,
     }
 }
 
@@ -51,9 +46,13 @@ pub mod consent {
 
     #[derive(Copy, Clone, Eq, PartialEq, Debug, uDebug, Serialize, Deserialize)]
     pub enum Level {
+        /// There is no user present
+        None,
+
         /// Normal user presence check, currently implemented as "touch any of three buttons"
         Normal,
-        /// Strong user intent check, currently implemented as "three finger squeeze"
+
+        /// Strong user intent check, currently implemented as "two-or-three finger squeeze"
         Strong,
     }
 
