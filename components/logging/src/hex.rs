@@ -63,6 +63,13 @@ impl HexRepresentation4 for u16{
         unsafe{ MEM = self.as_bytes() };
         unsafe{ core::str::from_utf8_unchecked(&MEM) }
     }
-
-
 }
+
+#[macro_export]
+macro_rules! hex {
+    ($byte:expr) => {
+        unsafe{ core::str::from_utf8_unchecked(&($byte).as_bytes()) }
+    }
+}
+
+

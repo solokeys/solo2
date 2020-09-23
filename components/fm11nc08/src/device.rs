@@ -28,6 +28,7 @@ use hal::{
 };
 use crate::traits::nfc;
 use logging::hex::*;
+use logging::hex;
 
 use crate::logger::{
     info,
@@ -365,15 +366,11 @@ where
         let main_irq = self.read_reg(Register::MainIrq);
         let mut new_session = false;
 
-        let do_flush = if main_irq & (Interrupt::TxDone as u8) != 0 {
+        if main_irq & (Interrupt::TxDone as u8) != 0 {
             // Need to turn off transmit mode
             let count = self.read_reg(Register::FifoCount);
             info!("off transmit (-{}) {}", count, main_irq.hex()).ok();
-            self.write_reg(Register::RfTxEn, 0x00);
-            true
-        } else {
-            false
-        };
+        }
 
         let fifo_irq = if (main_irq & Interrupt::Fifo as u8) != 0 {
             self.read_reg(Register::FifoIrq)
@@ -391,9 +388,9 @@ where
         if (fifo_irq & (1 << 2)) != 0 {
             info!("!OF! {} @{}", self.read_reg(Register::FifoCount), hal::get_cycle_count()/96_00).ok();
             info!("{} {} {}",
-                    main_irq.hex(),
-                    fifo_irq.hex(),
-                    aux_irq.hex(),
+                    hex!(main_irq),
+                    hex!(fifo_irq),
+                    hex!(aux_irq),
                 ).ok();
 
             // self.write_reg(Register::FifoFlush, 0xff);
@@ -429,9 +426,6 @@ where
                     buf[i] = self.packet[i];
                 }
                 self.offset = 0;
-                if do_flush {
-                    self.write_reg(Register::FifoFlush, 0xaa);
-                }
                 if new_session {
                     return Ok(nfc::State::NewSession(l as u8));
                 } else {
@@ -452,15 +446,11 @@ where
                 info!("warning: potential ovflw").ok();
             }
         }
-        if do_flush {
-            self.write_reg(Register::FifoFlush, 0xaa);
-        }
 
         info!(". {},{},{}",
-            // logging::hex!(rf_status),
-            main_irq.hex(),
-            fifo_irq.hex(),
-            aux_irq.hex(),
+            hex!(main_irq),
+            hex!(fifo_irq),
+            hex!(aux_irq),
         ).ok();
 
         if new_session {
@@ -507,9 +497,9 @@ where
             info!("tx {}->{}. {} {} {}",
                 initial_count,
                 current_count,
-                rf_status.hex(),
-                aux_irq.hex(),
-                fifo_irq.hex(),
+                hex!(rf_status),
+                hex!(aux_irq),
+                hex!(fifo_irq),
             ).ok();
 
             if (fifo_irq & (FifoInterrupt::WaterLevel as u8)) != 0 {
@@ -633,13 +623,13 @@ impl ufmt::uDisplay for Eeprom {
         uwriteln!(f, "").ok();
         uwriteln!(f, "  regu_cfg         = x{}", self.regu_cfg.hex()).ok();
         uwriteln!(f, "  atqa             = x{}", self.atqa.hex()).ok();
-        uwriteln!(f, "  sak1,sak2        = x{} {}", self.sak1.hex(), self.sak2.hex()).ok();
+        uwriteln!(f, "  sak1,sak2        = x{} {}", hex!(self.sak1), hex!(self.sak2)).ok();
         uwriteln!(f, "  tl t0 ta tb tc   = x{} {} {} {} {}",
-            self.tl.hex(), self.t0.hex(), self.ta.hex(), self.tb.hex(), self.tc.hex()
+            hex!(self.tl), hex!(self.t0), hex!(self.ta), hex!(self.tb), hex!(self.tc)
         ).ok();
         uwriteln!(f, "  nfc_cfg          = x{}", self.nfc_cfg.hex()).ok();
         uwriteln!(f, "  i2c_addr         = x{}", self.i2c_addr.hex()).ok();
-        uwriteln!(f, "  rblock ack,nack  = x{} {}", self.rblock_ack.hex(), self.rblock_nack.hex())
+        uwriteln!(f, "  rblock ack,nack  = x{} {}", hex!(self.rblock_ack), hex!(self.rblock_nack))
     }
 }
 
