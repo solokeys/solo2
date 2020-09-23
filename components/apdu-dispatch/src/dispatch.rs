@@ -9,7 +9,7 @@
 //! Apps need to implement the Applet trait to be managed.
 //!
 
-use crate::applet::{Applet, Response as AppletResponse};
+use crate::applet::{Applet, Response as AppletResponse, Result as AppletResult};
 
 use iso7816::{
     Aid,
@@ -27,16 +27,53 @@ pub enum InterfaceType{
     Contactless,
 }
 
-pub enum ApduType{
+pub enum RequestType {
     Select(Aid),
     GetResponse,
-    Other,
+    NewCommand,
+    None,
 }
 
 use crate::logger::info;
+use crate::logger::dump_hex;
 
 use interchange::Responder;
 use crate::types::{ContactInterchange, ContactlessInterchange};
+
+#[derive(PartialEq)]
+enum RawApduBuffer {
+    None,
+    Request(Command),
+    Response(response::Data),
+}
+
+struct ApduBuffer {
+    pub raw: RawApduBuffer,
+}
+
+impl ApduBuffer {
+    fn request(&mut self, command: &Command) {
+        match &mut self.raw {
+            RawApduBuffer::Request(buffered) => {
+                buffered.extend_from_command(command).ok();
+            }
+            _ => {
+                if self.raw != RawApduBuffer::None {
+                    info!("Was buffering the last response, but aborting that now for this new request.").ok();
+                }
+                let mut new_cmd = Command::try_from(&[0,0,0,0]).unwrap();
+                new_cmd.extend_from_command(command).ok();
+                self.raw = RawApduBuffer::Request(new_cmd);
+            }
+        }
+    }
+
+
+    fn response(&mut self, response: &response::Data) {
+        self.raw = RawApduBuffer::Response(response.clone());
+    }
+
+}
 
 pub struct ApduDispatch {
     // or currently_selected_aid, or...
@@ -45,19 +82,19 @@ pub struct ApduDispatch {
     contactless: Responder<ContactlessInterchange>,
     current_interface: InterfaceType,
 
-    chain_buffer: response::Data,
-    is_chaining_response: bool,
+    buffer: ApduBuffer,
+    was_request_chained: bool,
 }
 
 impl ApduDispatch
 {
-    fn apdu_type(apdu: &Command) -> ApduType {
+    fn apdu_type(apdu: &Command) -> RequestType {
         if apdu.instruction() == Instruction::Select && (apdu.p1 & 0x04) != 0 {
-            ApduType::Select(Aid::from_slice(apdu.data()).unwrap())
+            RequestType::Select(Aid::from_slice(apdu.data()).unwrap())
         } else if apdu.instruction() == Instruction::GetResponse {
-            ApduType::GetResponse
+            RequestType::GetResponse
         } else {
-            ApduType::Other
+            RequestType::NewCommand
         }
     }
 
@@ -65,13 +102,15 @@ impl ApduDispatch
         contact: Responder<ContactInterchange>,
         contactless: Responder<ContactlessInterchange>,
     ) -> ApduDispatch {
-        ApduDispatch{
+        ApduDispatch {
             current_aid: None,
             contact: contact,
             contactless: contactless,
             current_interface: InterfaceType::Contact,
-            chain_buffer: response::Data::new(),
-            is_chaining_response: false,
+            was_request_chained: false,
+            buffer: ApduBuffer {
+                raw: RawApduBuffer::None,
+            },
         }
     }
 
@@ -110,34 +149,40 @@ impl ApduDispatch
         contactless_busy || contact_busy
     }
 
-    fn buffer_chained_apdu_if_needed(&mut self, command: Command, inferface: InterfaceType) -> Option<Command>{
+
+    #[inline(never)]
+    fn buffer_chained_apdu_if_needed(&mut self, command: Command, inferface: InterfaceType) -> RequestType {
+
         self.current_interface = inferface;
         // iso 7816-4 5.1.1
         // check Apdu level chaining and buffer if necessary.
-        if command.class().chain().last_or_only() {
-            if self.chain_buffer.len() > 0 && !self.is_chaining_response{
-                // Merge the chained buffer with the new apdu.
-                self.chain_buffer.extend_from_slice(command.data()).unwrap();
-                let length: u16 = (self.chain_buffer.len() - 7) as u16;
+        if !command.class().chain().not_the_last() {
 
-                self.chain_buffer[0] = command.class().into_inner();
-                self.chain_buffer[1] = command.instruction().into();
-                self.chain_buffer[2] = command.p1;
-                self.chain_buffer[3] = command.p2;
-                //   chain_buffer[4] == 0
-                self.chain_buffer[5] = ((length & 0xff00) >> 8) as u8;
-                self.chain_buffer[6] = (length & 0xff) as u8;
+            let is_chaining = match &self.buffer.raw {
+                RawApduBuffer::Request(_) => true,
+                _ => false,
+            };
 
-                info!("merging {} bytes", length).ok();
-                let merged_apdu = Command::try_from(&self.chain_buffer).unwrap();
-                self.chain_buffer.clear();
+            if is_chaining {
+                self.buffer.request(&command);
 
                 // Response now needs to be chained.
-                self.is_chaining_response = true;
+                self.was_request_chained = true;
+                info!("combined chained commands.").ok();
 
-                Some(merged_apdu)
+                RequestType::NewCommand
             } else {
-                Some(command)
+                if self.buffer.raw == RawApduBuffer::None {
+                    self.was_request_chained = false;
+                }
+                let apdu_type = Self::apdu_type(&command);
+                match Self::apdu_type(&command) {
+                    // Keep buffer the same in case of GetResponse
+                    RequestType::GetResponse => (),
+                    // Overwrite for everything else.
+                    _ => self.buffer.request(&command),
+                }
+                apdu_type
             }
         } else {
             match inferface {
@@ -151,24 +196,12 @@ impl ApduDispatch
                         .expect("Could not respond");
                 }
             }
-            if self.is_chaining_response {
-                info!("Was chaining the last response, but aborting that now for this new request.").ok();
-                self.is_chaining_response = false;
-                self.chain_buffer.clear();
-            }
-            if self.chain_buffer.len() == 0 {
-                // Prepend an extended length apdu header.
-                self.chain_buffer.push(0x00).ok();   // cla
-                self.chain_buffer.push(0x00).ok();   // ins
-                self.chain_buffer.push(0x00).ok();   // p1
-                self.chain_buffer.push(0x00).ok();   // p2
-                self.chain_buffer.push(0x00).ok();   // 0x00
-                self.chain_buffer.push(0x00).ok();   // length upper byte
-                self.chain_buffer.push(0x00).ok();   // length lower byte
-            }
+
             info!("chaining {} bytes", command.data().len()).ok();
-            self.chain_buffer.extend_from_slice(&command.data()).ok();
-            None
+            self.buffer.request(&command);
+            
+            // Nothing for the application to consume yet.
+            RequestType::None
         }
     }
 
@@ -192,7 +225,8 @@ impl ApduDispatch
 
     }
 
-    fn check_for_request(&mut self) -> Option<Command> {
+    #[inline(never)]
+    fn check_for_request(&mut self) -> RequestType {
         if !self.busy() {
 
             // Check to see if we have gotten a message, giving priority to contactless.
@@ -201,145 +235,63 @@ impl ApduDispatch
             } else if let Some(message) = self.contact.take_request() {
                 (message, InterfaceType::Contact)
             } else {
-                return None;
+                return RequestType::None;
             };
 
             // Parse the message as an APDU.
-            match Self::parse_apdu(message.as_ref()) {
+            match Self::parse_apdu(&message) {
                 Ok(command) => {
                     // The Apdu may be standalone or part of a chain.
                     self.buffer_chained_apdu_if_needed(command, interface)
                 },
                 Err(response) => {
                     // If not a valid APDU, return error and don't pass to app.
-                    match self.current_interface {
+                    info!("Invalid apdu").ok();
+                    match interface {
                         InterfaceType::Contactless =>
                             self.contactless.respond(response.into_message()).expect("cant respond"),
                         InterfaceType::Contact =>
                             self.contact.respond(response.into_message()).expect("cant respond"),
                     }
-                    None
+                    RequestType::None
                 }
             }
 
         } else {
-            None
+            RequestType::None
         }
     }
 
-    pub fn poll<'a>(
-        &mut self,
-        applets: &'a mut [&'a mut dyn Applet],
-    ) {
+    #[inline(never)]
+    fn reply_error (&mut self, status: Status) {
+        self.respond(Response::Status(status).into_message());
+        self.buffer.raw = RawApduBuffer::None;
+    }
 
-        // Only take on one transaction at a time.
-        let request = self.check_for_request();
-
-        // if there is a new request:
-        // - if it's a select, handle appropriately
-        // - else pass it on to currently selected app
-        // if there is no new request, poll currently selected app
-        let response = match request {
-            // have new command APDU
-            Some(apdu) => {
-                // three cases: SELECT, GET RESPONSE, or Other
-                match Self::apdu_type(&apdu) {
-                    // SELECT case
-                    ApduType::Select(aid) => {
-                        // three cases:
-                        // - currently selected app has different AID -> deselect it, to give it
-                        //   the chance to clear sensitive state
-                        // - currently selected app has given AID (typical behaviour will be NOP,
-                        //   but pass along anyway) -> do not deselect it first
-                        // - no currently selected app
-                        //
-                        // For PIV, "SELECT" is NOP if it was already selected, but this is
-                        // not necessarily the case for other apps
-
-                        // if there is a selected app with a different AID, deselect it
-                        if let Some(current_aid) = self.current_aid.as_ref() {
-                            if *current_aid != *aid {
-                                let applet = Self::find_applet(self.current_aid.as_ref(), applets).unwrap();
-                                // for now all applets will be happy with this.
-                                applet.deselect();
-                                self.current_aid = None;
-                            }
-                        }
-
-                        // select specified app in any case
-                        if let Some(applet) = Self::find_applet(Some(&aid), applets) {
-                            let result = applet.select(apdu);
-                            if result.is_ok() {
-                                self.current_aid = Some(aid);
-                            }
-                            result
-                        } else {
-                            Err(Status::NotFound)
-                        }
-
-                    }
-
-
-                    ApduType::GetResponse => {
-                        // The reader/host is using chaining.  On behalf of the app,
-                        // we will return the response in chunks.
-                        if self.chain_buffer.len() == 0 || !self.is_chaining_response {
-                            info!("Unexpected GetResponse").ok();
-                            Err(Status::UnspecifiedCheckingError)
-                        } else {
-                            // This is a bit unclear, but am returning this
-                            // just to continue the chaining response.
-                            Ok(AppletResponse::Respond(Default::default()))
-                        }
-                    }
-
-                    // command that is not a special command -- goes to applet.
-                    ApduType::Other => {
-                        // Invalidate the chain_buffer
-                        self.chain_buffer.clear();
-
-                        // if there is a selected app, send it the command
-                        if let Some(applet) = Self::find_applet(self.current_aid.as_ref(), applets) {
-                            applet.call(apdu)
-                        } else {
-                            // TODO: correct error?
-                            Err(Status::NotFound)
-                        }
-                    }
-                }
+    #[inline(never)]
+    fn handle_reply(&mut self,) {
+        // Consider if we need to reply via chaining method.
+        // If the reader is using chaining, we will simply
+        // reply 61XX, and put the response in a buffer.
+        // It is up to the reader to then send GetResponse
+        // requests, to which we will return up to 256 bytes at a time.
+        let (new_state, response) = match &mut self.buffer.raw {
+            RawApduBuffer::Request(_) | RawApduBuffer::None => {
+                info!("Unexpected GetResponse request.").ok();
+                (
+                    RawApduBuffer::None,
+                    Response::Status(Status::UnspecifiedCheckingError).into_message()
+                )
             }
+            RawApduBuffer::Response(res) => {
 
-            // no new command, simply poll the current app
-            None => {
-                if let Some(applet) = Self::find_applet(self.current_aid.as_ref(), applets) {
-                    applet.poll()
-                } else {
-                    // ideally, we should be able to exclude this case, as there should always be
-                    // an AID that is selected by default. but this may not be possible, as not all
-                    // system resources are available during init
-                    return;
-                }
-            }
-        };
-
-        let message = match response {
-            Ok(AppletResponse::Respond(response)) => {
-
-                // Consider if we need to reply via chaining method.
-                // If the reader is using chaining, we will simply
-                // reply 61XX, and put the response in a buffer.
-                // It is up to the reader to then send GetResponse
-                // requests, to which we will return up to 256 bytes at a time.
-                if self.is_chaining_response {
-                    if self.chain_buffer.len() == 0 {
-                        self.chain_buffer.extend_from_slice(&response).ok();
-                        info!("Putting response of {} bytes into chain buffer", response.len()).ok();
-                    }
+                if self.was_request_chained {
 
                     // Send 256 bytes max at a time.
-                    let boundary = core::cmp::min(256, self.chain_buffer.len());
-                    let to_send = &self.chain_buffer[..boundary];
-                    let remaining = &self.chain_buffer[boundary..];
+                    let boundary = core::cmp::min(256, res.len());
+
+                    let to_send = &res[..boundary];
+                    let remaining = &res[boundary..];
                     let mut message = response::Data::from_slice(to_send).unwrap();
                     let return_code = if remaining.len() > 255 {
                         // XX = 00 indicates more than 255 bytes of data
@@ -351,33 +303,173 @@ impl ApduDispatch
                         0x9000
                     };
                     message.extend_from_slice(&return_code.to_be_bytes()).ok();
-                    self.chain_buffer = response::Data::from_slice(remaining).unwrap();
-                    message
+                    if return_code == 0x9000 {
+                        (
+                            RawApduBuffer::None,
+                            message
+                        )
+                    } else {
+                        info!("Still {} bytes in response buffer", remaining.len()).ok();
+                        (
+                            RawApduBuffer::Response(response::Data::from_slice(remaining).unwrap()),
+                            message
+                        )
+                    }
 
                 } else {
-                    // Just reply normally
-                    Response::Data(response).into_message()
+                    // Add success code
+                    res.extend_from_slice(&[0x90,00]).ok();
+                    (RawApduBuffer::None, res.clone())
                 }
-            }
 
-            Ok(AppletResponse::Defer) => {
-                return;
-            }
-
-            Err(status) => {
-                info!("applet error").ok();
-                Response::Status(status).into_message()
             }
         };
+        self.buffer.raw = new_state;
+        self.respond(response);
 
+    }
+
+    #[inline(never)]
+    fn handle_app_response(&mut self, response: &AppletResult) {
+        // put message into the response buffer
+        match response {
+            Ok(AppletResponse::Respond(response)) => {
+                info!("buffered the response of {} bytes.", response.len()).ok();
+                self.buffer.response(response);
+                self.handle_reply();
+            }
+            Ok(AppletResponse::Defer) => {
+                // no op
+            }
+            Err(status) => {
+                // Just reply the error immediately.
+                info!("buffered applet error").ok();
+                self.reply_error(*status);
+            }
+        }
+    }
+
+    #[inline(never)]
+    fn handle_app_select<'a>(&mut self, applets: &'a mut [&'a mut dyn Applet], aid: Aid) {
+        // three cases:
+        // - currently selected app has different AID -> deselect it, to give it
+        //   the chance to clear sensitive state
+        // - currently selected app has given AID (typical behaviour will be NOP,
+        //   but pass along anyway) -> do not deselect it first
+        // - no currently selected app
+        //
+        // For PIV, "SELECT" is NOP if it was already selected, but this is
+        // not necessarily the case for other apps
+
+        // if there is a selected app with a different AID, deselect it
+        if let Some(current_aid) = self.current_aid.as_ref() {
+            if *current_aid != *aid {
+                let applet = Self::find_applet(self.current_aid.as_ref(), applets).unwrap();
+                // for now all applets will be happy with this.
+                applet.deselect();
+                self.current_aid = None;
+            }
+        }
+
+        // select specified app in any case
+        if let Some(applet) = Self::find_applet(Some(&aid), applets) {
+            info!("Selected app").ok();
+            let result = match &self.buffer.raw {
+                RawApduBuffer::Request(apdu) => {
+                    applet.select(apdu)
+                }
+                _ => panic!("Unexpected buffer state."),
+            };
+            if result.is_ok() {
+                self.current_aid = Some(aid);
+            }
+
+            self.handle_app_response(&result);
+
+
+        } else {
+            info!("could not find app by aid: ").ok(); dump_hex(&aid, aid.len()).ok();
+            self.reply_error(Status::NotFound);
+        };
+
+    }
+
+
+    #[inline(never)]
+    fn handle_app_command<'a>(&mut self, applets: &'a mut [&'a mut dyn Applet]) {
+        // if there is a selected app, send it the command
+        if let Some(applet) = Self::find_applet(self.current_aid.as_ref(), applets) {
+            let response = match &self.buffer.raw {
+                RawApduBuffer::Request(apdu) => {
+                    // TODO this isn't very clear
+                    applet.call(apdu)
+                }
+                _ => panic!("Unexpected buffer state."),
+            };
+            self.handle_app_response(& response);
+
+        } else {
+            // TODO: correct error?
+            self.reply_error(Status::NotFound);
+        };
+    }
+
+    #[inline(never)]
+    fn handle_app_poll<'a>(&mut self, applets: &'a mut [&'a mut dyn Applet]) {
+        if let Some(applet) = Self::find_applet(self.current_aid.as_ref(), applets) {
+            self.handle_app_response(& applet.poll());
+        } else {
+            // ideally, we should be able to exclude this case, as there should always be
+            // an AID that is selected by default. but this may not be possible, as not all
+            // system resources are available during init
+        }
+    }
+
+    pub fn poll<'a>(
+        &mut self,
+        applets: &'a mut [&'a mut dyn Applet],
+    ) {
+
+        // Only take on one transaction at a time.
+        let request_type = self.check_for_request();
+
+        // if there is a new request:
+        // - if it's a select, handle appropriately
+        // - else pass it on to currently selected app
+        // if there is no new request, poll currently selected app
+        match request_type {
+            // SELECT case
+            RequestType::Select(aid) => {
+                info!("Select").ok();
+                self.handle_app_select(applets,aid);
+            }
+
+
+            RequestType::GetResponse => {
+                info!("GetResponse").ok();
+                self.handle_reply();
+            }
+
+            // command that is not a special command -- goes to applet.
+            RequestType::NewCommand => {
+                info!("Command").ok();
+                self.handle_app_command(applets);
+            }
+
+            RequestType::None => {
+                self.handle_app_poll(applets);
+            }
+        }
+
+    }
+
+    #[inline(never)]
+    fn respond(&mut self, message: iso7816::response::Data){
         match self.current_interface {
             InterfaceType::Contactless =>
                 self.contactless.respond(message).expect("cant respond"),
             InterfaceType::Contact =>
                 self.contact.respond(message).expect("cant respond"),
         }
-
-
-
     }
 }

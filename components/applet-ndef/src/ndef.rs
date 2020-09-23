@@ -47,13 +47,13 @@ impl<'a> applet::Aid for NdefApplet<'a> {
 
 impl<'a> applet::Applet for NdefApplet<'a> {
 
-    fn select(&mut self, _apdu: Command) -> applet::Result {
+    fn select(&mut self, _apdu: &Command) -> applet::Result {
         Ok(Default::default())
     }
 
     fn deselect(&mut self) {}
 
-    fn call(&mut self, apdu: Command) -> applet::Result {
+    fn call(&mut self, apdu: &Command) -> applet::Result {
         let instruction = apdu.instruction();
         let p1 = apdu.p1;
         let p2 = apdu.p2;

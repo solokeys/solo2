@@ -45,8 +45,22 @@ impl Command {
         self.le
     }
 
-    // pub fn instruction(&self) -> class::Class {
-    // }
+    /// This can be use for APDU chaining to convert
+    /// multiple APDU's into one.
+    /// * Global Platform GPC_SPE_055 3.10
+    pub fn extend_from_command(&mut self, command: &Command) -> core::result::Result<(),()> {
+
+        // Always take the header from the last command;
+        self.class = command.class();
+        self.instruction = command.instruction();
+        self.p1 = command.p1;
+        self.p2 = command.p2;
+        self.le = command.le;
+        self.extended = true;
+
+        // add the data to the end.
+        self.data.extend_from_slice(&command.data())
+    }
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]

@@ -49,7 +49,7 @@ pub trait Applet : Aid {
     /// Given parsed APDU for select command.
     /// Write response data back to buf, and return length of payload.  Return APDU Error code on error.
     /// Alternatively, the app can defer the response until later by returning it in `poll()`.
-    fn select(&mut self, apdu: Command) -> Result;
+    fn select(&mut self, apdu: &Command) -> Result;
 
     /// Deselects the applet. This is the result of another applet getting selected.
     /// Applet should clear any sensitive state and reset security indicators.
@@ -57,7 +57,7 @@ pub trait Applet : Aid {
 
     /// Given parsed APDU for applet when selected.
     /// Write response data back to buf, and return length of payload.  Return APDU Error code on error.
-    fn call(&mut self, apdu: Command) -> Result;
+    fn call(&mut self, apdu: &Command) -> Result;
 
     /// Called repeatedly for the selected applet.
     /// Applet could choose to defer a response in `send_recv`, and send a reply later here.

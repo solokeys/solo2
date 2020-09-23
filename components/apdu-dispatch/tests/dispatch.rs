@@ -49,14 +49,14 @@ impl Aid for TestApp1 {
 // This app echos to Ins code 0x10
 impl Applet for TestApp1 {
 
-    fn select(&mut self, _apdu: Command) -> AppletResult {
+    fn select(&mut self, _apdu: &Command) -> AppletResult {
         Ok(Default::default())
     }
 
     fn deselect(&mut self) {
     }
 
-    fn call (&mut self, apdu: Command) -> AppletResult {
+    fn call (&mut self, apdu: &Command) -> AppletResult {
         println!("TestApp1::call");
         match apdu.instruction().into() {
             0x10 => {
@@ -68,6 +68,13 @@ impl Applet for TestApp1 {
                 buf.push(0).unwrap();
                 buf.push(0).unwrap();
                 buf.extend_from_slice(apdu.data()).unwrap();
+                Ok(AppletResponse::Respond(buf))
+            }
+            // For measuring the stack burden of dispatch
+            0x15 => {
+                let mut buf = ByteBuf::new();
+                let addr = (&buf as *const iso7816::response::Data ) as u32;
+                buf.extend_from_slice(&addr.to_be_bytes()).unwrap();
                 Ok(AppletResponse::Respond(buf))
             }
             _ => 
@@ -95,14 +102,14 @@ impl Aid for TestApp2 {
 // This app echos to Ins code 0x20
 impl Applet for TestApp2 {
 
-    fn select(&mut self, _apdu: Command) -> AppletResult {
+    fn select(&mut self, _apdu: &Command) -> AppletResult {
         Ok(Default::default())
     }
 
     fn deselect(&mut self) {
     }
 
-    fn call (&mut self, apdu: Command) -> AppletResult {
+    fn call (&mut self, apdu: &Command) -> AppletResult {
         println!("TestApp2::call");
         match apdu.instruction().into() {
             0x20 => {
@@ -140,7 +147,7 @@ impl Aid for PanicApp{
 // This app should never get selected
 impl Applet for PanicApp {
 
-    fn select(&mut self, _apdu: Command) -> AppletResult {
+    fn select(&mut self, _apdu: &Command) -> AppletResult {
         panic!("Dont call the panic app");
     }
 
@@ -148,7 +155,7 @@ impl Applet for PanicApp {
         panic!("Dont call the panic app");
     }
 
-    fn call (&mut self, _apdu: Command) -> AppletResult {
+    fn call (&mut self, _apdu: &Command) -> AppletResult {
         panic!("Dont call the panic app");
     }
 
@@ -296,6 +303,24 @@ fn echo_1(){
 
             // Echo
             &[0x00u8, 0x10, 0x00, 0x00, 0x05, 0x01, 0x02, 0x03, 0x04, 0x05],
+            // Echo + Ok
+            &[0x00u8, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x90, 0x00],
+        ]
+    )
+}
+
+#[test]
+#[serial]
+fn echo_with_cla_bits_set(){
+    run_apdus(
+        &[
+            // Select
+            &[0x00u8, 0xA4, 0x04, 0x00, 0x05, 0x0A, 0x01, 0x00, 0x00, 0x01],
+            // Ok
+            &[0x90, 0x00],
+
+            // Echo
+            &[0x80u8, 0x10, 0x00, 0x00, 0x05, 0x01, 0x02, 0x03, 0x04, 0x05],
             // Echo + Ok
             &[0x00u8, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x90, 0x00],
         ]
@@ -730,4 +755,50 @@ fn multiple_chained_apdu_interruption (){
 
         ]
     )
+}
+
+#[test]
+#[serial]
+fn check_stack_burden(){
+
+    let (mut contact_requester, contact_responder) = ContactInterchange::claim(0)
+        .expect("could not setup ccid ApduInterchange");
+
+    let (_contactless_requester, contactless_responder) = ContactlessInterchange::claim(0)
+        .expect("could not setup iso14443 ApduInterchange");
+
+    let mut apdu_dispatch = apdu_dispatch::dispatch::ApduDispatch::new(contact_responder, contactless_responder);
+
+    let mut app1 = TestApp1{};
+
+    contact_requester.request(command::Data::from_slice(
+        &[0x00u8, 0xA4, 0x04, 0x00, 0x05, 0x0A, 0x01, 0x00, 0x00, 0x01],
+    ).unwrap()).expect("could not deposit command");
+
+    apdu_dispatch.poll(&mut[&mut app1]);
+
+    let response = contact_requester.take_response().unwrap();
+
+    print!(">> "); 
+    dump_hex(&response);
+
+    contact_requester.request(command::Data::from_slice(
+        &[0x00u8, 0x15, 0x00, 0x00],
+    ).unwrap()).expect("could not deposit command");
+
+    apdu_dispatch.poll(&mut[&mut app1]);
+
+    let response = contact_requester.take_response().unwrap();
+
+    print!(">> "); 
+    dump_hex(&response);
+
+    let payload: [u8; 4] = [response[0], response[1], response[2], response[3], ];
+    let min_stack = u32::from_be_bytes(payload);
+    let max_stack = (&response as *const iso7816::response::Data) as u32;
+
+    println!("Burden: {} bytes", max_stack - min_stack);
+
+    assert!(false);
+
 }
