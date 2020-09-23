@@ -153,7 +153,7 @@ impl<UP: UserPresence> applet::Aid for Fido<UP> {
 impl<UP: UserPresence> applet::Applet for Fido<UP> {
 
 
-    fn select(&mut self, _apdu: Command) -> applet::Result {
+    fn select(&mut self, _apdu: &Command) -> applet::Result {
         // U2F_V2
         Ok(applet::Response::Respond(ByteBuf::from_slice(
             & [0x55, 0x32, 0x46, 0x5f, 0x56, 0x32,]
@@ -162,7 +162,7 @@ impl<UP: UserPresence> applet::Applet for Fido<UP> {
 
     fn deselect(&mut self) {}
 
-    fn call(&mut self, apdu: Command) -> applet::Result {
+    fn call(&mut self, apdu: &Command) -> applet::Result {
         let instruction = apdu.instruction();
 
         match instruction {
@@ -171,12 +171,12 @@ impl<UP: UserPresence> applet::Applet for Fido<UP> {
                     Ok(FidoCommand::Cbor) => {
                         match parse_cbor(apdu.data()) {
                             Ok(request) => {
-                                info!("handled cbor").ok();
+                                info!("parsed cbor").ok();
                                 self.call_authenticator(&request)
                             }
                             Err(mapping_error) => {
                                 let authenticator_error: AuthenticatorError = mapping_error.into();
-                                info!("cbor mapping error").ok();
+                                info!("cbor mapping error: {}", authenticator_error as u8).ok();
                                 Ok(applet::Response::Respond(ByteBuf::from_slice(
                                    & [authenticator_error as u8]
                                 ).unwrap()))
@@ -184,7 +184,11 @@ impl<UP: UserPresence> applet::Applet for Fido<UP> {
                         }
                     }
                     Ok(FidoCommand::Msg) => {
-                        self.call_authenticator_u2f(&apdu)
+                        self.call_authenticator_u2f(apdu)
+                    }
+                    Ok(FidoCommand::Deselect) => {
+                        self.deselect();
+                        Ok(applet::Response::Respond(Default::default()))
                     }
                     _ => {
                         info!("Unsupported ins for fido app {}", ins.hex()).ok();
@@ -213,6 +217,8 @@ impl<UP: UserPresence> hid::App for Fido<UP> {
         if message.len() < 1 {
             return Err(hid::Error::InvalidLength);
         }
+        // blocking::info!("request: ").ok();
+        // blocking::dump_hex(message, message.len()).ok();
         match command {
             hid::Command::Cbor => {
                 match parse_cbor(message) {
@@ -222,6 +228,8 @@ impl<UP: UserPresence> hid::App for Fido<UP> {
                             Ok(applet::Response::Respond(buffer)) => {
                                 message.clear();
                                 message.extend_from_slice(buffer).ok();
+                                // blocking::info!("response: ").ok();
+                                // blocking::dump_hex(message, message.len()).ok();
                                 Ok(())
                             }
                             _ => {

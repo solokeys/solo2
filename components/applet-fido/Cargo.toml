@@ -19,8 +19,6 @@ interchange= { path = "../interchange" }
 ctap-types = { path = "../ctap-types" }
 logging = { path = "../logging" }
 
-usbd-ctaphid = { path = "../usbd-ctaphid" }
-
 [features]
 default = []
 

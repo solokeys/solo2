@@ -936,7 +936,7 @@ impl applet::Aid for App {
 
 
 impl applet::Applet for App {
-    fn select(&mut self, _apdu: Command) -> applet::Result {
+    fn select(&mut self, _apdu: &Command) -> applet::Result {
         let mut der: Der<consts::U256> = Default::default();
         der.nested(0x61, |der| {
             // Application identifier of application:
@@ -956,8 +956,8 @@ impl applet::Applet for App {
 
     fn deselect(&mut self) {}
 
-    fn call(&mut self, apdu: Command) -> applet::Result {
-        match self.try_handle(&apdu) {
+    fn call(&mut self, apdu: &Command) -> applet::Result {
+        match self.try_handle(apdu) {
             Ok(data) => {
                 Ok(applet::Response::Respond(data))
             }

@@ -43,6 +43,11 @@ impl Chain {
     pub fn last_or_only(&self) -> bool {
         *self == Chain::LastOrOnly
     }
+
+    #[inline]
+    pub fn not_the_last(&self) -> bool {
+        *self == Chain::NotTheLast
+    }
 }
 
 impl Class {

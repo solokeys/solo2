@@ -17,6 +17,9 @@ pub enum Command {
     Cancel,
     KeepAlive,
 
+    // ISO7816 only commands
+    Deselect,
+
     // vendor-assigned range from 0x40 to 0x7f
     Vendor(VendorCommand),
 }
@@ -40,6 +43,7 @@ impl TryFrom<u8> for Command {
             0x04 => Ok(Command::Lock),
             0x10 => Ok(Command::Cbor),
             0x11 => Ok(Command::Cancel),
+            0x12 => Ok(Command::Deselect),
             0x3b => Ok(Command::KeepAlive),
             code => Ok(Command::Vendor(VendorCommand::try_from(code)?)),
         }
@@ -146,6 +150,7 @@ impl Into<u8> for Command {
             Command::Lock => 0x04,
             Command::Cbor => 0x10,
             Command::Cancel => 0x11,
+            Command::Deselect => 0x12,
             Command::KeepAlive => 0x3b,
             Command::Vendor(command) => command as u8,
         }
