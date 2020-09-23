@@ -716,19 +716,40 @@ impl<B: Board> ServiceResources<B> {
             },
 
             Request::RequestUserConsent(request) => {
-                use crate::types::consent::*;
-                if request.timeout_seconds.is_some() {
-                    let result = Err(Error::TimeoutNotImplemented);
-                    return Ok(Reply::RequestUserConsent(reply::RequestUserConsent { result } ))
-                }
-                assert_eq!(request.level, Level::Normal);
+                assert_eq!(request.level, consent::Level::Normal);
 
-                let ui = self.board.user_interface();
+                let starttime = self.board.uptime().uptime();
+                let timeout = core::time::Duration::from_millis(request.timeout_milliseconds as u64);
 
-                ui.set_status(Status::WaitingForUserPresence);
-                while ui.check_user_presence() == UserPresenceIndication::None {
+                self.board.user_interface().set_status(ui::Status::WaitingForUserPresence);
+                loop {
+                    let nowtime = self.board.uptime().uptime();
+                    if (nowtime - starttime) > timeout {
+                        let result = Err(consent::Error::TimedOut);
+                        return Ok(Reply::RequestUserConsent(reply::RequestUserConsent { result } ));
+                    }
+                    let up = self.board.user_interface().check_user_presence();
+                    match request.level {
+                        // If Normal level consent is request, then both Strong and Normal
+                        // indications will result in success.
+                        consent::Level::Normal => {
+                            if up == consent::Level::Normal || 
+                                up == consent::Level::Strong {
+                                    break;
+                                }
+                        },
+                        // Otherwise, only strong level indication will work.
+                        consent::Level::Strong => {
+                            if up == consent::Level::Strong {
+                                break;
+                            }
+                        }
+                        _ => {
+                            break;
+                        }
+                    }
                 }
-                ui.set_status(Status::Idle);
+                self.board.user_interface().set_status(ui::Status::Idle);
 
                 let result = Ok(());
                 Ok(Reply::RequestUserConsent(reply::RequestUserConsent { result } ))
@@ -914,7 +935,7 @@ impl<B: Board> Service<B> {
     // - potentially read out button status and return "async"
     pub fn update_ui(&mut self) /* -> u32 */ {
 
-        self.resources.board.user_interface().set_status(Status::Idle);
+        self.resources.board.user_interface().set_status(ui::Status::Idle);
     }
 
     // process one request per client which has any

@@ -73,7 +73,6 @@ generate_enums! {
     // UI //
     ////////
     
-    HeartBeat: 32
     RequestUserConsent: 33
 
     ///////////
@@ -254,20 +253,9 @@ pub mod request {
           - key: ObjectHandle
           - associated_data: Message
 
-        // UI
-        HeartBeat:
-          // TODO: configurability
-          - on: bool
-          // use whatever is used elsewhere, ideally want sub and super 1Hz
-          - frequency_hertz: u32
-          - pattern: ui::VisualPattern
-
         RequestUserConsent:
           - level: consent::Level
-          // - urgency: consent::Urgency
-          // - prompt: ui::VisualPattern
-          // use whatever type is used elsewhere, typical values will be tens of seconds
-          - timeout_seconds: Option<u32>
+          - timeout_milliseconds: u32
     }
 }
 
@@ -377,8 +365,6 @@ pub mod reply {
             - wrapped_key: Message
 
         // UI
-        HeartBeat:
-
         RequestUserConsent:
             - result: consent::Result
 

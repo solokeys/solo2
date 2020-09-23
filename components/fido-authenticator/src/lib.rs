@@ -41,6 +41,7 @@ use littlefs2::path::{Path, PathBuf};
 
 pub mod credential_management;
 pub mod state;
+pub mod constants;
 
 use state::{
     MinCredentialHeap,
@@ -107,14 +108,14 @@ impl core::convert::TryFrom<i32> for SupportedAlgorithm {
 /// and return upon button press.
 /// TODO: Do we need a timeout?
 pub trait UserPresence: Copy {
-    fn user_present(self, trussed: &mut TrussedClient) -> bool;
+    fn user_present(self, trussed: &mut TrussedClient, timeout_milliseconds: u32) -> bool;
 }
 
 #[derive(Copy, Clone)]
 pub struct SilentAuthenticator {}
 
 impl UserPresence for SilentAuthenticator {
-    fn user_present(self, _: &mut TrussedClient) -> bool {
+    fn user_present(self, _: &mut TrussedClient, _:u32) -> bool {
         true
     }
 }
@@ -123,8 +124,8 @@ impl UserPresence for SilentAuthenticator {
 pub struct NonSilentAuthenticator {}
 
 impl UserPresence for NonSilentAuthenticator {
-    fn user_present(self, trussed: &mut TrussedClient) -> bool {
-        let result = syscall!(trussed.confirm_user_present(None)).result;
+    fn user_present(self, trussed: &mut TrussedClient, timeout_milliseconds: u32) -> bool {
+        let result = syscall!(trussed.confirm_user_present(timeout_milliseconds)).result;
         result.is_ok()
     }
 }
@@ -162,7 +163,7 @@ impl<UP: UserPresence> Authenticator<UP> {
         match request {
             U2fCommand::Register(reg) => {
 
-                if !self.user_present() {
+                if !self.up.user_present(&mut self.trussed, constants::U2F_UP_TIMEOUT) {
                     return Err(U2fError::ConditionsOfUseNotSatisfied);
                 }
                 // Generate a new P256 key pair.
@@ -283,7 +284,7 @@ impl<UP: UserPresence> Authenticator<UP> {
                         };
                     },
                     ctap1::ControlByte::EnforceUserPresenceAndSign => {
-                        if !self.user_present() {
+                        if !self.up.user_present(&mut self.trussed, constants::U2F_UP_TIMEOUT) {
                             return Err(U2fError::ConditionsOfUseNotSatisfied);
                         }
                         0x01
@@ -814,11 +815,6 @@ impl<UP: UserPresence> Authenticator<UP> {
         }
     }
 
-    fn user_present(&mut self) -> bool {
-        // TODO use a trussed call here
-        true
-    }
-
     /// Returns whether UV was performed.
     fn pin_prechecks(&mut self,
         options: &Option<ctap2::AuthenticatorOptions>,
@@ -835,7 +831,7 @@ impl<UP: UserPresence> Authenticator<UP> {
         // wants to enforce PIN and needs to figure out which authnrs support PIN
         if let Some(pin_auth) = pin_auth.as_ref() {
             if pin_auth.len() == 0 {
-                if !self.up.user_present(&mut self.trussed) {
+                if !self.up.user_present(&mut self.trussed, constants::FIDO2_UP_TIMEOUT) {
                     return Err(Error::OperationDenied);
                 }
                 if !self.state.persistent.pin_is_set() {
@@ -1272,7 +1268,7 @@ impl<UP: UserPresence> Authenticator<UP> {
 
         // 8. collect user presence
         let up_performed = if do_up {
-            if self.user_present() {
+            if self.up.user_present(&mut self.trussed, constants::FIDO2_UP_TIMEOUT) {
                 true
             } else {
                 return Err(Error::OperationDenied);
@@ -1305,19 +1301,20 @@ impl<UP: UserPresence> Authenticator<UP> {
         -> Result<ctap2::get_assertion::Response>
     {
         let data = self.state.runtime.active_get_assertion.clone().unwrap();
+        let rp_id_hash = ByteBuf::from_slice(&data.rp_id_hash).unwrap();
 
         // 9./10. sign clientDataHash || authData with "first" credential
 
         // blocking::info!("signing with credential {:?}", &credential).ok();
         let kek = self.state.persistent.key_encryption_key(&mut self.trussed)?;
-        let credential_id = credential.id(&mut self.trussed, &kek)?;
+        let credential_id = credential.id_using_hash(&mut self.trussed, &kek, &rp_id_hash)?;
 
         use ctap2::AuthenticatorDataFlags as Flags;
 
         let sig_count = self.state.persistent.timestamp(&mut self.trussed)?;
 
         let authenticator_data = ctap2::get_assertion::AuthenticatorData {
-            rp_id_hash: ByteBuf::from_slice(&data.rp_id_hash).unwrap(),
+            rp_id_hash: rp_id_hash,
 
             flags: {
                 let mut flags = Flags::EMPTY;
@@ -1588,7 +1585,7 @@ impl<UP: UserPresence> Authenticator<UP> {
                 let result = Credential::try_from(self, &rp_id_hash, descriptor);
                 if result.is_ok() {
                     info!("Excluded!").ok();
-                    if self.user_present() {
+                    if self.up.user_present(&mut self.trussed, constants::FIDO2_UP_TIMEOUT) {
                         return Err(Error::CredentialExcluded);
                     } else {
                         return Err(Error::OperationDenied);
@@ -1694,7 +1691,7 @@ impl<UP: UserPresence> Authenticator<UP> {
         // debug!("hmac-secret = {:?}, credProtect = {:?}", hmac_secret_requested, cred_protect_requested).ok();
 
         // 10. get UP, if denied error OperationDenied
-        if !self.up.user_present(&mut self.trussed) {
+        if !self.up.user_present(&mut self.trussed, constants::FIDO2_UP_TIMEOUT) {
             return Err(Error::OperationDenied);
         }
 
@@ -1820,7 +1817,7 @@ impl<UP: UserPresence> Authenticator<UP> {
             rp_id_hash: rp_id_hash.try_to_byte_buf().map_err(|_| Error::Other)?,
 
             flags: {
-                let mut flags = Flags::EMPTY;
+                let mut flags = Flags::USER_PRESENCE;
                 if uv_performed {
                     flags |= Flags::USER_VERIFIED;
                 }
@@ -2008,7 +2005,7 @@ impl<UP: UserPresence> Authenticator<UP> {
         let mut versions = Vec::<String<consts::U12>, consts::U3>::new();
         versions.push(String::from_str("U2F_V2").unwrap()).unwrap();
         versions.push(String::from_str("FIDO_2_0").unwrap()).unwrap();
-        #[cfg(not(feature = "disable-fido-pre"))]
+        #[cfg(feature = "enable-fido-pre")]
         versions.push(String::from_str("FIDO_2_1_PRE").unwrap()).unwrap();
 
         let mut extensions = Vec::<String<consts::U11>, consts::U4>::new();

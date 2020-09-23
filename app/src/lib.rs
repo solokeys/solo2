@@ -44,6 +44,7 @@ use fm11nc08::{
 };
 use hal::drivers::timer::Lap;
 use hal::traits::wg::timer::Cancel;
+use trussed::board::UserInterface;
 
 //
 // Board Initialization
@@ -82,8 +83,12 @@ fn configure_fm11_if_needed(
         return Err(());
     }
 
-    if  current_regu_config != REGU_CONFIG {
-    // if true {
+    #[cfg(not(feature = "reconfig"))]
+    let reconfig = current_regu_config != REGU_CONFIG;
+    #[cfg(feature = "reconfig")]
+    let reconfig = true;
+
+    if reconfig {
         logger::info!("{}", fm.dump_eeprom() ).ok();
         logger::info!("{}", fm.dump_registers() ).ok();
 
@@ -200,6 +205,42 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     let mut perf_timer = Timer::new(hal.ctimer.4.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap()));
     perf_timer.start(60_000.ms());
 
+
+    let (contactless_requester, contactless_responder) = apdu_dispatch::types::ContactlessInterchange::claim(0)
+        .expect("could not setup iso14443 ApduInterchange");
+    let mut iso14443 = {
+        let token = clocks.support_flexcomm_token().unwrap();
+        let spi = hal.flexcomm.0.enabled_as_spi(&mut syscon, &token);
+        let sck = types::NfcSckPin::take().unwrap().into_spi0_sck_pin(&mut iocon);
+        let mosi = types::NfcMosiPin::take().unwrap().into_spi0_mosi_pin(&mut iocon);
+        let miso = types::NfcMisoPin::take().unwrap().into_spi0_miso_pin(&mut iocon);
+        let spi_mode = hal::traits::wg::spi::Mode {
+            polarity: hal::traits::wg::spi::Polarity::IdleLow,
+            phase: hal::traits::wg::spi::Phase::CaptureOnSecondTransition,
+        };
+        let spi = SpiMaster::new(spi, (sck, mosi, miso, hal::typestates::pin::flexcomm::NoCs), 2.mhz(), spi_mode);
+
+        // Start unselected.
+        let nfc_cs = types::NfcCsPin::take().unwrap().into_gpio_pin(&mut iocon, &mut gpio).into_output_high();
+
+
+        // Set up external interrupt for NFC IRQ
+        let mut mux = hal.inputmux.enabled(&mut syscon);
+        let mut pint = hal.pint.enabled(&mut syscon);
+        pint.enable_interrupt(&mut mux, &nfc_irq, hal::peripherals::pint::Slot::Slot0, hal::peripherals::pint::Mode::ActiveLow);
+        mux.disabled(&mut syscon);
+
+        let mut fm = FM11NC08::new(spi, nfc_cs, nfc_irq).enabled();
+        if configure_fm11_if_needed(&mut fm, &mut delay_timer).is_ok() {
+            Some(iso14443::Iso14443::new(fm, contactless_requester))
+        } else {
+            if is_passive_mode {
+                logger::info!("Shouldn't get passive signal when there's no chip!").ok();
+            }
+            None
+        }
+    };
+
     #[cfg(feature = "board-lpcxpresso")]
     let rgb = board::led::RgbLed::new(
         board::led::RedLedPin::take().unwrap(),
@@ -217,11 +258,12 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         Pwm::new(hal.ctimer.3.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap())),
         &mut iocon,
     );
-
+    if let Some(iso14443) = &mut iso14443 { iso14443.poll(); }
     if is_passive_mode {
         // Give a small delay to charge up capacitors
-        delay_timer.start(4.ms()); nb::block!(delay_timer.wait()).ok();
+        delay_timer.start(5.ms()); nb::block!(delay_timer.wait()).ok();
     }
+    if let Some(iso14443) = &mut iso14443 { iso14443.poll(); }
 
     let usb0_vbus_pin = pins::Pio0_22::take().unwrap()
         .into_usb0_vbus_pin(&mut iocon);
@@ -231,7 +273,12 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     use littlefs2::fs::{Allocation, Filesystem};
 
     let flash = hal::drivers::flash::FlashGordon::new(hal.flash.enabled(&mut syscon));
-
+    // temporarily increase clock for the storage mounting or else it takes a long time.
+    if is_passive_mode {
+        clocks = unsafe { hal::ClockRequirements::default()
+            .system_frequency(48.mhz())
+            .reconfigure(clocks, &mut pmc, &mut syscon) };
+    }
     static mut INTERNAL_STORAGE: Option<FlashGordon> = None;
     unsafe { INTERNAL_STORAGE = Some(flash); }
     static mut INTERNAL_FS_ALLOC: Option<Allocation<FlashGordon>> = None;
@@ -245,14 +292,10 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     static mut VOLATILE_FS_ALLOC: Option<Allocation<VolatileStorage>> = None;
     unsafe { VOLATILE_FS_ALLOC = Some(Filesystem::allocate()); }
 
-    // temporarily increase clock for the storage mounting or else it takes a long time.
-    if is_passive_mode {
-        clocks = unsafe { hal::ClockRequirements::default()
-            .system_frequency(48.mhz())
-            .reconfigure(clocks, &mut pmc, &mut syscon) };
-    }
+
     let store = Store::claim().unwrap();
 
+    if let Some(iso14443) = &mut iso14443 { iso14443.poll(); }
 
     let result = store.mount(
         unsafe { INTERNAL_FS_ALLOC.as_mut().unwrap() },
@@ -290,6 +333,8 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         // rgb.red(30);
     }
 
+    if let Some(iso14443) = &mut iso14443 { iso14443.poll(); }
+
     let (fido_trussed_requester, fido_trussed_responder) = trussed::pipe::TrussedInterchange::claim(0)
         .expect("could not setup FIDO TrussedInterchange");
     let mut fido_client_id = littlefs2::path::PathBuf::new();
@@ -297,9 +342,6 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
     let (contact_requester, contact_responder) = apdu_dispatch::types::ContactInterchange::claim(0)
         .expect("could not setup ccid ApduInterchange");
-
-    let (contactless_requester, contactless_responder) = apdu_dispatch::types::ContactlessInterchange::claim(0)
-        .expect("could not setup iso14443 ApduInterchange");
 
     let (hid_requester, hid_responder) = hid_dispatch::types::HidInterchange::claim(0)
         .expect("could not setup HidInterchange");
@@ -309,71 +351,42 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
     let usb_classes =
     {
-        let mut usbd = hal.usbhs.enabled_as_device(
-            &mut anactrl,
-            &mut pmc,
-            &mut syscon,
-            &mut delay_timer,
-            clocks.support_usbhs_token().unwrap(),
-        );
-        #[cfg(not(feature = "highspeed"))]
-        usbd.disable_high_speed();
-        let _: EnabledUsbPeripheral = usbd;
+        if !is_passive_mode {
+            let mut usbd = hal.usbhs.enabled_as_device(
+                &mut anactrl,
+                &mut pmc,
+                &mut syscon,
+                &mut delay_timer,
+                clocks.support_usbhs_token().unwrap(),
+            );
+            #[cfg(not(feature = "highspeed"))]
+            usbd.disable_high_speed();
+            let _: EnabledUsbPeripheral = usbd;
 
-        // ugh, what's the nice way?
-        static mut USB_BUS: Option<usb_device::bus::UsbBusAllocator<UsbBus<EnabledUsbPeripheral>>> = None;
-        unsafe { USB_BUS = Some(hal::drivers::UsbBus::new(usbd, usb0_vbus_pin)); }
-        let usb_bus = unsafe { USB_BUS.as_ref().unwrap() };
+            // ugh, what's the nice way?
+            static mut USB_BUS: Option<usb_device::bus::UsbBusAllocator<UsbBus<EnabledUsbPeripheral>>> = None;
+            unsafe { USB_BUS = Some(hal::drivers::UsbBus::new(usbd, usb0_vbus_pin)); }
+            let usb_bus = unsafe { USB_BUS.as_ref().unwrap() };
 
-        // our USB classes (must be allocated in order that they're passed in `.poll(...)` later!)
-        let ccid = Ccid::new(usb_bus, contact_requester);
-        let ctaphid = CtapHid::new(usb_bus, hid_requester, perf_timer.lap().0/1000)
-                        .implements_ctap1()
-                        .implements_ctap2()
-                        .implements_wink();
-        let serial = usbd_serial::SerialPort::new(usb_bus);
+            // our USB classes (must be allocated in order that they're passed in `.poll(...)` later!)
+            let ccid = Ccid::new(usb_bus, contact_requester);
+            let ctaphid = CtapHid::new(usb_bus, hid_requester, perf_timer.lap().0/1000)
+                            .implements_ctap1()
+                            .implements_ctap2()
+                            .implements_wink();
+            let serial = usbd_serial::SerialPort::new(usb_bus);
 
-        // our composite USB device
-        let usbd = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0x1209, 0xbeee))
-            .manufacturer("SoloKeys")
-            .product("Solo 🐝")
-            .serial_number("20/20")
-            .device_release(0x0001)
-            .max_packet_size_0(64)
-            .build();
+            // our composite USB device
+            let usbd = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0x1209, 0xbeee))
+                .manufacturer("SoloKeys")
+                .product("Solo B")
+                .serial_number("20/20")
+                .device_release(0x0001)
+                .max_packet_size_0(64)
+                .build();
 
-        Some(types::UsbClasses::new(usbd, ccid, ctaphid, serial))
-    };
-
-    let iso14443 = {
-        let token = clocks.support_flexcomm_token().unwrap();
-        let spi = hal.flexcomm.0.enabled_as_spi(&mut syscon, &token);
-        let sck = types::NfcSckPin::take().unwrap().into_spi0_sck_pin(&mut iocon);
-        let mosi = types::NfcMosiPin::take().unwrap().into_spi0_mosi_pin(&mut iocon);
-        let miso = types::NfcMisoPin::take().unwrap().into_spi0_miso_pin(&mut iocon);
-        let spi_mode = hal::traits::wg::spi::Mode {
-            polarity: hal::traits::wg::spi::Polarity::IdleLow,
-            phase: hal::traits::wg::spi::Phase::CaptureOnSecondTransition,
-        };
-        let spi = SpiMaster::new(spi, (sck, mosi, miso, hal::typestates::pin::flexcomm::NoCs), 2.mhz(), spi_mode);
-
-        // Start unselected.
-        let nfc_cs = types::NfcCsPin::take().unwrap().into_gpio_pin(&mut iocon, &mut gpio).into_output_high();
-
-
-        // Set up external interrupt for NFC IRQ
-        let mut mux = hal.inputmux.enabled(&mut syscon);
-        let mut pint = hal.pint.enabled(&mut syscon);
-        pint.enable_interrupt(&mut mux, &nfc_irq, hal::peripherals::pint::Slot::Slot0, hal::peripherals::pint::Mode::ActiveLow);
-        mux.disabled(&mut syscon);
-
-        let mut fm = FM11NC08::new(spi, nfc_cs, nfc_irq).enabled();
-        if configure_fm11_if_needed(&mut fm, &mut delay_timer).is_ok() {
-            Some(iso14443::Iso14443::new(fm, contactless_requester))
+            Some(types::UsbClasses::new(usbd, ccid, ctaphid, serial))
         } else {
-            if is_passive_mode {
-                logger::info!("Shouldn't get passive signal when there's no chip!").ok();
-            }
             None
         }
     };
@@ -382,15 +395,16 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     rtc.reset();
 
     let (clock_controller, three_buttons) = if is_passive_mode {
-        let signal_pin = types::SignalPin::take().unwrap().into_gpio_pin(&mut iocon, &mut gpio).into_output_low();
-        let mut clock_controller = clock_controller::DynamicClockController::new(adc, signal_pin, clocks, pmc, syscon);
+        let mut clock_controller = clock_controller::DynamicClockController::new(adc,
+                types::SignalPin::take().unwrap().into_gpio_pin(&mut iocon, &mut gpio).into_output_high(),
+            clocks, pmc, syscon);
         clock_controller.start_high_voltage_compare();
         (Some(clock_controller), None)
     } else {
         #[cfg(feature = "board-lpcxpresso")]
         let three_buttons = board::button::ThreeButtons::new(
             Timer::new(hal.ctimer.1.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap())),
-            board::button::UserButtonPin::take().unwrap().into_gpio_pin(&mut iocon, &mut gpio).into_input(),
+            boar::button::UserButtonPin::take().unwrap().into_gpio_pin(&mut iocon, &mut gpio).into_input(),
             board::button::WakeupButtonPin::take().unwrap().into_gpio_pin(&mut iocon, &mut gpio).into_input(),
         );
 
@@ -420,7 +434,9 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         Some(rgb)
     };
 
-    let solobee_interface = solo_trussed::UserInterface::new(three_buttons, rgb);
+    let mut solobee_interface = solo_trussed::UserInterface::new(None, rgb);
+    solobee_interface.set_status(trussed::board::ui::Status::Idle);
+
     let solobee_uptime = solo_trussed::UpTime::new(rtc);
 
     let board = Board::new(rng, store, solobee_uptime, solobee_interface);
@@ -476,19 +492,18 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     )
 }
 
-//
 // Logging
-//
-
-// For some reason, NFC prio #7 maps to 2..
 use logging::{funnel,Drain};
 use rtic::Mutex;
 funnel!(NVIC_PRIO_BITS = hal::raw::NVIC_PRIO_BITS, {
-    0: 2048,
-    1: 1024,
-    2: 5112,
-    3: 512,
-    4: 512,
+    // These are not the actual priorities, but the ranking of priorities.
+    // E.g. (lowest prio, 2nd lowest prio, etc).
+    0: 1024,    // Idle
+    1: 512,     // Ui update
+    2: 1024,    // Trussed
+    3: 512,     // USB
+    4: 4096,    // NFC
+    5: 128,     // Clock controller
 });
 
 pub fn drain_log_to_serial(mut serial: impl Mutex<T = types::SerialClass>) {

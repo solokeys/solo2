@@ -16,6 +16,7 @@ use logging::info;
 // pub type DynamicClockController = Adc<hal::typestates::init_state::Enabled>;
 pub struct DynamicClockController {
     adc: hal::raw::ADC0,
+    #[allow(dead_code)]
     signal_button: types::SignalButton,
     clocks: Clocks,
     pmc: Pmc,
@@ -99,6 +100,7 @@ impl DynamicClockController {
     }
 
     fn decrease_clock(&mut self,){
+        #[cfg(feature = "enable-clock-controller-signal-pin")]
         self.signal_button.set_low().ok();
 
         let requirements = hal::ClockRequirements::default()
@@ -108,6 +110,7 @@ impl DynamicClockController {
     }
 
     fn increase_clock(&mut self,){
+        #[cfg(feature = "enable-clock-controller-signal-pin")]
         self.signal_button.set_high().ok();
 
         let requirements = hal::ClockRequirements::default()
@@ -155,18 +158,22 @@ impl DynamicClockController {
 
         self.adc.ctrl.modify(|_,w| { w.rstfifo0().set_bit().rstfifo1().set_bit() });
         // info!("handle ADC: {}. status: {}", sample, self.adc.stat.read().bits()).ok();
-        if sample < ADC_VOLTAGE_HIGH {
-            // info!("Voltage is high.  increase clock rate!");
-            self.increase_clock();
-            self.start_low_voltage_compare();
-        } else if sample > ADC_VOLTAGE_LOW {
-            // info!("Voltage is low.  Lower clock rate!");
-            self.decrease_clock();
-            self.start_high_voltage_compare();
-        } else {
-            // info!("Voltage is center: {}. Increase clock rate and watch closely!", sample);
-            self.increase_clock();
-            self.start_low_voltage_compare();
+        #[cfg(not(feature = "no-clock-controller"))]
+        {
+
+            if sample < ADC_VOLTAGE_HIGH {
+                // info!("Voltage is high.  increase clock rate!");
+                self.increase_clock();
+                self.start_low_voltage_compare();
+            } else if sample > ADC_VOLTAGE_LOW {
+                // info!("Voltage is low.  Lower clock rate!");
+                self.decrease_clock();
+                self.start_high_voltage_compare();
+            } else {
+                // info!("Voltage is center: {}. Increase clock rate and watch closely!", sample);
+                self.increase_clock();
+                self.start_low_voltage_compare();
+            }
         }
     }
 }

@@ -20,7 +20,6 @@ const PERIOD: u32 = CLOCK_FREQ/2;
 // use logging::hex::*;
 logging::add!(logger);
 use logger::{info,};
-
 #[rtic::app(device = app::hal::raw, peripherals = true, monotonic = rtic::cyccnt::CYCCNT)]
 const APP: () = {
 
@@ -164,13 +163,13 @@ const APP: () = {
         }
     }
 
-    #[task(binds = USB1_NEEDCLK, resources = [usb_classes], priority=8)]
+    #[task(binds = USB1_NEEDCLK, resources = [usb_classes], priority=6)]
     fn usb1_needclk(c: usb1_needclk::Context) {
         let usb_classes = c.resources.usb_classes.as_mut().unwrap();
         usb_classes.usbd.poll(&mut [&mut usb_classes.ccid, &mut usb_classes.ctaphid, &mut usb_classes.serial]);
     }
 
-    #[task(binds = USB1, resources = [usb_classes], priority=8)]
+    #[task(binds = USB1, resources = [usb_classes], priority=6)]
     fn usb1(c: usb1::Context) {
         let usb = unsafe { hal::raw::Peripherals::steal().USB1 } ;
         let before = Instant::now();
@@ -206,7 +205,7 @@ const APP: () = {
 
     }
 
-    #[task(binds = OS_EVENT, resources = [trussed], priority = 7)]
+    #[task(binds = OS_EVENT, resources = [trussed], priority = 5)]
     fn os_event(c: os_event::Context) {
         c.resources.trussed.process();
     }

@@ -1,29 +1,16 @@
 pub use embedded_hal::blocking::rng::Read as RngRead;
 pub use crate::store::Store;
+pub use crate::types::ui;
+pub use crate::types::consent;
 
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum UserPresenceIndication {
-    Strong,
-    Light,
-    None,
-    CantTell,
-}
-
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum Status {
-    Idle,
-    WaitingForUserPresence,
-    Processing,
-    Error,
-}
 
 pub trait UserInterface {
     /// Check if the user has indicated their presence so as to give
     /// consent to an action.
-    fn check_user_presence(&mut self) -> UserPresenceIndication;
+    fn check_user_presence(&mut self) -> consent::Level;
 
     /// Set the state of Trussed to give potential feedback to the user.
-    fn set_status(&mut self, status: Status);
+    fn set_status(&mut self, status: ui::Status);
 }
 
 pub trait UpTime {

@@ -1,6 +1,6 @@
 use core::cmp::Ordering;
 
-use crate::logger::{blocking};
+use crate::logger::{blocking, info};
 
 use trussed::{
     block, syscall,
@@ -252,11 +252,11 @@ impl PersistentState {
         if !self.initialised {
             match Self::load(trussed) {
                 Ok(previous_self) => {
-                    blocking::info!("loaded previous state!").ok();
+                    info!("loaded previous state!").ok();
                     *self = previous_self
                 },
                 Err(err) => {
-                    blocking::info!("error with previous state! {:?}", err).ok();
+                    info!("error with previous state! {:?}", err).ok();
                 }
             }
             self.initialised = true;
