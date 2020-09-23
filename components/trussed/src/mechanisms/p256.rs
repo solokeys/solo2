@@ -269,10 +269,13 @@ Sign<B> for super::P256
     {
         let key_id = request.key.object_id;
 
-        // blocking::info!("loading keypair");
-        let keypair = load_keypair(resources, &key_id)?;
+        let seed: [u8; 32] = resources
+            .load_key(KeyType::Secret, Some(KeyKind::P256), &key_id)?
+            .value.as_slice()
+            .try_into()
+            .map_err(|_| Error::InternalError)?;
 
-        let native_signature = keypair.sign(&request.message);
+        let native_signature = nisty::SecretKey::sign_with(seed, &request.message);
 
         let our_signature = match request.format {
             SignatureSerialization::Asn1Der => {
