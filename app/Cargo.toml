@@ -52,10 +52,13 @@ panic-semihosting = { version = "0.5.3", features = ["jlink-quirks"] }
 littlefs2 = { git = "https://github.com/nickray/littlefs2", branch = "closures-instead-of-ub" }
 
 [features]
-default = ["board-lpcxpresso"]
+default = []
 # use this to format internal flash filesystem,
 # for instance to hard reset
 format-storage = []
+
+# Use to auto-succeed every user presence check
+no-buttons= []
 
 board-lpcxpresso = ["lpcxpresso55"]
 board-prototype = ["prototype-bee"]
@@ -64,6 +67,9 @@ log-serial = []
 
 highspeed = []
 serial = []
+reconfig = []
+no-clock-controller = []
+enable-clock-controller-signal-pin = []
 
 log-all = []
 log-none = []
@@ -78,6 +84,7 @@ log-error = []
 heapless = { git = "https://github.com/nicolas-solokeys/heapless", branch = "bytebuf" }
 ufmt = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty-enums" }
 ufmt-macros = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty-enums" }
+nisty = {git = "https://github.com/ycrypto/nisty", branch="main"}
 
 [profile.release]
 codegen-units = 1
@@ -85,3 +92,10 @@ codegen-units = 1
 opt-level = "z"
 incremental = false
 debug = true
+
+# Speed up crypto packages
+[profile.release.package.salty]
+opt-level = 2
+
+[profile.release.package.nisty]
+opt-level = 2
