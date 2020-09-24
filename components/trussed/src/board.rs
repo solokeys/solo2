@@ -11,9 +11,10 @@ pub trait UserInterface {
 
     /// Set the state of Trussed to give potential feedback to the user.
     fn set_status(&mut self, status: ui::Status);
-}
 
-pub trait UpTime {
+    /// May be called during idle periods to give the UI the opportunity to update.
+    fn refresh(&mut self);
+
     /// Return the duration since startup.
     fn uptime(&mut self) -> core::time::Duration;
 }
@@ -25,12 +26,10 @@ pub unsafe trait Board {
     type R: RngRead;
     type S: Store;
     type UI: UserInterface;
-    type UT: UpTime;
 
     fn rng(&mut self) -> &mut Self::R;
     fn store(&self) -> Self::S;
     fn user_interface(&mut self) -> &mut Self::UI;
-    fn uptime(&mut self) -> &mut Self::UT;
 }
 
 #[macro_export]
@@ -38,20 +37,18 @@ macro_rules! board { (
     $BoardName:ident,
     R: $Rng:ty,
     S: $Store:ty,
-    UT: $UpTime:ty,
     UI: $UserInterface:ty,
 ) => {
 
     pub struct $BoardName {
         rng: $Rng,
         store: $Store,
-        uptime: $UpTime,
         user_interface: $UserInterface,
     }
 
     impl $BoardName {
-        pub fn new(rng: $Rng, store: $Store, uptime: $UpTime, user_interface: $UserInterface) -> Self {
-            Self { rng, store, uptime, user_interface }
+        pub fn new(rng: $Rng, store: $Store, user_interface: $UserInterface) -> Self {
+            Self { rng, store, user_interface }
         }
     }
 
@@ -59,14 +56,9 @@ macro_rules! board { (
         type R = $Rng;
         type S = $Store;
         type UI = $UserInterface;
-        type UT = $UpTime;
 
         fn user_interface(&mut self) -> &mut Self::UI {
             &mut self.user_interface
-        }
-
-        fn uptime(&mut self) -> &mut Self::UT {
-            &mut self.uptime
         }
 
         fn rng(&mut self) -> &mut Self::R {

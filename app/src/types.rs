@@ -68,7 +68,6 @@ pub type RgbLed = crate::board::led::RgbLed;
 board!(Board,
     R: hal::peripherals::rng::Rng<hal::Enabled>,
     S: Store,
-    UT: crate::solo_trussed::UpTime,
     UI: crate::solo_trussed::UserInterface<ThreeButtons, RgbLed>,
 );
 

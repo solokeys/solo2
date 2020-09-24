@@ -434,12 +434,10 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         Some(rgb)
     };
 
-    let mut solobee_interface = solo_trussed::UserInterface::new(three_buttons, rgb);
+    let mut solobee_interface = solo_trussed::UserInterface::new(rtc, three_buttons, rgb);
     solobee_interface.set_status(trussed::board::ui::Status::Idle);
 
-    let solobee_uptime = solo_trussed::UpTime::new(rtc);
-
-    let board = Board::new(rng, store, solobee_uptime, solobee_interface);
+    let board = Board::new(rng, store, solobee_interface);
     let mut trussed = trussed::service::Service::new(board);
 
     let mut piv_client_id = littlefs2::path::PathBuf::new();

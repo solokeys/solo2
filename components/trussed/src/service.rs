@@ -718,12 +718,12 @@ impl<B: Board> ServiceResources<B> {
             Request::RequestUserConsent(request) => {
                 assert_eq!(request.level, consent::Level::Normal);
 
-                let starttime = self.board.uptime().uptime();
+                let starttime = self.board.user_interface().uptime();
                 let timeout = core::time::Duration::from_millis(request.timeout_milliseconds as u64);
 
                 self.board.user_interface().set_status(ui::Status::WaitingForUserPresence);
                 loop {
-                    let nowtime = self.board.uptime().uptime();
+                    let nowtime = self.board.user_interface().uptime();
                     if (nowtime - starttime) > timeout {
                         let result = Err(consent::Error::TimedOut);
                         return Ok(Reply::RequestUserConsent(reply::RequestUserConsent { result } ));
@@ -934,8 +934,7 @@ impl<B: Board> Service<B> {
     // - return "when" next to be called
     // - potentially read out button status and return "async"
     pub fn update_ui(&mut self) /* -> u32 */ {
-
-        self.resources.board.user_interface().set_status(ui::Status::Idle);
+        self.resources.board.user_interface().refresh();
     }
 
     // process one request per client which has any
