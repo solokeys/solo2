@@ -15,7 +15,7 @@ use hal::time::*;
 use rtic::cyccnt::{Instant, U32Ext as _};
 
 const CLOCK_FREQ: u32 = 96_000_000;
-const PERIOD: u32 = CLOCK_FREQ/2;
+const PERIOD: u32 = CLOCK_FREQ/16;
 
 // use logging::hex::*;
 logging::add!(logger);
@@ -220,7 +220,6 @@ const APP: () = {
         // c.schedule.update_ui(Instant::now() + wait_periods * PERIOD.cycles()).unwrap();
         c.schedule.update_ui(Instant::now() + PERIOD.cycles()).unwrap();
 
-        info!("updated UI #{}", *UPDATES).ok();
         *UPDATES += 1;
     }
 

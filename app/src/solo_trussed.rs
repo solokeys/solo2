@@ -9,11 +9,29 @@ use trussed::board::{
     consent,
 };
 
+// translated from https://stackoverflow.com/a/2284929/2490057
+fn sin(x: f32) -> f32
+{
+
+    let mut res = 0f32;
+    let mut pow = x;
+    let mut fact = 1f32;
+    for i in 0..5 {
+        res += pow/fact;
+        pow *= -1f32 * x * x;
+        fact *= ((2*(i+1))*(2*(i+1)+1)) as f32;
+    }
+
+    res
+}
+
+
 pub struct UserInterface<BUTTONS, RGB>
 where
 BUTTONS: Press + Edge,
 RGB: RgbLed,
 {
+    rtc: Rtc<init_state::Enabled>,
     buttons: Option<BUTTONS>,
     rgb: Option<RGB>,
 }
@@ -23,26 +41,15 @@ where
 BUTTONS: Press + Edge,
 RGB: RgbLed,
 {
-    pub fn new(buttons: Option<BUTTONS>, rgb: Option<RGB>) -> Self {
+    pub fn new(rtc: Rtc<init_state::Enabled>, buttons: Option<BUTTONS>, rgb: Option<RGB>) -> Self {
         #[cfg(not(feature = "no-buttons"))]
-        let ui = Self { buttons, rgb };
+        let ui = Self { rtc, buttons, rgb };
         #[cfg(feature = "no-buttons")]
-        let ui = Self { buttons: None, rgb };
+        let ui = Self { rtc, buttons: None, rgb };
 
         ui
     }
 }
-
-pub struct UpTime {
-    rtc: Rtc<init_state::Enabled>
-}
-
-impl UpTime {
-    pub fn new(rtc: Rtc<init_state::Enabled>) -> Self {
-        Self { rtc }
-    }
-}
-
 
 impl<BUTTONS, RGB> trussed::board::UserInterface for UserInterface<BUTTONS,RGB>
 where
@@ -99,9 +106,32 @@ RGB: RgbLed,
 
         }
     }
-}
 
-impl trussed::board::UpTime for UpTime {
+    fn refresh(&mut self) {
+        if self.rgb.is_some() && self.buttons.is_some() {
+            // 1. Get time & pick a period (here 4096).
+            // 2. Map it to a value between 0 and pi.
+            // 3. Calculate sine and map to amplitude between 0 and 255.
+            let time = (self.uptime().as_millis()) % 4096;
+            let amplitude = (sin((time as f32) * 3.14159265f32/4096f32) * 255f32) as u32;
+
+            let state = self.buttons.as_mut().unwrap().state();
+            let color = if state.a || state.b || state.middle {
+                // Use blue if button is pressed.
+                0x00_00_01 | (amplitude << 0)
+            } else {
+                // Use green if no button is pressed.
+                0x00_00_01 | (amplitude << 8)
+            };
+            // use logging::hex::*;
+            // use logging::hex;
+            // crate::logger::info!("time: {}", time).ok();
+            // crate::logger::info!("amp: {}", hex!(amplitude)).ok();
+            // crate::logger::info!("color: {}", hex!(color)).ok();
+            self.rgb.as_mut().unwrap().set(color.into());
+        }
+    }
+
     fn uptime(&mut self) -> core::time::Duration {
         self.rtc.uptime()
     }

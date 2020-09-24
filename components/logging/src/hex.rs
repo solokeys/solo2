@@ -15,7 +15,7 @@ pub trait HexRepresentation4 {
     fn hex(self) -> &'static str;
 }
 pub trait HexRepresentation8 {
-    fn as_bytes(self) -> [u8; 4];
+    fn as_bytes(self) -> [u8; 8];
     fn hex(self) -> &'static str;
 }
 
@@ -60,6 +60,31 @@ impl HexRepresentation4 for u16{
     }
     fn hex(self) -> &'static str{
         static mut MEM: [u8; 4] = [0,0,0,0];
+        unsafe{ MEM = self.as_bytes() };
+        unsafe{ core::str::from_utf8_unchecked(&MEM) }
+    }
+}
+
+impl HexRepresentation8 for u32 {
+    fn as_bytes(self) -> [u8; 8] {
+        let mut hex = [0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30];
+
+        let bottom = ((self & 0xffff) as u16).as_bytes();
+        let top = (((self & 0xffff0000)>>16) as u16).as_bytes();
+
+        hex[0] = top[0];
+        hex[1] = top[1];
+        hex[2] = top[2];
+        hex[3] = top[3];
+        hex[4] = bottom[0];
+        hex[5] = bottom[1];
+        hex[6] = bottom[2];
+        hex[7] = bottom[3];
+
+        hex
+    }
+    fn hex(self) -> &'static str{
+        static mut MEM: [u8; 8] = [0,0,0,0,0,0,0,0];
         unsafe{ MEM = self.as_bytes() };
         unsafe{ core::str::from_utf8_unchecked(&MEM) }
     }
