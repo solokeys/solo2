@@ -64,6 +64,7 @@ const APP: () = {
 
         // don't toggle LED in passive mode
         if usb_classes.is_some() {
+            hal::enable_cycle_counter();
             c.schedule.update_ui(Instant::now() + PERIOD.cycles()).unwrap();
         }
 
