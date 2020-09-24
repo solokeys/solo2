@@ -167,34 +167,44 @@ impl<UP: UserPresence> applet::Applet for Fido<UP> {
 
         match instruction {
             Instruction::Unknown(ins) => {
-                match FidoCommand::try_from(ins) {
-                    Ok(FidoCommand::Cbor) => {
-                        match parse_cbor(apdu.data()) {
-                            Ok(request) => {
-                                info!("parsed cbor").ok();
-                                self.call_authenticator(&request)
+                // TODO need to tidy up these ins codes somewhere
+                match ins {
+                    // U2F ins codes
+                    0x00 | 0x01 | 0x02 => {
+                        self.call_authenticator_u2f(apdu)
+                    }
+                    _ => {
+                        match FidoCommand::try_from(ins) {
+                            Ok(FidoCommand::Cbor) => {
+                                match parse_cbor(apdu.data()) {
+                                    Ok(request) => {
+                                        info!("parsed cbor").ok();
+                                        self.call_authenticator(&request)
+                                    }
+                                    Err(mapping_error) => {
+                                        let authenticator_error: AuthenticatorError = mapping_error.into();
+                                        info!("cbor mapping error: {}", authenticator_error as u8).ok();
+                                        Ok(applet::Response::Respond(ByteBuf::from_slice(
+                                        & [authenticator_error as u8]
+                                        ).unwrap()))
+                                    }
+                                }
                             }
-                            Err(mapping_error) => {
-                                let authenticator_error: AuthenticatorError = mapping_error.into();
-                                info!("cbor mapping error: {}", authenticator_error as u8).ok();
-                                Ok(applet::Response::Respond(ByteBuf::from_slice(
-                                   & [authenticator_error as u8]
-                                ).unwrap()))
+                            Ok(FidoCommand::Msg) => {
+                                self.call_authenticator_u2f(apdu)
+                            }
+                            Ok(FidoCommand::Deselect) => {
+                                self.deselect();
+                                Ok(applet::Response::Respond(Default::default()))
+                            }
+                            _ => {
+                                info!("Unsupported ins for fido app {}", ins.hex()).ok();
+                                Err(Status::InstructionNotSupportedOrInvalid)
                             }
                         }
                     }
-                    Ok(FidoCommand::Msg) => {
-                        self.call_authenticator_u2f(apdu)
-                    }
-                    Ok(FidoCommand::Deselect) => {
-                        self.deselect();
-                        Ok(applet::Response::Respond(Default::default()))
-                    }
-                    _ => {
-                        info!("Unsupported ins for fido app {}", ins.hex()).ok();
-                        Err(Status::InstructionNotSupportedOrInvalid)
-                    }
                 }
+
             }
             _ => {
                 info!("Unsupported ins for fido app").ok();
