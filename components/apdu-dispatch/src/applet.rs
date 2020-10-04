@@ -2,6 +2,8 @@ use iso7816::{Command, response::Data, Status};
 
 pub type Result = core::result::Result<Response, Status>;
 
+pub use crate::dispatch::InterfaceType;
+
 pub enum Response {
     Respond(Data),
     Defer,
@@ -57,7 +59,7 @@ pub trait Applet : Aid {
 
     /// Given parsed APDU for applet when selected.
     /// Write response data back to buf, and return length of payload.  Return APDU Error code on error.
-    fn call(&mut self, apdu: &Command) -> Result;
+    fn call(&mut self, interface_type: InterfaceType, apdu: &Command) -> Result;
 
     /// Called repeatedly for the selected applet.
     /// Applet could choose to defer a response in `send_recv`, and send a reply later here.

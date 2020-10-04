@@ -982,7 +982,7 @@ impl applet::Applet for App {
 
     fn deselect(&mut self) {}
 
-    fn call(&mut self, apdu: &Command) -> applet::Result {
+    fn call(&mut self, _type: applet::InterfaceType, apdu: &Command) -> applet::Result {
         match self.try_handle(apdu) {
             Ok(data) => {
                 Ok(applet::Response::Respond(data))
