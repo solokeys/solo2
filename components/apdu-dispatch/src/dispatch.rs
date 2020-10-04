@@ -21,7 +21,7 @@ use iso7816::{
     command::FromSliceError,
 };
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 pub enum InterfaceType{
     Contact,
     Contactless,
@@ -402,7 +402,7 @@ impl ApduDispatch
             let response = match &self.buffer.raw {
                 RawApduBuffer::Request(apdu) => {
                     // TODO this isn't very clear
-                    applet.call(apdu)
+                    applet.call(self.current_interface, apdu)
                 }
                 _ => panic!("Unexpected buffer state."),
             };

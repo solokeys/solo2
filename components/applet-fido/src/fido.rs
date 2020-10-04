@@ -162,7 +162,7 @@ impl<UP: UserPresence> applet::Applet for Fido<UP> {
 
     fn deselect(&mut self) {}
 
-    fn call(&mut self, apdu: &Command) -> applet::Result {
+    fn call(&mut self, _type: applet::InterfaceType, apdu: &Command) -> applet::Result {
         let instruction = apdu.instruction();
 
         match instruction {
