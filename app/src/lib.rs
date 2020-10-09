@@ -404,7 +404,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         #[cfg(feature = "board-lpcxpresso")]
         let three_buttons = board::button::ThreeButtons::new(
             Timer::new(hal.ctimer.1.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap())),
-            boar::button::UserButtonPin::take().unwrap().into_gpio_pin(&mut iocon, &mut gpio).into_input(),
+            board::button::UserButtonPin::take().unwrap().into_gpio_pin(&mut iocon, &mut gpio).into_input(),
             board::button::WakeupButtonPin::take().unwrap().into_gpio_pin(&mut iocon, &mut gpio).into_input(),
         );
 
