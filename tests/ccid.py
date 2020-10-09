@@ -21,6 +21,7 @@ PIV = NIST_RID + NIST_PIX_PIV_APP + NIST_PIX_PIV_VERSION
 
 SELECT = [0x00, 0xA4, 0x04, 0x00, len(PIV)]
 
+# [0, 164, 4, 0, 11, 160, 0, 0, 3, 8, 0, 0, 16, 0, 1, 0]
 # resp = c.transmit(SELECT + PIV + [0])
 
 LONG_ASS = [

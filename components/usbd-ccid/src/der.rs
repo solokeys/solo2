@@ -118,6 +118,14 @@ impl<N: ArrayLength<u8>> Der<N> {
         self.extend_from_slice(value)
     }
 
+    /// Write an arbitrary tag-length-value with 2-byte tag
+    /// NB: everything in ISO 7816 is big-endian
+    pub fn raw_tlv2(&mut self, tag: u16, value: &[u8]) -> Result {
+        self.extend_from_slice(&tag.to_be_bytes())?;
+        self.write_length_field(value.len())?;
+        self.extend_from_slice(value)
+    }
+
     ///// Write the given input as integer.
     /////
     ///// Assumes `input` is the big-endian representation of a non-negative `Integer`

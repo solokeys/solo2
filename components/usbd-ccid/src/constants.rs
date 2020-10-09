@@ -40,10 +40,13 @@ pub const CLOCK_FREQUENCY_KHZ: [u8; 4] = [0xfc, 0x0d, 0x00, 0x00];
 // (not relevant, fixed fixed for legacy reasonse
 // Yubico: 307200 bps, gnuk: 9600
 // pub const DATA_RATE_BPS: [u8; 4] = [0x00, 0xb0, 0x04, 0x00];
+// pub const DATA_RATE_BPS: [u8; 4] = [0x80, 0x25, 0x00, 0x00];
+// ICCD spec: "9600bps, not relevant, fixed for legacy reason"
 pub const DATA_RATE_BPS: [u8; 4] = [0x80, 0x25, 0x00, 0x00];
 // 254 (as per ICCD spec)
 // Yubico: 2038, gnuk: 254
 // pub const MAX_IFSD: [u8; 4] = [0xf6, 0x07, 0x00, 0x00];
+// ICCD spec: "For T = 1: 000000FEh"
 pub const MAX_IFSD: [u8; 4] = [0xfe, 0x00, 0x00, 0x00];
 
 // "The value shall be between 261 + 10 and 65544 + 10
@@ -62,9 +65,11 @@ pub const FUNCTIONAL_INTERFACE_DESCRIPTOR: [u8; 52] = [
     // bcdCCID rev1.10
     0x10, 0x01,
     // bMaxSlotIndex
-    NUM_SLOTS - 1,
+    // NUM_SLOTS - 1,
+    // "An USB-ICC is regarded as a single slot CCID."
+    0x00,
     // bVoltageSupport (5.0V + 3.0V + 1.8V)
-    0x07,
+    0x01,
     // dwProtocols: T=1 only (0 = T=0, 3 = T0+T1)
     0x02, 0x00, 0x00, 0x00,
 
@@ -112,7 +117,10 @@ pub const FUNCTIONAL_INTERFACE_DESCRIPTOR: [u8; 52] = [
     // Auto baud rate change
     // Auto parameter negotiation made by CCID
     // Short and extended APDU level exchange
-    0xFE, 0x00, 0x04, 0x00,
+    // 0xFE, 0x00, 0x04, 0x00,
+    // ICCD: lower word (=0840): only requests valid for USB-ICC
+    // upper word: 0000 = char level, 0002 = short APDU, 0004 = short+exteded APDU
+    0x40, 0x08, 0x04, 0x00,
 
     // dwMaxCCIDMsgLen (3072)
     // gnuk: 271
@@ -128,6 +136,7 @@ pub const FUNCTIONAL_INTERFACE_DESCRIPTOR: [u8; 52] = [
     // wlcdLayout (none)
     0x00, 0x00,
     // bPinSupport
+    // ICCD: "No PIN pad, not relevant, fixed for legacy reasons"
     PIN_SUPPORT,
     // bMaxCCIDBusySlots
     MAX_BUSY_SLOTS,

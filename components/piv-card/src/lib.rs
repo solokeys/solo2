@@ -943,6 +943,32 @@ impl applet::Applet for App {
             // -> PIX (without RID, with version)
             der.raw_tlv(0x4f, &PIV_PIX)?;
 
+            // Application label:
+            // "Text describing the application; e.g., for use on a man-machine interface."
+            der.raw_tlv(0x50, APPLICATION_LABEL)?;
+
+            // Uniform resource locator:
+            // "Reference to the specification describing the application."
+            der.raw_tlv2(0x5F50, APPLICATION_URL)?;
+
+            // Cryptographic algorithms supported:
+            // "Cryptographic algorithm identifier template. See Table 5."
+            der.nested(0xAC, |der| {
+                // 0x80: Cryptographic algorithm identifier
+                // "For values see [SP800-78, Table 6-2]"
+
+                // 0C: AES-256
+                der.raw_tlv(0x80, &[0x0C])?;
+                // 11: ECC-P256
+                der.raw_tlv(0x80, &[0x11])?;
+
+                // 22 (non-standard!): Ed25519
+                der.raw_tlv(0x80, &[0x22])?;
+
+                // mandatory "Object identifier" with value set to 0x00
+                der.raw_tlv(0x06, &[0x00])
+            })?;
+
             // Coexistent tag allocation authority
             der.nested(0x79, |der| {
                 // Application identifier

@@ -380,6 +380,24 @@ where
         let packet = DataBlock::new(
             self.seq,
             Chain::BeginsAndEnds,
+
+            // PivApplet just uses:
+            // 3B 80 80 01 01
+            //
+            // 3B 88 80 01 80 57 53 6F 6C 6F 20 42 83
+            // T=0, T=1, card issuer's data "Solo B"
+            // https://smartcard-atr.apdu.fr/parse?ATR=3B+88+80+01+80+57+53+6F+6C+6F+20+42+83
+            //
+            // T=0, T=1, command chaining/extended Lc+Le/no logical channels, card issuer's data "Solo B"
+            // 3B 8C 80 01 80 73 C0 21 C0 56 53 6F 6C 6F 20 42 D4
+            // https://smartcard-atr.apdu.fr/parse?ATR=3B+8C+80+01+80+73+C0+21+C0+56+53+6F+6C+6F+20+42+D4
+            b";\x8c\x80\x01\x80s\xc0!\xc0VSolo B\xd4"
+            //
+            // Not sure if we also need some TA/TB/TC data as in
+            // https://smartcard-atr.apdu.fr/parse?ATR=3B+F8+13+00+00+81+31+FE+15+59+75+62+69+6B+65+79+34+D4
+            // At least TB(1) is deprecated, so it makes no sense
+            // Also, there TD(1) = 0x81 and TD(2) = 0x31 both refer to protocol T=1 which seems wrong
+
             // don't remember where i got this from
             // &[0x3b, 0x8c,0x80,0x01],
             // "corrected"?
@@ -400,37 +418,37 @@ where
             // ],
             // Yubikey FIDO+CCID
             // 3b:f8:13:00:00:81:31:fe:15:59:75:62:69:6b:65:79:34:d4
-            &[
-                // TS
-                0x3b,
-                // TO = TA1, TB1, TB2, TB3 follow, 8 historical bytes
-                0xf8,
+            // &[
+            //     // TS
+            //     0x3b,
+            //     // TO = TA1, TB1, TB2, TB3 follow, 8 historical bytes
+            //     0xf8,
 
-                // TA1 = default clock (5MHz), default clock rate conversion (372)o
-                // But sets Di to 3 instead of default of 1
-                0x13,
-                // TB1 deprecated, should not transmit
-                0x00,
-                // TC1 = "extra guard time", default of 0
-                0x00,
+            //     // TA1 = default clock (5MHz), default clock rate conversion (372)o
+            //     // But sets Di to 3 instead of default of 1
+            //     0x13,
+            //     // TB1 deprecated, should not transmit
+            //     0x00,
+            //     // TC1 = "extra guard time", default of 0
+            //     0x00,
 
-                // TD1 = (Y2, T) -> follows D2, T = 1
-                0x81,
-                // TD2 = (Y2, T)
-                0x31,
-                // TA2
-                0xfe,
-                // TB2
-                0x15,
-                // T1 = first historical byte
-                0x59,
+            //     // TD1 = (Y2, T) -> follows D2, T = 1
+            //     0x81,
+            //     // TD2 = (Y2, T)
+            //     0x31,
+            //     // TA2
+            //     0xfe,
+            //     // TB2
+            //     0x15,
+            //     // T1 = first historical byte
+            //     0x59,
 
-                // "SoloBee"
-                0x53, 0x6F, 0x6C, 0x6F, 0x42, 0x65 ,0x65,
+            //     // "SoloBee"
+            //     0x53, 0x6F, 0x6C, 0x6F, 0x42, 0x65 ,0x65,
 
-                // Checksum
-                0x94,
-            ],
+            //     // Checksum
+            //     0x94,
+            // ],
             // Yubikey NEO OTP+U2F+CCID
             // 3b:fc:13:00:00:81:31:fe:15:59:75:62:69:6b:65:79:4e:45:4f:72:33:e1
         );
