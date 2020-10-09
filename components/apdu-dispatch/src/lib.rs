@@ -2,6 +2,5 @@
 
 pub mod applet;
 pub mod dispatch;
-pub mod types;
 
 logging::add!(logger);

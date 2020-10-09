@@ -2,7 +2,7 @@ use core::convert::TryFrom;
 
 use crate::logger::{blocking};
 use interchange::Requester;
-use apdu_dispatch::types::ContactInterchange;
+use iso7816::ContactInterchange;
 
 use crate::{
     constants::*,

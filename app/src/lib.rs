@@ -138,7 +138,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     perf_timer.start(60_000.ms());
 
 
-    let (contactless_requester, contactless_responder) = apdu_dispatch::types::ContactlessInterchange::claim(0)
+    let (contactless_requester, contactless_responder) = iso7816::ContactlessInterchange::claim(0)
         .expect("could not setup iso14443 ApduInterchange");
 
     let mut iso14443 = {
@@ -297,7 +297,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     let mut fido_client_id = littlefs2::path::PathBuf::new();
     fido_client_id.push(b"fido2\0".try_into().unwrap());
 
-    let (contact_requester, contact_responder) = apdu_dispatch::types::ContactInterchange::claim(0)
+    let (contact_requester, contact_responder) = iso7816::ContactInterchange::claim(0)
         .expect("could not setup ccid ApduInterchange");
 
     let (hid_requester, hid_responder) = hid_dispatch::types::HidInterchange::claim(0)

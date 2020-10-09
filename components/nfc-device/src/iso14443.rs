@@ -4,9 +4,9 @@ use heapless::ByteBuf;
 use fm11nc08::traits::{
     nfc,
 };
-use iso7816::command;
 use interchange::Requester;
-use apdu_dispatch::types::ContactlessInterchange;
+use iso7816::command;
+use iso7816::ContactlessInterchange;
 use crate::logger::{
     self,
     info,

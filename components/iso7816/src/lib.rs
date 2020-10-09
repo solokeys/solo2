@@ -16,3 +16,18 @@ pub use command::Command;
 pub use command::instruction::Instruction;
 pub use response::Response;
 pub use response::status::Status;
+
+// NB: This library is not necessarily the optimal location
+// to define these two interchanges. However, we want to avoid
+// making `apdu-dispatch` a dependency of the `usbd-ccid` and
+// `nfc-device` libraries, and here seems lightweight enough for now.
+
+#[cfg(feature = "contact-interchange")]
+interchange::interchange! {
+    ContactInterchange: (command::Data, response::Data)
+}
+
+#[cfg(feature = "contactless-interchange")]
+interchange::interchange! {
+    ContactlessInterchange: (command::Data, response::Data)
+}

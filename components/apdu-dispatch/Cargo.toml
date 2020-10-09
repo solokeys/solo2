@@ -11,7 +11,7 @@ ufmt = "0.1"
 heapless = { version = "0.5.5" }
 
 # Components
-iso7816 = { path = "../iso7816" }
+iso7816 = { path = "../iso7816", features = ["contact-interchange", "contactless-interchange"] }
 logging = {path = "../logging"}
 interchange = {path = "../interchange"}
 
