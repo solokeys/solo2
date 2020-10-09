@@ -240,8 +240,8 @@ const APP: () = {
             info!("<{}", perf_timer.lap().0/100).ok();
             let status = contactless.poll_wait_extensions();
             match status {
-                iso14443::Iso14443Status::Idle => {}
-                iso14443::Iso14443Status::ReceivedData(duration) => {
+                nfc_device::Iso14443Status::Idle => {}
+                nfc_device::Iso14443Status::ReceivedData(duration) => {
                     hw_scheduler.start(duration.subsec_millis().ms());
                 }
             }
@@ -267,8 +267,8 @@ const APP: () = {
         info!("[").ok();
         let status = contactless.poll();
         match status {
-            iso14443::Iso14443Status::Idle => {}
-            iso14443::Iso14443Status::ReceivedData(duration) => {
+            nfc_device::Iso14443Status::Idle => {}
+            nfc_device::Iso14443Status::ReceivedData(duration) => {
                 hw_scheduler.cancel().ok();
                 hw_scheduler.start(duration.subsec_millis().ms());
             }

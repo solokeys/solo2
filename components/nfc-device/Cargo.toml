@@ -1,5 +1,5 @@
 [package]
-name = "iso14443"
+name = "nfc-device"
 version = "0.0.1"
 authors = ["Conor Patrick <conor@solokeys.com>"]
 edition = "2018"
@@ -26,3 +26,6 @@ log-info = []
 log-debug = []
 log-warn = []
 log-error = []
+
+[patch.crates-io]
+heapless = { git = "https://github.com/nicolas-solokeys/heapless", branch = "bytebuf" }

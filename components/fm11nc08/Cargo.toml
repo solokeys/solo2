@@ -8,16 +8,14 @@ edition = "2018"
 
 [dependencies]
 # cortex-m-funnel = "0.1.0-alpha.1"
+bitflags = "1"
 cortex-m = "0.6.1"
 cortex-m-rt = "0.6.10"
+embedded-hal = { version = "0.2.4", features = ["unproven"] }
 nb = "1"
 ufmt = "0.1.0"
 
 logging = {path = "../logging"}
-
-[dependencies.lpc55-hal]
-git = "https://github.com/nickray/lpc55-hal"
-branch = "main"
 
 [features]
 log-all = []

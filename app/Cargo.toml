@@ -35,7 +35,7 @@ piv-card = { path = "../components/piv-card" }
 usbd-ccid = { path = "../components/usbd-ccid" }
 usbd-ctaphid = { path = "../components/usbd-ctaphid" }
 fm11nc08 = {path = "./../components/fm11nc08"}
-iso14443 = {path = "./../components/iso14443"}
+nfc-device = {path = "./../components/nfc-device"}
 apdu-dispatch = {path = "./../components/apdu-dispatch"}
 hid-dispatch = {path = "./../components/hid-dispatch"}
 applet-ndef = {path = "./../components/applet-ndef"}

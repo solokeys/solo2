@@ -95,8 +95,9 @@ pub type NfcChip = FM11NC08<
                 >,
                 Pin<NfcCsPin, state::Gpio<direction::Output>>,
                 Pin<NfcIrqPin, state::Gpio<direction::Input>>,
+                fm11nc08::device::Configured,
             >;
-pub type Iso14443 = iso14443::Iso14443<NfcChip>;
+pub type Iso14443 = nfc_device::Iso14443<NfcChip>;
 
 pub type ExternalInterrupt = hal::Pint<hal::typestates::init_state::Enabled>;
 

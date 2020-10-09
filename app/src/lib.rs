@@ -40,7 +40,7 @@ use types::{
 };
 
 use fm11nc08::{
-    FM11NC08, Configuration, Register,
+    FM11NC08, Configuration,
 };
 use hal::drivers::timer::Lap;
 use hal::traits::wg::timer::Cancel;
@@ -66,77 +66,6 @@ use usb_device::device::{UsbDeviceBuilder, UsbVidPid};
 // bring traits in scope
 use hal::prelude::*;
 use hal::traits::wg::digital::v2::InputPin;
-
-
-fn configure_fm11_if_needed(
-    fm: &mut types::NfcChip,
-    timer: &mut Timer<impl hal::peripherals::ctimer::Ctimer<hal::typestates::init_state::Enabled>>)
-    -> Result<(),()>
-    {
-    //                      no limit      2mA resistor    3.3V
-    const REGU_CONFIG: u8 = (0b11 << 4) | (0b10 << 2) | (0b11 << 0);
-    let current_regu_config = fm.read_reg(fm11nc08::Register::ReguCfg);
-
-    if current_regu_config == 0xff {
-        // No nfc chip connected
-        logger::info!("No NFC chip connected").ok();
-        return Err(());
-    }
-
-    #[cfg(not(feature = "reconfig"))]
-    let reconfig = current_regu_config != REGU_CONFIG;
-    #[cfg(feature = "reconfig")]
-    let reconfig = true;
-
-    if reconfig {
-        logger::info!("{}", fm.dump_eeprom() ).ok();
-        logger::info!("{}", fm.dump_registers() ).ok();
-
-        logger::info!("writing EEPROM").ok();
-
-        fm.configure(Configuration{
-            regu: REGU_CONFIG,
-            ataq: 0x4400,
-            sak1: 0x04,
-            sak2: 0x20,
-            tl: 0x05,
-            // (x[7:4], FSDI[3:0]) . FSDI[2] == 32 byte frame, FSDI[8] == 256 byte frame, 7==128byte
-            t0: 0x78,
-            ta: 0x91,
-            // (FWI[b4], SFGI[b4]), (256 * 16 / fc) * 2 ^ value
-            tb: 0x78,
-            tc: 0x02,
-                // enable P-on IRQ    14443-4 mode
-            nfc:    (0b0 << 1) |       (0b00 << 2),
-        }, timer);
-    } else {
-        logger::info!("EEPROM already initialized.").ok();
-    }
-
-    // disable all interrupts except RxStart
-    fm.write_reg(Register::AuxIrqMask, 0x00);
-    fm.write_reg(Register::FifoIrqMask,
-        // 0x0
-        0xff
-        ^ (1 << 3) /* water-level */
-        ^ (1 << 1) /* fifo-full */
-    );
-    fm.write_reg(Register::MainIrqMask,
-        // 0x0
-        0xff
-        ^ fm11nc08::device::Interrupt::RxStart as u8
-        ^ fm11nc08::device::Interrupt::RxDone as u8
-        ^ fm11nc08::device::Interrupt::TxDone as u8
-        ^ fm11nc08::device::Interrupt::Fifo as u8
-        ^ fm11nc08::device::Interrupt::Active as u8
-    );
-
-    //                    no limit    rrfcfg .      3.3V
-    // let regu_powered = (0b11 << 4) | (0b10 << 2) | (0b11 << 0);
-    // fm.write_reg(Register::ReguCfg, regu_powered);
-
-    Ok(())
-}
 
 // // filesystem starting at 320KB
 // // this needs to be synchronized with contents of `memory.x`
@@ -175,6 +104,9 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     let iocon = iocon.release();
     iocon.pio0_19.modify(|_,w| { w.mode().pull_up() } );
     let mut iocon = hal::Iocon::from(iocon).enabled(&mut syscon);
+
+    // "passive mode" means we are powered over NFC at startup
+    // Q: does this mean we have no USB power?
     let is_passive_mode = nfc_irq.is_low().ok().unwrap();
 
     // Start out with slow clock if in passive mode;
@@ -208,15 +140,17 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
     let (contactless_requester, contactless_responder) = apdu_dispatch::types::ContactlessInterchange::claim(0)
         .expect("could not setup iso14443 ApduInterchange");
+
     let mut iso14443 = {
         let token = clocks.support_flexcomm_token().unwrap();
         let spi = hal.flexcomm.0.enabled_as_spi(&mut syscon, &token);
         let sck = types::NfcSckPin::take().unwrap().into_spi0_sck_pin(&mut iocon);
         let mosi = types::NfcMosiPin::take().unwrap().into_spi0_mosi_pin(&mut iocon);
         let miso = types::NfcMisoPin::take().unwrap().into_spi0_miso_pin(&mut iocon);
-        let spi_mode = hal::traits::wg::spi::Mode {
-            polarity: hal::traits::wg::spi::Polarity::IdleLow,
-            phase: hal::traits::wg::spi::Phase::CaptureOnSecondTransition,
+        use hal::traits::wg;
+        let spi_mode = wg::spi::Mode {
+            polarity: wg::spi::Polarity::IdleLow,
+            phase: wg::spi::Phase::CaptureOnSecondTransition,
         };
         let spi = SpiMaster::new(spi, (sck, mosi, miso, hal::typestates::pin::flexcomm::NoCs), 2.mhz(), spi_mode);
 
@@ -230,14 +164,37 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         pint.enable_interrupt(&mut mux, &nfc_irq, hal::peripherals::pint::Slot::Slot0, hal::peripherals::pint::Mode::ActiveLow);
         mux.disabled(&mut syscon);
 
-        let mut fm = FM11NC08::new(spi, nfc_cs, nfc_irq).enabled();
-        if configure_fm11_if_needed(&mut fm, &mut delay_timer).is_ok() {
-            Some(iso14443::Iso14443::new(fm, contactless_requester))
-        } else {
-            if is_passive_mode {
-                logger::info!("Shouldn't get passive signal when there's no chip!").ok();
+        let nfc_chip = FM11NC08::new(spi, nfc_cs, nfc_irq);
+
+        let configuration = Configuration {
+                // no limit     2mA resistor       3.3V
+            regu: (0b11 << 4) | (0b10 << 2) | (0b11 << 0),
+            ataq: 0x4400,
+            sak1: 0x04,
+            sak2: 0x20,
+            tl: 0x05,
+            // (x[7:4], FSDI[3:0]) . FSDI[2] == 32 byte frame, FSDI[8] == 256 byte frame, 7==128byte
+            t0: 0x78,
+            ta: 0x91,
+            // (FWI[b4], SFGI[b4]), (256 * 16 / fc) * 2 ^ value
+            tb: 0x78,
+            tc: 0x02,
+                // enable P-on IRQ    14443-4 mode
+            nfc:    (0b0 << 1) |       (0b00 << 2),
+        };
+
+        let force_reconfiguration = cfg!(feature = "reconfig");
+        match nfc_chip.configure(configuration, force_reconfiguration, &mut delay_timer, 10.ms().into()) {
+            Some(configured_nfc_chip) => {
+                Some(nfc_device::Iso14443::new(configured_nfc_chip, contactless_requester))
             }
-            None
+            None => {
+                logger::info!("No NFC chip connected").ok();
+                if is_passive_mode {
+                    logger::info!("Shouldn't get passive signal when there's no chip!").ok();
+                }
+                None
+            }
         }
     };
 
@@ -379,7 +336,11 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
             // our composite USB device
             let usbd = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0x1209, 0xbeee))
                 .manufacturer("SoloKeys")
-                .product("Solo B")
+                .product(if iso14443.is_some() {
+                    "Solo Be NFC"
+                } else {
+                    "Solo Be USB"
+                })
                 .serial_number("20/20")
                 .device_release(0x0001)
                 .max_packet_size_0(64)
