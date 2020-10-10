@@ -16,8 +16,14 @@ nb = "1"
 ufmt = "0.1.0"
 
 logging = {path = "../logging"}
+# nfc-device = { path = "../nfc-device", optional = True }
+nfc-device = { path = "../nfc-device"}
+
+[dev-dependencies]
+embedded-hal-mock = "0.7.2"
 
 [features]
+# default = ["nfc-device"]
 log-all = []
 log-none = []
 log-info = []

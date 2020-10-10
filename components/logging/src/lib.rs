@@ -372,6 +372,7 @@ macro_rules! add {
                     }
                 }
 
+                /// Highly-efficient `funnel`-based logging subsystem
                 pub mod $module_name {
                     pub use __info_wrapper as info;
                     pub use __warn_wrapper as warn;

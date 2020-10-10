@@ -39,9 +39,6 @@ use types::{
     Store,
 };
 
-use fm11nc08::{
-    FM11NC08, Configuration,
-};
 use hal::drivers::timer::Lap;
 use hal::traits::wg::timer::Cancel;
 use trussed::board::UserInterface;
@@ -164,9 +161,9 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         pint.enable_interrupt(&mut mux, &nfc_irq, hal::peripherals::pint::Slot::Slot0, hal::peripherals::pint::Mode::ActiveLow);
         mux.disabled(&mut syscon);
 
-        let nfc_chip = FM11NC08::new(spi, nfc_cs, nfc_irq);
+        let nfc_chip = fm11nc08::Chip::new(spi, nfc_cs, nfc_irq);
 
-        let configuration = Configuration {
+        let configuration = fm11nc08::Configuration {
                 // no limit     2mA resistor       3.3V
             regu: (0b11 << 4) | (0b10 << 2) | (0b11 << 0),
             ataq: 0x4400,
@@ -184,7 +181,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         };
 
         let force_reconfiguration = cfg!(feature = "reconfig");
-        match nfc_chip.configure(configuration, force_reconfiguration, &mut delay_timer, 10.ms().into()) {
+        match nfc_chip.configure(configuration, force_reconfiguration, &mut delay_timer) {
             Some(configured_nfc_chip) => {
                 Some(nfc_device::Iso14443::new(configured_nfc_chip, contactless_requester))
             }
