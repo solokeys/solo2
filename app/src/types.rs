@@ -6,7 +6,6 @@ use littlefs2::{
 use trussed::types::{LfsResult, LfsStorage};
 use trussed::{board, store};
 use ctap_types::consts;
-use fm11nc08::FM11NC08;
 use hal::{
     typestates::{
         pin::flexcomm::{
@@ -79,7 +78,7 @@ pub type NfcMisoPin = pins::Pio0_25;
 pub type NfcCsPin = pins::Pio1_20;
 pub type NfcIrqPin = pins::Pio0_19;
 
-pub type NfcChip = FM11NC08<
+pub type NfcChip = fm11nc08::Chip<
             SpiMaster<
                 NfcSckPin,
                 NfcMosiPin,
@@ -95,8 +94,9 @@ pub type NfcChip = FM11NC08<
                 >,
                 Pin<NfcCsPin, state::Gpio<direction::Output>>,
                 Pin<NfcIrqPin, state::Gpio<direction::Input>>,
+                fm11nc08::chip::configuration_state::Configured,
             >;
-pub type Iso14443 = iso14443::Iso14443<NfcChip>;
+pub type Iso14443 = nfc_device::Iso14443<NfcChip>;
 
 pub type ExternalInterrupt = hal::Pint<hal::typestates::init_state::Enabled>;
 

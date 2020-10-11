@@ -35,7 +35,7 @@ ufmt = "0.1.0"
 
 cortex-m-rtic = "0.5.1"
 # lpc55-hal = "0.0.3"
-lpc55-hal = { git = "https://github.com/nickray/lpc55-hal", branch = "main" }
+lpc55-hal = { git = "https://github.com/nickray/lpc55-hal", branch = "timer-duration" }
 logging = { path = "../logging" }
 
 [dependencies.heapless-bytes]

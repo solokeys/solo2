@@ -38,7 +38,7 @@ use crate::logger::info;
 use crate::logger::dump_hex;
 
 use interchange::Responder;
-use crate::types::{ContactInterchange, ContactlessInterchange};
+use iso7816::{ContactInterchange, ContactlessInterchange};
 
 #[derive(PartialEq)]
 enum RawApduBuffer {
@@ -199,7 +199,7 @@ impl ApduDispatch
 
             info!("chaining {} bytes", command.data().len()).ok();
             self.buffer.request(&command);
-            
+
             // Nothing for the application to consume yet.
             RequestType::None
         }

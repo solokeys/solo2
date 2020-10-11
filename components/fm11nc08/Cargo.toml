@@ -8,21 +8,28 @@ edition = "2018"
 
 [dependencies]
 # cortex-m-funnel = "0.1.0-alpha.1"
+bitflags = "1"
 cortex-m = "0.6.1"
 cortex-m-rt = "0.6.10"
+embedded-hal = { version = "0.2.4", features = ["unproven"] }
 nb = "1"
 ufmt = "0.1.0"
 
 logging = {path = "../logging"}
+# nfc-device = { path = "../nfc-device", optional = True }
+nfc-device = { path = "../nfc-device"}
 
-[dependencies.lpc55-hal]
-git = "https://github.com/nickray/lpc55-hal"
-branch = "main"
+[dev-dependencies]
+embedded-hal-mock = "0.7.2"
 
 [features]
+# default = ["nfc-device"]
 log-all = []
 log-none = []
 log-info = []
 log-debug = []
 log-warn = []
 log-error = []
+
+[patch.crates-io]
+heapless = { git = "https://github.com/nicolas-solokeys/heapless", branch = "bytebuf" }

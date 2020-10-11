@@ -7,10 +7,16 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-heapless = "0.5.5"
+heapless = "=0.5.5"
 heapless-bytes = { git = "https://github.com/ycrypto/heapless-bytes", branch = "main" }
+interchange = { path = "../interchange", optional = true }
+
+[features]
+contact-interchange = ["interchange"]
+contactless-interchange = ["interchange"]
 
 [patch.crates-io]
 ufmt = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty-enums" }
 ufmt-macros = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty-enums" }
-heapless = { git = "https://github.com/nickray/heapless", branch = "nickray-udebug" }
+# heapless = { git = "https://github.com/nickray/heapless", branch = "nickray-udebug" }
+heapless = { git = "https://github.com/nicolas-solokeys/heapless", branch = "bytebuf" }

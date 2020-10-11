@@ -1,5 +1,5 @@
 [package]
-name = "iso14443"
+name = "nfc-device"
 version = "0.0.1"
 authors = ["Conor Patrick <conor@solokeys.com>"]
 edition = "2018"
@@ -11,10 +11,8 @@ nb = "1"
 ufmt = "0.1.0"
 heapless = "0.5.5"
 
-apdu-dispatch = { path = "../apdu-dispatch" }
-iso7816 = {path = "../iso7816"}
-logging = {path = "../logging"}
-fm11nc08 = {path = "../fm11nc08"}
+iso7816 = { path = "../iso7816", features = ["contactless-interchange"] }
+logging = { path = "../logging" }
 interchange = { path = "../interchange" }
 
 [features]
@@ -26,3 +24,6 @@ log-info = []
 log-debug = []
 log-warn = []
 log-error = []
+
+[patch.crates-io]
+heapless = { git = "https://github.com/nicolas-solokeys/heapless", branch = "bytebuf" }

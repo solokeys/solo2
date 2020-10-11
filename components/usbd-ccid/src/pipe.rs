@@ -1,6 +1,6 @@
 use core::convert::TryFrom;
 
-use apdu_dispatch::types::ContactInterchange;
+use iso7816::ContactInterchange;
 use interchange::Requester;
 use crate::logger::{blocking};
 

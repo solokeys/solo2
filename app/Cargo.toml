@@ -20,7 +20,7 @@ usb-device = "0.2.3"
 usbd-serial = "0.1.0"
 
 # board
-lpc55-hal = { git = "https://github.com/nickray/lpc55-hal", branch = "main" }
+lpc55-hal = { git = "https://github.com/nickray/lpc55-hal", branch = "timer-duration" }
 lpcxpresso55 = { path = "../boards/lpcxpresso55", optional = true }
 prototype-bee = { path = "../boards/prototype-bee", optional = true }
 board-traits = { path = "../boards/board-traits" }
@@ -31,11 +31,12 @@ trussed = { path = "../components/trussed", features = ["clients-2"] }
 ctap-types = { path = "../components/ctap-types" }
 fido-authenticator = { path = "../components/fido-authenticator" }
 interchange = { path = "../components/interchange" }
+iso7816 = { path = "../components/iso7816", features = ["contact-interchange", "contactless-interchange"] }
 piv-card = { path = "../components/piv-card" }
 usbd-ccid = { path = "../components/usbd-ccid" }
 usbd-ctaphid = { path = "../components/usbd-ctaphid" }
 fm11nc08 = {path = "./../components/fm11nc08"}
-iso14443 = {path = "./../components/iso14443"}
+nfc-device = {path = "./../components/nfc-device"}
 apdu-dispatch = {path = "./../components/apdu-dispatch"}
 hid-dispatch = {path = "./../components/hid-dispatch"}
 applet-ndef = {path = "./../components/applet-ndef"}

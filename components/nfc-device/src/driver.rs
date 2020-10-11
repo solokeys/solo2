@@ -1,12 +1,10 @@
 use core::mem::MaybeUninit;
 use core::time::Duration;
 use heapless::ByteBuf;
-use fm11nc08::traits::{
-    nfc,
-};
-use iso7816::command;
+use crate::chip as nfc;
 use interchange::Requester;
-use apdu_dispatch::types::ContactlessInterchange;
+use iso7816::command;
+use iso7816::ContactlessInterchange;
 use crate::logger::{
     self,
     info,
@@ -90,7 +88,7 @@ impl Block {
     }
 }
 
-pub struct Iso14443<DEV: nfc::Device> {
+pub struct Iso14443<DEV: nfc::ChipDriver> {
     device: DEV,
 
     state: Iso14443State,
@@ -111,7 +109,7 @@ pub struct Iso14443<DEV: nfc::Device> {
 
 impl<DEV> Iso14443<DEV>
 where
-    DEV: nfc::Device
+    DEV: nfc::ChipDriver
 {
     pub fn new(device: DEV, interchange: Requester<ContactlessInterchange>) -> Self {
         Self {
