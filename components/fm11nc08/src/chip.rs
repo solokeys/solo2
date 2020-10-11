@@ -290,7 +290,7 @@ where
         if main_irq.contains(Interrupt::TX_DONE) {
             // Need to turn off transmit mode
             let count = self.read_reg(Register::FifoCount);
-            info!("off transmit (-{}) {:X}", count, main_irq).ok();
+            info!("off transmit (-{}) {}", count, main_irq.bits().hex()).ok();
         }
 
         let fifo_irq = if main_irq.contains(Interrupt::FIFO) {
@@ -314,7 +314,7 @@ where
             // info!("!OF! {} @{}", self.read_reg(Register::FifoCount), hal::get_cycle_count()/96_00).ok();
             info!("!OF! {}", self.read_reg(Register::FifoCount)).ok();
             // info!("{:X} {:X} {:X}", main_irq, fifo_irq, aux_irq).ok();
-            info!("{:?} {:?} {:?}", main_irq, fifo_irq, aux_irq).ok();
+            info!("{} {} {}", main_irq.bits().hex(), fifo_irq.bits().hex(), aux_irq.hex()).ok();
 
             // self.write_reg(Register::FifoFlush, 0xff);
         }
@@ -372,7 +372,7 @@ where
         }
 
         // info!("{:X} {:X} {:X}", main_irq, fifo_irq, aux_irq).ok();
-        info!("{:?} {:?} {:?}", main_irq, fifo_irq, aux_irq).ok();
+        info!("{} {} {}", main_irq.bits().hex(), fifo_irq.bits().hex(), aux_irq.hex()).ok();
 
         if new_session {
             Err(nfc_chip::Error::NewSession)
@@ -417,10 +417,10 @@ where
             current_count = self.read_reg(Register::FifoCount);
             let aux_irq = self.read_reg(Register::AuxIrq);
             let rf_status = self.read_reg(Register::RfStatus);
-            info!("tx {}->{}. {:X} {:X} {:X}",
+            info!("tx {}->{}. {} {} {}",
                 initial_count,
                 current_count,
-                rf_status, aux_irq, fifo_irq,
+                rf_status.hex(), aux_irq.hex(), fifo_irq.bits().hex(),
             ).ok();
 
             // if (fifo_irq & (FifoInterrupt::WATER_LEVEL as u8)) != 0 {

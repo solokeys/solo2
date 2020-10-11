@@ -59,11 +59,12 @@ impl<'a> applet::Applet for NdefApplet<'a> {
         let p2 = apdu.p2;
         let expected = apdu.expected();
         let payload = apdu.data();
-
+        // use cortex_m_semihosting::hprintln;
+        // hprintln!("NDEF call: {:?} {}|{} Le {}", &instruction, p1, p2, expected).ok();
+        // hprintln!("NDEF call {:?}", &instruction).ok();
 
         match instruction {
             Instruction::Select => {
-
                 if payload.starts_with(&[0xE1u8, 0x03]) {
                     self.reader = &Self::CAPABILITY_CONTAINER;
                     Ok(Default::default())
