@@ -3,5 +3,6 @@
 pub mod applet;
 pub mod dispatch;
 pub mod types;
+pub use iso7816;
 
 logging::add!(logger);

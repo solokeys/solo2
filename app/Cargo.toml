@@ -27,7 +27,7 @@ board-traits = { path = "../boards/board-traits" }
 
 # components
 c-stubs = { path = "../components/c-stubs" }
-trussed = { path = "../components/trussed", features = ["clients-2"] }
+trussed = { path = "../components/trussed", features = ["clients-3"] }
 ctap-types = { path = "../components/ctap-types" }
 fido-authenticator = { path = "../components/fido-authenticator" }
 interchange = { path = "../components/interchange" }
@@ -85,6 +85,9 @@ heapless = { git = "https://github.com/nicolas-solokeys/heapless", branch = "byt
 ufmt = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty-enums" }
 ufmt-macros = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty-enums" }
 nisty = {git = "https://github.com/ycrypto/nisty", branch="main"}
+
+[patch."https://github.com/ycrypto/salty"]                                                                                                                                                                                                                                                           
+salty = { git = "https://github.com/ycrypto//salty", branch = "replace-scalar-implementation" }  
 
 [profile.release]
 codegen-units = 1

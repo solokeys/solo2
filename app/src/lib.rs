@@ -29,7 +29,7 @@ pub use board::rt::entry;
 
 pub mod types;
 pub mod clock_controller;
-pub mod wink;
+pub mod applet_root; 
 pub mod solo_trussed;
 use types::{
     Board,
@@ -153,6 +153,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     types::Piv,
     types::FidoApplet<fido_authenticator::NonSilentAuthenticator>,
     applet_ndef::NdefApplet<'static>,
+    types::RootApp,
 
     Option<types::UsbClasses>,
     Option<types::Iso14443>,
@@ -340,13 +341,18 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     let mut fido_client_id = littlefs2::path::PathBuf::new();
     fido_client_id.push(b"fido2\0".try_into().unwrap());
 
+    let (root_trussed_requester, root_trussed_responder) = trussed::pipe::TrussedInterchange::claim(1)
+        .expect("could not setup FIDO TrussedInterchange");
+    let mut root_client_id = littlefs2::path::PathBuf::new();
+    root_client_id.push(b"root\0".try_into().unwrap());
+
     let (contact_requester, contact_responder) = apdu_dispatch::types::ContactInterchange::claim(0)
         .expect("could not setup ccid ApduInterchange");
 
     let (hid_requester, hid_responder) = hid_dispatch::types::HidInterchange::claim(0)
         .expect("could not setup HidInterchange");
 
-    let (piv_trussed_requester, piv_trussed_responder) = trussed::pipe::TrussedInterchange::claim(1)
+    let (piv_trussed_requester, piv_trussed_responder) = trussed::pipe::TrussedInterchange::claim(2)
         .expect("could not setup PIV TrussedInterchange");
 
     let usb_classes =
@@ -450,10 +456,14 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         syscaller,
     );
 
-    assert!(trussed.add_endpoint(fido_trussed_responder, fido_client_id).is_ok());
+    let syscaller = trussed::client::TrussedSyscall::default();
+    let root_trussed = trussed::client::Client::new(root_trussed_requester, syscaller);
 
     let syscaller = trussed::client::TrussedSyscall::default();
     let trussed_client = trussed::client::Client::new(fido_trussed_requester, syscaller);
+
+    assert!(trussed.add_endpoint(fido_trussed_responder, fido_client_id).is_ok());
+    assert!(trussed.add_endpoint(root_trussed_responder, root_client_id).is_ok());
 
     let authnr = fido_authenticator::Authenticator::new(
         trussed_client,
@@ -464,6 +474,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
     let piv = piv_card::App::new(piv_trussed);
     let ndef = applet_ndef::NdefApplet::new();
+    let root = types::RootApp::new(root_trussed);
 
     let apdu_dispatch = types::ApduDispatch::new(contact_responder, contactless_responder);
     let hid_dispatch = types::HidDispatch::new(hid_responder);
@@ -480,6 +491,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         piv,
         fido,
         ndef,
+        root,
 
         usb_classes,
         iso14443,

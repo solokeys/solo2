@@ -31,7 +31,7 @@ const APP: () = {
         piv: app::types::Piv,
         fido: app::types::FidoApplet<fido_authenticator::NonSilentAuthenticator>,
         ndef: applet_ndef::NdefApplet<'static>,
-        wink: app::types::WinkApplet,
+        root: app::types::RootApp,
 
         usb_classes: Option<app::types::UsbClasses>,
         contactless: Option<app::types::Iso14443>,
@@ -53,6 +53,7 @@ const APP: () = {
             piv,
             fido,
             ndef,
+            root,
 
             usb_classes,
             contactless,
@@ -68,8 +69,6 @@ const APP: () = {
             c.schedule.update_ui(Instant::now() + PERIOD.cycles()).unwrap();
         }
 
-        let wink = app::wink::Wink::new();
-
         init::LateResources {
             apdu_dispatch,
             hid_dispatch,
@@ -78,7 +77,7 @@ const APP: () = {
             piv,
             fido,
             ndef,
-            wink,
+            root,
 
             usb_classes,
             contactless,
@@ -90,7 +89,7 @@ const APP: () = {
         }
     }
 
-    #[idle(resources = [usb_classes, apdu_dispatch, hid_dispatch, ndef, piv, fido, wink, contactless, perf_timer])]
+    #[idle(resources = [usb_classes, apdu_dispatch, hid_dispatch, ndef, piv, fido, root, contactless, perf_timer])]
     fn idle(c: idle::Context) -> ! {
         let idle::Resources {
             mut usb_classes,
@@ -99,7 +98,7 @@ const APP: () = {
             ndef,
             piv,
             fido,
-            wink,
+            root,
             mut contactless,
             mut perf_timer,
         }
@@ -122,7 +121,7 @@ const APP: () = {
                 app::drain_log_to_semihosting();
             }
 
-            apdu_dispatch.poll(&mut [ndef, piv, fido]);
+            apdu_dispatch.poll(&mut [ndef, piv, fido, root]);
 
             contactless.lock(|contactless|  {
                 match contactless.as_ref() {
@@ -155,12 +154,8 @@ const APP: () = {
             } );
 
 
-            hid_dispatch.poll(&mut [fido, wink]);
+            hid_dispatch.poll(&mut [fido, root]);
 
-            // TODO: call via trussed
-            // if wink.wink() {
-            //     c.schedule.do_wink(Instant::now() + PERIOD.cycles()).ok();
-            // }
         }
     }
 
