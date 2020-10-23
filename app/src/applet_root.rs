@@ -143,6 +143,13 @@ impl applet::Applet for Root {
                 ))
             }
 
+            0x62 => {
+                // Get UUID
+                Ok(applet::Response::Respond(
+                    heapless::ByteBuf::from_slice(&crate::hal::uuid()).unwrap()
+                ))
+            }
+
             _ => {
                 Err(Status::InstructionNotSupportedOrInvalid)
             }
