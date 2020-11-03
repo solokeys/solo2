@@ -1,4 +1,5 @@
 #![no_std]
+include!(concat!(env!("OUT_DIR"), "/build_constants.rs"));
 
 // panic handler, depending on debug/release build
 // BUT: need to run in release anyway, to have USB work
@@ -29,7 +30,7 @@ pub use board::rt::entry;
 
 pub mod types;
 pub mod clock_controller;
-pub mod applet_root; 
+pub mod applet_root;
 pub mod solo_trussed;
 use types::{
     Board,
@@ -57,6 +58,7 @@ use hal::drivers::{
     Timer,
     Pwm,
 };
+use hal::peripherals::pfr::Pfr;
 
 use interchange::Interchange;
 use usbd_ccid::Ccid;
@@ -138,6 +140,22 @@ fn configure_fm11_if_needed(
     Ok(())
 }
 
+fn update_cfpa_version_if_needed(pfr: &mut Pfr<hal::typestates::init_state::Enabled>) {
+    let mut cfpa = pfr.read_latest_cfpa().unwrap();
+    let current_version: u32 = build_constants::CARGO_PKG_VERSION;
+    if cfpa.secure_fw_version < current_version || cfpa.ns_fw_version < current_version {
+        logger::info!("updating cfpa from {} to {}", cfpa.secure_fw_version, current_version).ok();
+
+        // All of these are monotonic counters.
+        cfpa.version += 1;
+        cfpa.secure_fw_version = current_version;
+        cfpa.ns_fw_version = current_version;
+        pfr.write_cfpa(&cfpa).unwrap();
+    } else {
+        logger::info!("do not need to update cfpa version {}", cfpa.secure_fw_version).ok();
+    }
+}
+
 // // filesystem starting at 320KB
 // // this needs to be synchronized with contents of `memory.x`
 // const FS_BASE: usize = 0x50_000;
@@ -198,6 +216,9 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
         let adc = hal::Adc::from(hal.adc)
             .enabled(&mut pmc, &mut syscon);
+
+        let mut pfr = hal.pfr.enabled(&clocks).unwrap();
+        update_cfpa_version_if_needed(&mut pfr);
 
         (clocks, adc)
     };
@@ -380,14 +401,19 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
                             .implements_ctap1()
                             .implements_ctap2()
                             .implements_wink();
+
             let serial = usbd_serial::SerialPort::new(usb_bus);
+
+            // Only 16 bits, so take the upper bits of our semver
+            let device_release = ((build_constants::CARGO_PKG_VERSION_MAJOR as u16) << 8) |
+                                (build_constants::CARGO_PKG_VERSION_MINOR as u16);
 
             // our composite USB device
             let usbd = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0x1209, 0xbeee))
                 .manufacturer("SoloKeys")
                 .product("Solo B")
                 .serial_number("20/20")
-                .device_release(0x0001)
+                .device_release(device_release)
                 .max_packet_size_0(64)
                 .build();
 
