@@ -156,6 +156,27 @@ fn update_cfpa_version_if_needed(pfr: &mut Pfr<hal::typestates::init_state::Enab
     }
 }
 
+// SoloKeys stores a product string in the first 64 bytes of CMPA.
+fn get_product_string(pfr: &mut Pfr<hal::typestates::init_state::Enabled>) -> &'static str {
+    let data = pfr.cmpa_customer_data();
+
+    // check the first 64 bytes of customer data for a string
+    if data[0] != 0 {
+        for i in 1 .. 64 {
+            if data[i] == 0 {
+                let str_maybe = core::str::from_utf8(&data[0 .. i]);
+                if let Ok(string) = str_maybe {
+                    return string;
+                }
+                break;
+            }
+        }
+    }
+
+    // Use a default string
+    "Solo B Custom Device"
+}
+
 // // filesystem starting at 320KB
 // // this needs to be synchronized with contents of `memory.x`
 // const FS_BASE: usize = 0x50_000;
@@ -217,11 +238,12 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         let adc = hal::Adc::from(hal.adc)
             .enabled(&mut pmc, &mut syscon);
 
-        let mut pfr = hal.pfr.enabled(&clocks).unwrap();
-        update_cfpa_version_if_needed(&mut pfr);
 
         (clocks, adc)
     };
+
+    let mut pfr = hal.pfr.enabled(&clocks).unwrap();
+    update_cfpa_version_if_needed(&mut pfr);
 
     let mut delay_timer = Timer::new(hal.ctimer.0.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap()));
     let mut perf_timer = Timer::new(hal.ctimer.4.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap()));
@@ -408,10 +430,11 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
             let device_release = ((build_constants::CARGO_PKG_VERSION_MAJOR as u16) << 8) |
                                 (build_constants::CARGO_PKG_VERSION_MINOR as u16);
 
-            // our composite USB device
+            let product_string = get_product_string(&mut pfr);
+                // our composite USB device
             let usbd = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0x1209, 0xbeee))
                 .manufacturer("SoloKeys")
-                .product("Solo B")
+                .product(product_string)
                 .serial_number("20/20")
                 .device_release(device_release)
                 .max_packet_size_0(64)
