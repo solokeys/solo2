@@ -62,9 +62,9 @@ impl SoloThreeTouchButtons<ButtonTopPin, ButtonBotPin, ButtonMidPin>
             top,bot,mid,
         );
         let touch_sensor = TouchSensor::new([
-            13_900,
-            13_900,
-            13_900,
+            12_000,
+            12_000,
+            12_000,
             ], 5, adc, adc_timer, sample_timer, charge_match, button_pins);
         let touch_sensor = touch_sensor.enabled(dma, token);
         Self {
