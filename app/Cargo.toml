@@ -1,7 +1,7 @@
 [package]
 name = "app"
 version = "0.1.0"
-authors = ["Nicolas Stalder <n@stalder.io>"]
+authors = ["Nicolas Stalder <n@stalder.io>", "Conor Patrick <conor@solokeys.com>"]
 edition = "2018"
 
 [lib]
@@ -53,9 +53,9 @@ littlefs2 = { git = "https://github.com/nickray/littlefs2", branch = "closures-i
 
 [features]
 default = []
-# use this to format internal flash filesystem,
-# for instance to hard reset
-format-storage = []
+
+# Do not use encryption for the filesystem
+no-encrypted-storage = []
 
 # Use to auto-succeed every user presence check
 no-buttons= []
@@ -86,12 +86,17 @@ ufmt = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty
 ufmt-macros = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty-enums" }
 nisty = {git = "https://github.com/ycrypto/nisty", branch="main"}
 
-[patch."https://github.com/ycrypto/salty"]                                                                                                                                                                                                                                                           
-salty = { git = "https://github.com/ycrypto//salty", branch = "replace-scalar-implementation" }  
+
+# MacOS needed patches
+micro-ecc-sys = {git="https://github.com/conorpp/micro-ecc-sys", branch="fix-macos"}
+littlefs2-sys = {git="https://github.com/conorpp/littlefs2-sys", branch="fix-macos"}
+
+[patch."https://github.com/nickray/lpc55-hal"]
+lpc55-hal = {path = "../../../lpc55-hal"}
 
 [profile.release]
 codegen-units = 1
-# lto = true
+lto = true
 opt-level = "z"
 incremental = false
 debug = true
