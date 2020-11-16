@@ -32,6 +32,7 @@ pub mod types;
 pub mod clock_controller;
 pub mod applet_root;
 pub mod solo_trussed;
+// pub mod filesystem;
 use types::{
     Board,
     EnabledUsbPeripheral,
@@ -312,20 +313,31 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     let usb0_vbus_pin = pins::Pio0_22::take().unwrap()
         .into_usb0_vbus_pin(&mut iocon);
 
-    let rng = hal.rng.enabled(&mut syscon);
+    #[allow(unused_mut)]
+    let mut rng = hal.rng.enabled(&mut syscon);
+
+    #[cfg(not(feature = "no-encrypted-storage"))]
+    let prince = hal.prince.enabled(&mut rng);
 
     use littlefs2::fs::{Allocation, Filesystem};
 
-    let flash = hal::drivers::flash::FlashGordon::new(hal.flash.enabled(&mut syscon));
+    let flash_gordon = FlashGordon::new(hal.flash.enabled(&mut syscon));
+
+    #[cfg(not(feature = "no-encrypted-storage"))]
+    let filesystem = types::PrinceFilesystem::new(flash_gordon, prince);
+
+    #[cfg(feature = "no-encrypted-storage")]
+    let filesystem = types::PlainFilesystem::new(flash_gordon);
+
     // temporarily increase clock for the storage mounting or else it takes a long time.
     if is_passive_mode {
         clocks = unsafe { hal::ClockRequirements::default()
             .system_frequency(48.mhz())
             .reconfigure(clocks, &mut pmc, &mut syscon) };
     }
-    static mut INTERNAL_STORAGE: Option<FlashGordon> = None;
-    unsafe { INTERNAL_STORAGE = Some(flash); }
-    static mut INTERNAL_FS_ALLOC: Option<Allocation<FlashGordon>> = None;
+    static mut INTERNAL_STORAGE: Option<types::FlashStorage> = None;
+    unsafe { INTERNAL_STORAGE = Some(filesystem); }
+    static mut INTERNAL_FS_ALLOC: Option<Allocation<types::FlashStorage>> = None;
     unsafe { INTERNAL_FS_ALLOC = Some(Filesystem::allocate()); }
 
     static mut EXTERNAL_STORAGE: ExternalStorage = ExternalStorage::new();

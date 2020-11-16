@@ -1,3 +1,4 @@
+include!(concat!(env!("OUT_DIR"), "/build_constants.rs"));
 use crate::hal;
 use hal::drivers::{pins,pins::Pin,SpiMaster, timer};
 use littlefs2::{
@@ -22,9 +23,21 @@ use hal::{
     },
     peripherals::ctimer,
 };
-// use usbd_ctaphid::insecure::InsecureRamAuthenticator;
 
-pub type FlashStorage = hal::drivers::FlashGordon;
+#[cfg(feature = "no-encrypted-storage")]
+use hal::littlefs2_filesystem;
+#[cfg(not(feature = "no-encrypted-storage"))]
+use hal::littlefs2_prince_filesystem;
+
+#[cfg(feature = "no-encrypted-storage")]
+littlefs2_filesystem!(PlainFilesystem: (build_constants::CONFIG_FILESYSTEM_BOUNDARY));
+#[cfg(not(feature = "no-encrypted-storage"))]
+littlefs2_prince_filesystem!(PrinceFilesystem: (build_constants::CONFIG_FILESYSTEM_BOUNDARY));
+
+#[cfg(feature = "no-encrypted-storage")]
+pub type FlashStorage = PlainFilesystem;
+#[cfg(not(feature = "no-encrypted-storage"))]
+pub type FlashStorage = PrinceFilesystem;
 
 pub type Piv = piv_card::App;
 
