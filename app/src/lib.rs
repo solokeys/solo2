@@ -30,7 +30,6 @@ pub use board::rt::entry;
 
 pub mod types;
 pub mod clock_controller;
-pub mod applet_root;
 pub mod solo_trussed;
 // pub mod filesystem;
 use types::{
