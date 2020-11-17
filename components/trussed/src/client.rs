@@ -718,4 +718,14 @@ impl<Syscall: crate::pipe::Syscall> Client<Syscall> {
         Ok(FutureResult::new(self))
     }
 
+    pub fn reboot<'c>(&'c mut self, to: reboot::To)
+        -> core::result::Result<FutureResult<'c, reply::Reboot>, ClientError>
+    {
+        self.raw.request(request::Reboot {
+            to: to,
+        } )?;
+        self.syscall.syscall();
+        Ok(FutureResult::new(self))
+    }
+
 }

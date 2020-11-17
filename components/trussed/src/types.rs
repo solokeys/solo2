@@ -41,6 +41,16 @@ pub mod ui {
     }
 }
 
+pub mod reboot {
+    use super::*;
+
+    #[derive(Copy, Clone, Eq, PartialEq, Debug, uDebug, Serialize, Deserialize)]
+    pub enum To {
+        Application,
+        ApplicationUpdate,
+    }
+}
+
 pub mod consent {
     use super::*;
 

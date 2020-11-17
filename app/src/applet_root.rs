@@ -6,16 +6,25 @@ use apdu_dispatch::iso7816::{Command, Status};
 use trussed::{
     syscall,
     Client as TrussedClient,
+    types::reboot,
 };
+
+const UPDATE: VendorCommand = VendorCommand::H51;
+const REBOOT: VendorCommand = VendorCommand::H53;
+const RNG: VendorCommand = VendorCommand::H60;
+const VERSION: VendorCommand = VendorCommand::H61;
+const UUID: VendorCommand = VendorCommand::H62;
 
 pub struct Root {
     got_wink: bool,
     trussed: TrussedClient,
+    uuid: [u8; 16],
+    version: u32,
 }
 
 impl Root {
-    pub fn new(client: TrussedClient) -> Self {
-        Self {got_wink: false, trussed: client}
+    pub fn new(client: TrussedClient, uuid: [u8; 16], version: u32) -> Self {
+        Self {got_wink: false, trussed: client, uuid, version}
     }
 
     /// Indicate if a wink was recieved
@@ -33,57 +42,46 @@ impl Root {
         user_present.is_ok()
     }
 
-    fn boot_to_bootrom() -> ! {
-        // Best way to boot into MCUBOOT is to erase the first flash page before rebooting.
-        use crate::hal::traits::flash::WriteErase;
-        let flash = unsafe { crate::hal::peripherals::flash::Flash::steal() }.enabled(
-            &mut unsafe {crate::hal::peripherals::syscon::Syscon::steal()}
-        );
-        crate::hal::drivers::flash::FlashGordon::new(flash).erase_page(0).ok();
-        crate::hal::raw::SCB::sys_reset()
-    }
-}
 
-const UPDATE_COMMAND: hid_dispatch::command::Command = HidCommand::Vendor(VendorCommand::H51);
-const REBOOT_COMMAND: hid_dispatch::command::Command = HidCommand::Vendor(VendorCommand::H53);
-const RNG_COMMAND: hid_dispatch::command::Command = HidCommand::Vendor(VendorCommand::H60);
-const VERSION_COMMAND: hid_dispatch::command::Command = HidCommand::Vendor(VendorCommand::H61);
-// const UUID_COMMAND: hid_dispatch::command::Command = HidCommand::Vendor(VendorCommand::H62);
+}
 
 impl App for Root {
     fn commands(&self) -> &'static [HidCommand] {
-        &[HidCommand::Wink, REBOOT_COMMAND, UPDATE_COMMAND, RNG_COMMAND, VERSION_COMMAND]
+        &[
+            HidCommand::Wink,
+            HidCommand::Vendor(UPDATE),
+            HidCommand::Vendor(REBOOT),
+            HidCommand::Vendor(RNG),
+            HidCommand::Vendor(VERSION),
+            HidCommand::Vendor(UUID),
+        ]
     }
 
     fn call(&mut self, command: HidCommand, message: &mut Message) -> Response {
         match command {
-            HidCommand::Vendor(VendorCommand::H53) => {
-                // REBOOT
-                crate::hal::raw::SCB::sys_reset();
+            HidCommand::Vendor(REBOOT) => {
+                syscall!(self.trussed.reboot(reboot::To::Application));
+                loop { continue ; }
             }
-            HidCommand::Vendor(VendorCommand::H51) => {
-                // BOOT TO UPDATE MODE
+            HidCommand::Vendor(UPDATE) => {
                 if self.user_present() {
-                    Self::boot_to_bootrom();
+                    syscall!(self.trussed.reboot(reboot::To::ApplicationUpdate));
+                    loop { continue ; }
                 } else {
                     return Err(hid::Error::InvalidLength);
                 }
             }
-            HidCommand::Vendor(VendorCommand::H60) => {
-                // GET RNG
+            HidCommand::Vendor(RNG) => {
                 // Fill the HID packet (57 bytes)
                 message.clear();
                 message.extend_from_slice(
                     &syscall!(self.trussed.random_bytes(57)).bytes.as_slice()
                 ).ok();
             }
-            HidCommand::Vendor(VendorCommand::H61) => {
+            HidCommand::Vendor(VERSION) => {
                 // GET VERSION
                 message.clear();
-                message.push(5).ok();
-                message.push(0).ok();
-                message.push(0).ok();
-                message.push(0).ok();
+                message.extend_from_slice(&self.version.to_be_bytes()).ok();
             }
             _ => {
                 message.clear();
@@ -116,37 +114,41 @@ impl applet::Applet for Root {
     fn call(&mut self, interface_type: applet::InterfaceType, apdu: &Command) -> applet::Result {
         let instruction: u8 = apdu.instruction().into();
 
-        match instruction {
-            0x53 => {
-                // Reboot
-                crate::hal::raw::SCB::sys_reset();
+        let command: VendorCommand = instruction.try_into().map_err(|_e| Status::InstructionNotSupportedOrInvalid)?;
+
+        match command {
+            REBOOT => {
+                syscall!(self.trussed.reboot(reboot::To::Application));
+                loop { continue ; }
             }
-            0x51 => {
+            UPDATE => {
                 // Boot to mcuboot (only when contact interface)
-                if interface_type == applet::InterfaceType::Contact && self.user_present() {
+                if interface_type == applet::InterfaceType::Contact && self.user_present()
+                {
                     // Doesn't return.
-                    Self::boot_to_bootrom();
+                    syscall!(self.trussed.reboot(reboot::To::ApplicationUpdate));
+                    loop { continue ; }
                 }
                 Err(Status::ConditionsOfUseNotSatisfied)
             }
 
-            0x60 => {
+            RNG => {
                 // Random bytes
                 Ok(applet::Response::Respond(
                     syscall!(self.trussed.random_bytes(57)).bytes.as_slice().try_into().unwrap()
                 ))
             }
-            0x61 => {
+            VERSION => {
                 // Get version
                 Ok(applet::Response::Respond(
-                    (&[0x05u8, 0,0,0][..]).try_into().unwrap()
+                    (&self.version.to_be_bytes()[..]).try_into().unwrap()
                 ))
             }
 
-            0x62 => {
+            UUID => {
                 // Get UUID
                 Ok(applet::Response::Respond(
-                    heapless::ByteBuf::from_slice(&crate::hal::uuid()).unwrap()
+                    heapless::ByteBuf::from_slice(&self.uuid).unwrap()
                 ))
             }
 
@@ -156,4 +158,4 @@ impl applet::Applet for Root {
         }
 
     }
-} 
+}

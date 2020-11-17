@@ -1,6 +1,6 @@
 pub use embedded_hal::blocking::rng::Read as RngRead;
 pub use crate::store::Store;
-pub use crate::types::ui;
+pub use crate::types::{ui, reboot};
 pub use crate::types::consent;
 
 
@@ -17,6 +17,9 @@ pub trait UserInterface {
 
     /// Return the duration since startup.
     fn uptime(&mut self) -> core::time::Duration;
+
+    /// Exit / reset the application
+    fn reboot (&mut self, to: reboot::To) -> !;
 }
 
 // This is the same trick as in "store.rs",

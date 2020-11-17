@@ -546,7 +546,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
     let piv = piv_card::App::new(piv_trussed);
     let ndef = applet_ndef::NdefApplet::new();
-    let root = types::RootApp::new(root_trussed);
+    let root = types::RootApp::new(root_trussed, hal::uuid(), build_constants::CARGO_PKG_VERSION);
 
     let apdu_dispatch = types::ApduDispatch::new(contact_responder, contactless_responder);
     let hid_dispatch = types::HidDispatch::new(hid_responder);
