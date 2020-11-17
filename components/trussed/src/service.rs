@@ -733,7 +733,7 @@ impl<B: Board> ServiceResources<B> {
                         // If Normal level consent is request, then both Strong and Normal
                         // indications will result in success.
                         consent::Level::Normal => {
-                            if up == consent::Level::Normal || 
+                            if up == consent::Level::Normal ||
                                 up == consent::Level::Strong {
                                     break;
                                 }
@@ -753,6 +753,10 @@ impl<B: Board> ServiceResources<B> {
 
                 let result = Ok(());
                 Ok(Reply::RequestUserConsent(reply::RequestUserConsent { result } ))
+            }
+
+            Request::Reboot(request) => {
+                self.board.user_interface().reboot(request.to);
             }
 
             _ => {

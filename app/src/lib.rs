@@ -141,7 +141,7 @@ fn configure_fm11_if_needed(
     Ok(())
 }
 
-fn update_cfpa_version_if_needed(pfr: &mut Pfr<hal::typestates::init_state::Enabled>) {
+fn validate_cfpa(pfr: &mut Pfr<hal::typestates::init_state::Enabled>) {
     let mut cfpa = pfr.read_latest_cfpa().unwrap();
     let current_version: u32 = build_constants::CARGO_PKG_VERSION;
     if cfpa.secure_fw_version < current_version || cfpa.ns_fw_version < current_version {
@@ -154,6 +154,16 @@ fn update_cfpa_version_if_needed(pfr: &mut Pfr<hal::typestates::init_state::Enab
         pfr.write_cfpa(&cfpa).unwrap();
     } else {
         logger::info!("do not need to update cfpa version {}", cfpa.secure_fw_version).ok();
+    }
+    #[cfg(not(feature = "no-encrypted-storage"))]
+    {
+        // Unless encryption is explicity disabled, we require that PRINCE has been provisioned.
+        // Check by seeing if the IV in CFPA is zero or not.
+        let mut iv_or = 0;
+        for i in 0 .. cfpa.iv_code_prince_region[2].iv.len() {
+            iv_or |= cfpa.iv_code_prince_region[2].iv[i];
+        }
+        assert!(iv_or != 0);
     }
 }
 
@@ -244,7 +254,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     };
 
     let mut pfr = hal.pfr.enabled(&clocks).unwrap();
-    update_cfpa_version_if_needed(&mut pfr);
+    validate_cfpa(&mut pfr);
 
     let mut delay_timer = Timer::new(hal.ctimer.0.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap()));
     let mut perf_timer = Timer::new(hal.ctimer.4.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap()));
@@ -316,8 +326,9 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     #[allow(unused_mut)]
     let mut rng = hal.rng.enabled(&mut syscon);
 
-    #[cfg(not(feature = "no-encrypted-storage"))]
-    let prince = hal.prince.enabled(&mut rng);
+    let mut prince = hal.prince.enabled(&mut rng);
+    prince.disable_all_region_2();
+    prince.disable_encrypted_write();
 
     use littlefs2::fs::{Allocation, Filesystem};
 
