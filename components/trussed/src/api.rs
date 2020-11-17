@@ -72,8 +72,9 @@ generate_enums! {
     ////////
     // UI //
     ////////
-    
+
     RequestUserConsent: 33
+    Reboot: 34
 
     ///////////
     // Other //
@@ -256,6 +257,9 @@ pub mod request {
         RequestUserConsent:
           - level: consent::Level
           - timeout_milliseconds: u32
+
+        Reboot:
+          - to: reboot::To
     }
 }
 
@@ -367,6 +371,8 @@ pub mod reply {
         // UI
         RequestUserConsent:
             - result: consent::Result
+
+        Reboot:
 
     }
 
