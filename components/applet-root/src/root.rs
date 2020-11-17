@@ -148,7 +148,7 @@ impl applet::Applet for Root {
             UUID => {
                 // Get UUID
                 Ok(applet::Response::Respond(
-                    heapless::ByteBuf::from_slice(&self.uuid).unwrap()
+                    apdu_dispatch::heapless::ByteBuf::from_slice(&self.uuid).unwrap()
                 ))
             }
 
@@ -159,3 +159,4 @@ impl applet::Applet for Root {
 
     }
 }
+

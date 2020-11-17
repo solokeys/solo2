@@ -39,6 +39,7 @@ iso14443 = {path = "./../components/iso14443"}
 apdu-dispatch = {path = "./../components/apdu-dispatch"}
 hid-dispatch = {path = "./../components/hid-dispatch"}
 applet-ndef = {path = "./../components/applet-ndef"}
+applet-root = {path = "./../components/applet-root"}
 applet-fido = {path = "./../components/applet-fido"}
 logging = {path = "./../components/logging"}
 

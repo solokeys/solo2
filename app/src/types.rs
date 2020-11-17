@@ -119,7 +119,7 @@ pub type HidDispatch = hid_dispatch::dispatch::Dispatch;
 
 pub type FidoApplet<UP> = applet_fido::Fido<UP>;
 
-pub type RootApp = crate::applet_root::Root;
+pub type RootApp = applet_root::Root;
 
 pub type PerfTimer = timer::Timer<ctimer::Ctimer4<hal::typestates::init_state::Enabled>>;
 
