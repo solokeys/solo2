@@ -41,8 +41,8 @@ hid-dispatch = {path = "../../components/hid-dispatch"}
 applet-ndef = {path = "../../components/applet-ndef"}
 applet-root = {path = "../../components/applet-root"}
 applet-fido = {path = "../../components/applet-fido"}
-logging = {path = "../../components/logging", features = ["cortex-m"]}
-
+# logging = {path = "../../components/logging", features = ["cortex-m"]}
+logging = {path = "../../components/logging"}
 
 # panic
 panic-halt = "0.2.0"
