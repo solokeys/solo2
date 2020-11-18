@@ -1,0 +1,9 @@
+[target.x86_64-apple-darwin]
+runner = "lldb"
+rustflags = [
+]
+# flip-link currently results in a broken program
+# "-C", "linker=flip-link"
+
+[build]
+target = "x86_64-apple-darwin"
