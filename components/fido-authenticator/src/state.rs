@@ -4,8 +4,7 @@ use crate::logger::{blocking, info};
 
 use trussed::{
     block, syscall,
-    Client as CryptoClient,
-    pipe::Syscall,
+    Client as TrussedClient,
     types::{
         self,
         ObjectHandle as Key,
@@ -40,7 +39,7 @@ pub struct State {
 
 impl State {
 
-    // pub fn new<S: Syscall>(trussed: &mut CryptoClient<S>) -> Self {
+    // pub fn new(trussed: &mut TrussedClient) -> Self {
     pub fn new() -> Self {
         // let identity = Identity::get(trussed);
         let identity = Default::default();
@@ -51,13 +50,13 @@ impl State {
         Self { identity, persistent, runtime }
     }
 
-    pub fn decrement_retries<S: Syscall>(&mut self, trussed: &mut CryptoClient<S>) -> Result<()> {
+    pub fn decrement_retries<T: TrussedClient>(&mut self, trussed: &mut T) -> Result<()> {
         self.persistent.decrement_retries(trussed)?;
         self.runtime.decrement_retries()?;
         Ok(())
     }
 
-    pub fn reset_retries<S: Syscall>(&mut self, trussed: &mut CryptoClient<S>) -> Result<()> {
+    pub fn reset_retries<T: TrussedClient>(&mut self, trussed: &mut T) -> Result<()> {
         self.persistent.reset_retries(trussed)?;
         self.runtime.reset_retries();
         Ok(())
@@ -86,7 +85,7 @@ pub struct Identity {
 }
 
 impl Identity {
-    // pub fn get<S: Syscall>(trussed: &mut CryptoClient<S>) -> Self {
+    // pub fn get(trussed: &mut TrussedClient) -> Self {
 
     //     // TODO: inject properly
     //     let attestation_key = syscall!(trussed
@@ -103,7 +102,7 @@ impl Identity {
         ByteBuf::from_slice(b"AAGUID0123456789").unwrap()
     }
 
-    pub fn attestation_key<S: Syscall>(&mut self, trussed: &mut CryptoClient<S>) -> Option<Key>
+    pub fn attestation_key<T: TrussedClient>(&mut self, trussed: &mut T) -> Option<Key>
     {
         let key = Key {
             object_id: UniqueId::from(0)
@@ -168,7 +167,7 @@ pub struct PersistentState {
     // TODO: there has to be a better way than.. this
     // Pro-tip: it should involve types ^^
     //
-    // We could alternatively make all methods take a CryptoClient as parameter
+    // We could alternatively make all methods take a TrussedClient as parameter
     initialised: bool,
 
     key_encryption_key: Option<Key>,
@@ -191,7 +190,7 @@ impl PersistentState {
         Self::MAX_RESIDENT_CREDENTIALS_GUESSTIMATE
     }
 
-    pub fn load<S: Syscall>(trussed: &mut CryptoClient<S>) -> Result<Self> {
+    pub fn load<T: TrussedClient>(trussed: &mut T) -> Result<Self> {
 
         // TODO: add "exists_file" method instead?
         let result = block!(trussed.read_file(
@@ -221,7 +220,7 @@ impl PersistentState {
         previous_state
     }
 
-    pub fn save<S: Syscall>(&self, trussed: &mut CryptoClient<S>) -> Result<()> {
+    pub fn save<T: TrussedClient>(&self, trussed: &mut T) -> Result<()> {
         let data = crate::cbor_serialize_message(self).unwrap();
 
         syscall!(trussed.write_file(
@@ -233,7 +232,7 @@ impl PersistentState {
         Ok(())
     }
 
-    pub fn reset<S: Syscall>(&mut self, trussed: &mut CryptoClient<S>) -> Result<()> {
+    pub fn reset<T: TrussedClient>(&mut self, trussed: &mut T) -> Result<()> {
         if let Some(key) = self.key_encryption_key {
             syscall!(trussed.delete(key));
         }
@@ -248,7 +247,7 @@ impl PersistentState {
         self.save(trussed)
     }
 
-    pub fn load_if_not_initialised<S: Syscall>(&mut self, trussed: &mut CryptoClient<S>) {
+    pub fn load_if_not_initialised<T: TrussedClient>(&mut self, trussed: &mut T) {
         if !self.initialised {
             match Self::load(trussed) {
                 Ok(previous_self) => {
@@ -263,7 +262,7 @@ impl PersistentState {
         }
     }
 
-    pub fn timestamp<S: Syscall>(&mut self, trussed: &mut CryptoClient<S>) -> Result<u32> {
+    pub fn timestamp<T: TrussedClient>(&mut self, trussed: &mut T) -> Result<u32> {
         let now = self.timestamp;
         self.timestamp += 1;
         self.save(trussed)?;
@@ -271,7 +270,7 @@ impl PersistentState {
         Ok(now)
     }
 
-    pub fn key_encryption_key<S: Syscall>(&mut self, trussed: &mut CryptoClient<S>) -> Result<Key>
+    pub fn key_encryption_key<T: TrussedClient>(&mut self, trussed: &mut T) -> Result<Key>
     {
         match self.key_encryption_key {
             Some(key) => Ok(key),
@@ -279,7 +278,7 @@ impl PersistentState {
         }
     }
 
-    pub fn rotate_key_encryption_key<S: Syscall>(&mut self, trussed: &mut CryptoClient<S>) -> Result<Key> {
+    pub fn rotate_key_encryption_key<T: TrussedClient>(&mut self, trussed: &mut T) -> Result<Key> {
         if let Some(key) = self.key_encryption_key { syscall!(trussed.delete(key)); }
         let key = syscall!(trussed.generate_chacha8poly1305_key(StorageLocation::Internal)).key;
         self.key_encryption_key = Some(key);
@@ -287,7 +286,7 @@ impl PersistentState {
         Ok(key)
     }
 
-    pub fn key_wrapping_key<S: Syscall>(&mut self, trussed: &mut CryptoClient<S>) -> Result<Key>
+    pub fn key_wrapping_key<T: TrussedClient>(&mut self, trussed: &mut T) -> Result<Key>
     {
         match self.key_wrapping_key {
             Some(key) => Ok(key),
@@ -295,7 +294,7 @@ impl PersistentState {
         }
     }
 
-    pub fn rotate_key_wrapping_key<S: Syscall>(&mut self, trussed: &mut CryptoClient<S>) -> Result<Key> {
+    pub fn rotate_key_wrapping_key<T: TrussedClient>(&mut self, trussed: &mut T) -> Result<Key> {
         self.load_if_not_initialised(trussed);
         if let Some(key) = self.key_wrapping_key { syscall!(trussed.delete(key)); }
         let key = syscall!(trussed.generate_chacha8poly1305_key(StorageLocation::Internal)).key;
@@ -316,7 +315,7 @@ impl PersistentState {
         self.consecutive_pin_mismatches >= Self::RESET_RETRIES
     }
 
-     fn reset_retries<S: Syscall>(&mut self, trussed: &mut CryptoClient<S>) -> Result<()> {
+     fn reset_retries<T: TrussedClient>(&mut self, trussed: &mut T) -> Result<()> {
         if self.consecutive_pin_mismatches > 0 {
             self.consecutive_pin_mismatches = 0;
             self.save(trussed)?;
@@ -324,7 +323,7 @@ impl PersistentState {
         Ok(())
     }
 
-    fn decrement_retries<S: Syscall>(&mut self, trussed: &mut CryptoClient<S>) -> Result<()> {
+    fn decrement_retries<T: TrussedClient>(&mut self, trussed: &mut T) -> Result<()> {
         // error to call before initialization
         if self.consecutive_pin_mismatches < Self::RESET_RETRIES {
             self.consecutive_pin_mismatches += 1;
@@ -340,7 +339,7 @@ impl PersistentState {
         self.pin_hash
     }
 
-    pub fn set_pin_hash<S: Syscall>(&mut self, trussed: &mut CryptoClient<S>, pin_hash: [u8; 16]) -> Result<()> {
+    pub fn set_pin_hash<T: TrussedClient>(&mut self, trussed: &mut T, pin_hash: [u8; 16]) -> Result<()> {
         self.pin_hash = Some(pin_hash);
         self.save(trussed)?;
         Ok(())
@@ -386,14 +385,14 @@ impl RuntimeState {
         self.credentials.as_mut().unwrap()
     }
 
-    pub fn key_agreement_key<S: Syscall>(&mut self, trussed: &mut CryptoClient<S>) -> Key {
+    pub fn key_agreement_key<T: TrussedClient>(&mut self, trussed: &mut T) -> Key {
         match self.key_agreement_key {
             Some(key) => key,
             None => self.rotate_key_agreement_key(trussed),
         }
     }
 
-    pub fn rotate_key_agreement_key<S: Syscall>(&mut self, trussed: &mut CryptoClient<S>) -> Key {
+    pub fn rotate_key_agreement_key<T: TrussedClient>(&mut self, trussed: &mut T) -> Key {
         // TODO: need to rotate pin token?
         if let Some(key) = self.key_agreement_key { syscall!(trussed.delete(key)); }
 
@@ -402,14 +401,14 @@ impl RuntimeState {
         key
     }
 
-    pub fn pin_token<S: Syscall>(&mut self, trussed: &mut CryptoClient<S>) -> Key {
+    pub fn pin_token<T: TrussedClient>(&mut self, trussed: &mut T) -> Key {
         match self.pin_token {
             Some(token) => token,
             None => self.rotate_pin_token(trussed),
         }
     }
 
-    pub fn rotate_pin_token<S: Syscall>(&mut self, trussed: &mut CryptoClient<S>) -> Key {
+    pub fn rotate_pin_token<T: TrussedClient>(&mut self, trussed: &mut T) -> Key {
         // TODO: need to rotate key agreement key?
         if let Some(token) = self.pin_token { syscall!(trussed.delete(token)); }
         let token = syscall!(trussed.generate_hmacsha256_key(StorageLocation::Volatile)).key;
@@ -417,7 +416,7 @@ impl RuntimeState {
         token
     }
 
-    pub fn reset<S: Syscall>(&mut self, trussed: &mut CryptoClient<S>) {
+    pub fn reset<T: TrussedClient>(&mut self, trussed: &mut T) {
         self.rotate_key_agreement_key(trussed);
         self.rotate_pin_token(trussed);
         // self.drop_shared_secret(trussed);
@@ -426,7 +425,7 @@ impl RuntimeState {
     }
 
     // TODO: don't recalculate constantly
-    pub fn generate_shared_secret<S: Syscall>(&mut self, trussed: &mut CryptoClient<S>, platform_key_agreement_key: &CoseEcdhEsHkdf256PublicKey) -> Result<Key> {
+    pub fn generate_shared_secret<T: TrussedClient>(&mut self, trussed: &mut T, platform_key_agreement_key: &CoseEcdhEsHkdf256PublicKey) -> Result<Key> {
         let private_key = self.key_agreement_key(trussed);
 
         let serialized_pkak = cbor_serialize_message(platform_key_agreement_key).map_err(|_| Error::InvalidParameter)?;

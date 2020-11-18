@@ -108,14 +108,14 @@ impl core::convert::TryFrom<i32> for SupportedAlgorithm {
 /// and return upon button press.
 /// TODO: Do we need a timeout?
 pub trait UserPresence: Copy {
-    fn user_present(self, trussed: &mut TrussedClient, timeout_milliseconds: u32) -> bool;
+    fn user_present<T: TrussedClient>(self, trussed: &mut T, timeout_milliseconds: u32) -> bool;
 }
 
 #[derive(Copy, Clone)]
 pub struct SilentAuthenticator {}
 
 impl UserPresence for SilentAuthenticator {
-    fn user_present(self, _: &mut TrussedClient, _:u32) -> bool {
+    fn user_present<T: TrussedClient>(self, _: &mut T, _:u32) -> bool {
         true
     }
 }
@@ -124,7 +124,7 @@ impl UserPresence for SilentAuthenticator {
 pub struct NonSilentAuthenticator {}
 
 impl UserPresence for NonSilentAuthenticator {
-    fn user_present(self, trussed: &mut TrussedClient, timeout_milliseconds: u32) -> bool {
+    fn user_present<T: TrussedClient>(self, trussed: &mut T, timeout_milliseconds: u32) -> bool {
         let result = syscall!(trussed.confirm_user_present(timeout_milliseconds)).result;
         result.is_ok()
     }
@@ -136,17 +136,20 @@ fn cbor_serialize_message<T: serde::Serialize>(object: &T) -> core::result::Resu
     Ok(message)
 }
 
-pub struct Authenticator<UP>
-where UP: UserPresence
+pub struct Authenticator<UP, T>
+where UP: UserPresence,
+      T: TrussedClient,
 {
-    trussed: TrussedClient,
+    trussed: T,
     state: state::State,
     up: UP,
 }
 
-impl<UP: UserPresence> Authenticator<UP> {
-
-    pub fn new(trussed: TrussedClient, up: UP) -> Self {
+impl<UP, T> Authenticator<UP, T>
+where UP: UserPresence,
+      T: TrussedClient,
+{
+    pub fn new(trussed: T, up: UP) -> Self {
 
         let state = state::State::new();
         let authenticator = Self { trussed, state, up };

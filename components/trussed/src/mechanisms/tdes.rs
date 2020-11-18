@@ -12,7 +12,7 @@ use block_cipher_trait::BlockCipher;
 use crate::api::*;
 use crate::error::Error;
 use crate::service::*;
-use crate::board::Board;
+use crate::traits::platform::Board;
 use crate::types::*;
 
 #[cfg(feature = "tdes")]

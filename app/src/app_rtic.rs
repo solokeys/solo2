@@ -26,7 +26,7 @@ const APP: () = {
     struct Resources {
         apdu_dispatch: app::types::ApduDispatch,
         hid_dispatch: app::types::HidDispatch,
-        trussed: app::types::CryptoService,
+        trussed: app::types::Trussed,
 
         piv: app::types::Piv,
         fido: app::types::FidoApplet<fido_authenticator::NonSilentAuthenticator>,

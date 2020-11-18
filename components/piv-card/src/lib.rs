@@ -2,6 +2,8 @@
 
 pub mod constants;
 pub mod state;
+pub mod derp;
+pub mod der;
 
 logging::add!(logger);
 use logger::{blocking};
@@ -18,28 +20,26 @@ use iso7816::{
 };
 use apdu_dispatch::applet;
 // use apdu_dispatch::{Aid, Applet, Result as applet::Result, applet::Response};
-use trussed::Client as Trussed;
+use trussed::Client as TrussedClient;
 use trussed::{block, syscall};
 
-use usbd_ccid::{
-    // constants::*,
-    der::Der,
-    derp,
-};
+use der::Der;
 
 use constants::*;
 
-pub struct App
+pub struct App<T>
+where T: TrussedClient
 {
     state: state::State,
-    trussed: Trussed,
+    trussed: T,
     // trussed: RefCell<Trussed>,
 }
 
-impl App
+impl<T> App<T>
+where T: TrussedClient
 {
     pub fn new(
-        trussed: Trussed,
+        trussed: T,
     )
         -> Self
     {
@@ -923,7 +923,9 @@ impl App
 }
 
 
-impl applet::Aid for App {
+impl<T> applet::Aid for App<T>
+where T: TrussedClient
+{
 
     fn aid(&self) -> &'static [u8] {
         &constants::PIV_AID
@@ -935,7 +937,9 @@ impl applet::Aid for App {
 }
 
 
-impl applet::Applet for App {
+impl<T> applet::Applet for App<T>
+where T: TrussedClient
+{
     fn select(&mut self, _apdu: &Command) -> applet::Result {
         let mut der: Der<consts::U256> = Default::default();
         der.nested(0x61, |der| {

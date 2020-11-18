@@ -15,15 +15,19 @@ const RNG: VendorCommand = VendorCommand::H60;
 const VERSION: VendorCommand = VendorCommand::H61;
 const UUID: VendorCommand = VendorCommand::H62;
 
-pub struct Root {
+pub struct Root<T>
+where T: TrussedClient
+{
     got_wink: bool,
-    trussed: TrussedClient,
+    trussed: T,
     uuid: [u8; 16],
     version: u32,
 }
 
-impl Root {
-    pub fn new(client: TrussedClient, uuid: [u8; 16], version: u32) -> Self {
+impl<T> Root<T>
+where T: TrussedClient
+{
+    pub fn new(client: T, uuid: [u8; 16], version: u32) -> Self {
         Self {got_wink: false, trussed: client, uuid, version}
     }
 
@@ -45,7 +49,9 @@ impl Root {
 
 }
 
-impl App for Root {
+impl<T> App for Root<T>
+where T: TrussedClient
+{
     fn commands(&self) -> &'static [HidCommand] {
         &[
             HidCommand::Wink,
@@ -92,7 +98,9 @@ impl App for Root {
     }
 }
 
-impl applet::Aid for Root {
+impl<T> applet::Aid for Root<T>
+where T: TrussedClient
+{
     // Solo root app
     fn aid(&self) -> &'static [u8] {
         &[ 0xA0, 0x00, 0x00, 0x08, 0x47, 0x00, 0x00, 0x00, 0x01]
@@ -102,8 +110,9 @@ impl applet::Aid for Root {
     }
 }
 
-impl applet::Applet for Root {
-
+impl<T> applet::Applet for Root<T>
+where T: TrussedClient
+{
 
     fn select(&mut self, _apdu: &Command) -> applet::Result {
         Ok(Default::default())

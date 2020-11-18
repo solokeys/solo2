@@ -33,9 +33,6 @@ sha-1 = { version = "0.8.2", default-features = false, optional = true }
 sha2 = { version = "0.8.0", default-features = false }
 ufmt = "0.1.0"
 
-cortex-m-rtic = "0.5.1"
-# lpc55-hal = "0.0.3"
-lpc55-hal = { git = "https://github.com/nickray/lpc55-hal", branch = "main" }
 logging = { path = "../logging" }
 
 [dependencies.heapless-bytes]

@@ -48,9 +48,5 @@ pub struct ServiceEndpoint {
 
 // pub type ClientEndpoint = Requester<TrussedInterchange>;
 
-// in testing, this just directly calls service.process()
-// in reality, this should rtic::pend() the interrupt with handler triggering the service
-pub trait Syscall {
-    fn syscall(&mut self);
-}
+
 

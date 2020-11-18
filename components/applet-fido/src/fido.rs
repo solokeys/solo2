@@ -13,18 +13,23 @@ use crate::cbor::{parse_cbor};
 use crate::logger::{info, blocking};
 use logging::hex::*;
 
+use trussed::Client as TrussedClient;
 use fido_authenticator::{Authenticator, UserPresence};
 use apdu_dispatch::applet;
 use hid_dispatch::app as hid;
 
-pub struct Fido<UP>
-where UP: UserPresence
+pub struct Fido<UP, T>
+where UP: UserPresence,
+      T: TrussedClient
 {
-    authenticator: Authenticator<UP>,
+    authenticator: Authenticator<UP, T>,
 }
 
-impl<UP: UserPresence> Fido<UP> {
-    pub fn new(authenticator: Authenticator<UP>) -> Fido<UP> {
+impl<UP, TRUSSED> Fido<UP, TRUSSED>
+where UP: UserPresence,
+      TRUSSED: TrussedClient
+{
+    pub fn new(authenticator: Authenticator<UP, TRUSSED>) -> Fido<UP, TRUSSED> {
         Self { authenticator }
     }
 
@@ -141,7 +146,10 @@ impl<UP: UserPresence> Fido<UP> {
 
 }
 
-impl<UP: UserPresence> applet::Aid for Fido<UP> {
+impl<UP, T> applet::Aid for Fido<UP, T>
+where UP: UserPresence,
+      T: TrussedClient
+{
     fn aid(&self) -> &'static [u8] {
         &[ 0xA0, 0x00, 0x00, 0x06, 0x47, 0x2F, 0x00, 0x01 ]
     }
@@ -150,7 +158,10 @@ impl<UP: UserPresence> applet::Aid for Fido<UP> {
     }
 }
 
-impl<UP: UserPresence> applet::Applet for Fido<UP> {
+impl<UP, T> applet::Applet for Fido<UP, T>
+where UP: UserPresence,
+      T: TrussedClient
+{
 
 
     fn select(&mut self, _apdu: &Command) -> applet::Result {
@@ -215,7 +226,10 @@ impl<UP: UserPresence> applet::Applet for Fido<UP> {
 
 }
 
-impl<UP: UserPresence> hid::App for Fido<UP> {
+impl<UP, T> hid::App for Fido<UP, T>
+where UP: UserPresence,
+      T: TrussedClient
+{
 
     fn commands(&self,) -> &'static [hid::Command] {
         &[ hid::Command::Cbor, hid::Command::Msg ]
@@ -281,7 +295,7 @@ impl<UP: UserPresence> hid::App for Fido<UP> {
                 message.extend_from_slice(&response).ok();
 
                 if is_success {
-                    // Need to add x9000 success code (normally the apdu-dispatch does this, but 
+                    // Need to add x9000 success code (normally the apdu-dispatch does this, but
                     // since u2f uses apdus over hid, we must do it here.)
                     message.extend_from_slice(&[0x90, 0x00]).ok();
                     // blocking::dump_hex(&message, message.len());
