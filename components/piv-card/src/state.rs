@@ -1,7 +1,8 @@
 use heapless::ByteBuf;
 use trussed::{
-    block, syscall,
-    Client as Trussed,
+    block,
+    Client as TrussedClient,
+    syscall,
     types::{ObjectHandle, PathBuf, StorageLocation},
 };
 
@@ -29,7 +30,7 @@ impl State {
     //
     // TODO: it is really not good to overwrite user data on failure to decode old state.
     // To fix this, need a flag to detect if we're "fresh", and/or initialize state in factory.
-    pub fn persistent(&mut self, trussed: &mut Trussed) -> &mut Persistent {
+    pub fn persistent<T: TrussedClient>(&mut self, trussed: &mut T) -> &mut Persistent {
         if self.persistent.is_none() {
             self.persistent = Some(match Persistent::load(trussed) {
                 Ok(previous_self) => {
@@ -213,7 +214,8 @@ pub struct Keys {
     pub pinless_authentication_key: Option<ObjectHandle>,
 }
 
-impl Persistent {
+impl Persistent
+{
     pub const PIN_RETRIES_DEFAULT: u8 = 3;
     // hmm...!
     pub const PUK_RETRIES_DEFAULT: u8 = 5;
@@ -247,27 +249,27 @@ impl Persistent {
         self.puk == *other_puk
     }
 
-    pub fn set_pin(&mut self, trussed: &mut Trussed, new_pin: Pin) {
+    pub fn set_pin<T: TrussedClient>(&mut self, trussed: &mut T, new_pin: Pin) {
         self.pin = new_pin;
         self.save(trussed);
     }
 
-    pub fn set_puk(&mut self, trussed: &mut Trussed, new_puk: Pin) {
+    pub fn set_puk<T: TrussedClient>(&mut self, trussed: &mut T, new_puk: Pin) {
         self.puk = new_puk;
         self.save(trussed);
     }
 
-    pub fn reset_pin(&mut self, trussed: &mut Trussed) {
+    pub fn reset_pin<T: TrussedClient>(&mut self, trussed: &mut T) {
         self.set_pin(trussed, Pin::try_new(Self::DEFAULT_PIN).unwrap());
         self.reset_consecutive_pin_mismatches(trussed);
     }
 
-    pub fn reset_puk(&mut self, trussed: &mut Trussed) {
+    pub fn reset_puk<T: TrussedClient>(&mut self, trussed: &mut T) {
         self.set_puk(trussed, Pin::try_new(Self::DEFAULT_PUK).unwrap());
         self.reset_consecutive_puk_mismatches(trussed);
     }
 
-    pub fn increment_consecutive_pin_mismatches(&mut self, trussed: &mut Trussed) -> u8 {
+    pub fn increment_consecutive_pin_mismatches<T: TrussedClient>(&mut self, trussed: &mut T) -> u8 {
         if self.consecutive_pin_mismatches >= Self::PIN_RETRIES_DEFAULT {
             return 0;
         }
@@ -277,7 +279,7 @@ impl Persistent {
         Self::PIN_RETRIES_DEFAULT - self.consecutive_pin_mismatches
     }
 
-    pub fn increment_consecutive_puk_mismatches(&mut self, trussed: &mut Trussed) -> u8 {
+    pub fn increment_consecutive_puk_mismatches<T: TrussedClient>(&mut self, trussed: &mut T) -> u8 {
         if self.consecutive_puk_mismatches >= Self::PUK_RETRIES_DEFAULT {
             return 0;
         }
@@ -287,7 +289,7 @@ impl Persistent {
         Self::PUK_RETRIES_DEFAULT - self.consecutive_puk_mismatches
     }
 
-    pub fn reset_consecutive_pin_mismatches(&mut self, trussed: &mut Trussed) -> u8 {
+    pub fn reset_consecutive_pin_mismatches<T: TrussedClient>(&mut self, trussed: &mut T) -> u8 {
         if self.consecutive_pin_mismatches != 0 {
             self.consecutive_pin_mismatches = 0;
             self.save(trussed);
@@ -296,7 +298,7 @@ impl Persistent {
         Self::PIN_RETRIES_DEFAULT
     }
 
-    pub fn reset_consecutive_puk_mismatches(&mut self, trussed: &mut Trussed) -> u8 {
+    pub fn reset_consecutive_puk_mismatches<T: TrussedClient>(&mut self, trussed: &mut T) -> u8 {
         if self.consecutive_puk_mismatches != 0 {
             self.consecutive_puk_mismatches = 0;
             self.save(trussed);
@@ -305,11 +307,11 @@ impl Persistent {
         Self::PUK_RETRIES_DEFAULT
     }
 
-    pub fn reset_management_key(&mut self, trussed: &mut Trussed) {
+    pub fn reset_management_key<T: TrussedClient>(&mut self, trussed: &mut T) {
         self.set_management_key(trussed, YUBICO_DEFAULT_MANAGEMENT_KEY);
     }
 
-    pub fn set_management_key(&mut self, trussed: &mut Trussed, management_key: &[u8; 24]) {
+    pub fn set_management_key<T: TrussedClient>(&mut self, trussed: &mut T, management_key: &[u8; 24]) {
         let new_management_key = syscall!(trussed.unsafe_inject_tdes_key(
             management_key,
             trussed::types::StorageLocation::Internal,
@@ -320,7 +322,7 @@ impl Persistent {
         syscall!(trussed.delete(old_management_key));
     }
 
-    pub fn initialize(trussed: &mut Trussed) -> Self {
+    pub fn initialize<T: TrussedClient>(trussed: &mut T) -> Self {
         let management_key = syscall!(trussed.unsafe_inject_tdes_key(
             YUBICO_DEFAULT_MANAGEMENT_KEY,
             trussed::types::StorageLocation::Internal,
@@ -344,7 +346,7 @@ impl Persistent {
         }
     }
 
-    pub fn load(trussed: &mut Trussed) -> Result<Self> {
+    pub fn load<T: TrussedClient>(trussed: &mut T) -> Result<Self> {
         let data = block!(trussed.read_file(
                 StorageLocation::Internal,
                 PathBuf::from(Self::FILENAME),
@@ -363,7 +365,7 @@ impl Persistent {
         Ok(previous_state)
     }
 
-    pub fn save(&self, trussed: &mut Trussed) {
+    pub fn save<T: TrussedClient>(&self, trussed: &mut T) {
         let data: trussed::types::Message = trussed::cbor_serialize_bytebuf(self).unwrap();
 
         syscall!(trussed.write_file(
@@ -374,7 +376,7 @@ impl Persistent {
         ));
     }
 
-    pub fn timestamp(&mut self, trussed: &mut Trussed) -> u32 {
+    pub fn timestamp<T: TrussedClient>(&mut self, trussed: &mut T) -> u32 {
         self.timestamp += 1;
         self.save(trussed);
         self.timestamp

@@ -18,6 +18,7 @@ iso7816 = { path = "../iso7816" }
 interchange= { path = "../interchange" }
 ctap-types = { path = "../ctap-types" }
 logging = { path = "../logging" }
+trussed = { path = "../trussed" }
 
 [features]
 default = []

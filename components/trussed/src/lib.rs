@@ -8,7 +8,6 @@
 // extern crate std;
 
 pub mod api;
-pub mod board;
 pub mod client;
 pub mod config;
 pub mod error;
@@ -16,11 +15,13 @@ pub mod mechanisms;
 pub mod pipe;
 pub mod service;
 pub mod store;
+pub mod traits;
 pub mod types;
 
 pub use api::Reply;
 pub use error::Error;
-pub use client::Client;
+pub use client::Client as DefaultClient;
+pub use traits::client::Client;
 pub use service::Service;
 
 pub use ctap_types::{

@@ -8,7 +8,7 @@ use littlefs2::path::{Path, PathBuf};
 
 
 use crate::api::*;
-use crate::board::*;
+use crate::traits::platform::*;
 use crate::config::*;
 use crate::error::Error;
 use crate::mechanisms;
@@ -965,7 +965,7 @@ impl<B: Board> Service<B> {
     }
 }
 
-impl<B> crate::pipe::Syscall for &mut Service<B>
+impl<B> crate::client::Syscall for &mut Service<B>
 where B: Board
 {
     fn syscall(&mut self) {

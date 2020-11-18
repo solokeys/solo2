@@ -39,10 +39,6 @@ pub type FlashStorage = PlainFilesystem;
 #[cfg(not(feature = "no-encrypted-storage"))]
 pub type FlashStorage = PrinceFilesystem;
 
-pub type Piv = piv_card::App;
-
-pub use trussed::client::TrussedSyscall;
-
 pub mod usb;
 pub use usb::{UsbClasses, EnabledUsbPeripheral, SerialClass, CcidClass, CtapHidClass};
 
@@ -84,7 +80,18 @@ board!(Board,
     UI: crate::solo_trussed::UserInterface<ThreeButtons, RgbLed>,
 );
 
-pub type CryptoService = trussed::Service<Board>;
+#[derive(Default)]
+pub struct Syscall {}
+
+impl trussed::client::Syscall for Syscall {
+    #[inline]
+    fn syscall(&mut self) {
+        rtic::pend(lpc55_hal::raw::Interrupt::OS_EVENT);
+    }
+}
+
+pub type Trussed = trussed::Service<Board>;
+pub type TrussedClient = trussed::DefaultClient<Syscall>;
 
 pub type NfcSckPin = pins::Pio0_28;
 pub type NfcMosiPin = pins::Pio0_24;
@@ -117,9 +124,11 @@ pub type ApduDispatch = apdu_dispatch::dispatch::ApduDispatch;
 
 pub type HidDispatch = hid_dispatch::dispatch::Dispatch;
 
-pub type FidoApplet<UP> = applet_fido::Fido<UP>;
+pub type Piv = piv_card::App<TrussedClient>;
 
-pub type RootApp = applet_root::Root;
+pub type FidoApplet<UP> = applet_fido::Fido<UP, TrussedClient>;
+
+pub type RootApp = applet_root::Root<TrussedClient>;
 
 pub type PerfTimer = timer::Timer<ctimer::Ctimer4<hal::typestates::init_state::Enabled>>;
 

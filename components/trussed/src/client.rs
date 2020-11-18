@@ -4,19 +4,13 @@ use interchange::Requester;
 
 use crate::logger::{info, blocking};
 use crate::api::*;
-// use crate::config::*;
 use crate::error::*;
 use crate::pipe::TrussedInterchange;
 use crate::types::*;
 
-// to be fair, this is a programmer error,
-// and could also just panic
-#[derive(Copy, Clone, Debug)]
-pub enum ClientError {
-    Full,
-    Pending,
-    DataTooLarge,
-}
+use crate::traits;
+pub use crate::traits::client::{ClientError, ClientResult};
+pub use crate::traits::platform::Syscall;
 
 #[macro_export]
 macro_rules! block {
@@ -46,21 +40,64 @@ macro_rules! syscall {
     }}
 }
 
+pub struct FutureResult<'c, T, C: ?Sized>
+where C: traits::client::Client
+{
+    client: &'c mut C,
+    __: PhantomData<T>,
+}
 
-pub struct RawClient {
+impl<'c,T, C> FutureResult<'c, T, C>
+where
+    T: From<crate::api::Reply>,
+    C: traits::client::Client,
+{
+    pub fn new(client: &'c mut C) -> Self {
+        Self { client: client, __: PhantomData}
+    }
+    pub fn poll(&mut self)
+        -> core::task::Poll<core::result::Result<T, Error>>
+    {
+        use core::task::Poll::{Pending, Ready};
+        match self.client.poll() {
+            Ready(Ok(reply)) => Ready(Ok(T::from(reply))),
+            Ready(Err(error)) => Ready(Err(error)),
+            Pending => Pending
+        }
+    }
+
+}
+
+pub struct Client<S: Syscall> {
+    // raw: RawClient<Client<S>>,
+    syscall: S,
+
+    // RawClient:
     pub(crate) interchange: Requester<TrussedInterchange>,
     // pending: Option<Discriminant<Request>>,
     pending: Option<u8>,
 }
 
-impl RawClient {
-    pub fn new(interchange: Requester<TrussedInterchange>) -> Self {
-        Self { interchange, pending: None }
+// impl<S> From<(RawClient, S)> for Client<S>
+// where S: Syscall
+// {
+//     fn from(input: (RawClient, S)) -> Self {
+//         Self { raw: input.0, syscall: input.1 }
+//     }
+// }
+
+
+impl<S> Client<S>
+where S: Syscall
+{
+    pub fn new(interchange: Requester<TrussedInterchange>, syscall: S) -> Self {
+        Self { interchange: interchange, pending: None, syscall }
     }
 
     // call with any of `crate::api::request::*`
-    pub fn request<'c>(&'c mut self, req: impl Into<Request>)
-        -> core::result::Result<RawFutureResult<'c>, ClientError>
+    fn request<'c, T: From<crate::api::Reply>>(&'c mut self, req: impl Into<Request>)
+        // -> core::result::Result<FutureResult<'c, T, Client<S>>, ClientError>
+        -> ClientResult<'c, T, Self>
     {
         // TODO: handle failure
         // TODO: fail on pending (non-canceled) request)
@@ -75,40 +112,37 @@ impl RawClient {
         let request = req.into();
         self.pending = Some(u8::from(&request));
         self.interchange.request(request).map_err(drop).unwrap();
-        Ok(RawFutureResult::new(self))
-    }
-}
-
-pub struct RawFutureResult<'c> {
-    c: &'c mut RawClient,
-}
-
-impl<'c> RawFutureResult<'c> {
-
-    pub fn new(client: &'c mut RawClient) -> Self {
-        Self { c: client }
+        Ok(FutureResult::new(self))
     }
 
-    pub fn poll(&mut self)
+
+}
+
+                                //   core::result::Result<FutureResult<'c, T, Client<S>>, ClientError>
+
+impl<S> traits::client::Client for Client<S>
+where S: Syscall {
+
+    fn poll(&mut self)
         -> core::task::Poll<core::result::Result<Reply, Error>>
     {
-        match self.c.interchange.take_response() {
+        match self.interchange.take_response() {
             Some(reply) => {
                 // #[cfg(all(test, feature = "verbose-tests"))]
                 // println!("got a reply: {:?}", &reply);
                 match reply {
                     Ok(reply) => {
-                        if Some(u8::from(&reply)) == self.c.pending {
-                            self.c.pending = None;
+                        if Some(u8::from(&reply)) == self.pending {
+                            self.pending = None;
                             core::task::Poll::Ready(Ok(reply))
                         } else  {
                             // #[cfg(all(test, feature = "verbose-tests"))]
-                            info!("got: {:?}, expected: {:?}", Some(u8::from(&reply)), self.c.pending).ok();
+                            info!("got: {:?}, expected: {:?}", Some(u8::from(&reply)), self.pending).ok();
                             core::task::Poll::Ready(Err(Error::InternalError))
                         }
                     }
                     Err(error) => {
-                        self.c.pending = None;
+                        self.pending = None;
                         core::task::Poll::Ready(Err(error))
                     }
                 }
@@ -117,141 +151,49 @@ impl<'c> RawFutureResult<'c> {
             None => core::task::Poll::Pending
         }
     }
-}
 
-// instead of: `let mut future = client.request(request)`
-// allows: `let mut future = request.submit(&mut client)`
-pub trait SubmitRequest: Into<Request> {
-    fn submit<'c>(self, client: &'c mut RawClient)
-        -> Result<RawFutureResult<'c>, ClientError>
-    {
-        client.request(self)
-    }
-}
-
-impl SubmitRequest for request::GenerateKey {}
-// impl SubmitRequest for request::GenerateKeypair {}
-impl SubmitRequest for request::Sign {}
-impl SubmitRequest for request::Verify {}
-
-pub struct FutureResult<'c, T> {
-    f: RawFutureResult<'c>,
-    __: PhantomData<T>,
-}
-
-impl<'c, T> FutureResult<'c, T>
-where
-    T: From<crate::api::Reply>
-{
-    pub fn new<S: crate::pipe::Syscall>(client: &'c mut Client<S>) -> Self {
-        Self { f: RawFutureResult::new(&mut client.raw), __: PhantomData }
-    }
-
-    pub fn poll(&mut self)
-        -> core::task::Poll<core::result::Result<T, Error>>
-    {
-        use core::task::Poll::{Pending, Ready};
-        match self.f.poll() {
-            // Ready(Ok(reply)) => {
-            //     println!("my first match arm");
-            //     match T::try_from(reply) {
-            //         Ok(reply2) => {
-            //             println!("my second match arm");
-            //             Ready(Ok(reply2))
-            //         },
-            //         Err(_) => {
-            //             println!("not my second match arm");
-            //             Ready(Err(Error::ImplementationError))
-            //         }
-            //     }
-            // }
-            Ready(Ok(reply)) => Ready(Ok(T::from(reply))),
-            Ready(Err(error)) => Ready(Err(error)),
-            Pending => Pending
-        }
-    }
-}
-
-#[derive(Default)]
-pub struct TrussedSyscall {}
-
-impl crate::pipe::Syscall for TrussedSyscall {
-    #[inline]
-    fn syscall(&mut self) {
-        rtic::pend(lpc55_hal::raw::Interrupt::OS_EVENT);
-    }
-}
-
-pub struct Client<Syscall: crate::pipe::Syscall = TrussedSyscall> {
-    raw: RawClient,
-    syscall: Syscall,
-}
-
-impl<Syscall: crate::pipe::Syscall> From<(RawClient, Syscall)> for Client<Syscall> {
-    fn from(input: (RawClient, Syscall)) -> Self {
-        Self { raw: input.0, syscall: input.1 }
-    }
-}
-
-impl<Syscall: crate::pipe::Syscall> Client<Syscall> {
-    pub fn new(interchange: Requester<TrussedInterchange>, syscall: Syscall) -> Self {
-        Self { raw: RawClient::new(interchange), syscall }
-    }
-
-
-    pub fn agree<'c>(
+    fn agree<'c>(
         &'c mut self, mechanism: Mechanism,
         private_key: ObjectHandle, public_key: ObjectHandle,
         attributes: StorageAttributes,
         )
-        -> core::result::Result<FutureResult<'c, reply::Agree>, ClientError>
+        -> ClientResult<'c, reply::Agree, Self>
     {
-        self.raw.request(request::Agree {
+        let r = self.request(request::Agree {
             mechanism,
             private_key,
             public_key,
             attributes,
         })?;
-        self.syscall.syscall();
-        Ok(FutureResult::new(self))
+        r.client.syscall.syscall();
+        Ok(r)
     }
 
-    pub fn agree_p256<'c>(&'c mut self, private_key: &ObjectHandle, public_key: &ObjectHandle, persistence: StorageLocation)
-        -> core::result::Result<FutureResult<'c, reply::Agree>, ClientError>
+    fn derive_key<'c>(&'c mut self, mechanism: Mechanism, base_key: ObjectHandle, attributes: StorageAttributes)
+        -> ClientResult<'c, reply::DeriveKey, Self>
     {
-        self.agree(
-            Mechanism::P256,
-            private_key.clone(),
-            public_key.clone(),
-            StorageAttributes::new().set_persistence(persistence),
-        )
-    }
-
-    pub fn derive_key<'c>(&'c mut self, mechanism: Mechanism, base_key: ObjectHandle, attributes: StorageAttributes)
-        -> core::result::Result<FutureResult<'c, reply::DeriveKey>, ClientError>
-    {
-        self.raw.request(request::DeriveKey {
+        let r = self.request(request::DeriveKey {
             mechanism,
             base_key,
             attributes,
         })?;
-        self.syscall.syscall();
-        Ok(FutureResult::new(self))
+        r.client.syscall.syscall();
+        Ok(r)
     }
 
           // - mechanism: Mechanism
           // - key: ObjectHandle
           // - message: Message
           // - associated_data: ShortData
-    pub fn encrypt<'c>(&'c mut self, mechanism: Mechanism, key: ObjectHandle,
+    fn encrypt<'c>(&'c mut self, mechanism: Mechanism, key: ObjectHandle,
                        message: &[u8], associated_data: &[u8], nonce: Option<ShortData>)
-        -> core::result::Result<FutureResult<'c, reply::Encrypt>, ClientError>
+        -> ClientResult<'c, reply::Encrypt, Self>
     {
         let message = Message::from_slice(message).map_err(|_| ClientError::DataTooLarge)?;
         let associated_data = ShortData::from_slice(associated_data).map_err(|_| ClientError::DataTooLarge)?;
-        self.raw.request(request::Encrypt { mechanism, key, message, associated_data, nonce })?;
-        self.syscall.syscall();
-        Ok(FutureResult::new(self))
+        let r = self.request(request::Encrypt { mechanism, key, message, associated_data, nonce })?;
+        r.client.syscall.syscall();
+        Ok(r)
     }
 
           // - mechanism: Mechanism
@@ -260,220 +202,220 @@ impl<Syscall: crate::pipe::Syscall> Client<Syscall> {
           // - associated_data: ShortData
           // - nonce: ShortData
           // - tag: ShortData
-    pub fn decrypt<'c>(&'c mut self, mechanism: Mechanism, key: ObjectHandle,
+    fn decrypt<'c>(&'c mut self, mechanism: Mechanism, key: ObjectHandle,
                        message: &[u8], associated_data: &[u8],
                        nonce: &[u8], tag: &[u8],
                        )
-        -> core::result::Result<FutureResult<'c, reply::Decrypt>, ClientError>
+        -> ClientResult<'c, reply::Decrypt, Self>
     {
         let message = Message::from_slice(message).map_err(|_| ClientError::DataTooLarge)?;
         let associated_data = Message::from_slice(associated_data).map_err(|_| ClientError::DataTooLarge)?;
         let nonce = ShortData::from_slice(nonce).map_err(|_| ClientError::DataTooLarge)?;
         let tag = ShortData::from_slice(tag).map_err(|_| ClientError::DataTooLarge)?;
-        self.raw.request(request::Decrypt { mechanism, key, message, associated_data, nonce, tag })?;
-        self.syscall.syscall();
-        Ok(FutureResult::new(self))
+        let r = self.request(request::Decrypt { mechanism, key, message, associated_data, nonce, tag })?;
+        r.client.syscall.syscall();
+        Ok(r)
     }
 
           // - mechanism: Mechanism
           // - serialized_key: Message
           // - format: KeySerialization
           // - attributes: StorageAttributes
-    pub fn deserialize_key<'c>(&'c mut self, mechanism: Mechanism, serialized_key: Message,
+    fn deserialize_key<'c>(&'c mut self, mechanism: Mechanism, serialized_key: Message,
                                format: KeySerialization, attributes: StorageAttributes)
-        -> core::result::Result<FutureResult<'c, reply::DeserializeKey>, ClientError>
+        -> ClientResult<'c, reply::DeserializeKey, Self>
     {
-        self.raw.request(request::DeserializeKey {
+        let r = self.request(request::DeserializeKey {
             mechanism, serialized_key, format, attributes
         } )?;
-        self.syscall.syscall();
-        Ok(FutureResult::new(self))
+        r.client.syscall.syscall();
+        Ok(r)
     }
 
-    pub fn delete<'c>(
+    fn delete<'c>(
         &'c mut self,
         // mechanism: Mechanism,
         key: ObjectHandle,
     )
-        -> core::result::Result<FutureResult<'c, reply::Delete>, ClientError>
+        -> ClientResult<'c, reply::Delete, Self>
     {
-        self.raw.request(request::Delete {
+        let r = self.request(request::Delete {
             key,
             // mechanism,
         })?;
-        self.syscall.syscall();
-        Ok(FutureResult::new(self))
+        r.client.syscall.syscall();
+        Ok(r)
     }
 
-    pub fn debug_dump_store<'c>(
+    fn debug_dump_store<'c>(
         &'c mut self,
     )
-        -> core::result::Result<FutureResult<'c, reply::DebugDumpStore>, ClientError>
+        -> ClientResult<'c, reply::DebugDumpStore, Self>
     {
-        self.raw.request(request::DebugDumpStore {})?;
-        self.syscall.syscall();
-        Ok(FutureResult::new(self))
+        let r = self.request(request::DebugDumpStore {})?;
+        r.client.syscall.syscall();
+        Ok(r)
     }
 
-    pub fn exists<'c>(
+    fn exists<'c>(
         &'c mut self,
         mechanism: Mechanism,
         key: ObjectHandle,
     )
-        -> core::result::Result<FutureResult<'c, reply::Exists>, ClientError>
+        -> ClientResult<'c, reply::Exists, Self>
     {
-        self.raw.request(request::Exists {
+        let r = self.request(request::Exists {
             key,
             mechanism,
         })?;
-        self.syscall.syscall();
-        Ok(FutureResult::new(self))
+        r.client.syscall.syscall();
+        Ok(r)
     }
 
-    pub fn generate_key<'c>(&'c mut self, mechanism: Mechanism, attributes: StorageAttributes)
-        -> core::result::Result<FutureResult<'c, reply::GenerateKey>, ClientError>
+    fn generate_key<'c>(&'c mut self, mechanism: Mechanism, attributes: StorageAttributes)
+        -> ClientResult<'c, reply::GenerateKey, Self>
     {
-        self.raw.request(request::GenerateKey {
+        let r = self.request(request::GenerateKey {
             mechanism,
             attributes,
         })?;
-        self.syscall.syscall();
-        Ok(FutureResult::new(self))
+        r.client.syscall.syscall();
+        Ok(r)
     }
 
-    pub fn read_dir_first<'c>(
+    fn read_dir_first<'c>(
         &'c mut self,
         location: StorageLocation,
         dir: PathBuf,
         not_before_filename: Option<PathBuf>,
     )
-        -> core::result::Result<FutureResult<'c, reply::ReadDirFirst>, ClientError>
+        -> ClientResult<'c, reply::ReadDirFirst, Self>
     {
-        self.raw.request(request::ReadDirFirst { location, dir, not_before_filename } )?;
-        self.syscall.syscall();
-        Ok(FutureResult::new(self))
+        let r = self.request(request::ReadDirFirst { location, dir, not_before_filename } )?;
+        r.client.syscall.syscall();
+        Ok(r)
     }
 
-    pub fn read_dir_next<'c>(
+    fn read_dir_next<'c>(
         &'c mut self,
     )
-        -> core::result::Result<FutureResult<'c, reply::ReadDirNext>, ClientError>
+        -> ClientResult<'c, reply::ReadDirNext, Self>
     {
-        self.raw.request(request::ReadDirNext {} )?;
-        self.syscall.syscall();
-        Ok(FutureResult::new(self))
+        let r = self.request(request::ReadDirNext {} )?;
+        r.client.syscall.syscall();
+        Ok(r)
     }
 
-    pub fn read_dir_files_first<'c>(
+    fn read_dir_files_first<'c>(
         &'c mut self,
         location: StorageLocation,
         dir: PathBuf,
         user_attribute: Option<UserAttribute>,
     )
-        -> core::result::Result<FutureResult<'c, reply::ReadDirFilesFirst>, ClientError>
+        -> ClientResult<'c, reply::ReadDirFilesFirst, Self>
     {
-        self.raw.request(request::ReadDirFilesFirst { dir, location, user_attribute } )?;
-        self.syscall.syscall();
-        Ok(FutureResult::new(self))
+        let r = self.request(request::ReadDirFilesFirst { dir, location, user_attribute } )?;
+        r.client.syscall.syscall();
+        Ok(r)
     }
 
-    pub fn read_dir_files_next<'c>(
+    fn read_dir_files_next<'c>(
         &'c mut self,
     )
-        -> core::result::Result<FutureResult<'c, reply::ReadDirFilesNext>, ClientError>
+        -> ClientResult<'c, reply::ReadDirFilesNext, Self>
     {
-        self.raw.request(request::ReadDirFilesNext {} )?;
-        self.syscall.syscall();
-        Ok(FutureResult::new(self))
+        let r = self.request(request::ReadDirFilesNext {} )?;
+        r.client.syscall.syscall();
+        Ok(r)
     }
 
-    pub fn remove_dir<'c>(&'c mut self, location: StorageLocation, path: PathBuf)
-        -> core::result::Result<FutureResult<'c, reply::RemoveFile>, ClientError>
+    fn remove_dir<'c>(&'c mut self, location: StorageLocation, path: PathBuf)
+        -> ClientResult<'c, reply::RemoveFile, Self>
     {
-        self.raw.request(request::RemoveDir { location, path } )?;
-        self.syscall.syscall();
-        Ok(FutureResult::new(self))
+        let r = self.request(request::RemoveDir { location, path } )?;
+        r.client.syscall.syscall();
+        Ok(r)
     }
 
-    pub fn remove_file<'c>(&'c mut self, location: StorageLocation, path: PathBuf)
-        -> core::result::Result<FutureResult<'c, reply::RemoveFile>, ClientError>
+    fn remove_file<'c>(&'c mut self, location: StorageLocation, path: PathBuf)
+        -> ClientResult<'c, reply::RemoveFile, Self>
     {
-        self.raw.request(request::RemoveFile { location, path } )?;
-        self.syscall.syscall();
-        Ok(FutureResult::new(self))
+        let r = self.request(request::RemoveFile { location, path } )?;
+        r.client.syscall.syscall();
+        Ok(r)
     }
 
-    pub fn read_file<'c>(&'c mut self, location: StorageLocation, path: PathBuf)
-        -> core::result::Result<FutureResult<'c, reply::ReadFile>, ClientError>
+    fn read_file<'c>(&'c mut self, location: StorageLocation, path: PathBuf)
+        -> ClientResult<'c, reply::ReadFile, Self>
     {
-        self.raw.request(request::ReadFile { location, path } )?;
-        self.syscall.syscall();
-        Ok(FutureResult::new(self))
+        let r = self.request(request::ReadFile { location, path } )?;
+        r.client.syscall.syscall();
+        Ok(r)
     }
 
-    pub fn locate_file<'c>(&'c mut self, location: StorageLocation,
+    fn locate_file<'c>(&'c mut self, location: StorageLocation,
                            dir: Option<PathBuf>,
                            filename: PathBuf,
                            )
-        -> core::result::Result<FutureResult<'c, reply::LocateFile>, ClientError>
+        -> ClientResult<'c, reply::LocateFile, Self>
     {
-        self.raw.request(request::LocateFile { location, dir, filename } )?;
-        self.syscall.syscall();
-        Ok(FutureResult::new(self))
+        let r = self.request(request::LocateFile { location, dir, filename } )?;
+        r.client.syscall.syscall();
+        Ok(r)
     }
 
-    pub fn write_file<'c>(
+    fn write_file<'c>(
         &'c mut self,
         location: StorageLocation,
         path: PathBuf,
         data: Message,
         user_attribute: Option<UserAttribute>,
         )
-        -> core::result::Result<FutureResult<'c, reply::WriteFile>, ClientError>
+        -> ClientResult<'c, reply::WriteFile, Self>
     {
-        self.raw.request(request::WriteFile {
+        let r = self.request(request::WriteFile {
             location, path, data,
             user_attribute,
         } )?;
-        self.syscall.syscall();
-        Ok(FutureResult::new(self))
+        r.client.syscall.syscall();
+        Ok(r)
     }
           // - mechanism: Mechanism
           // - key: ObjectHandle
           // - format: KeySerialization
 
-    pub fn serialize_key<'c>(&'c mut self, mechanism: Mechanism, key: ObjectHandle, format: KeySerialization)
-        -> core::result::Result<FutureResult<'c, reply::SerializeKey>, ClientError>
+    fn serialize_key<'c>(&'c mut self, mechanism: Mechanism, key: ObjectHandle, format: KeySerialization)
+        -> ClientResult<'c, reply::SerializeKey, Self>
     {
-        self.raw.request(request::SerializeKey {
+        let r = self.request(request::SerializeKey {
             key,
             mechanism,
             format,
         })?;
-        self.syscall.syscall();
-        Ok(FutureResult::new(self))
+        r.client.syscall.syscall();
+        Ok(r)
     }
 
-    pub fn sign<'c>(
+    fn sign<'c>(
         &'c mut self,
         mechanism: Mechanism,
         key: ObjectHandle,
         data: &[u8],
         format: SignatureSerialization,
     )
-        -> core::result::Result<FutureResult<'c, reply::Sign>, ClientError>
+        -> ClientResult<'c, reply::Sign, Self>
     {
-        self.raw.request(request::Sign {
+        let r = self.request(request::Sign {
             key,
             mechanism,
             message: ByteBuf::from_slice(data).map_err(|_| ClientError::DataTooLarge)?,
             format,
         })?;
-        self.syscall.syscall();
-        Ok(FutureResult::new(self))
+        r.client.syscall.syscall();
+        Ok(r)
     }
 
-    pub fn verify<'c>(
+    fn verify<'c>(
         &'c mut self,
         mechanism: Mechanism,
         key: ObjectHandle,
@@ -481,251 +423,110 @@ impl<Syscall: crate::pipe::Syscall> Client<Syscall> {
         signature: &[u8],
         format: SignatureSerialization,
     )
-        -> core::result::Result<FutureResult<'c, reply::Verify>, ClientError>
+        -> ClientResult<'c, reply::Verify, Self>
     {
-        self.raw.request(request::Verify {
+        let r = self.request(request::Verify {
             mechanism,
             key,
             message: Message::from_slice(&message).expect("all good"),
             signature: Signature::from_slice(&signature).expect("all good"),
             format,
         })?;
-        self.syscall.syscall();
-        Ok(FutureResult::new(self))
+        r.client.syscall.syscall();
+        Ok(r)
     }
 
 
-    pub fn random_bytes<'c>(&'c mut self, count: usize)
-        -> core::result::Result<FutureResult<'c, reply::RandomByteBuf>, ClientError>
+    fn random_bytes<'c>(&'c mut self, count: usize)
+        -> ClientResult<'c, reply::RandomByteBuf, Self>
     {
-        self.raw.request(request::RandomByteBuf { count } )?;
-        self.syscall.syscall();
-        Ok(FutureResult::new(self))
+        let r = self.request(request::RandomByteBuf { count } )?;
+        r.client.syscall.syscall();
+        Ok(r)
     }
 
-    pub fn hash<'c>(&'c mut self, mechanism: Mechanism, message: Message)
-        -> core::result::Result<FutureResult<'c, reply::Hash>, ClientError>
+    fn hash<'c>(&'c mut self, mechanism: Mechanism, message: Message)
+        -> ClientResult<'c, reply::Hash, Self>
     {
-        self.raw.request(request::Hash { mechanism, message } )?;
-        self.syscall.syscall();
-        Ok(FutureResult::new(self))
+        let r = self.request(request::Hash { mechanism, message } )?;
+        r.client.syscall.syscall();
+        Ok(r)
     }
 
-    pub fn hash_sha256<'c>(&'c mut self, message: &[u8])
-        -> core::result::Result<FutureResult<'c, reply::Hash>, ClientError>
-    {
-        self.hash(Mechanism::Sha256, Message::from_slice(message).map_err(|_| ClientError::DataTooLarge)?)
-    }
 
-    pub fn decrypt_chacha8poly1305<'c>(&'c mut self, key: &ObjectHandle, message: &[u8], associated_data: &[u8],
-                                       nonce: &[u8], tag: &[u8])
-        -> core::result::Result<FutureResult<'c, reply::Decrypt>, ClientError>
-    {
-        self.decrypt(Mechanism::Chacha8Poly1305, key.clone(), message, associated_data, nonce, tag)
-    }
-
-    pub fn decrypt_aes256cbc<'c>(&'c mut self, key: &ObjectHandle, message: &[u8])
-        -> core::result::Result<FutureResult<'c, reply::Decrypt>, ClientError>
-    {
-        self.decrypt(
-            Mechanism::Aes256Cbc, key.clone(), message, &[], &[], &[],
-        )
-    }
-
-    pub fn encrypt_chacha8poly1305<'c>(&'c mut self, key: &ObjectHandle, message: &[u8], associated_data: &[u8],
-                                       nonce: Option<&[u8; 12]>)
-        -> core::result::Result<FutureResult<'c, reply::Encrypt>, ClientError>
-    {
-        self.encrypt(Mechanism::Chacha8Poly1305, key.clone(), message, associated_data,
-            nonce.and_then(|nonce| ShortData::from_slice(nonce).ok()))
-    }
-
-    pub fn decrypt_tdes<'c>(&'c mut self, key: &ObjectHandle, message: &[u8])
-        -> core::result::Result<FutureResult<'c, reply::Decrypt>, ClientError>
-    {
-        self.decrypt(Mechanism::Tdes, key.clone(), message, &[], &[], &[])
-    }
-
-    pub fn encrypt_tdes<'c>(&'c mut self, key: &ObjectHandle, message: &[u8])
-        -> core::result::Result<FutureResult<'c, reply::Encrypt>, ClientError>
-    {
-        self.encrypt(Mechanism::Tdes, key.clone(), message, &[], None)
-    }
-
-    pub fn unsafe_inject_totp_key<'c>(&'c mut self, raw_key: &[u8; 20], persistence: StorageLocation)
-        -> core::result::Result<FutureResult<'c, reply::UnsafeInjectKey>, ClientError>
+    fn unsafe_inject_totp_key<'c>(&'c mut self, raw_key: &[u8; 20], persistence: StorageLocation)
+        -> ClientResult<'c, reply::UnsafeInjectKey, Self>
     {
         blocking::info!("{}B: raw key: {:X?}", raw_key.len(), raw_key).ok();
-        self.raw.request(request::UnsafeInjectKey {
+        let r = self.request(request::UnsafeInjectKey {
             mechanism: Mechanism::Totp,
             raw_key: ShortData::from_slice(raw_key).unwrap(),
             attributes: StorageAttributes::new().set_persistence(persistence),
         })?;
-        self.syscall.syscall();
-        Ok(FutureResult::new(self))
+        r.client.syscall.syscall();
+        Ok(r)
     }
 
-    pub fn unsafe_inject_tdes_key<'c>(&'c mut self, raw_key: &[u8; 24], persistence: StorageLocation)
-        -> core::result::Result<FutureResult<'c, reply::UnsafeInjectKey>, ClientError>
+    fn unsafe_inject_tdes_key<'c>(&'c mut self, raw_key: &[u8; 24], persistence: StorageLocation)
+        -> ClientResult<'c, reply::UnsafeInjectKey, Self>
     {
-        self.raw.request(request::UnsafeInjectKey {
+        let r = self.request(request::UnsafeInjectKey {
             mechanism: Mechanism::Tdes,
             raw_key: ShortData::from_slice(raw_key).unwrap(),
             attributes: StorageAttributes::new().set_persistence(persistence),
         })?;
-        self.syscall.syscall();
-        Ok(FutureResult::new(self))
-    }
-
-    pub fn generate_chacha8poly1305_key<'c>(&'c mut self, persistence: StorageLocation)
-        -> core::result::Result<FutureResult<'c, reply::GenerateKey>, ClientError>
-    {
-        self.generate_key(Mechanism::Chacha8Poly1305, StorageAttributes::new().set_persistence(persistence))
-    }
-
-    pub fn generate_ed25519_private_key<'c>(&'c mut self, persistence: StorageLocation)
-        -> core::result::Result<FutureResult<'c, reply::GenerateKey>, ClientError>
-    {
-        self.generate_key(Mechanism::Ed25519, StorageAttributes::new().set_persistence(persistence))
-    }
-
-    pub fn generate_hmacsha256_key<'c>(&'c mut self, persistence: StorageLocation)
-        -> core::result::Result<FutureResult<'c, reply::GenerateKey>, ClientError>
-    {
-        self.generate_key(Mechanism::HmacSha256, StorageAttributes::new().set_persistence(persistence))
-    }
-
-    pub fn derive_ed25519_public_key<'c>(&'c mut self, private_key: &ObjectHandle, persistence: StorageLocation)
-        -> core::result::Result<FutureResult<'c, reply::DeriveKey>, ClientError>
-    {
-        self.derive_key(Mechanism::Ed25519, private_key.clone(), StorageAttributes::new().set_persistence(persistence))
-    }
-
-    pub fn generate_p256_private_key<'c>(&'c mut self, persistence: StorageLocation)
-        -> core::result::Result<FutureResult<'c, reply::GenerateKey>, ClientError>
-    {
-        self.generate_key(Mechanism::P256, StorageAttributes::new().set_persistence(persistence))
-    }
-
-    pub fn derive_p256_public_key<'c>(&'c mut self, private_key: &ObjectHandle, persistence: StorageLocation)
-        -> core::result::Result<FutureResult<'c, reply::DeriveKey>, ClientError>
-    {
-        self.derive_key(Mechanism::P256, private_key.clone(), StorageAttributes::new().set_persistence(persistence))
-    }
-
-    pub fn sign_ed25519<'c>(&'c mut self, key: &ObjectHandle, message: &[u8])
-        -> core::result::Result<FutureResult<'c, reply::Sign>, ClientError>
-    {
-        self.sign(Mechanism::Ed25519, key.clone(), message, SignatureSerialization::Raw)
-    }
-
-    pub fn sign_hmacsha256<'c>(&'c mut self, key: &ObjectHandle, message: &[u8])
-        -> core::result::Result<FutureResult<'c, reply::Sign>, ClientError>
-    {
-        self.sign(Mechanism::HmacSha256, key.clone(), message, SignatureSerialization::Raw)
-    }
-
-    // generally, don't offer multiple versions of a mechanism, if possible.
-    // try using the simplest when given the choice.
-    // hashing is something users can do themselves hopefully :)
-    //
-    // on the other hand: if users need sha256, then if the service runs in secure trustzone
-    // domain, we'll maybe need two copies of the sha2 code
-    pub fn sign_p256<'c>(&'c mut self, key: &ObjectHandle, message: &[u8], format: SignatureSerialization)
-        -> core::result::Result<FutureResult<'c, reply::Sign>, ClientError>
-    {
-        self.sign(Mechanism::P256, key.clone(), message, format)
-    }
-
-    pub fn sign_totp<'c>(&'c mut self, key: &ObjectHandle, timestamp: u64)
-        -> core::result::Result<FutureResult<'c, reply::Sign>, ClientError>
-    {
-        self.sign(Mechanism::Totp, key.clone(),
-            &timestamp.to_le_bytes().as_ref(),
-            SignatureSerialization::Raw,
-        )
+        r.client.syscall.syscall();
+        Ok(r)
     }
 
           // - mechanism: Mechanism
           // - wrapping_key: ObjectHandle
           // - wrapped_key: Message
           // - associated_data: Message
-    pub fn unwrap_key<'c>(&'c mut self, mechanism: Mechanism, wrapping_key: ObjectHandle, wrapped_key: Message,
+    fn unwrap_key<'c>(&'c mut self, mechanism: Mechanism, wrapping_key: ObjectHandle, wrapped_key: Message,
                        associated_data: &[u8], attributes: StorageAttributes)
-        -> core::result::Result<FutureResult<'c, reply::UnwrapKey>, ClientError>
+        -> ClientResult<'c, reply::UnwrapKey, Self>
     {
         let associated_data = Message::from_slice(associated_data).map_err(|_| ClientError::DataTooLarge)?;
-        self.raw.request(request::UnwrapKey { mechanism, wrapping_key, wrapped_key, associated_data, attributes })?;
-        self.syscall.syscall();
-        Ok(FutureResult::new(self))
-    }
-
-    pub fn unwrap_key_chacha8poly1305<'c>(&'c mut self, wrapping_key: &ObjectHandle, wrapped_key: &Message,
-                       associated_data: &[u8], location: StorageLocation)
-        -> core::result::Result<FutureResult<'c, reply::UnwrapKey>, ClientError>
-    {
-        self.unwrap_key(Mechanism::Chacha8Poly1305, wrapping_key.clone(), wrapped_key.clone(), associated_data,
-                         StorageAttributes::new().set_persistence(location))
-    }
-
-    pub fn verify_ed25519<'c>(&'c mut self, key: &ObjectHandle, message: &[u8], signature: &[u8])
-        -> core::result::Result<FutureResult<'c, reply::Verify>, ClientError>
-    {
-        self.verify(Mechanism::Ed25519, key.clone(), message, signature, SignatureSerialization::Raw)
-    }
-
-    pub fn verify_p256<'c>(&'c mut self, key: &ObjectHandle, message: &[u8], signature: &[u8])
-        -> core::result::Result<FutureResult<'c, reply::Verify>, ClientError>
-    {
-        self.verify(Mechanism::P256, key.clone(), message, signature, SignatureSerialization::Raw)
+        let r = self.request(request::UnwrapKey { mechanism, wrapping_key, wrapped_key, associated_data, attributes })?;
+        r.client.syscall.syscall();
+        Ok(r)
     }
 
           // - mechanism: Mechanism
           // - wrapping_key: ObjectHandle
           // - key: ObjectHandle
           // - associated_data: Message
-    pub fn wrap_key<'c>(&'c mut self, mechanism: Mechanism, wrapping_key: ObjectHandle, key: ObjectHandle,
+    fn wrap_key<'c>(&'c mut self, mechanism: Mechanism, wrapping_key: ObjectHandle, key: ObjectHandle,
                        associated_data: &[u8])
-        -> core::result::Result<FutureResult<'c, reply::WrapKey>, ClientError>
+        -> ClientResult<'c, reply::WrapKey, Self>
     {
         let associated_data = Message::from_slice(associated_data).map_err(|_| ClientError::DataTooLarge)?;
-        self.raw.request(request::WrapKey { mechanism, wrapping_key, key, associated_data })?;
-        self.syscall.syscall();
-        Ok(FutureResult::new(self))
+        let r = self.request(request::WrapKey { mechanism, wrapping_key, key, associated_data })?;
+        r.client.syscall.syscall();
+        Ok(r)
     }
 
-    pub fn wrap_key_chacha8poly1305<'c>(&'c mut self, wrapping_key: &ObjectHandle, key: &ObjectHandle,
-                       associated_data: &[u8])
-        -> core::result::Result<FutureResult<'c, reply::WrapKey>, ClientError>
-    {
-        self.wrap_key(Mechanism::Chacha8Poly1305, wrapping_key.clone(), key.clone(), associated_data)
-    }
 
-    pub fn wrap_key_aes256cbc<'c>(&'c mut self, wrapping_key: &ObjectHandle, key: &ObjectHandle)
-        -> core::result::Result<FutureResult<'c, reply::WrapKey>, ClientError>
+    fn confirm_user_present<'c>(&'c mut self, timeout_milliseconds: u32)
+        -> ClientResult<'c, reply::RequestUserConsent, Self>
     {
-        self.wrap_key(Mechanism::Aes256Cbc, wrapping_key.clone(), key.clone(), &[])
-    }
-
-    pub fn confirm_user_present<'c>(&'c mut self, timeout_milliseconds: u32)
-        -> core::result::Result<FutureResult<'c, reply::RequestUserConsent>, ClientError>
-    {
-        self.raw.request(request::RequestUserConsent {
+        let r = self.request(request::RequestUserConsent {
             level: consent::Level::Normal,
             timeout_milliseconds,
         } )?;
-        self.syscall.syscall();
-        Ok(FutureResult::new(self))
+        r.client.syscall.syscall();
+        Ok(r)
     }
 
-    pub fn reboot<'c>(&'c mut self, to: reboot::To)
-        -> core::result::Result<FutureResult<'c, reply::Reboot>, ClientError>
+    fn reboot<'c>(&'c mut self, to: reboot::To)
+        -> ClientResult<'c, reply::Reboot, Self>
     {
-        self.raw.request(request::Reboot {
+        let r = self.request(request::Reboot {
             to: to,
         } )?;
-        self.syscall.syscall();
-        Ok(FutureResult::new(self))
+        r.client.syscall.syscall();
+        Ok(r)
     }
 
 }

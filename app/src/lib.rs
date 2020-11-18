@@ -45,7 +45,7 @@ use fm11nc08::{
 };
 use hal::drivers::timer::Lap;
 use hal::traits::wg::timer::Cancel;
-use trussed::board::UserInterface;
+use trussed::traits::platform::UserInterface;
 
 //
 // Board Initialization
@@ -197,7 +197,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     // types::Authenticator,
     types::ApduDispatch,
     types::HidDispatch,
-    types::CryptoService,
+    types::Trussed,
 
     types::Piv,
     types::FidoApplet<fido_authenticator::NonSilentAuthenticator>,
@@ -512,7 +512,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     };
 
     let mut solobee_interface = solo_trussed::UserInterface::new(rtc, three_buttons, rgb);
-    solobee_interface.set_status(trussed::board::ui::Status::Idle);
+    solobee_interface.set_status(trussed::traits::platform::ui::Status::Idle);
 
     let board = Board::new(rng, store, solobee_interface);
     let mut trussed = trussed::service::Service::new(board);
@@ -521,17 +521,17 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     piv_client_id.push(b"piv2\0".try_into().unwrap());
     assert!(trussed.add_endpoint(piv_trussed_responder, piv_client_id).is_ok());
 
-    let syscaller = trussed::client::TrussedSyscall::default();
-    let piv_trussed = trussed::client::Client::new(
+    let syscaller = types::Syscall::default();
+    let piv_trussed = types::TrussedClient::new(
         piv_trussed_requester,
         syscaller,
     );
 
-    let syscaller = trussed::client::TrussedSyscall::default();
-    let root_trussed = trussed::client::Client::new(root_trussed_requester, syscaller);
+    let syscaller = types::Syscall::default();
+    let root_trussed = types::TrussedClient::new(root_trussed_requester, syscaller);
 
-    let syscaller = trussed::client::TrussedSyscall::default();
-    let trussed_client = trussed::client::Client::new(fido_trussed_requester, syscaller);
+    let syscaller = types::Syscall::default();
+    let trussed_client = types::TrussedClient::new(fido_trussed_requester, syscaller);
 
     assert!(trussed.add_endpoint(fido_trussed_responder, fido_client_id).is_ok());
     assert!(trussed.add_endpoint(root_trussed_responder, root_client_id).is_ok());

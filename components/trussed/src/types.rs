@@ -24,7 +24,7 @@ use ufmt::derive::uDebug;
 
 use crate::config::*;
 
-pub use crate::board::Board;
+pub use crate::traits::platform::Board;
 pub use crate::client::FutureResult;
 
 pub mod ui {

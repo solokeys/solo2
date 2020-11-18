@@ -4,7 +4,7 @@ use crate::hal::{
 };
 use board_traits::buttons::{Press, Edge};
 use board_traits::rgb_led::RgbLed;
-use trussed::board::{
+use trussed::traits::platform::{
     ui,
     reboot,
     consent,
@@ -62,7 +62,7 @@ RGB: RgbLed,
     }
 }
 
-impl<BUTTONS, RGB> trussed::board::UserInterface for UserInterface<BUTTONS,RGB>
+impl<BUTTONS, RGB> trussed::traits::platform::UserInterface for UserInterface<BUTTONS,RGB>
 where
 BUTTONS: Press + Edge,
 RGB: RgbLed,

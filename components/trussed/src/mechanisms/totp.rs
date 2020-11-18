@@ -3,7 +3,7 @@ use core::convert::TryInto;
 use crate::api::*;
 use crate::error::Error;
 use crate::service::*;
-use crate::board::Board;
+use crate::traits::platform::Board;
 use crate::types::*;
 
 // code copied from https://github.com/avacariu/rust-oath

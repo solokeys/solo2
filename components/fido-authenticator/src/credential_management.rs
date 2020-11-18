@@ -6,6 +6,7 @@ use crate::logger::{blocking};
 
 use trussed::{
     syscall,
+    Client as TrussedClient,
     types::{
         DirEntry,
         StorageLocation,
@@ -37,35 +38,44 @@ use crate::{
     state::CommandCache,
 };
 
-pub struct CredentialManagement<'a, UP>
-where UP: UserPresence
+pub struct CredentialManagement<'a, UP, T>
+where UP: UserPresence,
+      T: TrussedClient,
 {
-    authnr: &'a mut Authenticator<UP>,
+    authnr: &'a mut Authenticator<UP, T>,
 }
 
-impl<UP: UserPresence> core::ops::Deref for CredentialManagement<'_, UP>
+impl<UP, T> core::ops::Deref for CredentialManagement<'_, UP, T>
+where UP: UserPresence,
+      T: TrussedClient,
 {
-    type Target = Authenticator<UP>;
+    type Target = Authenticator<UP, T>;
     fn deref(&self) -> &Self::Target {
         &self.authnr
     }
 }
 
-impl<UP: UserPresence> core::ops::DerefMut for CredentialManagement<'_, UP>
+impl<UP, T> core::ops::DerefMut for CredentialManagement<'_, UP, T>
+where UP: UserPresence,
+      T: TrussedClient,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.authnr
     }
 }
 
-impl<'a, UP: UserPresence> CredentialManagement<'a, UP>
+impl<'a, UP, T> CredentialManagement<'a, UP, T>
+where UP: UserPresence,
+      T: TrussedClient,
 {
-    pub fn new(authnr: &'a mut Authenticator<UP>) -> Self {
+    pub fn new(authnr: &'a mut Authenticator<UP, T>) -> Self {
         Self { authnr }
     }
 }
 
-impl<UP: UserPresence> CredentialManagement<'_, UP>
+impl<UP, T> CredentialManagement<'_, UP, T>
+where UP: UserPresence,
+      T: TrussedClient,
 {
     pub fn get_creds_metadata(&mut self) -> Result<Response> {
         blocking::info!("get metadata").ok();

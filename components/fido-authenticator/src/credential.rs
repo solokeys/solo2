@@ -2,7 +2,7 @@ use core::convert::{TryFrom, TryInto};
 
 use trussed::{
     block, syscall,
-    Client as CryptoClient,
+    Client as TrussedClient,
     types::{
         ObjectHandle,
     },
@@ -176,9 +176,9 @@ impl Credential {
         }
     }
 
-    pub fn id_using_hash<'a>(
+    pub fn id_using_hash<'a, T: TrussedClient>(
         &self,
-        crypto: &mut CryptoClient,
+        crypto: &mut T,
         key_encryption_key: &ObjectHandle,
         rp_id_hash: &ByteBuf32,
     )
@@ -197,9 +197,9 @@ impl Credential {
         Ok(credential_id)
     }
 
-    pub fn id<'a>(
+    pub fn id<'a, T: TrussedClient>(
         &self,
-        trussed: &mut CryptoClient,
+        trussed: &mut T,
         key_encryption_key: &ObjectHandle,
     )
         -> Result<CredentialId>
@@ -242,8 +242,8 @@ impl Credential {
         }
     }
 
-    pub fn try_from<UP: UserPresence>(
-        authnr: &mut Authenticator<UP>,
+    pub fn try_from<UP: UserPresence, T: TrussedClient>(
+        authnr: &mut Authenticator<UP,T>,
         rp_id_hash: &ByteBuf<consts::U32>,
         descriptor: &PublicKeyCredentialDescriptor,
     )
@@ -252,8 +252,8 @@ impl Credential {
         Self::try_from_bytes(authnr, rp_id_hash, &descriptor.id)
     }
 
-    pub fn try_from_bytes<UP: UserPresence>(
-        authnr: &mut Authenticator<UP>,
+    pub fn try_from_bytes<UP: UserPresence, T: TrussedClient>(
+        authnr: &mut Authenticator<UP, T>,
         rp_id_hash: &ByteBuf<consts::U32>,
         id: &[u8],
     )

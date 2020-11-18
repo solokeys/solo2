@@ -55,7 +55,7 @@ macro_rules! board { (
         }
     }
 
-    unsafe impl $crate::board::Board for $BoardName {
+    unsafe impl $crate::traits::platform::Board for $BoardName {
         type R = $Rng;
         type S = $Store;
         type UI = $UserInterface;
@@ -74,4 +74,9 @@ macro_rules! board { (
     }
 }}
 
+/// Trussed client will call this method when making a Trussed request.
+/// This is intended to trigger a secure context on the platform.
+pub trait Syscall {
+    fn syscall(&mut self);
+}
 
