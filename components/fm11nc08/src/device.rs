@@ -26,7 +26,7 @@ use hal::{
         ctimer::Ctimer,
     }
 };
-use crate::traits::nfc;
+use iso14443::traits::nfc;
 use logging::hex::*;
 use logging::hex;
 

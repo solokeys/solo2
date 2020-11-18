@@ -14,6 +14,7 @@ nb = "1"
 ufmt = "0.1.0"
 
 logging = {path = "../logging"}
+iso14443 = {path = "../iso14443"}
 
 [dependencies.lpc55-hal]
 git = "https://github.com/nickray/lpc55-hal"
