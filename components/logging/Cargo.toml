@@ -8,14 +8,15 @@ edition = "2018"
 
 [dependencies]
 cfg-if = "0.1.10"
-cortex-m-funnel = { git = "https://github.com/conorpp/cortex-m-funnel"}
-cortex-m-semihosting = "0.3.5"
+cortex-m-funnel = { git = "https://github.com/conorpp/cortex-m-funnel", optional=true}
+cortex-m-semihosting = { version = "0.3.5", optional=true }
 nb = "1"
 ufmt = {version =  "0.1.0"}
 
 [features]
 default = ["all"]
 std = []
+cortex-m = ["cortex-m-funnel","cortex-m-semihosting"]
 
 # Enable all logs
 all=[]
