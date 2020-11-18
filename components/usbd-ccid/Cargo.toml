@@ -17,7 +17,6 @@ logging = { package = "logging", path = "../logging",version = "0.1.0" }
 
 apdu-dispatch = { path = "../apdu-dispatch" }
 iso7816 = { path = "../iso7816" }
-untrusted = "0.7.1"
 usb-device = { version = "0.2.3", features = ["control-buffer-256"] }
 
 [features]

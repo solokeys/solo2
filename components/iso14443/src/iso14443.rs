@@ -1,7 +1,7 @@
 use core::mem::MaybeUninit;
 use core::time::Duration;
 use heapless::ByteBuf;
-use fm11nc08::traits::{
+use crate::traits::{
     nfc,
 };
 use iso7816::command;
