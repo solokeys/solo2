@@ -32,6 +32,9 @@ pub mod ctap1 {
 
     #[derive(Clone, Debug,uDebug, PartialEq)]
     pub enum Response {
+        // Compiler not letting this enum be empty.
+        #[allow(non_camel_case_types)]
+        _unused,
     }
 
 }

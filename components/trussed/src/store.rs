@@ -191,21 +191,21 @@ macro_rules! store { (
         }
 
         fn ifs_ptr() -> *mut $crate::store::Fs<$Ifs> {
-            use core::{cell::RefCell, mem::MaybeUninit};
+            use core::{mem::MaybeUninit};
             use $crate::store::Fs;
             static mut IFS: MaybeUninit<Fs<$Ifs>> = MaybeUninit::uninit();
             unsafe { IFS.as_mut_ptr() }
         }
 
         fn efs_ptr() -> *mut $crate::store::Fs<$Efs> {
-            use core::{cell::RefCell, mem::MaybeUninit};
+            use core::{mem::MaybeUninit};
             use $crate::store::Fs;
             static mut EFS: MaybeUninit<Fs<$Efs>> = MaybeUninit::uninit();
             unsafe { EFS.as_mut_ptr() }
         }
 
         fn vfs_ptr() -> *mut $crate::store::Fs<$Vfs> {
-            use core::{cell::RefCell, mem::MaybeUninit};
+            use core::{mem::MaybeUninit};
             use $crate::store::Fs;
             static mut VFS: MaybeUninit<Fs<$Vfs>> = MaybeUninit::uninit();
             unsafe { VFS.as_mut_ptr() }
@@ -259,7 +259,7 @@ macro_rules! store { (
                     &mut *IFS_ALLOC.as_mut_ptr(),
                     &mut *IFS_STORAGE.as_mut_ptr(),
                 )?);
-                let mut ifs = $crate::store::Fs::new(IFS.as_ref().unwrap());
+                let ifs = $crate::store::Fs::new(IFS.as_ref().unwrap());
                 Self::ifs_ptr().write(ifs);
 
                 EFS_ALLOC.as_mut_ptr().write(efs_alloc);
@@ -268,7 +268,7 @@ macro_rules! store { (
                     &mut *EFS_ALLOC.as_mut_ptr(),
                     &mut *EFS_STORAGE.as_mut_ptr(),
                 )?);
-                let mut efs = $crate::store::Fs::new(EFS.as_ref().unwrap());
+                let efs = $crate::store::Fs::new(EFS.as_ref().unwrap());
                 Self::efs_ptr().write(efs);
 
                 VFS_ALLOC.as_mut_ptr().write(vfs_alloc);
@@ -277,7 +277,7 @@ macro_rules! store { (
                     &mut *VFS_ALLOC.as_mut_ptr(),
                     &mut *VFS_STORAGE.as_mut_ptr(),
                 )?);
-                let mut vfs = $crate::store::Fs::new(VFS.as_ref().unwrap());
+                let vfs = $crate::store::Fs::new(VFS.as_ref().unwrap());
                 Self::vfs_ptr().write(vfs);
 
                 Ok(())

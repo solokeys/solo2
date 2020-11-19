@@ -1,5 +1,5 @@
-// #![cfg_attr(not(test), no_std)]
-#![no_std]
+#![cfg_attr(not(test), no_std)]
+// #![no_std]
 
 // prevent a spurious error message: https://github.com/rust-lang/rust/issues/54010
 // UNFORTUNATELY: with #![cfg(test)], no longer compiles for no_std,
@@ -30,5 +30,11 @@ pub use ctap_types::{
 };
 
 logging::add!(logger);
-// #[cfg(test)]
-// mod tests;
+
+#[cfg(test)]
+mod tests;
+
+#[cfg(test)]
+#[macro_use]
+extern crate serial_test;
+

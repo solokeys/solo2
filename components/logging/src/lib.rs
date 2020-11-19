@@ -22,12 +22,12 @@ pub fn stub_dump_hex (_bin: &[u8], _len: usize) -> Result {
     Ok(())
 }
 
-#[cfg(not(feature = "std"))]
+#[cfg(feature = "cortex-m")]
 extern crate funnel;
-#[cfg(not(feature = "std"))]
+#[cfg(feature = "cortex-m")]
 pub use crate::funnel::*;
 
-#[cfg(not(feature = "std"))]
+#[cfg(feature = "cortex-m")]
 pub mod print_functions {
     // For embedded use
     pub use super::{Result, funnel, hex, hex::*};

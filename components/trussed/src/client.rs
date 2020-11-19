@@ -95,7 +95,7 @@ where S: Syscall
     }
 
     // call with any of `crate::api::request::*`
-    fn request<'c, T: From<crate::api::Reply>>(&'c mut self, req: impl Into<Request>)
+    pub fn request<'c, T: From<crate::api::Reply>>(&'c mut self, req: impl Into<Request>)
         // -> core::result::Result<FutureResult<'c, T, Client<S>>, ClientError>
         -> ClientResult<'c, T, Self>
     {
