@@ -5,6 +5,9 @@ authors = ["Nicolas Stalder <n@stalder.io>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[dev-dependencies]
+# Testing
+serial_test = { version = "*" }
 
 [dependencies]
 aes = { version = "0.3.2", default-features = false }
@@ -34,6 +37,7 @@ sha2 = { version = "0.8.0", default-features = false }
 ufmt = "0.1.0"
 
 logging = { path = "../logging" }
+
 
 [dependencies.heapless-bytes]
 # version = "0.1.0"
@@ -102,5 +106,9 @@ clients-4 = []
 clients-5 = []
 
 [patch.crates-io]
-# heapless = { git = "https://github.com/nicolas-solokeys/heapless", branch = "bytebuf" }
-heapless = { path = "../../../heapless" }
+heapless = { git = "https://github.com/nicolas-solokeys/heapless", branch = "bytebuf" }
+
+# MacOS needed patches
+micro-ecc-sys = {git="https://github.com/conorpp/micro-ecc-sys", branch="fix-macos"}
+littlefs2-sys = {git="https://github.com/conorpp/littlefs2-sys", branch="fix-macos"}
+nisty = {git = "https://github.com/ycrypto/nisty", branch="main"}
