@@ -2,9 +2,11 @@ use core::convert::{TryFrom, TryInto};
 
 use crate::logger::{info, blocking};
 pub use embedded_hal::blocking::rng::Read as RngRead;
+use rand_core::{RngCore, SeedableRng};
 use heapless::ByteBuf;
 use interchange::Responder;
 use littlefs2::path::{Path, PathBuf};
+use chacha20::ChaCha8Rng;
 
 
 use crate::api::*;
@@ -15,7 +17,6 @@ use crate::mechanisms;
 use crate::pipe::TrussedInterchange;
 use crate::store::{self, *};
 use crate::types::*;
-
 pub use crate::pipe::ServiceEndpoint;
 
 // #[macro_use]
@@ -73,6 +74,7 @@ where B: Board
     // TODO: how/when to clear
     read_dir_files_state: Option<ReadDirFilesState>,
     read_dir_state: Option<ReadDirState>,
+    rng_state: Option<ChaCha8Rng>,
 }
 
 impl<B: Board> ServiceResources<B> {
@@ -83,6 +85,7 @@ impl<B: Board> ServiceResources<B> {
             currently_serving: PathBuf::new(),
             read_dir_files_state: None,
             read_dir_state: None,
+            rng_state: None,
         }
     }
 }
@@ -645,10 +648,61 @@ impl<B: Board> ServiceResources<B> {
 
             Request::RandomByteBuf(request) => {
                 if request.count < 1024 {
+
+                    // Check if our RNG is loaded.
+                    if self.rng_state.is_none() {
+
+                        let path = PathBuf::from(b"rng-state.bin");
+
+                        // If it hasn't been saved to flash yet, generate it from HW RNG.
+                        let current_state = if ! path.exists(&self.board.store().ifs()) {
+                            let mut current_state = [0u8; 32];
+                            self.board.rng().read(&mut current_state)
+                                .map_err(|_| Error::EntropyMalfunction)?;
+                            current_state
+                        } else {
+                            // Use the last saved state.
+                            let current_state_bytebuf: ByteBuf<consts::U32> = store::read(self.board.store(), StorageLocation::Internal, &path)?;
+                            let mut current_state = [0u8; 32];
+                            current_state.clone_from_slice(&current_state_bytebuf);
+                            current_state
+                        };
+
+                        // Before we finish loading, we need to "split" our RNG state
+                        // and save it to use as RNG state for next boot.
+                        // This is avoid writing to flash on every RNG syscall, and to only have
+                        // to write to flash once per boot.
+
+                        // 1. First, Generate 32 new bytes from the HW TRNG.
+                        let mut next_state = [0u8; 32];
+                        self.board.rng().read(&mut next_state)
+                            .map_err(|_| Error::EntropyMalfunction)?;
+
+                        // 2. XOR our current state into it.
+                        for i in 0 .. next_state.len() {
+                            next_state[i] = next_state[i] ^ current_state[i];
+                        }
+
+                        // 3. Hash it to protect from a HW RNG failure.
+                        use sha2::digest::Digest;
+                        let mut hash = sha2::Sha256::new();
+                        hash.input(&next_state);
+                        next_state.clone_from_slice(&hash.result());
+
+                        store::store(self.board.store(), StorageLocation::Internal, &path, &next_state[..]).unwrap();
+
+                        // Initialize our ChaCha8 construction with our current state.
+                        self.rng_state = Some(chacha20::ChaCha8Rng::from_seed(current_state));
+                    }
+
+
+                    let chacha = self.rng_state.as_mut().unwrap();
+
                     let mut bytes = Message::new();
                     bytes.resize_default(request.count).unwrap();
-                    self.board.rng().read(&mut bytes)
-                        .map_err(|_| Error::EntropyMalfunction)?;
+
+                    chacha.fill_bytes(&mut bytes);
+
                     Ok(Reply::RandomByteBuf(reply::RandomByteBuf { bytes } ))
                 } else {
                     Err(Error::MechanismNotAvailable)
@@ -841,7 +895,6 @@ impl<B: Board> ServiceResources<B> {
         let serialized_bytes = crate::cbor_serialize(&serialized_key, &mut buf).map_err(|_| Error::CborError)?;
         let key_id = self.generate_unique_id()?;
         let path = self.key_path(key_type, &key_id);
-
         store::store(self.board.store(), location, &path, &serialized_bytes)?;
 
         Ok(key_id)
@@ -929,6 +982,15 @@ impl<B: Board> Service<B> {
 
     pub fn add_endpoint(&mut self, interchange: Responder<TrussedInterchange>, client_id: ClientId) -> Result<(), ServiceEndpoint> {
         self.eps.push(ServiceEndpoint { interchange, client_id })
+    }
+
+    pub fn set_seed_if_uninitialized(&mut self, seed: &[u8; 32]) {
+
+        let path = PathBuf::from(b"rng-state.bin");
+        if ! path.exists(&self.resources.board.store().ifs()) {
+            store::store(self.resources.board.store(), StorageLocation::Internal, &path, &seed[..]).unwrap();
+        }
+
     }
 
     // currently, this just blinks the green heartbeat LED (former toggle_red in app_rtic.rs)

@@ -9,6 +9,7 @@ use crate::types::*;
 use littlefs2::fs::{Allocation, Filesystem};
 use littlefs2::const_ram_storage;
 use interchange::Interchange;
+use entropy::shannon_entropy;
 
 
 
@@ -67,29 +68,19 @@ impl crate::platform::UserInterface for UserInterface
 
 }
 
+const_ram_storage!(InternalStorage, 4096*10);
+const_ram_storage!(ExternalStorage, 4096*10);
+const_ram_storage!(VolatileStorage, 4096*10);
+
+
 
 
 // Using macro to avoid maintaining the type declarations
-macro_rules! setup {
-    ($client:ident) => {
-            const_ram_storage!(InternalStorage, 4096*10);
-            const_ram_storage!(ExternalStorage, 4096*10);
-            const_ram_storage!(VolatileStorage, 4096*10);
-
-            store!(Store,
-                Internal: InternalStorage,
-                External: ExternalStorage,
-                Volatile: VolatileStorage
-            );
-            board!(Board,
-                R: MockRng,
-                S: Store,
-                UI: UserInterface,
-            );
-            pub type TestClient<'a> = crate::DefaultClient<&'a mut crate::Service<Board>>;
+macro_rules! create_memory {
+    () => {
+        {
 
             let filesystem = InternalStorage::new();
-
             static mut INTERNAL_STORAGE: Option<InternalStorage> = None;
             unsafe { INTERNAL_STORAGE = Some(filesystem); }
             static mut INTERNAL_FS_ALLOC: Option<Allocation<InternalStorage>> = None;
@@ -103,26 +94,94 @@ macro_rules! setup {
             static mut VOLATILE_FS_ALLOC: Option<Allocation<VolatileStorage>> = None;
             unsafe { VOLATILE_FS_ALLOC = Some(Filesystem::allocate()); }
 
-
-            let store = Store::claim().unwrap();
-
-            store.mount(
+            (
                 unsafe { INTERNAL_FS_ALLOC.as_mut().unwrap() },
-                // unsafe { &mut INTERNAL_STORAGE },
                 unsafe { INTERNAL_STORAGE.as_mut().unwrap() },
                 unsafe { EXTERNAL_FS_ALLOC.as_mut().unwrap() },
                 unsafe { &mut EXTERNAL_STORAGE },
                 unsafe { VOLATILE_FS_ALLOC.as_mut().unwrap() },
                 unsafe { &mut VOLATILE_STORAGE },
-                // to trash existing data, set to true
-                true,
+            )
+        }
+
+    };
+    // Create a "copy"
+    ($memory: expr) => {
+        {
+            let mem_2 = unsafe{&*(&$memory as *const (
+                &'static mut littlefs2::fs::Allocation<InternalStorage>,
+                &'static mut InternalStorage,
+                &'static mut littlefs2::fs::Allocation<ExternalStorage>,
+                &'static mut ExternalStorage,
+                &'static mut littlefs2::fs::Allocation<VolatileStorage>,
+                &'static mut VolatileStorage,
+            ))};
+            let mem_2 = (
+                (mem_2.0 as *const littlefs2::fs::Allocation<InternalStorage>) as u64,
+                (mem_2.1 as *const InternalStorage) as u64,
+                (mem_2.2 as *const littlefs2::fs::Allocation<ExternalStorage>) as u64,
+                (mem_2.3 as *const ExternalStorage) as u64,
+                (mem_2.4 as *const littlefs2::fs::Allocation<VolatileStorage>) as u64,
+                (mem_2.5 as *const VolatileStorage) as u64,
+            );
+            let mem_2: (
+                &'static mut littlefs2::fs::Allocation<InternalStorage>,
+                &'static mut InternalStorage,
+                &'static mut littlefs2::fs::Allocation<ExternalStorage>,
+                &'static mut ExternalStorage,
+                &'static mut littlefs2::fs::Allocation<VolatileStorage>,
+                &'static mut VolatileStorage,
+            ) = (
+                unsafe{std::mem::transmute(mem_2.0)},
+                unsafe{std::mem::transmute(mem_2.1)},
+                unsafe{std::mem::transmute(mem_2.2)},
+                unsafe{std::mem::transmute(mem_2.3)},
+                unsafe{std::mem::transmute(mem_2.4)},
+                unsafe{std::mem::transmute(mem_2.5)},
+            );
+
+            mem_2
+        }
+
+    }
+}
+macro_rules! setup {
+    ($client:ident) => {
+        let memory = create_memory!();
+        setup!($client, Store, Board, memory, [0u8; 32], true);
+    };
+    ($client:ident, $store:ident, $board: ident, $memory:expr, $seed:expr, $reformat: expr) => {
+
+
+            store!($store,
+                Internal: InternalStorage,
+                External: ExternalStorage,
+                Volatile: VolatileStorage
+            );
+            board!($board,
+                R: MockRng,
+                S: $store,
+                UI: UserInterface,
+            );
+
+            let store = $store::claim().unwrap();
+
+            store.mount(
+                $memory.0,
+                $memory.1,
+                $memory.2,
+                $memory.3,
+                $memory.4,
+                $memory.5,
+                $reformat,
             ).unwrap();
+
 
             let rng = MockRng::new();
             let pc_interface: UserInterface = Default::default();
 
-            let board = Board::new(rng, store, pc_interface);
-            let mut trussed: crate::Service<Board> = crate::service::Service::new(board);
+            let board = $board::new(rng, store, pc_interface);
+            let mut trussed: crate::Service<$board> = crate::service::Service::new(board);
 
             let (test_trussed_requester, test_trussed_responder) = crate::pipe::TrussedInterchange::claim(0)
                 .expect("could not setup TEST TrussedInterchange");
@@ -131,10 +190,14 @@ macro_rules! setup {
 
             assert!(trussed.add_endpoint(test_trussed_responder, test_client_id).is_ok());
 
-            let mut $client = TestClient::new(
-                test_trussed_requester,
-                &mut trussed
-            );
+            trussed.set_seed_if_uninitialized(&$seed);
+            let mut $client = {
+                pub type TestClient<'a> = crate::DefaultClient<&'a mut crate::Service<$board>>;
+                TestClient::new(
+                    test_trussed_requester,
+                    &mut trussed
+                )
+            };
 
     }
 }
@@ -299,3 +362,84 @@ fn aead() {
 
         assert_eq!(&message[..], plaintext.unwrap().as_slice());
 }
+
+#[test]
+#[serial]
+fn rng() {
+
+    macro_rules! gen_bytes {
+        ($client:expr, $size: expr) => {
+            {
+                assert!(($size % 128) == 0);
+                let mut rng_bytes = [0u8; $size];
+                for x in (0..$size).step_by(128) {
+                    let rng_chunk =
+                        block!(
+                            $client
+                            .random_bytes(128)
+                            .expect("no client error")
+                        )
+                        .expect("no errors")
+                        .bytes;
+                    rng_bytes[x .. x + 128].clone_from_slice(&rng_chunk);
+                }
+                rng_bytes
+            }
+        }
+    }
+
+    setup!(client1);
+    let bytes = gen_bytes!(client1, 1024*100);
+    let entropy = shannon_entropy(&bytes);
+    println!("got entropy of {} bytes: {}", bytes.len(), entropy);
+    assert!(entropy > 7.99);
+
+    // Since RNG is deterministic for these tests, we expect two clients with same seed
+    // to have the same output.
+    let mem1 = create_memory!();
+    let mem2 = create_memory!();
+    let mem3 = create_memory!();
+    setup!(client_twin1, StoreTwin1, BoardTwin1, mem1, [0x01u8; 32], true);
+    setup!(client_twin2, StoreTwin2, BoardTwin2, mem2, [0x01u8; 32], true);
+    setup!(client_3, StoreTwin3, BoardTwin3, mem3, [0x02u8; 32], true);
+    let bytes_twin1 = gen_bytes!(client_twin1, 1024*100);
+    let bytes_twin2 = gen_bytes!(client_twin2, 1024*100);
+    let bytes_3 = gen_bytes!(client_3, 1024*100);
+
+    for i in 0 .. bytes_twin2.len() {
+        assert!(bytes_twin1[i] == bytes_twin2[i]);
+    }
+    for i in 0 .. bytes_twin2.len() {
+        // bytes_3 was from different seed.
+        if bytes_3[i] != bytes_twin2[i] {
+            break;
+        }
+        if i > 200 {
+            assert!(false, "Changing seed did not change rng");
+        }
+    }
+
+    let mem = create_memory!();
+    let mem_copy = create_memory!(mem);
+
+    // Trussed saves the RNG state so it cannot produce the same RNG on different boots.
+    setup!(client_twin3, StoreTwin4, BoardTwin4, mem, [0x01u8; 32], true);
+
+    let first_128 = gen_bytes!(client_twin3, 128);
+
+    // This time don't reformat the memory -- should pick up on last rng state.
+    setup!(client_twin4, StoreTwin5, BoardTwin5, mem_copy, [0x01u8; 32], false);
+
+    let second_128 = gen_bytes!(client_twin4, 128);
+
+    let mut mismatch_count = 0;
+    for i in 0 .. 128 {
+        assert!(first_128[i] == bytes_twin2[i]);
+        if first_128[i] != second_128[i] {
+            mismatch_count += 1;
+        }
+    }
+    assert!(mismatch_count > 100);
+
+}
+
