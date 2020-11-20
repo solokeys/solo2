@@ -169,7 +169,7 @@ GenerateKey<B> for super::P256
     {
         // generate keypair
         let mut seed = [0u8; 32];
-        resources.board.rng().read(&mut seed)
+        resources.fill_random_bytes(&mut seed)
             .map_err(|_| Error::EntropyMalfunction)?;
 
         // let keypair = nisty::Keypair::generate_patiently(&seed);
