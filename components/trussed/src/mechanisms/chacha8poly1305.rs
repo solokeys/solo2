@@ -24,7 +24,7 @@ GenerateKey<B> for super::Chacha8Poly1305 {
         let mut serialized = [0u8; 44];
 
         let entropy = &mut serialized[..32];
-        resources.board.rng().read(entropy)
+        resources.fill_random_bytes(entropy)
             .map_err(|_| Error::EntropyMalfunction)?;
 
         // store keys

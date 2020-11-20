@@ -648,60 +648,9 @@ impl<B: Board> ServiceResources<B> {
 
             Request::RandomByteBuf(request) => {
                 if request.count < 1024 {
-
-                    // Check if our RNG is loaded.
-                    if self.rng_state.is_none() {
-
-                        let path = PathBuf::from(b"rng-state.bin");
-
-                        // If it hasn't been saved to flash yet, generate it from HW RNG.
-                        let current_state = if ! path.exists(&self.board.store().ifs()) {
-                            let mut current_state = [0u8; 32];
-                            self.board.rng().read(&mut current_state)
-                                .map_err(|_| Error::EntropyMalfunction)?;
-                            current_state
-                        } else {
-                            // Use the last saved state.
-                            let current_state_bytebuf: ByteBuf<consts::U32> = store::read(self.board.store(), StorageLocation::Internal, &path)?;
-                            let mut current_state = [0u8; 32];
-                            current_state.clone_from_slice(&current_state_bytebuf);
-                            current_state
-                        };
-
-                        // Before we finish loading, we need to "split" our RNG state
-                        // and save it to use as RNG state for next boot.
-                        // This is avoid writing to flash on every RNG syscall, and to only have
-                        // to write to flash once per boot.
-
-                        // 1. First, Generate 32 new bytes from the HW TRNG.
-                        let mut next_state = [0u8; 32];
-                        self.board.rng().read(&mut next_state)
-                            .map_err(|_| Error::EntropyMalfunction)?;
-
-                        // 2. XOR our current state into it.
-                        for i in 0 .. next_state.len() {
-                            next_state[i] = next_state[i] ^ current_state[i];
-                        }
-
-                        // 3. Hash it to protect from a HW RNG failure.
-                        use sha2::digest::Digest;
-                        let mut hash = sha2::Sha256::new();
-                        hash.input(&next_state);
-                        next_state.clone_from_slice(&hash.result());
-
-                        store::store(self.board.store(), StorageLocation::Internal, &path, &next_state[..]).unwrap();
-
-                        // Initialize our ChaCha8 construction with our current state.
-                        self.rng_state = Some(chacha20::ChaCha8Rng::from_seed(current_state));
-                    }
-
-
-                    let chacha = self.rng_state.as_mut().unwrap();
-
                     let mut bytes = Message::new();
                     bytes.resize_default(request.count).unwrap();
-
-                    chacha.fill_bytes(&mut bytes);
+                    self.fill_random_bytes(&mut bytes)?;
 
                     Ok(Reply::RandomByteBuf(reply::RandomByteBuf { bytes } ))
                 } else {
@@ -963,12 +912,67 @@ impl<B: Board> ServiceResources<B> {
     pub fn generate_unique_id(&mut self) -> Result<UniqueId, Error> {
         let mut unique_id = [0u8; 16];
 
-        self.board.rng().read(&mut unique_id)
-            .map_err(|_| Error::EntropyMalfunction)?;
+        self.fill_random_bytes(&mut unique_id)?;
 
         // #[cfg(all(test, feature = "verbose-tests"))]
         // println!("unique id {:?}", &unique_id);
         Ok(UniqueId(unique_id))
+    }
+
+    pub fn fill_random_bytes(&mut self, bytes: &mut[u8]) -> Result<(), Error> {
+
+        // Check if our RNG is loaded.
+        if self.rng_state.is_none() {
+
+            let path = PathBuf::from(b"rng-state.bin");
+
+            // If it hasn't been saved to flash yet, generate it from HW RNG.
+            let current_state = if ! path.exists(&self.board.store().ifs()) {
+                let mut current_state = [0u8; 32];
+                self.board.rng().read(&mut current_state)
+                    .map_err(|_| Error::EntropyMalfunction)?;
+                current_state
+            } else {
+                // Use the last saved state.
+                let current_state_bytebuf: ByteBuf<consts::U32> = store::read(self.board.store(), StorageLocation::Internal, &path)?;
+                let mut current_state = [0u8; 32];
+                current_state.clone_from_slice(&current_state_bytebuf);
+                current_state
+            };
+
+            // Before we finish loading, we need to "split" our RNG state
+            // and save it to use as RNG state for next boot.
+            // This is avoid writing to flash on every RNG syscall, and to only have
+            // to write to flash once per boot.
+
+            // 1. First, Generate 32 new bytes from the HW TRNG.
+            let mut next_state = [0u8; 32];
+            self.board.rng().read(&mut next_state)
+                .map_err(|_| Error::EntropyMalfunction)?;
+
+            // 2. XOR our current state into it.
+            for i in 0 .. next_state.len() {
+                next_state[i] = next_state[i] ^ current_state[i];
+            }
+
+            // 3. Hash it to protect from a HW RNG failure.
+            use sha2::digest::Digest;
+            let mut hash = sha2::Sha256::new();
+            hash.input(&next_state);
+            next_state.clone_from_slice(&hash.result());
+
+            store::store(self.board.store(), StorageLocation::Internal, &path, &next_state[..]).unwrap();
+
+            // Initialize our ChaCha8 construction with our current state.
+            self.rng_state = Some(chacha20::ChaCha8Rng::from_seed(current_state));
+        }
+
+
+        let chacha = self.rng_state.as_mut().unwrap();
+
+        chacha.fill_bytes(bytes);
+        Ok(())
+
     }
 
 }

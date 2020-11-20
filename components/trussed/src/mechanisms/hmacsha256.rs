@@ -58,7 +58,7 @@ GenerateKey<B> for super::HmacSha256
         -> Result<reply::GenerateKey, Error>
     {
         let mut seed = [0u8; 16];
-        resources.board.rng().read(&mut seed).map_err(|_| Error::EntropyMalfunction)?;
+        resources.fill_random_bytes(&mut seed).map_err(|_| Error::EntropyMalfunction)?;
 
         // let keypair = salty::Keypair::from(&seed);
         // #[cfg(all(test, feature = "verbose-tests"))]
