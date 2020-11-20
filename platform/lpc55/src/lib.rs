@@ -154,16 +154,11 @@ fn validate_cfpa(pfr: &mut Pfr<hal::typestates::init_state::Enabled>) {
     } else {
         logger::info!("do not need to update cfpa version {}", cfpa.secure_fw_version).ok();
     }
-    #[cfg(not(feature = "no-encrypted-storage"))]
-    {
         // Unless encryption is explicity disabled, we require that PRINCE has been provisioned.
-        // Check by seeing if the IV in CFPA is zero or not.
-        let mut iv_or = 0;
-        for i in 0 .. cfpa.iv_code_prince_region[2].iv.len() {
-            iv_or |= cfpa.iv_code_prince_region[2].iv[i];
-        }
-        assert!(iv_or != 0);
-    }
+    #[cfg(not(feature = "no-encrypted-storage"))]
+    assert!(
+        cfpa.key_provisioned(hal::peripherals::pfr::KeyType::PrinceRegion2)
+    );
 }
 
 // SoloKeys stores a product string in the first 64 bytes of CMPA.
