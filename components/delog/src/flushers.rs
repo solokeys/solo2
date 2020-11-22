@@ -1,22 +1,14 @@
-//! The typical flushers in a `std` environment.
+//! Typical flushers in various environments.
+//!
+//! Availability based on cargo flags, e.g. `std` gives stdout/stderr flushers,
+//! while `semihosting` gives flushers to host's stdout/stderr.
 
-use crate::Flusher;
+#[cfg(any(feature = "std", test))]
+mod std;
+#[cfg(any(feature = "std", test))]
+pub use crate::flushers::std::*;
 
-#[derive(Debug, Default)]
-pub struct StdoutFlusher {}
-
-impl Flusher for StdoutFlusher {
-    fn flush(&self, logs: &str) {
-        print!("{}", logs);
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct StderrFlusher {}
-
-impl Flusher for StderrFlusher {
-    fn flush(&self, logs: &str) {
-        eprint!("{}", logs);
-    }
-}
-
+#[cfg(feature = "semihosting")]
+mod semihosting;
+#[cfg(feature = "semihosting")]
+pub use crate::flushers::semihosting::*;

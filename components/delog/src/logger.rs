@@ -48,9 +48,9 @@ macro_rules! delog {
         unsafe impl Send for $logger {}
         unsafe impl Sync for $logger {}
 
-        impl log::Log for $logger {
+        impl $crate::upstream::Log for $logger {
             /// log level is set via log::set_max_level, not here, hence always true
-            fn enabled(&self, _: &log::Metadata) -> bool {
+            fn enabled(&self, _: &$crate::upstream::Metadata) -> bool {
                 true
             }
 
@@ -65,21 +65,21 @@ macro_rules! delog {
                 self.flusher.flush(logs);
             }
 
-            fn log(&self, record: &log::Record) {
+            fn log(&self, record: &$crate::upstream::Record) {
                 // use $crate::Delogger;
                 unsafe { $crate::enqueue(*self, record) }
             }
         }
 
         impl $crate::TryLog for $logger {
-            fn try_log(&self, record: &log::Record) -> core::result::Result<(), ()> {
+            fn try_log(&self, record: &$crate::upstream::Record) -> core::result::Result<(), ()> {
                 // use $crate::Delogger;
                 unsafe { $crate::try_enqueue(*self, record) }
             }
         }
 
         impl $logger {
-            pub fn init(level: log::LevelFilter, flusher: &'static $flusher) -> Result<(), ()> {
+            pub fn init(level: $crate::upstream::LevelFilter, flusher: &'static $flusher) -> Result<(), ()> {
                 use core::sync::atomic::{self, AtomicBool, AtomicUsize, Ordering};
                 use core::mem::MaybeUninit;
 
@@ -91,8 +91,8 @@ macro_rules! delog {
                     let logger = Self { flusher };
                     Self::get().replace(logger);
                     $crate::trylogger().replace(Self::get().as_ref().unwrap());
-                    log::set_logger(Self::get().as_ref().unwrap())
-                        .map(|()| log::set_max_level(level))
+                    $crate::upstream::set_logger(Self::get().as_ref().unwrap())
+                        .map(|()| $crate::upstream::set_max_level(level))
                         .map_err(|_| ())
                 } else {
                     Err(())
@@ -107,7 +107,7 @@ macro_rules! delog {
             fn flush() {
                 // gracefully degrade if we're not initialized yet
                 if let Some(logger) = Self::get() {
-                    log::Log::flush(logger)
+                    $crate::upstream::Log::flush(logger)
                 }
             }
         }
@@ -169,7 +169,10 @@ pub unsafe fn try_enqueue(delogger: impl Delogger, record: &log::Record) -> core
 
     if record.target() == "!" {
         // todo: proper "fast path" / immediate mode
-        println!("{}", record.args());
+        let input = delogger.render(record.args());
+        let input = unsafe { core::str::from_utf8_unchecked(input) };
+        Delogger::flush(&delogger, input);
+        // println!("{}", record.args());
         return Ok(());
     }
 

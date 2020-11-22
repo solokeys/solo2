@@ -16,6 +16,9 @@
 //! the `fmt` traits. In release mode, this is all compiled out and translates to direct
 //! instructions for the formatting machinery.
 //!
+//! The `hex_fmt` types are re-exported, as they have some neat implementations for truncated
+//! output (beginning of array, end of array, beginning+end with ellipsis in the middle).
+//!
 //! Three examples (the parameter `2` to `hex_str` in the fourth example denotes "blocks of 2 bytes"):
 //!
 //! ```
@@ -78,6 +81,28 @@ where
     _block_size: PhantomData<BytesPerBlock>,
 }
 
+/// Sorry little replacement for the missing int to Unsigned type map in `typenum`.
+// this doesn't really help with the below, as it doesn't match on passed $n:literal values
+// hoping for: https://github.com/paholg/typenum/pull/136
+#[macro_export]
+#[doc(hidden)]
+macro_rules! typeint {
+    (1) => { $crate::hex::consts::U1 };
+    (2) => { $crate::hex::consts::U2 };
+    (3) => { $crate::hex::consts::U3 };
+    (4) => { $crate::hex::consts::U4 };
+    (5) => { $crate::hex::consts::U5 };
+    (6) => { $crate::hex::consts::U6 };
+    (7) => { $crate::hex::consts::U7 };
+    (8) => { $crate::hex::consts::U8 };
+    (9) => { $crate::hex::consts::U9 };
+    (10) => { $crate::hex::consts::U10 };
+    (16) => { $crate::hex::consts::U16 };
+    (20) => { $crate::hex::consts::U20 };
+    (32) => { $crate::hex::consts::U32 };
+    (64) => { $crate::hex::consts::U64 };
+}
+
 #[macro_export]
 /// Compactly format byte arrays and slices as hexadecimals.
 ///
@@ -91,12 +116,14 @@ where
 /// let four_bytes = &[7u8, 0xA1, 255, 0xC7];
 /// assert_eq!(format!("{:x}", hex_str!(four_bytes)), "07 a1 ff c7");
 /// assert_eq!(format!("{}", hex_str!(four_bytes, 2)), "07A1 FFC7");
+/// assert_eq!(format!("{}", hex_str!(four_bytes, 2, "|")), "07A1|FFC7");
 /// assert_eq!(format!("{}", hex_str!(four_bytes, 3)), "07A1FF C7");
 /// ```
 macro_rules! hex_str {
     ($array:expr) => { $crate::hex::hex_str($array) };
     ($array:expr, 1) => { $crate::hex::hex_str_1($array) };
-    ($array:expr, 2) => { $crate::hex::hex_str_2($array) };
+    // ($array:expr, 2) => { $crate::hex::hex_str_2($array) };
+    ($array:expr, 2) => { $crate::hex_str!($array, 2, " ") };
     ($array:expr, 3) => { $crate::hex::hex_str_3($array) };
     ($array:expr, 4) => { $crate::hex::hex_str_4($array) };
     ($array:expr, 5) => { $crate::hex::hex_str_5($array) };
@@ -105,6 +132,20 @@ macro_rules! hex_str {
     ($array:expr, 20) => { $crate::hex::hex_str_20($array) };
     ($array:expr, 32) => { $crate::hex::hex_str_32($array) };
     ($array:expr, 64) => { $crate::hex::hex_str_64($array) };
+    ($array:expr, 2, $separator:expr) => {{
+        struct Separator {}
+        impl $crate::hex::Separator for Separator {
+            const SEPARATOR: &'static str = $separator;
+        }
+        $crate::hex::HexStr::<_, Separator, $crate::typeint!(2)>($array)
+    }};
+    // ($array:expr, $n:literal, $separator:expr) => {{
+    //     struct Separator {}
+    //     impl $crate::hex::Separator for Separator {
+    //         const SEPARATOR: &'static str = $separator;
+    //     }
+    //     $crate::hex::HexStr::<_, Separator, $crate::typeint!($n)>($array)
+    // }};
 }
 
 #[macro_export]
@@ -183,7 +224,7 @@ pub fn hex_str_3<'a, T: ?Sized>(value: &'a T) -> HexStr<'a, T, SpaceSeparator, c
 /// blocks of 4 bytes / 32 bits in hex, space in between (e.g., `4A121387 1234ABCD`)
 ///
 /// For ease of use, prefer the `hex_str!(value, 4)` macro.
-pub fn hex_str_4<'a, T: ?Sized>(value: &'a T) -> HexStr<'a, T, SpaceSeparator, consts::U4> {
+pub fn hex_str_4<'a, T: ?Sized>(value: &'a T) -> HexStr<'a, T, SpaceSeparator, typeint!(4)> {
     HexStr(value)
 }
 

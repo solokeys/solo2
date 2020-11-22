@@ -42,9 +42,11 @@
 //! represenations of data in abnormally time-critical situations without formatting, deferring
 //! the extraction and actual formatting to some host-side mechanism.
 
+#![cfg_attr(not(any(feature = "std", test)), no_std)]
 use core::fmt;
 
 pub use log as upstream;
+pub use log::LevelFilter;
 // TODO: figure out how to re-export `log` as module and `log!` as macro
 // This way, at least we can re-export `log!`, but in a weird twist of fate,
 // it also gets re-exported as `upstream!` (huh?!)
@@ -53,7 +55,7 @@ pub use log::{debug, error, info, log, log_enabled, trace, warn};
 #[cfg(feature = "example")]
 pub mod example;
 
-#[cfg(any(feature = "std", test))]
+#[cfg(any(feature="std", feature="semihosting", test))]
 pub mod flushers;
 
 pub mod hex;
