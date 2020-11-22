@@ -1,0 +1,6 @@
+/target
+**/*.rs.bk
+Cargo.lock
+/venv
+**/*.o
+.gdb_history
