@@ -1,0 +1,5 @@
+---
+source: src/hex.rs
+expression: "format_args!(\"'{:02X}'\", hex_str_1(& buf))"
+---
+'01 02 03 A1 B7 FF 03'

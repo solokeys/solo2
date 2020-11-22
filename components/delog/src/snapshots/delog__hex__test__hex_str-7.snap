@@ -1,0 +1,5 @@
+---
+source: src/hex.rs
+expression: "format_args!(\"'{:X}'\", hex_str_4(& buf))"
+---
+'010203A1 B7FF03'

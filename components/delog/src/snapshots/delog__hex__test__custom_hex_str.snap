@@ -1,0 +1,5 @@
+---
+source: src/hex.rs
+expression: "format_args!(\"'{:02X}'\", HexStr :: < _, SpaceSeparator, typenum :: U3 >\n             (& buf),)"
+---
+'010203 A1B7FF 03'
