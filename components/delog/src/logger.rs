@@ -37,7 +37,7 @@ pub trait TryLog: log::Log {
 /// Generate a deferred logger with specified capacity and flushing mechanism.
 #[macro_export]
 macro_rules! delog {
-    ($logger:ident, $size:expr, $immediate_size:expr, $flusher:ty) => {
+    ($logger:ident, $capacity:expr, $flusher:ty) => {
 
         #[derive(Clone, Copy)]
         pub struct $logger {
@@ -56,7 +56,7 @@ macro_rules! delog {
 
             /// reads out logs from circular buffer, and flushes via injected flusher
             fn flush(&self) {
-                let mut buf = [0u8; $size] ;
+                let mut buf = [0u8; $capacity] ;
 
                 use $crate::Delogger;
                 let logs: &str = unsafe { $crate::dequeue(*self, &mut buf) };
@@ -115,7 +115,7 @@ macro_rules! delog {
         unsafe impl $crate::Delogger for $logger {
 
             fn buffer(&self) -> &'static mut [u8] {
-                static mut BUFFER: [u8; $size] = [0u8; $size];
+                static mut BUFFER: [u8; $capacity] = [0u8; $capacity];
                 unsafe { &mut BUFFER }
             }
 
@@ -143,7 +143,7 @@ macro_rules! delog {
             }
 
             fn render(&self, args: &core::fmt::Arguments) -> &'static [u8] {
-                static mut LOCAL_BUFFER: [u8; $size] = [0u8; $size];
+                static mut LOCAL_BUFFER: [u8; $capacity] = [0u8; $capacity];
 
                 let local_buffer = unsafe { &mut LOCAL_BUFFER };
                 $crate::render::render_arguments(local_buffer, *args)

@@ -46,7 +46,7 @@
 use core::fmt;
 
 pub use log as upstream;
-pub use log::LevelFilter;
+pub use log::{Level, LevelFilter};
 // TODO: figure out how to re-export `log` as module and `log!` as macro
 // This way, at least we can re-export `log!`, but in a weird twist of fate,
 // it also gets re-exported as `upstream!` (huh?!)
@@ -59,10 +59,10 @@ pub mod example;
 pub mod flushers;
 
 pub mod hex;
+mod log_macros;
 mod logger;
 pub use logger::{Delogger, TryLog, dequeue, enqueue, try_enqueue};
 pub mod render;
-mod try_log;
 
 /// A way to pass on logs, user supplied
 ///

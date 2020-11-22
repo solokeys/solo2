@@ -17,7 +17,7 @@ impl delog::Flusher for SemihostingFlusher {
     }
 }
 
-delog!(Delogger, 256, 256, SemihostingFlusher);
+delog!(Delogger, 256, SemihostingFlusher);
 
 static SEMIHOSTING_FLUSHER: SemihostingFlusher = SemihostingFlusher {};
 

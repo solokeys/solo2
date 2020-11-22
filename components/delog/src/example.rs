@@ -1,4 +1,4 @@
-//! An exampl deferred logger, generated as `delog!(Delogger, 1024, 1024, StdoutFlusher)`.
+//! An example deferred logger, generated as `delog!(Delogger, 4096, StdoutFlusher)`.
 //!
 //! It is included here for documentation purposes only.
 //!
@@ -6,4 +6,4 @@
 
 use crate::flushers::StdoutFlusher;
 
-crate::delog!(Delogger, 1024, 1024, StdoutFlusher);
+crate::delog!(Delogger, 4096, StdoutFlusher);

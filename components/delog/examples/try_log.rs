@@ -2,7 +2,7 @@ use delog::{try_info, try_warn};
 
 use delog::flushers::StdoutFlusher;
 
-delog::delog!(Delogger, 64, 64, StdoutFlusher);
+delog::delog!(Delogger, 64, StdoutFlusher);
 
 static STDOUT_FLUSHER: StdoutFlusher = StdoutFlusher {};
 
