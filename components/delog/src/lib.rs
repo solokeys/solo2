@@ -59,8 +59,11 @@ pub mod example;
 pub mod flushers;
 
 pub mod hex;
-mod log_macros;
+
+mod log_macros_global;
+mod log_macros_local;
 mod logger;
+
 pub use logger::{Delogger, TryLog, dequeue, enqueue, try_enqueue};
 pub mod render;
 

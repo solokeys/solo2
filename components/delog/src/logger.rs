@@ -13,6 +13,11 @@ use core::ptr;
 pub unsafe trait Delogger: log::Log + crate::TryLog {
 
     fn buffer(&self) -> &'static mut [u8];
+    // #[cfg(feature = "statistics")]
+    fn log_attempt_count(&self) -> &'static AtomicUsize;
+    // #[cfg(feature = "statistics")]
+    fn log_success_count(&self) -> &'static AtomicUsize;
+    fn log_flush_count(&self) -> &'static AtomicUsize;
     fn read(&self) -> &'static AtomicUsize;
     fn written(&self) -> &'static AtomicUsize;
     fn claimed(&self) -> &'static AtomicUsize;
@@ -32,9 +37,21 @@ pub unsafe trait Delogger: log::Log + crate::TryLog {
 /// want to crash.
 pub trait TryLog: log::Log {
     fn try_log(&self, _: &log::Record) -> core::result::Result<(), ()>;
+    // #[cfg(feature = "statistics")]
+    fn attempts(&self) -> usize;
+    // #[cfg(feature = "statistics")]
+    fn successes(&self) -> usize;
+    // #[cfg(feature = "statistics")]
+    fn flushes(&self) -> usize;
 }
 
 /// Generate a deferred logger with specified capacity and flushing mechanism.
+///
+/// Note that only the final "runner" generates, initializes and flushes such a deferred logger.
+///
+/// Libraries simply make calls to `log::log!`, or its drop-in replacement `delog::log!`,
+/// and/or its extension `delog::log_now!`, and/or its alternatives `delog::try_log!` and  `delog::try_log_now`,
+/// and/or the local logging variants `local_log!`.
 #[macro_export]
 macro_rules! delog {
     ($logger:ident, $capacity:expr, $flusher:ty) => {
@@ -76,6 +93,19 @@ macro_rules! delog {
                 // use $crate::Delogger;
                 unsafe { $crate::try_enqueue(*self, record) }
             }
+            // #[cfg(feature = "statistics")]
+            fn attempts(&self) -> usize {
+                $crate::Delogger::log_attempt_count(self).load(core::sync::atomic::Ordering::SeqCst)
+            }
+            // #[cfg(feature = "statistics")]
+            fn successes(&self) -> usize {
+                $crate::Delogger::log_success_count(self).load(core::sync::atomic::Ordering::SeqCst)
+            }
+
+            fn flushes(&self) -> usize {
+                $crate::Delogger::log_flush_count(self).load(core::sync::atomic::Ordering::SeqCst)
+            }
+
         }
 
         impl $logger {
@@ -124,6 +154,27 @@ macro_rules! delog {
                 self.flusher.flush(logs)
             }
 
+            // #[cfg(feature = "statistics")]
+            fn log_attempt_count(&self) -> &'static core::sync::atomic::AtomicUsize {
+                use core::sync::atomic::AtomicUsize;
+                static LOG_ATTEMPT_COUNT: AtomicUsize = AtomicUsize::new(0);
+                &LOG_ATTEMPT_COUNT
+            }
+
+            // #[cfg(feature = "statistics")]
+            fn log_success_count(&self) -> &'static core::sync::atomic::AtomicUsize {
+                use core::sync::atomic::AtomicUsize;
+                static LOG_SUCCESS_COUNT: AtomicUsize = AtomicUsize::new(0);
+                &LOG_SUCCESS_COUNT
+            }
+
+            // #[cfg(feature = "statistics")]
+            fn log_flush_count(&self) -> &'static core::sync::atomic::AtomicUsize {
+                use core::sync::atomic::AtomicUsize;
+                static LOG_FLUSH_COUNT: AtomicUsize = AtomicUsize::new(0);
+                &LOG_FLUSH_COUNT
+            }
+
             fn read(&self) -> &'static core::sync::atomic::AtomicUsize {
                 use core::sync::atomic::AtomicUsize;
                 static READ: AtomicUsize = AtomicUsize::new(0);
@@ -167,12 +218,18 @@ pub unsafe fn enqueue(delogger: impl Delogger, record: &log::Record) {
 #[allow(unused_unsafe)]
 pub unsafe fn try_enqueue(delogger: impl Delogger, record: &log::Record) -> core::result::Result<(), ()> {
 
+    // keep track of how man logs were attempted
+    // #[cfg(feature = "statistics")]
+    delogger.log_attempt_count().fetch_add(1, Ordering::SeqCst);
+
     if record.target() == "!" {
         // todo: proper "fast path" / immediate mode
         let input = delogger.render(record.args());
         let input = unsafe { core::str::from_utf8_unchecked(input) };
         Delogger::flush(&delogger, input);
         // println!("{}", record.args());
+        // #[cfg(feature = "statistics")]
+        delogger.log_success_count().fetch_add(1, Ordering::SeqCst);
         return Ok(());
     }
 
@@ -220,6 +277,8 @@ pub unsafe fn try_enqueue(delogger: impl Delogger, record: &log::Record) -> core
         }
 
         delogger.written().store(written.wrapping_add(input_len), Ordering::SeqCst);
+        // #[cfg(feature = "statistics")]
+        delogger.log_success_count().fetch_add(1, Ordering::SeqCst);
         Ok(())
     } else {
         Err(())
@@ -233,6 +292,7 @@ pub unsafe fn try_enqueue(delogger: impl Delogger, record: &log::Record) -> core
 #[allow(unused_unsafe)]
 pub unsafe fn dequeue<'b>(delogger: impl Delogger, buf: &'b mut [u8]) -> &'b str
 {
+    delogger.log_flush_count().fetch_add(1, Ordering::SeqCst);
     // we control the inputs, so we know this is a valid string
     unsafe { core::str::from_utf8_unchecked(drain_as_bytes(delogger, buf)) }
 }

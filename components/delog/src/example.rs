@@ -7,3 +7,5 @@
 use crate::flushers::StdoutFlusher;
 
 crate::delog!(Delogger, 4096, StdoutFlusher);
+
+crate::local_delog!();

@@ -1,0 +1,18 @@
+[package]
+name = "lib-a"
+version = "0.1.0"
+authors = ["Nicolas Stalder <n@stalder.io>"]
+edition = "2018"
+
+[dependencies.delog]
+path = "../.."
+features = ["std"]
+
+[features]
+log-error = []
+log-warn = ["log-error"]
+log-info = ["log-warn"]
+log-debug = ["log-info"]
+log-trace = ["log-debug"]
+log-all = ["log-trace"]
+log-none = []

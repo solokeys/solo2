@@ -14,7 +14,10 @@ hex_fmt = "0.3.0"
 insta = "1.3.0"
 
 [features]
+default = ["fallible", "immediate"]
 std = []
-# randomly-panic = []
 example = ["std"]
 semihosting = ["cortex-m-semihosting"]
+fallible = []
+immediate = []
+# statistics = []
