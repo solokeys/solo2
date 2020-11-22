@@ -1,7 +1,5 @@
-use core::cmp;
-use core::fmt;
+use core::{cmp, fmt, ptr};
 use core::sync::atomic::{AtomicUsize, Ordering};
-use core::ptr;
 
 /// Semi-abstract characterization of the deferred loggers that the `delog!` macro produces.
 ///
@@ -28,6 +26,13 @@ pub unsafe trait Delogger: log::Log + crate::TryLog {
 
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct Statistics {
+    pub attempts: usize,
+    pub successes: usize,
+    pub flushes: usize,
+}
+
 /// Fallible, panic-free version of the `log::Log` trait.
 ///
 /// The intention is actually that implementors of this library also
@@ -37,6 +42,8 @@ pub unsafe trait Delogger: log::Log + crate::TryLog {
 /// want to crash.
 pub trait TryLog: log::Log {
     fn try_log(&self, _: &log::Record) -> core::result::Result<(), ()>;
+    fn statistics(&self) -> Statistics;
+
     // #[cfg(feature = "statistics")]
     fn attempts(&self) -> usize;
     // #[cfg(feature = "statistics")]
@@ -104,6 +111,14 @@ macro_rules! delog {
 
             fn flushes(&self) -> usize {
                 $crate::Delogger::log_flush_count(self).load(core::sync::atomic::Ordering::SeqCst)
+            }
+
+            fn statistics(&self) -> $crate::Statistics {
+                $crate::Statistics {
+                    attempts: self.attempts(),
+                    successes: self.successes(),
+                    flushes: self.flushes(),
+                }
             }
 
         }
@@ -215,6 +230,19 @@ pub unsafe fn enqueue(delogger: impl Delogger, record: &log::Record) {
 ///
 /// Unfortunately exposed for all to see, as the `delog!` macro needs access to it to
 /// implement the logger at call site. Hence marked as unsafe.
+///
+/// This implementation needs some HEAVY testing. It is unsound on PC, where the OS
+/// can schedule threads in any manner, but assumed to be sound in ARM Cortex-M NVIC
+/// situations, where interrupts are "nested", in the sense that one may be interrupted,
+/// then the interrupter can, ..., then the interrupter hands back control, ..., and finally
+/// the original caller of this function regains control.
+///
+/// In this situation, we keep track of three counters `(read, written, claimed)`, with
+/// invariants `read <= written <= claimed`. Each writer pessimistically gauges sufficient
+/// capacity for its log by checking `claimed + size <= read + capacity`, accounting for the
+/// wraparound. If so, the writer **atomically advances the claim counter**, and starts copying
+/// its data in this newly claimed space. At the end, it is the duty of the "first" caller
+/// to advance the `written` counter to the correct state.
 #[allow(unused_unsafe)]
 pub unsafe fn try_enqueue(delogger: impl Delogger, record: &log::Record) -> core::result::Result<(), ()> {
 
@@ -233,56 +261,73 @@ pub unsafe fn try_enqueue(delogger: impl Delogger, record: &log::Record) -> core
         return Ok(());
     }
 
-    let written = delogger.written().load(Ordering::SeqCst);
-    let buffer = delogger.buffer();
-    let input = delogger.render(record.args());
+    let capacity = delogger.capacity();
+    let log = delogger.render(record.args());
+    let size = log.len();
 
-    let buffer_len = buffer.len();
-    let input_len = input.len();
+    let previously_claimed = loop {
+        let read = delogger.read().load(Ordering::SeqCst);
+        let claimed = delogger.claimed().load(Ordering::SeqCst);
 
-    if input_len > buffer_len {
-        // early exit to hint the optimizer that `buffer_len` can't be `0`
-        return Err(());
-    }
-
-    // NOTE we use `UnsafeCell` instead of `AtomicUsize` because we want this operation to
-    // return the same value when calling `log` consecutively
-    let read = delogger.read().load(Ordering::SeqCst);
-
-    if buffer_len >= input_len + written.wrapping_sub(read) {
-
-        let w = written % buffer_len;
-
-        // NOTE we use `ptr::copy_nonoverlapping` instead of `copy_from_slice` to avoid
-        // panicking branches
-        if w + input_len > buffer_len {
-            // two memcpy-s
-            let mid = buffer_len - w;
-            // buffer[w..].copy_from_slice(&input[..mid]);
-            unsafe {
-                ptr::copy_nonoverlapping(input.as_ptr(), buffer.as_mut_ptr().add(w), mid);
-                // buffer[..input_len - mid].copy_from_slice(&input[mid..]);
-                ptr::copy_nonoverlapping(
-                    input.as_ptr().add(mid),
-                    buffer.as_mut_ptr(),
-                    input_len - mid,
-                );
-            }
-        } else {
-            // single memcpy
-            // buffer[w..w + input_len].copy_from_slice(&input);
-            unsafe {
-                ptr::copy_nonoverlapping(input.as_ptr(), buffer.as_mut_ptr().add(w), input_len);
-            }
+        // figure out the corner cases for "wrap-around" at usize capacity
+        if claimed + size > read + capacity {
+            // not enough space, currently
+            return Err(())
         }
 
-        delogger.written().store(written.wrapping_add(input_len), Ordering::SeqCst);
-        // #[cfg(feature = "statistics")]
-        delogger.log_success_count().fetch_add(1, Ordering::SeqCst);
-        Ok(())
+        // try to stake out our claim
+        let previous = delogger.claimed()
+            .compare_and_swap(claimed, claimed + size, Ordering::SeqCst);
+
+        // we were not interrupted, the region is now ours
+        if previous == claimed {
+            break claimed;
+        }
+    };
+
+    // find out if we're the "first" and will need to update `written` at the end:
+    let written = delogger.written().load(Ordering::SeqCst);
+    let first: bool = written == previously_claimed;
+
+    // now copy our data - we can be interrupted here at anytime
+    let destination = previously_claimed % capacity;
+    let buffer = delogger.buffer();
+    if destination + size < capacity {
+        // can do a single copy
+        unsafe { ptr::copy_nonoverlapping(
+            log.as_ptr(),
+            buffer.as_mut_ptr().add(destination),
+            size,
+        ) };
     } else {
-        Err(())
+        // need to split
+        let split = capacity - destination;
+        unsafe {
+            ptr::copy_nonoverlapping(
+                log.as_ptr(),
+                buffer.as_mut_ptr().add(destination),
+                split,
+            );
+            ptr::copy_nonoverlapping(
+                log.as_ptr().add(split),
+                buffer.as_mut_ptr(),
+                size - split,
+            );
+        }
     }
+
+    if first {
+        // update `written` to current `claimed` (which may be beyond our own claim)
+        loop {
+            let claimed = delogger.claimed().load(Ordering::SeqCst);
+            delogger.written().store(claimed, Ordering::SeqCst);
+            if claimed == delogger.claimed().load(Ordering::SeqCst) {
+                break;
+            }
+        }
+    }
+
+    Ok(())
 }
 
 /// The core "read from circular buffer" method. Marked unsafe to discourage use!

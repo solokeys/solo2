@@ -64,7 +64,7 @@ mod log_macros_global;
 mod log_macros_local;
 mod logger;
 
-pub use logger::{Delogger, TryLog, dequeue, enqueue, try_enqueue};
+pub use logger::{Delogger, Statistics, TryLog, dequeue, enqueue, try_enqueue};
 pub mod render;
 
 /// A way to pass on logs, user supplied
