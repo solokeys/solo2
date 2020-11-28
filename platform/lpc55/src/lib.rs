@@ -96,7 +96,7 @@ fn configure_fm11_if_needed(
 
         logger::info!("writing EEPROM").ok();
 
-        fm.configure(Configuration{
+        let r = fm.configure(Configuration{
             regu: REGU_CONFIG,
             ataq: 0x4400,
             sak1: 0x04,
@@ -111,6 +111,10 @@ fn configure_fm11_if_needed(
                 // enable P-on IRQ    14443-4 mode
             nfc:    (0b0 << 1) |       (0b00 << 2),
         }, timer);
+        if r.is_err() {
+            logger::info!("Eeprom failed.  No NFC chip connected?").ok();
+            return Err(());
+        }
     } else {
         logger::info!("EEPROM already initialized.").ok();
     }
