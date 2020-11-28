@@ -486,18 +486,30 @@ pub struct UniqueId(pub(crate) [u8; 16]);
 impl From<SpecialId> for UniqueId {
     fn from(special_id: u8) -> Self {
         let mut unique_id = [0u8; 16];
-        // consider this a "little endian" u256, so "first" 256
+        // consider this a "big endian" u256, so "first" 256
         // keys are "special" or "well-known"
-        unique_id[0] = special_id;
+        // E.g. /app/sec/000000000000000000000000000000XX
+        unique_id[15] = special_id;
         Self(unique_id)
     }
 }
 
 impl UniqueId {
-    pub fn hex(&self) -> [u8; 32] {
-        let mut hex = [b'0'; 32];
-        format_hex(&self.0, &mut hex);
-        hex
+    pub fn hex(&self) -> ByteBuf<consts::U32> {
+        const HEX_CHARS: &[u8] = b"0123456789abcdef";
+        let mut buffer = ByteBuf::new();
+
+        for i in 0 .. self.0.len() {
+            if self.0[i] == 0 && i != (self.0.len()-1) {
+                // Skip leading zeros.
+                continue;
+            }
+
+            buffer.push(HEX_CHARS[(self.0[i] >> 4) as usize]).unwrap();
+            buffer.push(HEX_CHARS[(self.0[i] & 0xf) as usize]).unwrap();
+        }
+
+        buffer
     }
 
     pub fn try_from_hex(hex: &[u8]) -> core::result::Result<Self, ()> {
@@ -546,16 +558,4 @@ impl ufmt::uDebug for UniqueId {
 }
 
 pub type UserAttribute = ByteBuf<MAX_USER_ATTRIBUTE_LENGTH>;
-
-// PANICS
-// Also assumes buffer is initialised with b'0',
-// not b'\0' if 2*data.len() < buffer.len()
-const HEX_CHARS: &[u8] = b"0123456789abcdef";
-fn format_hex(data: &[u8], mut buffer: &mut [u8]) {
-    for byte in data.iter() {
-        buffer[0] = HEX_CHARS[(byte >> 4) as usize];
-        buffer[1] = HEX_CHARS[(byte & 0xf) as usize];
-        buffer = &mut buffer[2..];
-    }
-}
 

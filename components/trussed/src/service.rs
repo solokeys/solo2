@@ -831,7 +831,7 @@ impl<B: Board> ServiceResources<B> {
             KeyType::Public => b"pub\0".try_into().unwrap(),
             KeyType::Secret => b"sec\0".try_into().unwrap(),
         });
-        path.push(&PathBuf::from(&key_id.hex()));
+        path.push(&PathBuf::from(key_id.hex().as_slice()));
         // no dataspacing
         self.namespace_path(&path)
     }
