@@ -219,7 +219,7 @@ where
         for _ in 0 .. 2 { block!( self.spi.read(  )).ok().unwrap(); }
     }
 
-    fn end_write(&mut self, timer: &mut Timer<impl Ctimer<init_state::Enabled>>){
+    fn end_write(&mut self, timer: &mut Timer<impl Ctimer<init_state::Enabled>>) -> Result<(),()> {
         self.cs.set_high().ok();
 
         // Need to give ~10ms of unactivity for eeprom block to write
@@ -227,17 +227,21 @@ where
 
         let aux_irq = self.read_reg(Register::AuxIrq);
         if (aux_irq & (1 << 6)) != 0 {
-            panic!("Wrote to forbidden EEPROM location");
+            info!("Wrote to forbidden EEPROM location").ok();
+            return Err(());
         }
         if (aux_irq & (1 << 7)) == 0 {
-            panic!("EEPROM did not write");
+            info!("EEPROM did not write").ok();
+            return Err(());
         }
 
         self.write_reg(Register::AuxIrq, 0);
+        Ok(())
     }
 
     /// Configure the eeprom in FM11 chip.  Should only need to do this once per device.
-    pub fn configure(&mut self, config: Configuration, timer: &mut Timer<impl Ctimer<init_state::Enabled>>){
+    pub fn configure(&mut self, config: Configuration, timer: &mut Timer<impl Ctimer<init_state::Enabled>>)
+        -> Result<(),()> {
 
         // Clear all aux interrupts
         self.write_reg(Register::AuxIrq, 0);
@@ -248,7 +252,7 @@ where
         block!( self.spi.send( config.regu )).ok();
         for _ in 0 .. 2 { block!( self.spi.read(  )).ok().unwrap(); }
 
-        self.end_write(timer);
+        self.end_write(timer)?;
 
         self.start_write(0x3A0);
 
@@ -259,7 +263,7 @@ where
 
         for _ in 0 .. 4 { block!( self.spi.read(  )).ok().unwrap(); }
 
-        self.end_write(timer);
+        self.end_write(timer)?;
 
         self.start_write(0x3b0);
 
@@ -276,7 +280,7 @@ where
 
         for _ in 0 .. 3 { block!( self.spi.read(  )).ok().unwrap(); }
 
-        self.end_write(timer);
+        self.end_write(timer)
 
     }
 
