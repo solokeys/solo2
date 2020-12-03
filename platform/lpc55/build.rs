@@ -75,7 +75,7 @@ MEMORY
 ",
         parameters.filesystem_boundary/1024,        // code size in KB
         parameters.filesystem_boundary,             // Start address of filesystem
-        640 - parameters.filesystem_boundary/1024,  // filesystem size in KB
+        630 - parameters.filesystem_boundary/1024,  // filesystem size in KB
     ).expect("Could not write memory.x");
 }
 
