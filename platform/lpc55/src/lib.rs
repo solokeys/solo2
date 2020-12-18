@@ -59,7 +59,8 @@ use hal::drivers::{
     Pwm,
 };
 use hal::peripherals::pfr::Pfr;
-
+use board_traits::rgb_led::RgbLed;
+use board_traits::buttons::Press;
 use interchange::Interchange;
 use usbd_ccid::Ccid;
 use usbd_ctaphid::CtapHid;
@@ -304,7 +305,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     );
 
     #[cfg(feature = "board-prototype")]
-    let rgb = board::led::RgbLed::new(
+    let mut rgb = board::led::RgbLed::new(
         board::led::RedLedPin::take().unwrap(),
         board::led::GreenLedPin::take().unwrap(),
         board::led::BlueLedPin::take().unwrap(),
@@ -343,6 +344,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
             .system_frequency(48.mhz())
             .reconfigure(clocks, &mut pmc, &mut syscon) };
     }
+    logger::info!("mount start {} ms",perf_timer.lap().0/1000).ok();
     static mut INTERNAL_STORAGE: Option<types::FlashStorage> = None;
     unsafe { INTERNAL_STORAGE = Some(filesystem); }
     static mut INTERNAL_FS_ALLOC: Option<Allocation<types::FlashStorage>> = None;
@@ -373,7 +375,11 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         false,
     );
 
+
     if result.is_err() {
+        rgb.blue(200);
+        rgb.red(200);
+        delay_timer.start(300.ms()); nb::block!(delay_timer.wait()).ok();
         logger::info!("Not yet formatted!  Formatting..").ok();
         store.mount(
             unsafe { INTERNAL_FS_ALLOC.as_mut().unwrap() },
@@ -387,6 +393,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
             true,
         ).unwrap();
     }
+    logger::info!("mount end {} ms",perf_timer.lap().0/1000).ok();
 
     // return to slow freq
     if is_passive_mode {
@@ -418,6 +425,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     let (piv_trussed_requester, piv_trussed_responder) = trussed::pipe::TrussedInterchange::claim(2)
         .expect("could not setup PIV TrussedInterchange");
 
+    logger::info!("usb class start {} ms",perf_timer.lap().0/1000).ok();
     let usb_classes =
     {
         if !is_passive_mode {
@@ -458,6 +466,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
                 .serial_number("20/20")
                 .device_release(device_release)
                 .max_packet_size_0(64)
+                .composite_with_iads()
                 .build();
 
             Some(types::UsbClasses::new(usbd, ccid, ctaphid, serial))
@@ -500,6 +509,24 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
                 clocks.support_touch_token().unwrap(),
             )
         };
+
+        // Boot to bootrom if buttons are all held for 5s
+        logger::info!("button start {}",perf_timer.lap().0/1000).ok();
+        delay_timer.start(5_000.ms());
+        while three_buttons.is_pressed(board_traits::buttons::Button::A) &&
+              three_buttons.is_pressed(board_traits::buttons::Button::B) &&
+              three_buttons.is_pressed(board_traits::buttons::Button::Middle) {
+            // logger::info!("3 buttons pressed..").ok();
+            if delay_timer.wait().is_ok() {
+                // Give a small red blink show success
+                rgb.red(200);
+                rgb.green(0);
+                rgb.blue(0);
+                delay_timer.start(100.ms()); nb::block!(delay_timer.wait()).ok();
+                solo_trussed::boot_to_bootrom()
+            }
+        }
+        logger::info!("button end {}",perf_timer.lap().0/1000).ok();
         (None, Some(three_buttons))
     };
 
@@ -577,15 +604,15 @@ use rtic::Mutex;
 funnel!(NVIC_PRIO_BITS = hal::raw::NVIC_PRIO_BITS, {
     // These are not the actual priorities, but the ranking of priorities.
     // E.g. (lowest prio, 2nd lowest prio, etc).
-    0: 1024,    // Idle
+    0: 2048,    // Idle
     1: 512,     // Ui update
     2: 1024,    // Trussed
     3: 512,     // USB
-    4: 4096,    // NFC
+    4: 2048,    // NFC
     5: 128,     // Clock controller
 });
 
-pub fn drain_log_to_serial(mut serial: impl Mutex<T = types::SerialClass>) {
+pub fn drain_log_to_serial(serial: &mut types::SerialClass) {
     let mut buf = [0u8; 64];
 
     let drains = Drain::get_all();
@@ -596,7 +623,7 @@ pub fn drain_log_to_serial(mut serial: impl Mutex<T = types::SerialClass>) {
             if n == 0 {
                 break 'l;
             }
-            serial.lock(|serial: &mut types::SerialClass| {
+            // serial.lock(|serial: &mut types::SerialClass| {
                 match serial.write(&buf[..n]) {
                     Ok(_count) => {
                     },
@@ -606,7 +633,10 @@ pub fn drain_log_to_serial(mut serial: impl Mutex<T = types::SerialClass>) {
 
                 // not much we can do
                 serial.flush().ok();
-            });
+
+                // Only write one packet at a time or serialport will overrun.
+                break;
+            // });
         }
     }
 }
