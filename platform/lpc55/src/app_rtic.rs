@@ -116,7 +116,14 @@ const APP: () = {
             if time > 1_000_000 {
                 // Only drain outside of a 1s window of any NFC activity.
                 #[cfg(feature = "log-serial")]
-                app::drain_log_to_serial(&mut serial);
+                usb_classes.lock(|usb_classes_maybe| {
+                    match usb_classes_maybe.as_mut() {
+                        Some(usb_classes) => {
+                            app::drain_log_to_serial(&mut usb_classes.serial);
+                        }
+                        _=>{}
+                    }
+                });
                 #[cfg(not(feature = "log-serial"))]
                 app::drain_log_to_semihosting();
             }
