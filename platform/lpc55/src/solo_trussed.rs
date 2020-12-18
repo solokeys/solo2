@@ -26,7 +26,7 @@ fn sin(x: f32) -> f32
     res
 }
 
-fn boot_to_bootrom() -> ! {
+pub fn boot_to_bootrom() -> ! {
     // Best way to boot into MCUBOOT is to erase the first flash page before rebooting.
     use crate::hal::traits::flash::WriteErase;
     let flash = unsafe { crate::hal::peripherals::flash::Flash::steal() }.enabled(
@@ -148,7 +148,7 @@ RGB: RgbLed,
     }
 
     fn reboot(&mut self, to: reboot::To) -> ! {
-        crate::logger::blocking::info!("reboot {:?}", to).ok();
+        // crate::logger::blocking::info!("reboot {:?}", to).ok();
         match to {
             reboot::To::Application => {
                 crate::hal::raw::SCB::sys_reset()
