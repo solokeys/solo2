@@ -327,7 +327,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
     let mut prince = hal.prince.enabled(&mut rng);
     prince.disable_all_region_2();
-    prince.disable_encrypted_write();
+    unsafe { prince.disable_encrypted_write(); }
 
     use littlefs2::fs::{Allocation, Filesystem};
 
