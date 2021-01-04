@@ -12,6 +12,6 @@ nb = "1"
 board-traits = {path = "../board-traits"}
 
 [dependencies.lpc55-hal]
-git = "https://github.com/nickray/lpc55-hal"
+git = "https://github.com/lpc55/lpc55-hal"
 branch = "main"
 features = ["littlefs", "rtic-peripherals"]
