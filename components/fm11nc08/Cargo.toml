@@ -17,7 +17,7 @@ logging = {path = "../logging"}
 iso14443 = {path = "../iso14443"}
 
 [dependencies.lpc55-hal]
-git = "https://github.com/nickray/lpc55-hal"
+git = "https://github.com/lpc55/lpc55-hal"
 branch = "main"
 
 [features]

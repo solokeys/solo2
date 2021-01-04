@@ -92,12 +92,6 @@ nisty = {git = "https://github.com/ycrypto/nisty", branch="main"}
 micro-ecc-sys = {git="https://github.com/conorpp/micro-ecc-sys", branch="fix-macos"}
 littlefs2-sys = {git="https://github.com/conorpp/littlefs2-sys", branch="fix-macos"}
 
-<<<<<<< HEAD:app/Cargo.toml
-=======
-[patch."https://github.com/nickray/lpc55-hal"]
-lpc55-hal = {path = "../../../../lpc55-hal"}
-
->>>>>>> cda3a3f (rename app/ to platform/lpc55/):platform/lpc55/Cargo.toml
 [profile.release]
 codegen-units = 1
 lto = true
