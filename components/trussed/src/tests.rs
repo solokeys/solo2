@@ -40,7 +40,7 @@ impl crate::service::RngRead for MockRng {
 pub struct UserInterface {
 }
 
-impl crate::traits::platform::UserInterface for UserInterface
+impl crate::platform::UserInterface for UserInterface
 {
     fn check_user_presence(&mut self) -> consent::Level {
         consent::Level::Normal
