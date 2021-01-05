@@ -600,7 +600,6 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
 // Logging
 use logging::{funnel,Drain};
-use rtic::Mutex;
 funnel!(NVIC_PRIO_BITS = hal::raw::NVIC_PRIO_BITS, {
     // These are not the actual priorities, but the ranking of priorities.
     // E.g. (lowest prio, 2nd lowest prio, etc).
