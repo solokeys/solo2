@@ -13,15 +13,14 @@ pub mod config;
 pub mod error;
 pub mod mechanisms;
 pub mod pipe;
+pub mod platform;
 pub mod service;
 pub mod store;
-pub mod traits;
 pub mod types;
 
 pub use api::Reply;
 pub use error::Error;
-pub use client::Client as DefaultClient;
-pub use traits::client::Client;
+pub use client::{Client, ClientImplementation};
 pub use service::Service;
 
 pub use ctap_types::{

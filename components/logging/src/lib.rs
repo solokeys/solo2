@@ -270,6 +270,7 @@ crate::cfg_if! {
     }
 }
 
+#[cfg(feature = "cortex-m")]
 pub use print_functions::dump_hex;
 
 pub use __info as info;
@@ -286,6 +287,7 @@ pub use __blocking_debug as __blocking_debug2;
 pub use __blocking_dbg_gated as __blocking_dbg_gated2;
 
 pub mod blocking {
+    #[cfg(feature = "cortex-m")]
     pub use super::print_functions::blocking::dump_hex;
 
     pub use super::__blocking_info2 as info;

@@ -8,7 +8,7 @@ use littlefs2::path::{Path, PathBuf};
 
 
 use crate::api::*;
-use crate::traits::platform::*;
+use crate::platform::*;
 use crate::config::*;
 use crate::error::Error;
 use crate::mechanisms;

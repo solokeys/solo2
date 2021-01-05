@@ -91,7 +91,7 @@ impl trussed::client::Syscall for Syscall {
 }
 
 pub type Trussed = trussed::Service<Board>;
-pub type TrussedClient = trussed::DefaultClient<Syscall>;
+pub type TrussedClient = trussed::ClientImplementation<Syscall>;
 
 pub type NfcSckPin = pins::Pio0_28;
 pub type NfcMosiPin = pins::Pio0_24;

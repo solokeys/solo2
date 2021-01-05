@@ -45,7 +45,7 @@ use fm11nc08::{
 };
 use hal::drivers::timer::Lap;
 use hal::traits::wg::timer::Cancel;
-use trussed::traits::platform::UserInterface;
+use trussed::platform::UserInterface;
 
 //
 // Board Initialization
@@ -512,7 +512,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     };
 
     let mut solobee_interface = solo_trussed::UserInterface::new(rtc, three_buttons, rgb);
-    solobee_interface.set_status(trussed::traits::platform::ui::Status::Idle);
+    solobee_interface.set_status(trussed::platform::ui::Status::Idle);
 
     let board = Board::new(rng, store, solobee_interface);
     let mut trussed = trussed::service::Service::new(board);
