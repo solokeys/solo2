@@ -1,8 +1,7 @@
 use core::convert::{TryFrom, TryInto};
 
 use crate::logger::{info, blocking};
-pub use embedded_hal::blocking::rng::Read as RngRead;
-use rand_core::{RngCore, SeedableRng};
+pub use rand_core::{RngCore, SeedableRng};
 use heapless::ByteBuf;
 use interchange::Responder;
 use littlefs2::path::{Path, PathBuf};
@@ -929,7 +928,7 @@ impl<B: Board> ServiceResources<B> {
             // If it hasn't been saved to flash yet, generate it from HW RNG.
             let current_state = if ! path.exists(&self.board.store().ifs()) {
                 let mut current_state = [0u8; 32];
-                self.board.rng().read(&mut current_state)
+                self.board.rng().try_fill_bytes(&mut current_state)
                     .map_err(|_| Error::EntropyMalfunction)?;
                 current_state
             } else {
@@ -947,7 +946,7 @@ impl<B: Board> ServiceResources<B> {
 
             // 1. First, Generate 32 new bytes from the HW TRNG.
             let mut next_state = [0u8; 32];
-            self.board.rng().read(&mut next_state)
+            self.board.rng().try_fill_bytes(&mut next_state)
                 .map_err(|_| Error::EntropyMalfunction)?;
 
             // 2. XOR our current state into it.

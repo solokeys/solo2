@@ -13,7 +13,7 @@ GenerateKey<B> for super::Trng
     {
         // generate entropy
         let mut entropy = [0u8; 32];
-        resources.board.rng().read(&mut entropy)
+        resources.board.rng().try_fill_bytes(&mut entropy)
             .map_err(|_| Error::EntropyMalfunction)?;
 
         // store keys

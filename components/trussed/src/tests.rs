@@ -25,13 +25,22 @@ impl MockRng {
     }
 }
 
-impl crate::service::RngRead for MockRng {
-    type Error = core::convert::Infallible;
-
-    fn read(&mut self, buf: &mut [u8]) -> Result<(), Self::Error> {
+impl crate::service::RngCore for MockRng {
+    fn fill_bytes(&mut self, buf: &mut [u8]) {
 		use chacha20::stream_cipher::SyncStreamCipher;
         self.0.apply_keystream(buf);
-        Ok(())
+    }
+
+    fn next_u32(&mut self) -> u32 {
+        rand_core::impls::next_u32_via_fill(self)
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        rand_core::impls::next_u64_via_fill(self)
+    }
+
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
+        Ok(self.fill_bytes(dest))
     }
 }
 
@@ -192,7 +201,7 @@ macro_rules! setup {
 
             trussed.set_seed_if_uninitialized(&$seed);
             let mut $client = {
-                pub type TestClient<'a> = crate::DefaultClient<&'a mut crate::Service<$board>>;
+                pub type TestClient<'a> = crate::ClientImplementation<&'a mut crate::Service<$board>>;
                 TestClient::new(
                     test_trussed_requester,
                     &mut trussed
