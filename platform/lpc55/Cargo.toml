@@ -87,12 +87,8 @@ ufmt = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty
 ufmt-macros = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty-enums" }
 nisty = {git = "https://github.com/ycrypto/nisty", branch="main"}
 
-
-# MacOS needed patches
-# micro-ecc-sys = {git="https://github.com/conorpp/micro-ecc-sys", branch="fix-macos"}
-micro-ecc-sys = { path = "../../../micro-ecc-sys" }
-# littlefs2-sys = {git="https://github.com/conorpp/littlefs2-sys", branch="fix-macos"}
-littlefs2-sys = { path = "../../../littlefs2-sys" }
+# micro-ecc-sys = { path = "../../../micro-ecc-sys" }
+# littlefs2-sys = { path = "../../../littlefs2-sys" }
 
 # [patch."https://github.com/lpc55/lpc55-hal"]
 # lpc55-hal = {git = "https://github.com/nickray/lpc55-hal", branch = "rand-core" }

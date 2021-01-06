@@ -1717,7 +1717,7 @@ where UP: UserPresence,
                     Mechanism::P256, public_key.clone(), KeySerialization::Cose
                 )).serialized_key;
                 let _success = syscall!(self.trussed.delete(public_key)).success;
-                info!("deleted public P256 key: {}", success);
+                info!("deleted public P256 key: {}", _success);
             }
             SupportedAlgorithm::Ed25519 => {
                 private_key = syscall!(self.trussed.generate_ed25519_private_key(location)).key;
@@ -1726,7 +1726,7 @@ where UP: UserPresence,
                     Mechanism::Ed25519, public_key.clone(), KeySerialization::Cose
                 )).serialized_key;
                 let _success = syscall!(self.trussed.delete(public_key)).success;
-                info!("deleted public Ed25519 key: {}", success);
+                info!("deleted public Ed25519 key: {}", _success);
             }
             SupportedAlgorithm::Totp => {
                 if parameters.client_data_hash.len() != 32 {
@@ -1920,7 +1920,7 @@ where UP: UserPresence,
 
         if !rk_requested {
             let _success = syscall!(self.trussed.delete(private_key)).success;
-            info!("deleted private credential key: {}", success);
+            info!("deleted private credential key: {}", _success);
         }
 
         let packed_attn_stmt = ctap2::make_credential::PackedAttestationStatement {
