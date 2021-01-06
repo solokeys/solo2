@@ -21,8 +21,6 @@ jobs:
           - board-prototype
         rust:
           - stable
-        target:
-          - thumbv8m.main-none-eabi
     defaults:
       run:
         working-directory: platform/lpc55
@@ -39,7 +37,7 @@ jobs:
         with:
           profile: minimal
           toolchain: ${{ matrix.rust }}
-          target: ${{ matrix.target }}
+          target: thumbv8m.main-none-eabi
           override: true
           components: llvm-tools-preview
       - name: Build
@@ -55,28 +53,36 @@ jobs:
         run: cargo size --release --features ${{ matrix.board }}
 
   build-pc:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        os:
+          - ubuntu-latest
+          # TODO: some build issue currently
+          # - macos-latest
         rust:
           - stable
-        target:
-          - x86_64-unknown-linux-gnu
-          # - x86_64-apple-darwin
     defaults:
       run:
         working-directory: platform/pc
     steps:
       - uses: actions/checkout@v1
-      - name: Install littlefs2-sys/micro-ecc-sys build dependencies
+      - name: Install Linux build dependencies
+        if: matrix.os == 'ubuntu-latest'
         shell: bash
         run: |
           sudo apt update -y -qq && sudo apt install -y -qq llvm libclang-dev
+
+      # this is already installed
+      # - name: Install macOS build dependencies
+      #   if: matrix.os == 'macos-latest'
+      #   shell: bash
+      #   run: brew install llvm
+
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: ${{ matrix.rust }}
-          target: ${{ matrix.target }}
           override: true
       - name: Build
         run: cargo build --release
