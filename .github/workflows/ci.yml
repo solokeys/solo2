@@ -2,6 +2,7 @@ name: ci
 
 on:
   pull_request:
+    branches:
   push:
     branches:
       - dev
@@ -59,7 +60,7 @@ jobs:
         os:
           - ubuntu-latest
           # TODO: some build issue currently
-          # - macos-latest
+          - macos-latest
         rust:
           - stable
     defaults:
@@ -74,10 +75,10 @@ jobs:
           sudo apt update -y -qq && sudo apt install -y -qq llvm libclang-dev
 
       # this is already installed
-      # - name: Install macOS build dependencies
-      #   if: matrix.os == 'macos-latest'
-      #   shell: bash
-      #   run: brew install llvm
+      - name: Install macOS build dependencies
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: brew install llvm
 
       - uses: actions-rs/toolchain@v1
         with:
