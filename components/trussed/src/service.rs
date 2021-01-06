@@ -926,44 +926,55 @@ impl<B: Board> ServiceResources<B> {
             let path = PathBuf::from(b"rng-state.bin");
 
             // If it hasn't been saved to flash yet, generate it from HW RNG.
-            let current_state = if ! path.exists(&self.board.store().ifs()) {
-                let mut current_state = [0u8; 32];
-                self.board.rng().try_fill_bytes(&mut current_state)
+            let stored_seed = if ! path.exists(&self.board.store().ifs()) {
+                let mut stored_seed = [0u8; 32];
+                self.board.rng().try_fill_bytes(&mut stored_seed)
                     .map_err(|_| Error::EntropyMalfunction)?;
-                current_state
+                stored_seed
             } else {
                 // Use the last saved state.
-                let current_state_bytebuf: ByteBuf<consts::U32> = store::read(self.board.store(), StorageLocation::Internal, &path)?;
-                let mut current_state = [0u8; 32];
-                current_state.clone_from_slice(&current_state_bytebuf);
-                current_state
+                let stored_seed_bytebuf: ByteBuf<consts::U32> = store::read(self.board.store(), StorageLocation::Internal, &path)?;
+                let mut stored_seed = [0u8; 32];
+                stored_seed.clone_from_slice(&stored_seed_bytebuf);
+                stored_seed
             };
 
-            // Before we finish loading, we need to "split" our RNG state
-            // and save it to use as RNG state for next boot.
-            // This is avoid writing to flash on every RNG syscall, and to only have
-            // to write to flash once per boot.
+            // Generally, the TRNG is fed through a DRBG to whiten its output.
+            //
+            // In principal seeding a DRBG like Chacha8Rng from "good" HW/external entropy
+            // should be good enough for the lifetime of the key.
+            //
+            // Since we have a TRNG though, we might as well mix in some new entropy
+            // on each boot. We do not do so on each DRBG draw to avoid excessive flash writes.
+            // (e.g., if some app exposes unlimited "read-entropy" functionality to users).
+            //
+            // Additionally, we use a twist on the ideas of Haskell's splittable RNGs, and store
+            // the hash of the current seed as input seed for the next boot. In this way, even if
+            // the HW entropy "goes bad" (e.g., starts returning all zeros), the properties of the
+            // hash function should ensure that there are no cycles or repeats of entropy in the
+            // output to apps.
 
-            // 1. First, Generate 32 new bytes from the HW TRNG.
-            let mut next_state = [0u8; 32];
-            self.board.rng().try_fill_bytes(&mut next_state)
+            // 1. First, draw fresh entropy from the HW TRNG.
+            let mut entropy = [0u8; 32];
+            self.board.rng().try_fill_bytes(&mut entropy)
                 .map_err(|_| Error::EntropyMalfunction)?;
 
-            // 2. XOR our current state into it.
-            for i in 0 .. next_state.len() {
-                next_state[i] = next_state[i] ^ current_state[i];
+            // 2. Mix into our previously stored seed.
+            let mut our_seed = [0u8; 32];
+            for i in 0..32 {
+                our_seed[i] = stored_seed[i] ^ entropy[i];
             }
 
-            // 3. Hash it to protect from a HW RNG failure.
+            // Initialize ChaCha8 construction with our seed.
+            self.rng_state = Some(chacha20::ChaCha8Rng::from_seed(our_seed));
+
+            // 3. Store hash of seed for next boot.
             use sha2::digest::Digest;
             let mut hash = sha2::Sha256::new();
-            hash.input(&next_state);
-            next_state.clone_from_slice(&hash.result());
+            hash.input(&our_seed);
+            let seed_to_store = hash.result();
 
-            store::store(self.board.store(), StorageLocation::Internal, &path, &next_state[..]).unwrap();
-
-            // Initialize our ChaCha8 construction with our current state.
-            self.rng_state = Some(chacha20::ChaCha8Rng::from_seed(current_state));
+            store::store(self.board.store(), StorageLocation::Internal, &path, seed_to_store.as_ref()).unwrap();
         }
 
 
