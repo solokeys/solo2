@@ -1,0 +1,45 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - dev
+      - main
+
+env:
+  CARGO_INCREMENTAL: 0
+  RUSTFLAGS: "-Dwarnings"
+
+jobs:
+  build-lpc55:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        board:
+          - board-lpcxpresso
+          - board-prototype
+        rust:
+          - stable
+        target:
+          - thumbv8m.main-none-eabi
+    defaults:
+      run:
+        working-directory: platform/lpc55
+    steps:
+      - uses: actions/checkout@v1
+      - name: Install littlefs2-sys build dependencies
+        shell: bash
+        run: |
+          sudo apt update -y -qq && sudo apt install -y -qq llvm libc6-dev-i386
+      - uses: fiam/arm-none-eabi-gcc@v1
+        with:
+          release: "9-2020-q2"
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.rust }}
+          target: ${{ matrix.target }}
+          override: true
+      - name: Build
+        run: cargo build --release --features ${{ matrix.board }}
