@@ -244,7 +244,7 @@ const APP: () = {
     fn nfc_wait_extension(c: nfc_wait_extension::Context) {
         let nfc_wait_extension::Resources {
             contactless,
-            perf_timer: _,
+            perf_timer: _perf_timer,
             hw_scheduler,
         }
             = c.resources;
@@ -253,7 +253,7 @@ const APP: () = {
             // clear the interrupt
             hw_scheduler.cancel().ok();
 
-            info!("<{}", perf_timer.lap().0/100);
+            info!("<{}", _perf_timer.lap().0/100);
             let status = contactless.poll_wait_extensions();
             match status {
                 iso14443::Iso14443Status::Idle => {}
@@ -261,7 +261,7 @@ const APP: () = {
                     hw_scheduler.start(duration.subsec_millis().ms());
                 }
             }
-            info!(" {}>", perf_timer.lap().0/100);
+            info!(" {}>", _perf_timer.lap().0/100);
         }
     }
 
