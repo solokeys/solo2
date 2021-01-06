@@ -296,7 +296,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     };
 
     #[cfg(feature = "board-lpcxpresso")]
-    let rgb = board::led::RgbLed::new(
+    let mut rgb = board::led::RgbLed::new(
         board::led::RedLedPin::take().unwrap(),
         board::led::GreenLedPin::take().unwrap(),
         board::led::BlueLedPin::take().unwrap(),
