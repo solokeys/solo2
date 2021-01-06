@@ -4,7 +4,6 @@ use crate::api::*;
 // use crate::config::*;
 use crate::error::Error;
 use crate::service::*;
-use crate::store::*;
 use crate::types::*;
 
 fn load_public_key<B: Board>(resources: &mut ServiceResources<B>, key_id: &UniqueId)

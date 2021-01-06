@@ -72,6 +72,27 @@ use usb_device::device::{UsbDeviceBuilder, UsbVidPid};
 use hal::prelude::*;
 use hal::traits::wg::digital::v2::InputPin;
 
+// Logging
+#[derive(Debug)]
+pub struct Flusher {}
+
+#[cfg(feature = "log-serial")]
+impl delog::Flusher for Flusher {
+    fn flush(&self, logs: &str) {
+        // see https://git.io/JLARR for the plan on how to improve this once we switch to RTIC 0.6
+        rtic::pend(hal::raw::Interrupt::MAILBOX);
+    }
+}
+#[cfg(not(feature = "log-serial"))]
+impl delog::Flusher for Flusher {
+    fn flush(&self, logs: &str) {
+        cortex_m_semihosting::hprint!(logs).ok();
+    }
+}
+
+delog!(Delogger, 2048, Flusher);
+static FLUSHER: Flusher = Flusher {};
+
 
 fn configure_fm11_if_needed(
     fm: &mut types::NfcChip,
@@ -213,9 +234,8 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     Option<clock_controller::DynamicClockController>,
     types::HwScheduler,
 ) {
-    cortex_m_semihosting::hprintln!("entering init_board");
     Delogger::init_default(delog::LevelFilter::Debug, &FLUSHER).ok();
-    info_now!("ENTERING init_board");
+    info_now!("entering init_board");
 
     let hal = hal::Peripherals::from((device_peripherals, core_peripherals));
 
@@ -603,88 +623,3 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         delay_timer,
     )
 }
-
-// Logging
-#[derive(Debug)]
-pub struct Flusher {}
-
-#[cfg(feature = "log-serial")]
-impl delog::Flusher for Flusher {
-    // fn flush(&self, logs: &str, serial: &mut types::SerialClass) {
-    fn flush(&self, logs: &str) {
-        // TODO: somehow move over logs (probably an Interchange?)
-        rtic::pend(hal::raw::Interrupt::MAILBOX);
-        // serial.write(logs.as_bytes()).ok();
-        // todo!();
-    }
-}
-#[cfg(not(feature = "log-serial"))]
-impl delog::Flusher for Flusher {
-    fn flush(&self, logs: &str) {
-        cortex_m_semihosting::hprint!(logs).ok();
-    }
-}
-
-delog!(Delogger, 2048, Flusher);
-static FLUSHER: Flusher = Flusher {};
-
-//
-// use logging::{funnel,Drain};
-// funnel!(NVIC_PRIO_BITS = hal::raw::NVIC_PRIO_BITS, {
-//     // These are not the actual priorities, but the ranking of priorities.
-//     // E.g. (lowest prio, 2nd lowest prio, etc).
-//     0: 2048,    // Idle
-//     1: 512,     // Ui update
-//     2: 1024,    // Trussed
-//     3: 512,     // USB
-//     4: 2048,    // NFC
-//     5: 128,     // Clock controller
-// });
-
-// pub fn drain_log_to_serial(serial: &mut types::SerialClass) {
-//     let mut buf = [0u8; 64];
-
-//     let drains = Drain::get_all();
-
-//     for (_, drain) in drains.iter().enumerate() {
-//         'l: loop {
-//             let n = drain.read(&mut buf).len();
-//             if n == 0 {
-//                 break 'l;
-//             }
-//             // serial.lock(|serial: &mut types::SerialClass| {
-//                 match serial.write(&buf[..n]) {
-//                     Ok(_count) => {
-//                     },
-//                     Err(_err) => {
-//                     },
-//                 }
-
-//                 // not much we can do
-//                 serial.flush().ok();
-
-//                 // Only write one packet at a time or serialport will overrun.
-//                 break;
-//             // });
-//         }
-//     }
-// }
-
-// pub fn drain_log_to_semihosting() {
-//     let drains = Drain::get_all();
-//     let mut buf = [0u8; 64];
-
-//     for (_, drain) in drains.iter().enumerate() {
-//         'l: loop {
-//             let n = drain.read(&mut buf).len();
-//             if n == 0 {
-//                 break 'l;
-//             }
-//             match core::str::from_utf8(&buf[..n]) {
-//                 Ok(string) => logging::write!(string).ok(),
-//                 Err(e) => logging::blocking::error!("ERROR {:?}", &e).ok(),
-//             };
-//         }
-//     }
-// }
-

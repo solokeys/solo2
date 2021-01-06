@@ -366,8 +366,8 @@ where
 
         if main_irq & (Interrupt::TxDone as u8) != 0 {
             // Need to turn off transmit mode
-            let count = self.read_reg(Register::FifoCount);
-            info!("off transmit (-{}) {}", count, main_irq.hex());
+            let _count = self.read_reg(Register::FifoCount);
+            info!("off transmit (-{}) {}", _count, main_irq.hex());
         }
 
         let fifo_irq = if (main_irq & Interrupt::Fifo as u8) != 0 {
@@ -376,7 +376,7 @@ where
             0
         };
 
-        let aux_irq = if (main_irq & Interrupt::Aux as u8) != 0 {
+        let _aux_irq = if (main_irq & Interrupt::Aux as u8) != 0 {
             self.read_reg(Register::AuxIrq)
         } else {
             0
@@ -489,14 +489,16 @@ where
                 }
             }
 
-            current_count = self.read_reg(Register::FifoCount);
-            let aux_irq = self.read_reg(Register::AuxIrq);
-            let rf_status = self.read_reg(Register::RfStatus);
+            #[allow(unused_assignments)] {
+                current_count = self.read_reg(Register::FifoCount);
+            }
+            let _aux_irq = self.read_reg(Register::AuxIrq);
+            let _rf_status = self.read_reg(Register::RfStatus);
             info!("tx {}->{}. {} {} {}",
                 initial_count,
                 current_count,
-                hex_str!(rf_status),
-                hex_str!(aux_irq),
+                hex_str!(_rf_status),
+                hex_str!(_aux_irq),
                 hex_str!(fifo_irq),
             );
 
@@ -572,42 +574,42 @@ where
 
 /// For logging
 pub struct Eeprom {
-    regu_cfg: u8,
-    atqa: u16,
-    sak1: u8,
-    sak2: u8,
-    tl: u8,
-    t0: u8,
-    ta: u8,
-    tb: u8,
-    tc: u8,
-    nfc_cfg: u8,
-    i2c_addr: u8,
-    rblock_ack: u8,
-    rblock_nack: u8,
+    pub regu_cfg: u8,
+    pub atqa: u16,
+    pub sak1: u8,
+    pub sak2: u8,
+    pub tl: u8,
+    pub t0: u8,
+    pub ta: u8,
+    pub tb: u8,
+    pub tc: u8,
+    pub nfc_cfg: u8,
+    pub i2c_addr: u8,
+    pub rblock_ack: u8,
+    pub rblock_nack: u8,
 }
 
 pub struct InterruptState {
-    main: u8,
-    fifo: u8,
-    aux: u8,
-    count: u8,
+    pub main: u8,
+    pub fifo: u8,
+    pub aux: u8,
+    pub count: u8,
 }
 
 pub struct RegisterBlock {
-    fifo_count: u8,
-    rf_status: u8,
-    rf_txen: u8,
-    rf_baud: u8,
-    rf_rats: u8,
-    main_irq: u8,
-    fifo_irq: u8,
-    aux_irq: u8,
-    main_irq_mask: u8,
-    fifo_irq_mask: u8,
-    aux_irq_mask: u8,
-    nfc_cfg: u8,
-    regu_cfg: u8,
+    pub fifo_count: u8,
+    pub rf_status: u8,
+    pub rf_txen: u8,
+    pub rf_baud: u8,
+    pub rf_rats: u8,
+    pub main_irq: u8,
+    pub fifo_irq: u8,
+    pub aux_irq: u8,
+    pub main_irq_mask: u8,
+    pub fifo_irq_mask: u8,
+    pub aux_irq_mask: u8,
+    pub nfc_cfg: u8,
+    pub regu_cfg: u8,
 }
 
 

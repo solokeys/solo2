@@ -54,8 +54,8 @@ impl Dispatch {
             let tuple: &mut (Command, Message) = unsafe { self.responder.interchange.as_mut().unwrap().rq_mut() };
             let command = tuple.0;
             let message = &mut tuple.1;
-            let commandu8: u8 = command.into();
-            info_now!("cmd: {}", commandu8);
+            let _commandu8: u8 = command.into();
+            info_now!("cmd: {}", _commandu8);
             if let Some(app) = Self::find_app(command, apps) {
                 match app.call(command, message) {
                     Err(err) => {

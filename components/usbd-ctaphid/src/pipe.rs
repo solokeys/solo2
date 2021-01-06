@@ -231,8 +231,8 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
             // both should not occur here, and we can't do anything anyway.
             // Err(UsbError::WouldBlock) => { return; },
             // Err(UsbError::BufferOverflow) => { return; },
-            Err(error) => {
-                info!("error no {}", error as i32);
+            Err(_error) => {
+                info!("error no {}", _error as i32);
                 return;
             },
         };

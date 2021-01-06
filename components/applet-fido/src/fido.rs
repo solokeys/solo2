@@ -280,8 +280,8 @@ where UP: UserPresence,
                         (data,true)
                     },
                     Err(status) => {
-                        let code: u16 = status.into();
-                        info!("U2F error. {}", code);
+                        let _code: u16 = status.into();
+                        info!("U2F error. {}", _code);
                         (iso7816::Response::Status(status).into_message(), false)
                     },
                     _ => {

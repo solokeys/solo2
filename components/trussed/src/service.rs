@@ -461,8 +461,8 @@ impl<B: Board> ServiceResources<B> {
                             let mut path = path.clone();
                             path.push(name);
                             let attribute = fs.attribute(&path, crate::config::USER_ATTRIBUTE_NUMBER)
-                                .map_err(|e| {
-                                    info!("error getting attribute: {:?}", &e);
+                                .map_err(|_e| {
+                                    info!("error getting attribute: {:?}", &_e);
                                     littlefs2::io::Error::Io
                                 }
                             )?;
@@ -553,8 +553,8 @@ impl<B: Board> ServiceResources<B> {
                             let mut path = path.clone();
                             path.push(name);
                             let attribute = fs.attribute(&path, crate::config::USER_ATTRIBUTE_NUMBER)
-                                .map_err(|e| {
-                                    info!("error getting attribute: {:?}", &e);
+                                .map_err(|_e| {
+                                    info!("error getting attribute: {:?}", &_e);
                                     littlefs2::io::Error::Io
                                 }
                             )?;
