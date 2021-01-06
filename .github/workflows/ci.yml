@@ -41,5 +41,15 @@ jobs:
           toolchain: ${{ matrix.rust }}
           target: ${{ matrix.target }}
           override: true
+          components: llvm-tools-preview
       - name: Build
         run: cargo build --release --features ${{ matrix.board }}
+      # Use precompiled binutils
+      - name: cargo install cargo-binutils
+        uses: actions-rs/install@v0.1
+        with:
+          crate: cargo-binutils
+          version: latest
+          use-tool-cache: true
+      - name: Size
+        run: cargo size --release --features ${{ matrix.board }}
