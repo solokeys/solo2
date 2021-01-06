@@ -81,7 +81,7 @@ log-error = []
 # patch dependencies like so to test local changes
 
 [patch.crates-io]
-heapless = { git = "https://github.com/nicolas-solokeys/heapless", branch = "bytebuf" }
+heapless = { git = "https://github.com/nickray/heapless", branch = "bytebuf-0.5.6" }
 nisty = {git = "https://github.com/ycrypto/nisty", branch="main"}
 
 # micro-ecc-sys = { path = "../../../micro-ecc-sys" }
