@@ -148,7 +148,7 @@ RGB: RgbLed,
     }
 
     fn reboot(&mut self, to: reboot::To) -> ! {
-        // crate::logger::blocking::info!("reboot {:?}", to).ok();
+        // crate::logger::info_now!("reboot {:?}", to).ok();
         match to {
             reboot::To::Application => {
                 crate::hal::raw::SCB::sys_reset()

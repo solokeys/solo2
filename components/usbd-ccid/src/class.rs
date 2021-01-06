@@ -1,6 +1,5 @@
 use core::convert::TryFrom;
 
-use crate::logger::{blocking};
 use interchange::Requester;
 use apdu_dispatch::types::ContactInterchange;
 
@@ -77,7 +76,7 @@ where
     }
 
     fn poll(&mut self) {
-        // blocking::info!("poll of ccid").ok();
+        // info_now!("poll of ccid");
         self.pipe.poll_app();
         self.pipe.maybe_send_packet();
     }
@@ -134,7 +133,7 @@ where
                 }
 
                 Err(()) => {
-                    blocking::info!("unexpected request: {}", request).ok();
+                    info_now!("unexpected request: {}", request);
                 }
             }
         }
@@ -167,7 +166,7 @@ where
                 }
 
                 Err(()) => {
-                    blocking::info!("unexpected request: {}", request).ok();
+                    info_now!("unexpected request: {}", request);
                 }
             }
         }

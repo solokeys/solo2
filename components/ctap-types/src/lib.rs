@@ -18,6 +18,10 @@
 #[macro_use]
 extern crate ufmt_macros;
 
+#[macro_use]
+extern crate delog;
+generate_macros!();
+
 pub use heapless::{consts, ArrayLength, String, Vec};
 pub use heapless::spsc::{Consumer, Producer, Queue};
 pub use heapless::ByteBuf;
@@ -37,5 +41,3 @@ pub mod webauthn;
 #[cfg(test)]
 mod tests {
 }
-
-logging::add!(logger);

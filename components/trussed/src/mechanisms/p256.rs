@@ -1,6 +1,5 @@
 use core::convert::{TryFrom, TryInto};
 
-use crate::logger::{blocking};
 use crate::api::*;
 // use crate::config::*;
 use crate::error::Error;
@@ -46,10 +45,10 @@ Agree<B> for super::P256
         let public_key = load_public_key(resources, &public_id)?;
 
         // THIS IS THE CORE
-        blocking::info!("free/total RAMFS blocks: {:?}/{:?}",
+        info_now!("free/total RAMFS blocks: {:?}/{:?}",
             resources.board.store().vfs().available_blocks().unwrap(),
             resources.board.store().vfs().total_blocks(),
-        ).ok();
+        );
         let shared_secret = keypair.secret.agree(&public_key).map_err(|_| Error::InternalError)?.to_bytes();
 
         let key_id = resources.store_key(
@@ -248,7 +247,7 @@ Exists<B> for super::P256
 fn load_keypair<B: Board>(resources: &mut ServiceResources<B>, key_id: &UniqueId)
     -> Result<nisty::Keypair, Error> {
 
-    // blocking::info!("loading keypair").ok();
+    // info_now!("loading keypair");
     let seed: [u8; 32] = resources
         .load_key(KeyType::Secret, Some(KeyKind::P256), &key_id)?
         .value.as_slice()
@@ -256,7 +255,7 @@ fn load_keypair<B: Board>(resources: &mut ServiceResources<B>, key_id: &UniqueId
         .map_err(|_| Error::InternalError)?;
 
     let keypair = nisty::Keypair::generate_patiently(&seed);
-    // blocking::info!("seed: {:?}", &seed).ok();
+    // info_now!("seed: {:?}", &seed);
     Ok(keypair)
 }
 
@@ -287,11 +286,11 @@ Sign<B> for super::P256
         };
         // #[cfg(all(test, feature = "verbose-tests"))]
         // println!("p256 sig = {:?}", &native_signature);
-        // blocking::info!("p256 sig = {:?}", &our_signature).ok();
+        // info_now!("p256 sig = {:?}", &our_signature).ok();
 
-        blocking::info!("P256 signature:").ok();
-        // blocking::info!("msg: {:?}", &request.message).ok();
-        // blocking::info!("sig: {:?}", &our_signature).ok();
+        info_now!("P256 signature:");
+        // info_now!("msg: {:?}", &request.message).ok();
+        // info_now!("sig: {:?}", &our_signature).ok();
 
         // return signature
         Ok(reply::Sign { signature: our_signature })
@@ -308,21 +307,21 @@ Sign<B> for super::P256Prehashed
         let key_id = request.key.object_id;
 
         let keypair = load_keypair(resources, &key_id).map_err(|e| {
-            blocking::info!("load keypair error {:?}", e).ok();
+            info_now!("load keypair error {:?}", e);
             e
         })?;
 
-        // blocking::info!("keypair loaded").ok();
+        // info_now!("keypair loaded");
 
         if request.message.len() != nisty::DIGEST_LENGTH {
-            blocking::info!("wrong length").ok();
+            info_now!("wrong length");
             return Err(Error::WrongMessageLength);
         }
         let message: [u8; 32] = request.message.as_slice().try_into().unwrap();
-        blocking::info!("cast to 32B array").ok();
+        info_now!("cast to 32B array");
 
         let native_signature = keypair.sign_prehashed(&message);
-        blocking::info!("signed").ok();
+        info_now!("signed");
 
         let our_signature = match request.format {
             SignatureSerialization::Asn1Der => {
@@ -334,11 +333,11 @@ Sign<B> for super::P256Prehashed
         };
         // #[cfg(all(test, feature = "verbose-tests"))]
         // println!("p256 sig = {:?}", &native_signature);
-        // blocking::info!("p256 sig = {:?}", &our_signature).ok();
+        // info_now!("p256 sig = {:?}", &our_signature).ok();
 
-        blocking::info!("P256 ph signature:").ok();
-        // blocking::info!("msg: {:?}", &request.message).ok();
-        // blocking::info!("sig: {:?}", &our_signature).ok();
+        info_now!("P256 ph signature:");
+        // info_now!("msg: {:?}", &request.message).ok();
+        // info_now!("sig: {:?}", &our_signature).ok();
 
         // return signature
         Ok(reply::Sign { signature: our_signature })

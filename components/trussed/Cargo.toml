@@ -38,7 +38,7 @@ sha-1 = { version = "0.8.2", default-features = false, optional = true }
 sha2 = { version = "0.8.0", default-features = false }
 ufmt = "0.1.0"
 
-logging = { path = "../logging" }
+delog = "0.1.0-alpha.2"
 
 
 [dependencies.heapless-bytes]

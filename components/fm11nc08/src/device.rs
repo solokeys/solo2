@@ -27,12 +27,6 @@ use hal::{
     }
 };
 use iso14443::traits::nfc;
-use logging::hex::*;
-use logging::hex;
-
-use crate::logger::{
-    info,
-};
 
 pub enum Mode {
     Write = 0b000,
@@ -227,11 +221,11 @@ where
 
         let aux_irq = self.read_reg(Register::AuxIrq);
         if (aux_irq & (1 << 6)) != 0 {
-            info!("Wrote to forbidden EEPROM location").ok();
+            info!("Wrote to forbidden EEPROM location");
             return Err(());
         }
         if (aux_irq & (1 << 7)) == 0 {
-            info!("EEPROM did not write").ok();
+            info!("EEPROM did not write");
             return Err(());
         }
 
@@ -373,7 +367,7 @@ where
         if main_irq & (Interrupt::TxDone as u8) != 0 {
             // Need to turn off transmit mode
             let count = self.read_reg(Register::FifoCount);
-            info!("off transmit (-{}) {}", count, main_irq.hex()).ok();
+            info!("off transmit (-{}) {}", count, main_irq.hex());
         }
 
         let fifo_irq = if (main_irq & Interrupt::Fifo as u8) != 0 {
@@ -390,12 +384,12 @@ where
 
         // check for overflow
         if (fifo_irq & (1 << 2)) != 0 {
-            info!("!OF! {} @{}", self.read_reg(Register::FifoCount), hal::get_cycle_count()/96_00).ok();
+            info!("!OF! {} @{}", self.read_reg(Register::FifoCount), hal::get_cycle_count()/96_00);
             info!("{} {} {}",
-                    hex!(main_irq),
-                    hex!(fifo_irq),
-                    hex!(aux_irq),
-                ).ok();
+                    hex_str!(main_irq),
+                    hex_str!(fifo_irq),
+                    hex_str!(aux_irq),
+                );
 
             // self.write_reg(Register::FifoFlush, 0xff);
         }
@@ -409,7 +403,7 @@ where
             self.offset = 0;
             let rf_rats = self.read_reg(Register::RfRats);
             self.current_frame_size = fsdi_to_frame_size((rf_rats >> 4) & 0xf);
-            info!("RxStart {}", self.current_frame_size).ok();
+            info!("RxStart {}", self.current_frame_size);
         }
 
         if main_irq & (Interrupt::RxDone as u8) != 0 {
@@ -424,7 +418,7 @@ where
                 self.offset = 0;
             }
             else {
-                info!("RxDone").ok();
+                info!("RxDone");
                 let l = self.offset - 2;
                 for i in 0 .. l {
                     buf[i] = self.packet[i];
@@ -442,20 +436,20 @@ where
         let rf_status = self.read_reg(Register::RfStatus);
         if (fifo_irq & (1 << 3) != 0) && (rf_status & (1 << 0)) == 0 {
             let count = self.read_reg(Register::FifoCount);
-            info!("WL {}", count).ok();
+            info!("WL {}", count);
             self.read_fifo(count);
-            logging::dump_hex(&self.packet[self.offset ..], count as usize).ok();
+            info!("{}", hex_str!(&self.packet[self.offset ..][..count as usize]));
             self.offset += count as usize;
             if count == 32 {
-                info!("warning: potential ovflw").ok();
+                info!("warning: potential ovflw");
             }
         }
 
         info!(". {},{},{}",
-            hex!(main_irq),
-            hex!(fifo_irq),
-            hex!(aux_irq),
-        ).ok();
+            hex_str!(main_irq),
+            hex_str!(fifo_irq),
+            hex_str!(aux_irq),
+        );
 
         if new_session {
             Err(nfc::Error::NewSession)
@@ -473,7 +467,7 @@ where
         while (rf_status & 1) == 0 {
             i += 1;
             if i > 100 {
-                info!("Chip is not transmitting.").ok();
+                info!("Chip is not transmitting.");
                 break;
             }
             rf_status = self.read_reg(Register::RfStatus);
@@ -488,7 +482,7 @@ where
                 while (fifo_irq & (FifoInterrupt::WaterLevel as u8)) == 0 {
                     i += 1;
                     if i > 300 {
-                        info!("TX transmission timeout.").ok();
+                        info!("TX transmission timeout.");
                         break;
                     }
                     fifo_irq = self.read_reg(Register::FifoIrq);
@@ -501,10 +495,10 @@ where
             info!("tx {}->{}. {} {} {}",
                 initial_count,
                 current_count,
-                hex!(rf_status),
-                hex!(aux_irq),
-                hex!(fifo_irq),
-            ).ok();
+                hex_str!(rf_status),
+                hex_str!(aux_irq),
+                hex_str!(fifo_irq),
+            );
 
             if (fifo_irq & (FifoInterrupt::WaterLevel as u8)) != 0 {
                 return Ok(())
@@ -519,7 +513,7 @@ where
 
         // Write in chunks of 24
         for i in 0 .. buf.len()/24 {
-            info!("24 chunk").ok();
+            info!("24 chunk");
             self.write_fifo(&buf[i * 24 .. i * 24 + 24]);
 
             if ! self.wait_for_transmission().is_ok() {
@@ -565,7 +559,7 @@ where
         // Ok(())
         // let main_irq = self.read_reg(Register::MainIrq);
         // if (main_irq & (Interrupt::TxDone as u8)) != 0 {
-        //     // info!("wait is over. {}", logging::hex!(main_irq));
+        //     // info!("wait is over. {}", logging::hex_str!(main_irq));
         //     self.write_reg(Register::RfTxEn, 0x00);
         //     Ok(())
         // } else {
@@ -618,98 +612,98 @@ pub struct RegisterBlock {
 
 
 
-impl ufmt::uDisplay for Eeprom {
-    fn fmt<W: ?Sized>(&self, f: &mut ufmt::Formatter<'_, W>) -> Result<(), W::Error>
-    where
-        W: ufmt::uWrite
-    {
-        use ufmt::uwriteln;
-        uwriteln!(f, "").ok();
-        uwriteln!(f, "  regu_cfg         = x{}", self.regu_cfg.hex()).ok();
-        uwriteln!(f, "  atqa             = x{}", self.atqa.hex()).ok();
-        uwriteln!(f, "  sak1,sak2        = x{} {}", hex!(self.sak1), hex!(self.sak2)).ok();
-        uwriteln!(f, "  tl t0 ta tb tc   = x{} {} {} {} {}",
-            hex!(self.tl), hex!(self.t0), hex!(self.ta), hex!(self.tb), hex!(self.tc)
-        ).ok();
-        uwriteln!(f, "  nfc_cfg          = x{}", self.nfc_cfg.hex()).ok();
-        uwriteln!(f, "  i2c_addr         = x{}", self.i2c_addr.hex()).ok();
-        uwriteln!(f, "  rblock ack,nack  = x{} {}", hex!(self.rblock_ack), hex!(self.rblock_nack))
-    }
-}
+// impl ufmt::uDisplay for Eeprom {
+//     fn fmt<W: ?Sized>(&self, f: &mut ufmt::Formatter<'_, W>) -> Result<(), W::Error>
+//     where
+//         W: ufmt::uWrite
+//     {
+//         use ufmt::uwriteln;
+//         uwriteln!(f, "").ok();
+//         uwriteln!(f, "  regu_cfg         = x{}", self.regu_cfg.hex()).ok();
+//         uwriteln!(f, "  atqa             = x{}", self.atqa.hex()).ok();
+//         uwriteln!(f, "  sak1,sak2        = x{} {}", hex_str!(self.sak1), hex_str!(self.sak2)).ok();
+//         uwriteln!(f, "  tl t0 ta tb tc   = x{} {} {} {} {}",
+//             hex_str!(self.tl), hex_str!(self.t0), hex_str!(self.ta), hex_str!(self.tb), hex_str!(self.tc)
+//         ).ok();
+//         uwriteln!(f, "  nfc_cfg          = x{}", self.nfc_cfg.hex()).ok();
+//         uwriteln!(f, "  i2c_addr         = x{}", self.i2c_addr.hex()).ok();
+//         uwriteln!(f, "  rblock ack,nack  = x{} {}", hex_str!(self.rblock_ack), hex_str!(self.rblock_nack))
+//     }
+// }
 
-impl ufmt::uDisplay for RegisterBlock {
-    fn fmt<W: ?Sized>(&self, f: &mut ufmt::Formatter<'_, W>) -> Result<(), W::Error>
-    where
-        W: ufmt::uWrite
-    {
-        use ufmt::uwriteln;
-        uwriteln!(f, "").ok();
-        uwriteln!(f, "  fifo_count   = x{}", self.fifo_count.hex()).ok();
-        uwriteln!(f, "  rf_status    = x{}", self.rf_status.hex()).ok();
-        uwriteln!(f, "  rf_txen      = x{}", self.rf_txen.hex()).ok();
-        uwriteln!(f, "  rf_baud      = x{}", self.rf_baud.hex()).ok();
-        uwriteln!(f, "  rf_rats      = x{}", self.rf_rats.hex()).ok();
-        uwriteln!(f, "  main_irq     = x{}", self.main_irq.hex()).ok();
-        uwriteln!(f, "  fifo_irq     = x{}", self.fifo_irq.hex()).ok();
-        uwriteln!(f, "  aux_irq      = x{}", self.aux_irq.hex()).ok();
-        uwriteln!(f, "  main_irq_mask= x{}", self.main_irq_mask.hex()).ok();
-        uwriteln!(f, "  fifo_irq_mask= x{}", self.fifo_irq_mask.hex()).ok();
-        uwriteln!(f, "  aux_irq_mask = x{}", self.aux_irq_mask.hex()).ok();
-        uwriteln!(f, "  nfc_cfg      = x{}", self.nfc_cfg.hex()).ok();
-        uwriteln!(f, "  regu_cfg     = x{}", self.regu_cfg.hex())
-    }
-}
-
-
+// impl ufmt::uDisplay for RegisterBlock {
+//     fn fmt<W: ?Sized>(&self, f: &mut ufmt::Formatter<'_, W>) -> Result<(), W::Error>
+//     where
+//         W: ufmt::uWrite
+//     {
+//         use ufmt::uwriteln;
+//         uwriteln!(f, "").ok();
+//         uwriteln!(f, "  fifo_count   = x{}", self.fifo_count.hex()).ok();
+//         uwriteln!(f, "  rf_status    = x{}", self.rf_status.hex()).ok();
+//         uwriteln!(f, "  rf_txen      = x{}", self.rf_txen.hex()).ok();
+//         uwriteln!(f, "  rf_baud      = x{}", self.rf_baud.hex()).ok();
+//         uwriteln!(f, "  rf_rats      = x{}", self.rf_rats.hex()).ok();
+//         uwriteln!(f, "  main_irq     = x{}", self.main_irq.hex()).ok();
+//         uwriteln!(f, "  fifo_irq     = x{}", self.fifo_irq.hex()).ok();
+//         uwriteln!(f, "  aux_irq      = x{}", self.aux_irq.hex()).ok();
+//         uwriteln!(f, "  main_irq_mask= x{}", self.main_irq_mask.hex()).ok();
+//         uwriteln!(f, "  fifo_irq_mask= x{}", self.fifo_irq_mask.hex()).ok();
+//         uwriteln!(f, "  aux_irq_mask = x{}", self.aux_irq_mask.hex()).ok();
+//         uwriteln!(f, "  nfc_cfg      = x{}", self.nfc_cfg.hex()).ok();
+//         uwriteln!(f, "  regu_cfg     = x{}", self.regu_cfg.hex())
+//     }
+// }
 
 
-impl ufmt::uDisplay for InterruptState {
-    fn fmt<W: ?Sized>(&self, f: &mut ufmt::Formatter<'_, W>) -> Result<(), W::Error>
-    where
-        W: ufmt::uWrite
-    {
-        use ufmt::uwriteln;
-
-        if self.main != 0 {
-            // let count =
-            //     if (main & (1 << 4)) != 0 || (main & (1<<5)) != 0 {
-            //         fm.read_reg(Register::FifoCount)
-            //     } else { 0 };
-
-            uwriteln!(f,"MAIN:").ok();
-            if (self.main & (Interrupt::Aux as u8)) != 0 { uwriteln!(f,"  aux_flag").ok(); }
-            if (self.main & (Interrupt::Fifo as u8)) != 0 { uwriteln!(f,"  fifo_flag").ok(); }
-            if (self.main & (Interrupt::Arbitration as u8)) != 0 { uwriteln!(f,"  arbit_flag").ok(); }
-            if (self.main & (Interrupt::TxDone as u8)) != 0 { uwriteln!(f,"  tx_done").ok(); }
-            if (self.main & (Interrupt::RxDone as u8)) != 0 { uwriteln!(f,"  rx_done").ok(); }
-            if  self.count > 0             { uwriteln!(f,"  c:{}", self.count).ok(); }
-            if (self.main & (Interrupt::RxStart as u8)) != 0 { uwriteln!(f,"  rx_start").ok(); }
-            if (self.main & (Interrupt::Active as u8)) != 0 { uwriteln!(f,"  active").ok(); }
-            if (self.main & (Interrupt::RfPower as u8)) != 0 { uwriteln!(f,"  rf_pwon").ok(); }
 
 
-        }
+// impl ufmt::uDisplay for InterruptState {
+//     fn fmt<W: ?Sized>(&self, f: &mut ufmt::Formatter<'_, W>) -> Result<(), W::Error>
+//     where
+//         W: ufmt::uWrite
+//     {
+//         use ufmt::uwriteln;
 
-        if self.fifo != 0 {
-            uwriteln!(f,"FIFO:").ok();
-            if (self.fifo & (1 << 0)) != 0 { uwriteln!(f,"  fifo_empty").ok(); }
-            if (self.fifo & (1 << 1)) != 0 { uwriteln!(f,"  fifo_full").ok(); }
-            if (self.fifo & (1 << 2)) != 0 { uwriteln!(f,"  fifo_ovflow").ok(); }
-            if (self.fifo & (1 << 3)) != 0 { uwriteln!(f,"  fifo_wl").ok(); }
-        }
+//         if self.main != 0 {
+//             // let count =
+//             //     if (main & (1 << 4)) != 0 || (main & (1<<5)) != 0 {
+//             //         fm.read_reg(Register::FifoCount)
+//             //     } else { 0 };
 
-        if self.aux != 0 {
-            uwriteln!(f,"AUX:").ok();
-            if (self.aux & (1 << 3)) != 0 { uwriteln!(f,"  framing_error").ok(); }
-            if (self.aux & (1 << 4)) != 0 { uwriteln!(f,"  crc_error").ok(); }
-            if (self.aux & (1 << 5)) != 0 { uwriteln!(f,"  parity_error").ok(); }
-            if (self.aux & (1 << 6)) != 0 { uwriteln!(f,"  ee_prog_err").ok(); }
-            if (self.aux & (1 << 7)) != 0 { uwriteln!(f,"  ee_prog_done").ok(); }
-        }
+//             uwriteln!(f,"MAIN:").ok();
+//             if (self.main & (Interrupt::Aux as u8)) != 0 { uwriteln!(f,"  aux_flag").ok(); }
+//             if (self.main & (Interrupt::Fifo as u8)) != 0 { uwriteln!(f,"  fifo_flag").ok(); }
+//             if (self.main & (Interrupt::Arbitration as u8)) != 0 { uwriteln!(f,"  arbit_flag").ok(); }
+//             if (self.main & (Interrupt::TxDone as u8)) != 0 { uwriteln!(f,"  tx_done").ok(); }
+//             if (self.main & (Interrupt::RxDone as u8)) != 0 { uwriteln!(f,"  rx_done").ok(); }
+//             if  self.count > 0             { uwriteln!(f,"  c:{}", self.count).ok(); }
+//             if (self.main & (Interrupt::RxStart as u8)) != 0 { uwriteln!(f,"  rx_start").ok(); }
+//             if (self.main & (Interrupt::Active as u8)) != 0 { uwriteln!(f,"  active").ok(); }
+//             if (self.main & (Interrupt::RfPower as u8)) != 0 { uwriteln!(f,"  rf_pwon").ok(); }
 
-        Ok(())
-    }
-}
+
+//         }
+
+//         if self.fifo != 0 {
+//             uwriteln!(f,"FIFO:").ok();
+//             if (self.fifo & (1 << 0)) != 0 { uwriteln!(f,"  fifo_empty").ok(); }
+//             if (self.fifo & (1 << 1)) != 0 { uwriteln!(f,"  fifo_full").ok(); }
+//             if (self.fifo & (1 << 2)) != 0 { uwriteln!(f,"  fifo_ovflow").ok(); }
+//             if (self.fifo & (1 << 3)) != 0 { uwriteln!(f,"  fifo_wl").ok(); }
+//         }
+
+//         if self.aux != 0 {
+//             uwriteln!(f,"AUX:").ok();
+//             if (self.aux & (1 << 3)) != 0 { uwriteln!(f,"  framing_error").ok(); }
+//             if (self.aux & (1 << 4)) != 0 { uwriteln!(f,"  crc_error").ok(); }
+//             if (self.aux & (1 << 5)) != 0 { uwriteln!(f,"  parity_error").ok(); }
+//             if (self.aux & (1 << 6)) != 0 { uwriteln!(f,"  ee_prog_err").ok(); }
+//             if (self.aux & (1 << 7)) != 0 { uwriteln!(f,"  ee_prog_done").ok(); }
+//         }
+
+//         Ok(())
+//     }
+// }
 
 impl<SPI, CS, INT> FM11NC08 <SPI, CS, INT>
 where

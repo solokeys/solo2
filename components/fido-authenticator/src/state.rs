@@ -1,7 +1,5 @@
 use core::cmp::Ordering;
 
-use crate::logger::{blocking, info};
-
 use trussed::{
     block, syscall,
     Client as TrussedClient,
@@ -200,7 +198,7 @@ impl PersistentState {
         ).map_err(|_| Error::Other);
 
         if result.is_err() {
-            blocking::info!("err loading: {:?}", result.err().unwrap()).ok();
+            info_now!("err loading: {:?}", result.err().unwrap());
             return Err(Error::Other);
         }
 
@@ -209,14 +207,13 @@ impl PersistentState {
         let result = trussed::cbor_deserialize(&data);
 
         if result.is_err() {
-            blocking::info!("err deser'ing: {:?}", result.err().unwrap()).ok();
-            blocking::dump_hex(&data,data.len()).ok();
+            info_now!("err deser'ing: {:?}", result.err().unwrap());
+            info_now!("{}", hex_str!(&data));
             return Err(Error::Other);
         }
 
         let previous_state = result.map_err(|_| Error::Other);
 
-        // cortex_m_semihosting::blocking::info!("previously persisted state:\n{:?}", &previous_state).ok();
         previous_state
     }
 
@@ -251,11 +248,11 @@ impl PersistentState {
         if !self.initialised {
             match Self::load(trussed) {
                 Ok(previous_self) => {
-                    info!("loaded previous state!").ok();
+                    info!("loaded previous state!");
                     *self = previous_self
                 },
-                Err(err) => {
-                    info!("error with previous state! {:?}", err).ok();
+                Err(_err) => {
+                    info!("error with previous state! {:?}", err);
                 }
             }
             self.initialised = true;
@@ -266,7 +263,6 @@ impl PersistentState {
         let now = self.timestamp;
         self.timestamp += 1;
         self.save(trussed)?;
-        // cortex_m_semihosting::blocking::info!("https://time.is/{}", now).ok();
         Ok(now)
     }
 

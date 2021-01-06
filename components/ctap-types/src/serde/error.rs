@@ -135,11 +135,11 @@ impl serde::de::Error for Error {
         //
         // `invalid length 297, expected a sequence`
         //
-        crate::logger::blocking::info!("deser error: {}",&msg).ok();
+        info_now!("deser error: {}",&msg);
         Error::SerdeDeCustom
     }
     fn missing_field(field: &'static str) -> Self {
-        crate::logger::blocking::info!("deser missing: {}", field).ok();
+        info_now!("deser missing: {}", field);
         Error::SerdeMissingField
     }
 }

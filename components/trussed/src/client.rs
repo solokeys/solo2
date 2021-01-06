@@ -2,7 +2,6 @@ use core::marker::PhantomData;
 
 use interchange::Requester;
 
-use crate::logger::{info, blocking};
 use crate::api::*;
 use crate::error::*;
 use crate::pipe::TrussedInterchange;
@@ -502,7 +501,7 @@ where S: Syscall {
                             core::task::Poll::Ready(Ok(reply))
                         } else  {
                             // #[cfg(all(test, feature = "verbose-tests"))]
-                            info!("got: {:?}, expected: {:?}", Some(u8::from(&reply)), self.pending).ok();
+                            info!("got: {:?}, expected: {:?}", Some(u8::from(&reply)), self.pending);
                             core::task::Poll::Ready(Err(Error::InternalError))
                         }
                     }
@@ -822,7 +821,7 @@ where S: Syscall {
     fn unsafe_inject_totp_key<'c>(&'c mut self, raw_key: &[u8; 20], persistence: StorageLocation)
         -> ClientResult<'c, reply::UnsafeInjectKey, Self>
     {
-        blocking::info!("{}B: raw key: {:X?}", raw_key.len(), raw_key).ok();
+        info_now!("{}B: raw key: {:X?}", raw_key.len(), raw_key);
         let r = self.request(request::UnsafeInjectKey {
             mechanism: Mechanism::Totp,
             raw_key: ShortData::from_slice(raw_key).unwrap(),

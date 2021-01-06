@@ -7,6 +7,10 @@
 // #[cfg(test)]
 // extern crate std;
 
+#[macro_use]
+extern crate delog;
+generate_macros!();
+
 pub mod api;
 pub mod client;
 pub mod config;
@@ -27,8 +31,6 @@ pub use ctap_types::{
     ArrayLength, ByteBuf, consts,
     serde::{cbor_serialize, cbor_serialize_bytes, cbor_serialize_bytebuf, cbor_deserialize},
 };
-
-logging::add!(logger);
 
 #[cfg(test)]
 mod tests;

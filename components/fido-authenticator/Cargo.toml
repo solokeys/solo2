@@ -11,7 +11,7 @@ ctap-types = { path = "../ctap-types" }
 trussed = { path = "../trussed" } # , default-features = false }
 heapless = "0.5.5"
 interchange = { path = "../interchange" }
-logging = { path = "../logging" }
+delog = "0.1.0-alpha.2"
 # littlefs2 = { path = "../../../littlefs2" }
 littlefs2 = { git = "https://github.com/nickray/littlefs2", branch = "closures-instead-of-ub" }
 # embedded-hal = { version = "0.2", features = ["unproven"] }

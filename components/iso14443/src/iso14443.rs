@@ -7,10 +7,6 @@ use crate::traits::{
 use iso7816::command;
 use interchange::Requester;
 use apdu_dispatch::types::ContactlessInterchange;
-use crate::logger::{
-    self,
-    info,
-};
 
 pub enum SourceError {
     NoActivity,
@@ -201,7 +197,7 @@ where
                     match self.state.clone() {
                         Iso14443State::Transmitting(last_frame_range, remaining_data_range) => {
                             if duplicate_rblock {
-                                info!("Duplicate rblock, retransmitting").ok();
+                                info!("Duplicate rblock, retransmitting");
                                 self.send_frame(
                                     &ByteBuf::from_slice(
                                         &self.buffer[last_frame_range]
@@ -209,7 +205,7 @@ where
                                 ).ok();
                             } else {
                                 if remaining_data_range.len() == 0 {
-                                    info!("Error, recieved ack when this is no more data.").ok();
+                                    info!("Error, recieved ack when this is no more data.");
                                     self.ack(block_header);
                                     self.reset_state();
                                     return Err(SourceError::NoActivity);
@@ -221,13 +217,13 @@ where
                                     );
                                     self.send_frame(&next_frame).ok();
                                     if data_used != remaining_data_range.len() {
-                                        info!("Next frame").ok();
+                                        info!("Next frame");
                                         self.state = Iso14443State::Transmitting(
                                             remaining_data_range.start .. remaining_data_range.start + data_used,
                                             remaining_data_range.start + data_used .. self.buffer.len(),
                                         )
                                     } else {
-                                        info!("Last frame sent!").ok();
+                                        info!("Last frame sent!");
                                         self.state = Iso14443State::Transmitting(
                                             remaining_data_range.start .. remaining_data_range.start + data_used,
                                             self.buffer.len() .. self.buffer.len()
@@ -235,14 +231,14 @@ where
                                     }
 
                                 } else {
-                                    info!("Session has been reset.").ok();
+                                    info!("Session has been reset.");
                                     self.state = Iso14443State::Receiving;
                                 }
                             }
                         }
                         _ => {
                             // (None, Iso14443State::Idle)
-                            info!("Unexpected Rblock ack").ok();
+                            info!("Unexpected Rblock ack");
                             self.ack(block_header);
                         }
                     };
@@ -250,10 +246,10 @@ where
                 } else {
                     if let Some(last_iblock_recv) = self.last_iblock_recv {
                         self.ack(last_iblock_recv);
-                        info!("Ack last iblock").ok();
+                        info!("Ack last iblock");
                     } else {
                         self.ack(block_header);
-                        info!("Ack ping").ok();
+                        info!("Ack ping");
                     }
                 }
                 Err(SourceError::NoActivity)
@@ -261,13 +257,13 @@ where
             Block::SBlock(_cid, wtxgranted) => {
                 if wtxgranted {
                     if self.wtx_requested {
-                        info!("wtx accepted").ok();
+                        info!("wtx accepted");
                     } else {
-                        info!("unsolicited wtx").ok();
+                        info!("unsolicited wtx");
                     }
                     self.wtx_requested = false;
                 } else {
-                    info!("Deselected.").ok();
+                    info!("Deselected.");
                     self.device.send(
                         &[0xc2]
                     ).ok();
@@ -332,7 +328,7 @@ where
         self.last_iblock_recv = None;
         self.last_rblock_recv = None;
         self.last_block_num_recv = None;
-        info!("state reset.").ok();
+        info!("state reset.");
     }
 
     /// Read APDU into given buffer.  Return length of APDU on success.
@@ -345,18 +341,18 @@ where
         let res = self.device.read(packet);
         let packet_len = match res {
             Ok(nfc::State::NewSession(x)) => {
-                info!("State::NewSession").ok();
+                info!("State::NewSession");
                 self.reset_state();
                 x
             },
             Ok(nfc::State::Continue(x)) => x,
             Err(nfc::Error::NewSession) => {
-                info!("Error::NewSession").ok();
+                info!("Error::NewSession");
                 self.reset_state();
                 return Err(SourceError::NoActivity)
             },
             _ => {
-                info!("nop").ok();
+                info!("nop");
                 return Err(SourceError::NoActivity)
             }
         };
@@ -367,8 +363,8 @@ where
         // let packet = &self.packet;
         self.handle_block(&packet[.. packet_len as usize])?;
 
-        info!(">>").ok();
-        logger::dump_hex(&self.buffer, self.buffer.len()).ok();
+        info!(">>");
+        info!("{}", hex_str!(&self.buffer));
         // logging::dump_hex(packet, l as usize);
 
         let command = command::Data::from_slice(&self.buffer);
@@ -380,7 +376,7 @@ where
                 Ok(())
             } else {
                 // Would be better to try canceling and taking on this apdu.
-                info!("Had to drop most recent Apdu!").ok();
+                info!("Had to drop most recent Apdu!");
                 Err(SourceError::NoActivity)
             }
         } else {
@@ -393,7 +389,7 @@ where
 
                 self.send_frame( &frame )?;
             } else {
-                info!("Session dropped.  This shouldn't happen.").ok();
+                info!("Session dropped.  This shouldn't happen.");
             }
             Err(SourceError::NoActivity)
         }
@@ -408,13 +404,13 @@ where
         if interchange::State::Responded == self.interchange.state() {
             if let Some(msg) = self.interchange.take_response() {
                 if let Some(last_iblock_recv) = self.last_iblock_recv {
-                    info!("send!").ok();
+                    info!("send!");
                     let (frame, data_used) = self.construct_iblock(last_iblock_recv, &msg);
                     self.send_frame(
                         &frame
                     ).ok();
                     if data_used != msg.len() {
-                        info!("chaining response!").ok();
+                        info!("chaining response!");
                         self.buffer = msg;
                         self.state = Iso14443State::Transmitting(
                             0 .. data_used,
@@ -422,7 +418,7 @@ where
                         );
                     }
                 } else {
-                    info!("session was dropped! dropping response.").ok();
+                    info!("session was dropped! dropping response.");
                 }
             }
             Iso14443Status::Idle
@@ -439,23 +435,23 @@ where
     pub fn poll_wait_extensions(&mut self) -> Iso14443Status {
 
         if self.wtx_requested {
-            info!("warning: still awaiting wtx response.").ok();
+            info!("warning: still awaiting wtx response.");
             return Iso14443Status::ReceivedData(Duration::from_millis(32));
         }
 
         match self.interchange.state() {
             interchange::State::Responded => {
-                info!("could-send-from-wtx!").ok();
+                info!("could-send-from-wtx!");
                 Iso14443Status::ReceivedData(Duration::from_millis(32))
             }
             interchange::State::Requested | interchange::State::Processing => {
-                info!("send-wtx").ok();
+                info!("send-wtx");
                 self.send_wtx();
                 self.wtx_requested = true;
                 Iso14443Status::ReceivedData(Duration::from_millis(32))
             }
             _ => {
-                info!("wtx done").ok();
+                info!("wtx done");
                 Iso14443Status::Idle
             }
         }
@@ -470,8 +466,8 @@ where
             return Err(SourceError::NoActivity);
         }
 
-        info!("<<").ok();
-        if buffer.len() > 0 { logger::dump_hex(buffer, buffer.len()).ok(); }
+        info!("<<");
+        if buffer.len() > 0 { info!("{}", hex_str!(&buffer)); }
 
         Ok(())
     }

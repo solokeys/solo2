@@ -11,7 +11,7 @@ heapless = "0.5.5"
 
 apdu-dispatch = { path = "../apdu-dispatch" }
 iso7816 = {path = "../iso7816"}
-logging = {path = "../logging"}
+delog = "0.1.0-alpha.2"
 interchange = { path = "../interchange" }
 
 [features]

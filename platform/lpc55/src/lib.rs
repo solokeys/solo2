@@ -8,6 +8,10 @@ use panic_semihosting as _;
 // #[cfg(not(debug_assertions))]
 // use panic_halt as _;
 
+#[macro_use]
+extern crate delog;
+generate_macros!();
+
 use core::convert::TryInto;
 
 // board support package
@@ -19,8 +23,6 @@ pub use lpcxpresso55 as board;
 
 #[cfg(feature = "board-prototype")]
 pub use prototype_bee as board;
-
-logging::add!(logger);
 
 use c_stubs as _;
 
@@ -82,7 +84,7 @@ fn configure_fm11_if_needed(
 
     if current_regu_config == 0xff {
         // No nfc chip connected
-        logger::info!("No NFC chip connected").ok();
+        info!("No NFC chip connected");
         return Err(());
     }
 
@@ -92,10 +94,10 @@ fn configure_fm11_if_needed(
     let reconfig = true;
 
     if reconfig {
-        logger::info!("{}", fm.dump_eeprom() ).ok();
-        logger::info!("{}", fm.dump_registers() ).ok();
+        // info!("{}", fm.dump_eeprom() );
+        // info!("{}", fm.dump_registers() );
 
-        logger::info!("writing EEPROM").ok();
+        info!("writing EEPROM");
 
         let r = fm.configure(Configuration{
             regu: REGU_CONFIG,
@@ -113,11 +115,11 @@ fn configure_fm11_if_needed(
             nfc:    (0b0 << 1) |       (0b00 << 2),
         }, timer);
         if r.is_err() {
-            logger::info!("Eeprom failed.  No NFC chip connected?").ok();
+            info!("Eeprom failed.  No NFC chip connected?");
             return Err(());
         }
     } else {
-        logger::info!("EEPROM already initialized.").ok();
+        info!("EEPROM already initialized.");
     }
 
     // disable all interrupts except RxStart
@@ -149,7 +151,7 @@ fn validate_cfpa(pfr: &mut Pfr<hal::typestates::init_state::Enabled>) {
     let mut cfpa = pfr.read_latest_cfpa().unwrap();
     let current_version: u32 = build_constants::CARGO_PKG_VERSION;
     if cfpa.secure_fw_version < current_version || cfpa.ns_fw_version < current_version {
-        logger::info!("updating cfpa from {} to {}", cfpa.secure_fw_version, current_version).ok();
+        info!("updating cfpa from {} to {}", cfpa.secure_fw_version, current_version);
 
         // All of these are monotonic counters.
         cfpa.version += 1;
@@ -157,7 +159,7 @@ fn validate_cfpa(pfr: &mut Pfr<hal::typestates::init_state::Enabled>) {
         cfpa.ns_fw_version = current_version;
         pfr.write_cfpa(&cfpa).unwrap();
     } else {
-        logger::info!("do not need to update cfpa version {}", cfpa.secure_fw_version).ok();
+        info!("do not need to update cfpa version {}", cfpa.secure_fw_version);
     }
         // Unless encryption is explicity disabled, we require that PRINCE has been provisioned.
     #[cfg(not(feature = "no-encrypted-storage"))]
@@ -211,6 +213,10 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     Option<clock_controller::DynamicClockController>,
     types::HwScheduler,
 ) {
+    cortex_m_semihosting::hprintln!("entering init_board");
+    Delogger::init_default(delog::LevelFilter::Debug, &FLUSHER).ok();
+    info_now!("ENTERING init_board");
+
     let hal = hal::Peripherals::from((device_peripherals, core_peripherals));
 
     let mut anactrl = hal.anactrl;
@@ -289,7 +295,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
             Some(iso14443::Iso14443::new(fm, contactless_requester))
         } else {
             if is_passive_mode {
-                logger::info!("Shouldn't get passive signal when there's no chip!").ok();
+                info!("Shouldn't get passive signal when there's no chip!");
             }
             None
         }
@@ -344,7 +350,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
             .system_frequency(48.mhz())
             .reconfigure(clocks, &mut pmc, &mut syscon) };
     }
-    logger::info!("mount start {} ms",perf_timer.lap().0/1000).ok();
+    info!("mount start {} ms",perf_timer.lap().0/1000);
     static mut INTERNAL_STORAGE: Option<types::FlashStorage> = None;
     unsafe { INTERNAL_STORAGE = Some(filesystem); }
     static mut INTERNAL_FS_ALLOC: Option<Allocation<types::FlashStorage>> = None;
@@ -380,7 +386,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         rgb.blue(200);
         rgb.red(200);
         delay_timer.start(300.ms()); nb::block!(delay_timer.wait()).ok();
-        logger::info!("Not yet formatted!  Formatting..").ok();
+        info!("Not yet formatted!  Formatting..");
         store.mount(
             unsafe { INTERNAL_FS_ALLOC.as_mut().unwrap() },
             // unsafe { &mut INTERNAL_STORAGE },
@@ -393,7 +399,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
             true,
         ).unwrap();
     }
-    logger::info!("mount end {} ms",perf_timer.lap().0/1000).ok();
+    info!("mount end {} ms",perf_timer.lap().0/1000);
 
     // return to slow freq
     if is_passive_mode {
@@ -425,7 +431,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     let (piv_trussed_requester, piv_trussed_responder) = trussed::pipe::TrussedInterchange::claim(2)
         .expect("could not setup PIV TrussedInterchange");
 
-    logger::info!("usb class start {} ms",perf_timer.lap().0/1000).ok();
+    info!("usb class start {} ms",perf_timer.lap().0/1000);
     let usb_classes =
     {
         if !is_passive_mode {
@@ -511,12 +517,12 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         };
 
         // Boot to bootrom if buttons are all held for 5s
-        logger::info!("button start {}",perf_timer.lap().0/1000).ok();
+        info!("button start {}",perf_timer.lap().0/1000);
         delay_timer.start(5_000.ms());
         while three_buttons.is_pressed(board_traits::buttons::Button::A) &&
               three_buttons.is_pressed(board_traits::buttons::Button::B) &&
               three_buttons.is_pressed(board_traits::buttons::Button::Middle) {
-            // logger::info!("3 buttons pressed..").ok();
+            // info!("3 buttons pressed..");
             if delay_timer.wait().is_ok() {
                 // Give a small red blink show success
                 rgb.red(200);
@@ -526,7 +532,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
                 solo_trussed::boot_to_bootrom()
             }
         }
-        logger::info!("button end {}",perf_timer.lap().0/1000).ok();
+        info!("button end {}",perf_timer.lap().0/1000);
         (None, Some(three_buttons))
     };
 
@@ -577,7 +583,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
     // rgb.turn_off();
     delay_timer.cancel().ok();
-    logger::info!("init took {} ms",perf_timer.lap().0/1000).ok();
+    info!("init took {} ms",perf_timer.lap().0/1000);
 
     (
         apdu_dispatch,
@@ -599,62 +605,86 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 }
 
 // Logging
-use logging::{funnel,Drain};
-funnel!(NVIC_PRIO_BITS = hal::raw::NVIC_PRIO_BITS, {
-    // These are not the actual priorities, but the ranking of priorities.
-    // E.g. (lowest prio, 2nd lowest prio, etc).
-    0: 2048,    // Idle
-    1: 512,     // Ui update
-    2: 1024,    // Trussed
-    3: 512,     // USB
-    4: 2048,    // NFC
-    5: 128,     // Clock controller
-});
+#[derive(Debug)]
+pub struct Flusher {}
 
-pub fn drain_log_to_serial(serial: &mut types::SerialClass) {
-    let mut buf = [0u8; 64];
-
-    let drains = Drain::get_all();
-
-    for (_, drain) in drains.iter().enumerate() {
-        'l: loop {
-            let n = drain.read(&mut buf).len();
-            if n == 0 {
-                break 'l;
-            }
-            // serial.lock(|serial: &mut types::SerialClass| {
-                match serial.write(&buf[..n]) {
-                    Ok(_count) => {
-                    },
-                    Err(_err) => {
-                    },
-                }
-
-                // not much we can do
-                serial.flush().ok();
-
-                // Only write one packet at a time or serialport will overrun.
-                break;
-            // });
-        }
+#[cfg(feature = "log-serial")]
+impl delog::Flusher for Flusher {
+    // fn flush(&self, logs: &str, serial: &mut types::SerialClass) {
+    fn flush(&self, logs: &str) {
+        // TODO: somehow move over logs (probably an Interchange?)
+        rtic::pend(hal::raw::Interrupt::MAILBOX);
+        // serial.write(logs.as_bytes()).ok();
+        // todo!();
+    }
+}
+#[cfg(not(feature = "log-serial"))]
+impl delog::Flusher for Flusher {
+    fn flush(&self, logs: &str) {
+        cortex_m_semihosting::hprint!(logs).ok();
     }
 }
 
-pub fn drain_log_to_semihosting() {
-    let drains = Drain::get_all();
-    let mut buf = [0u8; 64];
+delog!(Delogger, 2048, Flusher);
+static FLUSHER: Flusher = Flusher {};
 
-    for (_, drain) in drains.iter().enumerate() {
-        'l: loop {
-            let n = drain.read(&mut buf).len();
-            if n == 0 {
-                break 'l;
-            }
-            match core::str::from_utf8(&buf[..n]) {
-                Ok(string) => logging::write!(string).ok(),
-                Err(e) => logging::blocking::error!("ERROR {:?}", &e).ok(),
-            };
-        }
-    }
-}
+//
+// use logging::{funnel,Drain};
+// funnel!(NVIC_PRIO_BITS = hal::raw::NVIC_PRIO_BITS, {
+//     // These are not the actual priorities, but the ranking of priorities.
+//     // E.g. (lowest prio, 2nd lowest prio, etc).
+//     0: 2048,    // Idle
+//     1: 512,     // Ui update
+//     2: 1024,    // Trussed
+//     3: 512,     // USB
+//     4: 2048,    // NFC
+//     5: 128,     // Clock controller
+// });
+
+// pub fn drain_log_to_serial(serial: &mut types::SerialClass) {
+//     let mut buf = [0u8; 64];
+
+//     let drains = Drain::get_all();
+
+//     for (_, drain) in drains.iter().enumerate() {
+//         'l: loop {
+//             let n = drain.read(&mut buf).len();
+//             if n == 0 {
+//                 break 'l;
+//             }
+//             // serial.lock(|serial: &mut types::SerialClass| {
+//                 match serial.write(&buf[..n]) {
+//                     Ok(_count) => {
+//                     },
+//                     Err(_err) => {
+//                     },
+//                 }
+
+//                 // not much we can do
+//                 serial.flush().ok();
+
+//                 // Only write one packet at a time or serialport will overrun.
+//                 break;
+//             // });
+//         }
+//     }
+// }
+
+// pub fn drain_log_to_semihosting() {
+//     let drains = Drain::get_all();
+//     let mut buf = [0u8; 64];
+
+//     for (_, drain) in drains.iter().enumerate() {
+//         'l: loop {
+//             let n = drain.read(&mut buf).len();
+//             if n == 0 {
+//                 break 'l;
+//             }
+//             match core::str::from_utf8(&buf[..n]) {
+//                 Ok(string) => logging::write!(string).ok(),
+//                 Err(e) => logging::blocking::error!("ERROR {:?}", &e).ok(),
+//             };
+//         }
+//     }
+// }
 

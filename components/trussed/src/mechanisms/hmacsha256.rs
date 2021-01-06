@@ -1,6 +1,5 @@
 use core::convert::TryInto;
 
-use crate::logger::blocking;
 use crate::api::*;
 // use crate::config::*;
 use crate::error::Error;
@@ -26,7 +25,7 @@ Sign<B> for super::HmacSha256
         // let shared_secret = &serialized_key.value;
         let l = shared_secret.as_slice().len();
         if (l & 0xf) != 0 {
-            blocking::info!("wrong key length, expected multiple of 16, got {}", l).ok();
+            info_now!("wrong key length, expected multiple of 16, got {}", l);
             Err(Error::WrongKeyKind)?;
         }
         // resources.load_key(&path, KeyKind::SharedSecret32, &mut shared_secret)?;

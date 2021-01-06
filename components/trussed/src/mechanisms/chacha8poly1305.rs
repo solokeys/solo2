@@ -1,6 +1,5 @@
 use core::convert::{TryFrom, TryInto};
 
-use crate::logger::{debug};
 use crate::api::*;
 // use crate::config::*;
 use crate::error::Error;
@@ -124,7 +123,7 @@ Encrypt<B> for super::Chacha8Poly1305
         // let key_id = request.key.object_id;
         // let path = resources.prepare_path_for_key(KeyType::Secret, &key_id)?;
         // let mut serialized = [0u8; 44];
-        // debug!("loading encryption key: {:?}", &path).ok();
+        // debug!("loading encryption key: {:?}", &path);
 
         {
             let nonce = &mut serialized[32..];
@@ -169,7 +168,7 @@ WrapKey<B> for super::Chacha8Poly1305
     fn wrap_key(resources: &mut ServiceResources<B>, request: request::WrapKey)
         -> Result<reply::WrapKey, Error>
     {
-        debug!("trussed: Chacha8Poly1305::WrapKey").ok();
+        debug!("trussed: Chacha8Poly1305::WrapKey");
 
         // TODO: need to check both secret and private keys
         let serialized_key = resources
