@@ -6,14 +6,14 @@
 //     fn process(&mut self, request: &mut Request) -> Result<Response, Error>;
 // }
 
-#[derive(Clone, Debug,uDebug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Request {
     Ctap1(ctap1::Request),
     Ctap2(ctap2::Request),
 }
 
 // see below
-#[derive(Clone, Debug,uDebug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 // #[derive(Debug)]
 pub enum Response {
     Ctap1(ctap1::Response),
@@ -23,14 +23,14 @@ pub enum Response {
 pub mod ctap1 {
     pub use crate::ctap1;
 
-    #[derive(Clone, Debug,uDebug, PartialEq)]
+    #[derive(Clone, Debug, PartialEq)]
     pub enum Request {
         Register(ctap1::Register),
         Authenticate(ctap1::Register),
         Version,
     }
 
-    #[derive(Clone, Debug,uDebug, PartialEq)]
+    #[derive(Clone, Debug, PartialEq)]
     pub enum Response {
         // Compiler not letting this enum be empty.
         #[allow(non_camel_case_types)]
@@ -41,7 +41,7 @@ pub mod ctap1 {
 pub mod ctap2 {
     pub use crate::ctap2::*;
 
-    #[derive(Clone, Debug,uDebug, PartialEq)]
+    #[derive(Clone, Debug, PartialEq)]
     pub enum Request {
         // 0x1
         MakeCredential(make_credential::Parameters),
@@ -62,7 +62,7 @@ pub mod ctap2 {
         Vendor(crate::operation::VendorOperation),
     }
 
-    #[derive(Clone, Debug,uDebug, PartialEq)]
+    #[derive(Clone, Debug, PartialEq)]
     pub enum Response {
         MakeCredential(make_credential::Response),
         GetAssertion(get_assertion::Response),
@@ -79,7 +79,7 @@ pub mod ctap2 {
 
 // pub type Result<T> = core::result::Result<T, Error>;
 
-#[derive(Clone,Copy,Debug,uDebug,Eq,PartialEq)]
+#[derive(Clone,Copy,Debug, Eq,PartialEq)]
 pub enum Error {
     Success = 0x00,
     InvalidCommand = 0x01,

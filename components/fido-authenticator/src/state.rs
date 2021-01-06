@@ -20,7 +20,6 @@ use ctap_types::{
 
 use heapless::binary_heap::{BinaryHeap, Max, Min};
 use littlefs2::path::PathBuf;
-use ufmt::derive::uDebug;
 
 use crate::Result;
 use crate::cbor_serialize_message;
@@ -75,7 +74,7 @@ impl State {
 
 }
 
-#[derive(Clone, Debug, uDebug, Default, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct Identity {
     // can this be [u8; 16] or need ByteBuf for serialization?
     // aaguid: Option<ByteBuf<consts::U16>>,
@@ -115,7 +114,7 @@ impl Identity {
 
 }
 
-#[derive(Clone, Debug, uDebug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum CommandCache {
     CredentialManagementEnumerateRps(u32, ByteBuf32),
     CredentialManagementEnumerateCredentials(u32, PathBuf, PathBuf),
@@ -159,7 +158,7 @@ pub struct RuntimeState {
 // Currently, this causes the entire authnr to reset state. Maybe it should even reformat disk
 //
 // - An alternative would be `heapless::Map`, but I'd prefer something more typed.
-#[derive(Clone, Debug, uDebug, Default, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct PersistentState {
     #[serde(skip)]
     // TODO: there has to be a better way than.. this

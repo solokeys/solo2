@@ -16,9 +16,6 @@
 //! so the authenticator logic is decoupled from these details.
 
 #[macro_use]
-extern crate ufmt_macros;
-
-#[macro_use]
 extern crate delog;
 generate_macros!();
 

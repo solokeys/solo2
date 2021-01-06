@@ -7,7 +7,6 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ufmt = "0.1"
 heapless = { version = "0.5.5" }
 
 # Components
@@ -16,7 +15,7 @@ delog = "0.1.0-alpha.2"
 interchange = {path = "../interchange"}
 
 # Testing
-serial_test = { version = "*", optional=true }
+serial_test = { version = "*", optional = true }
 
 [features]
 default = []

@@ -7,15 +7,12 @@ edition = "2018"
 
 [dependencies]
 ctap-types = { path = "../ctap-types" }
-interchange = { path = "../interchange" }
-hid-dispatch = { path = "../hid-dispatch" }
-heapless = { version = "0.5.5" }
 delog = "0.1.0-alpha.2"
+heapless = { version = "0.5.5" }
+hid-dispatch = { path = "../hid-dispatch" }
+interchange = { path = "../interchange" }
 serde = { version = "1.0", default-features = false }
 usb-device = "0.2.3"
-
-
-# ufmt = { version = "0.1.0", optional = true }
 
 [features]
 default = []

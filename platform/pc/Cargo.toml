@@ -12,9 +12,9 @@ name = "pc"
 path = "src/app_pc.rs"
 
 [dependencies]
-heapless = { version = "0.5.5", features = ["ufmt"] }
+chacha20 = { version = "0.6.0", features = ["rng"] }
+heapless = "0.5.5"
 nb = "1"
-ufmt = "0.1.0"
 embedded-hal = { version = "0.2", features = ["unproven"] }
 generic-array = "0.14.3"
 
@@ -63,15 +63,7 @@ log-error = []
 
 [patch.crates-io]
 heapless = { git = "https://github.com/nicolas-solokeys/heapless", branch = "bytebuf" }
-ufmt = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty-enums" }
-ufmt-macros = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty-enums" }
 nisty = {git = "https://github.com/ycrypto/nisty", branch="main"}
-
-
-# MacOS needed patches
-micro-ecc-sys = {git="https://github.com/conorpp/micro-ecc-sys", branch="fix-macos"}
-littlefs2-sys = {git="https://github.com/conorpp/littlefs2-sys", branch="fix-macos"}
-
 
 [profile.release]
 codegen-units = 1

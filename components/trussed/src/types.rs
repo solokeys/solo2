@@ -20,8 +20,6 @@ pub use littlefs2::{
 
 use serde::{Deserialize, Serialize};
 
-use ufmt::derive::uDebug;
-
 use crate::config::*;
 
 pub use crate::platform::Board;
@@ -32,7 +30,7 @@ pub mod ui {
 
     // TODO: Consider whether a simple "language" to specify "patterns"
     // makes sense, vs. "semantic" indications with board-specific implementation
-    #[derive(Copy, Clone, Eq, PartialEq, Debug, uDebug, Serialize, Deserialize)]
+    #[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
     pub enum Status {
         Idle,
         WaitingForUserPresence,
@@ -44,7 +42,7 @@ pub mod ui {
 pub mod reboot {
     use super::*;
 
-    #[derive(Copy, Clone, Eq, PartialEq, Debug, uDebug, Serialize, Deserialize)]
+    #[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
     pub enum To {
         Application,
         ApplicationUpdate,
@@ -54,7 +52,7 @@ pub mod reboot {
 pub mod consent {
     use super::*;
 
-    #[derive(Copy, Clone, Eq, PartialEq, Debug, uDebug, Serialize, Deserialize)]
+    #[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
     pub enum Level {
         /// There is no user present
         None,
@@ -66,7 +64,7 @@ pub mod consent {
         Strong,
     }
 
-    #[derive(Copy, Clone, Eq, PartialEq, Debug, uDebug, Serialize, Deserialize)]
+    #[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
     pub enum Urgency {
         /// Pending other user consent requests will fail as interrupted.
         InterruptOthers,
@@ -74,7 +72,7 @@ pub mod consent {
         FailIfOthers,
     }
 
-    #[derive(Copy, Clone, Eq, PartialEq, Debug, uDebug, Serialize, Deserialize)]
+    #[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
     pub enum Error {
         FailedToInterrupt,
         Interrupted,
@@ -114,7 +112,7 @@ pub type ClientId = PathBuf;
 // - Profiles
 
 
-#[derive(Clone, Eq, PartialEq, Debug, uDebug, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub enum Attributes {
     Certificate,
     Counter,
@@ -122,7 +120,7 @@ pub enum Attributes {
     Key(KeyAttributes),
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, uDebug)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CertificateType {
     // "identity", issued by certificate authority
     // --> authentication
@@ -144,7 +142,7 @@ pub enum CertificateType {
 // }
 
 
-#[derive(Clone, Default, Eq, PartialEq, Debug, uDebug, Serialize, Deserialize)]
+#[derive(Clone, Default, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct DataAttributes {
     // application that manages the object
     // pub application: String<MAX_APPLICATION_NAME_LENGTH>,
@@ -161,7 +159,7 @@ pub struct DataAttributes {
 // How do we handle defaults?
 //
 // Lookup seems a bit painful, on the other hand a struct of options is wasteful.
-#[derive(Copy, Clone, Eq, PartialEq, Debug, uDebug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct KeyAttributes {
     // key_type: KeyType,
     // object_id: ByteBuf,
@@ -204,7 +202,7 @@ impl KeyAttributes {
 
 // TODO: How to store/check?
 // TODO: Fix variant indices to keep storage stable!!
-#[derive(Copy, Clone, Debug, uDebug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum KeyKind {
     // Aes256,
@@ -235,7 +233,7 @@ impl core::convert::TryFrom<u8> for KeyKind {
     }
 }
 
-#[derive(Copy, Clone, Debug, uDebug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum KeyType {
     // Private,
     Public,
@@ -244,7 +242,7 @@ pub enum KeyType {
 
 /// PhantomData to make it unconstructable
 /// NB: Better to check in service that nothing snuck through!
-#[derive(Clone, Default, Eq, PartialEq, Debug, uDebug, Deserialize, Serialize)]
+#[derive(Clone, Default, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Letters(pub ShortData, ());
 
 impl TryFrom<ShortData> for Letters {
@@ -265,12 +263,12 @@ impl TryFrom<ShortData> for Letters {
 ///
 /// So e.g. users can't get at keys they don't own
 ///
-#[derive(Copy, Clone, Eq, PartialEq, Debug, uDebug)]//, Deserialize, Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]//, Deserialize, Serialize)]
 pub struct ObjectHandle{
     pub object_id: UniqueId,
 }
 
-// #[derive(Clone, Eq, PartialEq, Debug, uDebug)]//, Deserialize, Serialize)]
+// #[derive(Clone, Eq, PartialEq, Debug)]//, Deserialize, Serialize)]
 // pub struct AutoDrop<STORE: crate::store::Store> {
 //     handle: ObjectHandle,
 //     store:  STORE,
@@ -342,7 +340,7 @@ impl<'de> serde::Deserialize<'de> for ObjectHandle {
 }
 
 
-#[derive(Clone, Eq, PartialEq, Debug, uDebug)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum ObjectType {
     Certificate(CertificateType),
     // TODO: maybe group under Feature(FeautureType), with FeatureType = Counter, ...
@@ -352,7 +350,7 @@ pub enum ObjectType {
     Key(KeyType),
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, uDebug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct PublicKeyAttributes {
     // never return naked private key
     sensitive: bool,
@@ -366,7 +364,7 @@ pub struct PublicKeyAttributes {
     persistent: bool,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, uDebug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct PrivateKeyAttributes {
     // never return naked private key
     sensitive: bool,
@@ -380,14 +378,14 @@ pub struct PrivateKeyAttributes {
     persistent: bool,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, uDebug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub enum StorageLocation {
     Volatile,
     Internal,
     External,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, uDebug, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct StorageAttributes {
     // each object must have a unique ID
     // unique_id: UniqueId,
@@ -432,7 +430,7 @@ impl StorageAttributes {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, uDebug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub enum Mechanism {
     Aes256Cbc,
     Chacha8Poly1305,
@@ -455,7 +453,7 @@ pub type ShortData = ByteBuf<MAX_SHORT_DATA_LENGTH>;
 
 pub type Message = ByteBuf<MAX_MESSAGE_LENGTH>;
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, uDebug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub enum KeySerialization {
     // Asn1Der,
     Cose,
@@ -466,7 +464,7 @@ pub enum KeySerialization {
 
 pub type Signature = ByteBuf<MAX_SIGNATURE_LENGTH>;
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, uDebug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub enum SignatureSerialization {
     Asn1Der,
     // Cose,
@@ -545,15 +543,6 @@ impl core::fmt::Debug for UniqueId {
             write!(f, "{}", &(*ch as char))?;
         }
         write!(f, ")")
-    }
-}
-
-impl ufmt::uDebug for UniqueId {
-    fn fmt<W>(&self, f: &mut ufmt::Formatter<'_, W>) -> Result<(), W::Error>
-    where
-        W: ufmt::uWrite + ?Sized,
-    {
-        <[u8] as ufmt::uDebug>::fmt(&self.hex(), f)
     }
 }
 
