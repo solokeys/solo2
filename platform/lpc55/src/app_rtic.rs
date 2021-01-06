@@ -116,20 +116,7 @@ const APP: () = {
                 }
             });
             if time > 1_000_000 {
-                // cortex_m_semihosting::hprintln!("flushing");
                 app::Delogger::flush();
-                // // Only drain outside of a 1s window of any NFC activity.
-                // #[cfg(feature = "log-serial")]
-                // usb_classes.lock(|usb_classes_maybe| {
-                //     match usb_classes_maybe.as_mut() {
-                //         Some(usb_classes) => {
-                //             app::drain_log_to_serial(&mut usb_classes.serial);
-                //         }
-                //         _=>{}
-                //     }
-                // });
-                // #[cfg(not(feature = "log-serial"))]
-                // app::drain_log_to_semihosting();
             }
 
             apdu_dispatch.poll(&mut [ndef, piv, fido, root]);
@@ -213,6 +200,7 @@ const APP: () = {
     }
 
     #[task(binds = MAILBOX, resources = [usb_classes], priority = 5)]
+    #[allow(unused_mut,unused_variables)]
     fn mailbox(mut c: mailbox::Context) {
         #[cfg(feature = "log-serial")]
         c.resources.usb_classes.lock(|usb_classes_maybe| {
@@ -256,7 +244,7 @@ const APP: () = {
     fn nfc_wait_extension(c: nfc_wait_extension::Context) {
         let nfc_wait_extension::Resources {
             contactless,
-            perf_timer,
+            perf_timer: _,
             hw_scheduler,
         }
             = c.resources;
@@ -290,7 +278,7 @@ const APP: () = {
             }
             = c.resources;
         let contactless = contactless.as_mut().unwrap();
-        let starttime = perf_timer.lap().0/100;
+        let _starttime = perf_timer.lap().0/100;
 
         info!("[");
         let status = contactless.poll();
@@ -301,7 +289,7 @@ const APP: () = {
                 hw_scheduler.start(duration.subsec_millis().ms());
             }
         }
-        info!("{}-{}]", starttime,perf_timer.lap().0/100);
+        info!("{}-{}]", _starttime, perf_timer.lap().0/100);
 
         perf_timer.cancel().ok();
         perf_timer.start(60_000.ms());

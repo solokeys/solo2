@@ -52,9 +52,9 @@ where
 BUTTONS: Press + Edge,
 RGB: RgbLed,
 {
-    pub fn new(rtc: Rtc<init_state::Enabled>, buttons: Option<BUTTONS>, rgb: Option<RGB>) -> Self {
+    pub fn new(rtc: Rtc<init_state::Enabled>, _buttons: Option<BUTTONS>, rgb: Option<RGB>) -> Self {
         #[cfg(not(feature = "no-buttons"))]
-        let ui = Self { rtc, buttons, rgb };
+        let ui = Self { rtc, buttons: _buttons, rgb };
         #[cfg(feature = "no-buttons")]
         let ui = Self { rtc, buttons: None, rgb };
 

@@ -28,10 +28,10 @@ jobs:
         working-directory: platform/lpc55
     steps:
       - uses: actions/checkout@v1
-      - name: Install littlefs2-sys build dependencies
+      - name: Install littlefs2-sys/micro-ecc-sys build dependencies
         shell: bash
         run: |
-          sudo apt update -y -qq && sudo apt install -y -qq llvm libc6-dev-i386
+          sudo apt update -y -qq && sudo apt install -y -qq llvm libc6-dev-i386 libclang-dev
       - uses: fiam/arm-none-eabi-gcc@v1
         with:
           release: "9-2020-q2"

@@ -262,9 +262,9 @@ where T: TrussedClient
         };
 
         let signature = block!(self.trussed.sign(mechanism, key_handle, commitment, serialization).unwrap())
-            .map_err(|error| {
+            .map_err(|_error| {
                 // NoSuchKey
-                debug_now!("{:?}", &error);
+                debug_now!("{:?}", &_error);
                 Status::UnspecifiedNonpersistentExecutionError }
             )?
             .signature;
@@ -571,8 +571,8 @@ where T: TrussedClient
                     touch_policy.as_slice_less_safe(),
                 ))
             })
-        }).map_err(|e| {
-                info_now!("error parsing GenerateAsymmetricKeypair: {:?}", &e);
+        }).map_err(|_e| {
+                info_now!("error parsing GenerateAsymmetricKeypair: {:?}", &_e);
                 Status::IncorrectDataParameter
         })?;
 
@@ -669,8 +669,8 @@ where T: TrussedClient
             let data = derp::expect_tag_and_get_value(input, 0x53)?;
             Ok((data_object.as_slice_less_safe(), data.as_slice_less_safe()))
         // }).unwrap();
-        }).map_err(|e| {
-                info_now!("error parsing PutData: {:?}", &e);
+        }).map_err(|_e| {
+                info_now!("error parsing PutData: {:?}", &_e);
                 Status::IncorrectDataParameter
         })?;
 

@@ -130,8 +130,8 @@ impl DynamicClockController {
             while self.adc.fctrl[0].read().fcount().bits() == 0 {
             }
             let result = self.adc.resfifo[0].read().bits();
-            let sample = (result & 0xffff) as u16;
-            info_now!("Vref bias = {}",sample);
+            let _sample = (result & 0xffff) as u16;
+            info_now!("Vref bias = {}", _sample);
         }
         self.adc.cmdh1.modify(|_,w| unsafe { w
                                     .cmpen().bits(0b11)

@@ -179,8 +179,8 @@ where
                 panic!("short packet!");
             }
 
-            Err(PacketError::UnknownCommand(p)) => {
-                info_now!("unknown command {:X?}", &p);
+            Err(PacketError::UnknownCommand(_p)) => {
+                info_now!("unknown command {:X?}", &_p);
                 self.seq = self.ext_packet[6];
                 self.send_slot_status_error(Error::CommandNotSupported);
             }
