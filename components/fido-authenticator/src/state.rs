@@ -252,7 +252,7 @@ impl PersistentState {
                     *self = previous_self
                 },
                 Err(_err) => {
-                    info!("error with previous state! {:?}", err);
+                    info!("error with previous state! {:?}", _err);
                 }
             }
             self.initialised = true;
