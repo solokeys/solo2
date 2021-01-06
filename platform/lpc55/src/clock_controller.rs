@@ -11,7 +11,6 @@ use crate::hal::{
     drivers::clocks::Clocks,
 };
 use crate::types;
-use logging::info;
 
 // pub type DynamicClockController = Adc<hal::typestates::init_state::Enabled>;
 pub struct DynamicClockController {
@@ -121,7 +120,7 @@ impl DynamicClockController {
 
     /// Used for debugging to tune the ADC points
     pub fn evaluate(&mut self){
-        crate::logger::blocking::info!("status = {:02X}", self.adc.stat.read().bits()).ok();
+        info_now!("status = {:02X}", self.adc.stat.read().bits());
         self.adc.cmdh1.modify(|_,w| unsafe { w
                                     .cmpen().bits(0)
                                 } );
@@ -132,7 +131,7 @@ impl DynamicClockController {
             }
             let result = self.adc.resfifo[0].read().bits();
             let sample = (result & 0xffff) as u16;
-            crate::logger::blocking::info!("Vref bias = {}",sample).ok();
+            info_now!("Vref bias = {}",sample);
         }
         self.adc.cmdh1.modify(|_,w| unsafe { w
                                     .cmpen().bits(0b11)
@@ -143,12 +142,12 @@ impl DynamicClockController {
 
         let count = self.adc.fctrl[0].read().fcount().bits();
         if count == 0 {
-            info!("Error: no sample in fifo!").ok();
+            info!("Error: no sample in fifo!");
             self.start_low_voltage_compare();
             return;
         }
         if count > 1 {
-            info!("Got >1 sample!").ok();
+            info!("Got >1 sample!");
         }
         let result = self.adc.resfifo[0].read().bits();
         if  (result & 0x80000000) == 0 {
@@ -157,7 +156,7 @@ impl DynamicClockController {
         let sample = (result & 0xffff) as u16;
 
         self.adc.ctrl.modify(|_,w| { w.rstfifo0().set_bit().rstfifo1().set_bit() });
-        // info!("handle ADC: {}. status: {}", sample, self.adc.stat.read().bits()).ok();
+        // info!("handle ADC: {}. status: {}", sample, self.adc.stat.read().bits());
         #[cfg(not(feature = "no-clock-controller"))]
         {
 

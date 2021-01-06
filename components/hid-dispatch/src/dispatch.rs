@@ -3,7 +3,6 @@ use interchange::Interchange;
 use interchange::{Responder, State};
 use crate::types::{Command, Message, HidInterchange, Error};
 use crate::app::App;
-use crate::logger;
 
 pub struct Dispatch {
     responder: Responder<HidInterchange>,
@@ -56,11 +55,11 @@ impl Dispatch {
             let command = tuple.0;
             let message = &mut tuple.1;
             let commandu8: u8 = command.into();
-            logger::blocking::info!("cmd: {}", commandu8).ok();
+            info_now!("cmd: {}", commandu8);
             if let Some(app) = Self::find_app(command, apps) {
                 match app.call(command, message) {
                     Err(err) => {
-                        logger::info!("error from hid app!").ok();
+                        info!("error from hid app!");
                         self.reply_with_error(err);
                     }
                     Ok(()) => {

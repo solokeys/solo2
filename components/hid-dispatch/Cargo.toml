@@ -10,12 +10,12 @@ edition = "2018"
 heapless = { version = "0.5.5" }
 
 # Components
-logging = {path = "../logging"}
+delog = "0.1.0-alpha.2"
 interchange = {path = "../interchange"}
 
 [features]
 default = []
-std = ["logging/std"]
+std = ["delog/std"]
 
 log-all = []
 log-none = []

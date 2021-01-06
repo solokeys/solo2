@@ -1,12 +1,13 @@
 #![cfg_attr(not(test), no_std)]
 
+#[macro_use]
+extern crate delog;
+generate_macros!();
+
 pub mod constants;
 pub mod state;
 pub mod derp;
 pub mod der;
-
-logging::add!(logger);
-use logger::{blocking};
 
 use core::convert::{TryFrom, TryInto};
 
@@ -104,14 +105,14 @@ where T: TrussedClient
             return Err(Status::LogicalChannelNotSupported);
         }
 
-        // blocking::info!("CLA = {:?}", &command.class()).ok();
-        blocking::info!("INS = {:?}, P1 = {:X}, P2 = {:X}",
+        // info_now!("CLA = {:?}", &command.class());
+        info_now!("INS = {:?}, P1 = {:X}, P2 = {:X}",
                   &command.instruction(),
                   command.p1, command.p2,
-                  ).ok();
-        // blocking::info!("extended = {:?}", command.extended).ok();
+                  );
+        // info_now!("extended = {:?}", command.extended);
 
-        // blocking::info!("INS = {:?}" &command.instruction()).ok();
+        // info_now!("INS = {:?}" &command.instruction());
         match command.instruction() {
             Instruction::GetData => self.get_data(command),
             Instruction::PutData => self.put_data(command),
@@ -254,7 +255,7 @@ where T: TrussedClient
         // blocking::dbg!(commitment);
         let serialization = trussed::types::SignatureSerialization::Asn1Der; // ed25519 disregards
 
-        blocking::info!("looking for keyreference").ok();
+        info_now!("looking for keyreference");
         let key_handle = match self.state.persistent(&mut self.trussed).keys.authentication_key {
             Some(key) => key,
             None => return Err(Status::KeyReferenceNotFound),
@@ -263,7 +264,7 @@ where T: TrussedClient
         let signature = block!(self.trussed.sign(mechanism, key_handle, commitment, serialization).unwrap())
             .map_err(|error| {
                 // NoSuchKey
-                blocking::dbg!(error).ok();
+                debug_now!("{:?}", &error);
                 Status::UnspecifiedNonpersistentExecutionError }
             )?
             .signature;
@@ -312,7 +313,8 @@ where T: TrussedClient
         self.state.runtime.command_cache = None;
 
         if &our_challenge != response {
-            blocking::dbg!(our_challenge, response).ok();
+            debug_now!("{:?}", &our_challenge);
+            debug_now!("{:?}", &response);
             return Err(Status::IncorrectDataParameter);
         }
 
@@ -570,7 +572,7 @@ where T: TrussedClient
                 ))
             })
         }).map_err(|e| {
-                blocking::info!("error parsing GenerateAsymmetricKeypair: {:?}", &e).ok();
+                info_now!("error parsing GenerateAsymmetricKeypair: {:?}", &e);
                 Status::IncorrectDataParameter
         })?;
 
@@ -628,7 +630,7 @@ where T: TrussedClient
             trussed::types::KeySerialization::Raw,
         )).serialized_key;
 
-        // blocking::info!("supposed SEC1 pubkey, len {}: {:X?}", serialized_public_key.len(), &serialized_public_key).ok();
+        // info_now!("supposed SEC1 pubkey, len {}: {:X?}", serialized_public_key.len(), &serialized_public_key);
 
         // P256 SEC1 has 65 bytes, Ed25519 pubkeys have 32
         // let l2 = 65;
@@ -642,7 +644,7 @@ where T: TrussedClient
     }
 
     fn put_data(&mut self, command: &Command) -> ResponseResult {
-        blocking::info!("PutData").ok();
+        info_now!("PutData");
         if command.p1 != 0x3f || command.p2 != 0xff {
             return Err(Status::IncorrectP1OrP2Parameter);
         }
@@ -668,11 +670,11 @@ where T: TrussedClient
             Ok((data_object.as_slice_less_safe(), data.as_slice_less_safe()))
         // }).unwrap();
         }).map_err(|e| {
-                blocking::info!("error parsing PutData: {:?}", &e).ok();
+                info_now!("error parsing PutData: {:?}", &e);
                 Status::IncorrectDataParameter
         })?;
 
-        // blocking::info!("PutData in {:?}: {:?}", data_object, data).ok();
+        // info_now!("PutData in {:?}: {:?}", data_object, data);
 
         if data_object == &[0x5f, 0xc1, 0x09] {
             // "Printed Information", supposedly
@@ -755,7 +757,7 @@ where T: TrussedClient
         }
 
         // lookup what is asked for
-        blocking::info!("looking up {:?}", data).ok();
+        info_now!("looking up {:?}", data);
 
         // TODO: check security status, else return Status::SecurityStatusNotSatisfied
 
@@ -799,7 +801,7 @@ where T: TrussedClient
             DataObjects::X509CertificateForPivAuthentication => {
                 // return Err(Status::NotFound);
 
-                // blocking::info!("loading 9a cert").ok();
+                // info_now!("loading 9a cert");
                 // it seems like fetching this certificate is the way Filo's agent decides
                 // whether the key is "already setup":
                 // https://github.com/FiloSottile/yubikey-agent/blob/8781bc0082db5d35712a2244e3ab3086f415dd59/setup.go#L69-L70
@@ -807,10 +809,10 @@ where T: TrussedClient
                     trussed::types::StorageLocation::Internal,
                     trussed::types::PathBuf::from(b"authentication-key.x5c"),
                 ).unwrap()).map_err(|_| {
-                    // blocking::info!("error loading: {:?}", &e).ok();
+                    // info_now!("error loading: {:?}", &e);
                     Status::NotFound
                 } )?.data;
-                // blocking::info!("got the data: {:?}", &data).ok();
+                // info_now!("got the data: {:?}", &data);
 
                 let mut der: Der<consts::U1024> = Default::default();
                 der.raw_tlv(0x53, &data).unwrap();
@@ -828,7 +830,7 @@ where T: TrussedClient
     }
 
     fn yubico_piv_extension(&mut self, command: &Command, instruction: YubicoPivExtension) -> ResponseResult {
-        blocking::info!("yubico extension: {:?}", &instruction).ok();
+        info_now!("yubico extension: {:?}", &instruction);
         match instruction {
             YubicoPivExtension::GetSerial => {
                 // make up a 4-byte serial

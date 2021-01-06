@@ -13,7 +13,7 @@ cortex-m-rt = "0.6.10"
 nb = "1"
 ufmt = "0.1.0"
 
-logging = {path = "../logging"}
+delog = "0.1.0-alpha.2"
 iso14443 = {path = "../iso14443"}
 
 [dependencies.lpc55-hal]

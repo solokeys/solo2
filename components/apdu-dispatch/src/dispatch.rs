@@ -34,9 +34,6 @@ pub enum RequestType {
     None,
 }
 
-use crate::logger::info;
-use crate::logger::dump_hex;
-
 use interchange::Responder;
 use crate::types::{ContactInterchange, ContactlessInterchange};
 
@@ -59,7 +56,7 @@ impl ApduBuffer {
             }
             _ => {
                 if self.raw != RawApduBuffer::None {
-                    info!("Was buffering the last response, but aborting that now for this new request.").ok();
+                    info!("Was buffering the last response, but aborting that now for this new request.");
                 }
                 let mut new_cmd = Command::try_from(&[0,0,0,0]).unwrap();
                 new_cmd.extend_from_command(command).ok();
@@ -168,7 +165,7 @@ impl ApduDispatch
 
                 // Response now needs to be chained.
                 self.was_request_chained = true;
-                info!("combined chained commands.").ok();
+                info!("combined chained commands.");
 
                 RequestType::NewCommand
             } else {
@@ -197,9 +194,9 @@ impl ApduDispatch
                 }
             }
 
-            info!("chaining {} bytes", command.data().len()).ok();
+            info!("chaining {} bytes", command.data().len());
             self.buffer.request(&command);
-            
+
             // Nothing for the application to consume yet.
             RequestType::None
         }
@@ -212,12 +209,12 @@ impl ApduDispatch
                 Ok(command)
             },
             Err(_error) => {
-                logging::info!("apdu bad").ok();
+                info!("apdu bad");
                 match _error {
-                    FromSliceError::TooShort => { info!("TooShort").ok(); },
-                    FromSliceError::InvalidClass => { info!("InvalidClass").ok(); },
-                    FromSliceError::InvalidFirstBodyByteForExtended => { info!("InvalidFirstBodyByteForExtended").ok(); },
-                    FromSliceError::CanThisReallyOccur => { info!("CanThisReallyOccur").ok(); },
+                    FromSliceError::TooShort => { info!("TooShort"); },
+                    FromSliceError::InvalidClass => { info!("InvalidClass"); },
+                    FromSliceError::InvalidFirstBodyByteForExtended => { info!("InvalidFirstBodyByteForExtended"); },
+                    FromSliceError::CanThisReallyOccur => { info!("CanThisReallyOccur"); },
                 }
                 Err(Response::Status(Status::UnspecifiedCheckingError))
             }
@@ -246,7 +243,7 @@ impl ApduDispatch
                 },
                 Err(response) => {
                     // If not a valid APDU, return error and don't pass to app.
-                    info!("Invalid apdu").ok();
+                    info!("Invalid apdu");
                     match interface {
                         InterfaceType::Contactless =>
                             self.contactless.respond(response.into_message()).expect("cant respond"),
@@ -277,7 +274,7 @@ impl ApduDispatch
         // requests, to which we will return up to 256 bytes at a time.
         let (new_state, response) = match &mut self.buffer.raw {
             RawApduBuffer::Request(_) | RawApduBuffer::None => {
-                info!("Unexpected GetResponse request.").ok();
+                info!("Unexpected GetResponse request.");
                 (
                     RawApduBuffer::None,
                     Response::Status(Status::UnspecifiedCheckingError).into_message()
@@ -309,7 +306,7 @@ impl ApduDispatch
                             message
                         )
                     } else {
-                        info!("Still {} bytes in response buffer", remaining.len()).ok();
+                        info!("Still {} bytes in response buffer", remaining.len());
                         (
                             RawApduBuffer::Response(response::Data::from_slice(remaining).unwrap()),
                             message
@@ -334,7 +331,7 @@ impl ApduDispatch
         // put message into the response buffer
         match response {
             Ok(AppletResponse::Respond(response)) => {
-                info!("buffered the response of {} bytes.", response.len()).ok();
+                info!("buffered the response of {} bytes.", response.len());
                 self.buffer.response(response);
                 self.handle_reply();
             }
@@ -343,7 +340,7 @@ impl ApduDispatch
             }
             Err(status) => {
                 // Just reply the error immediately.
-                info!("buffered applet error").ok();
+                info!("buffered applet error");
                 self.reply_error(*status);
             }
         }
@@ -373,7 +370,7 @@ impl ApduDispatch
 
         // select specified app in any case
         if let Some(applet) = Self::find_applet(Some(&aid), applets) {
-            info!("Selected app").ok();
+            info!("Selected app");
             let result = match &self.buffer.raw {
                 RawApduBuffer::Request(apdu) => {
                     applet.select(apdu)
@@ -388,7 +385,7 @@ impl ApduDispatch
 
 
         } else {
-            info!("could not find app by aid: ").ok(); dump_hex(&aid, aid.len()).ok();
+            info!("could not find app by aid: {}", hex_str!(&aid));
             self.reply_error(Status::NotFound);
         };
 
@@ -440,19 +437,19 @@ impl ApduDispatch
         match request_type {
             // SELECT case
             RequestType::Select(aid) => {
-                info!("Select").ok();
+                info!("Select");
                 self.handle_app_select(applets,aid);
             }
 
 
             RequestType::GetResponse => {
-                info!("GetResponse").ok();
+                info!("GetResponse");
                 self.handle_reply();
             }
 
             // command that is not a special command -- goes to applet.
             RequestType::NewCommand => {
-                info!("Command").ok();
+                info!("Command");
                 self.handle_app_command(applets);
             }
 

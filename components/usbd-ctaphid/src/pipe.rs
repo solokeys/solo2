@@ -36,8 +36,6 @@ use usb_device::{
     // Result as UsbResult,
 };
 
-use crate::logger::{debug, info, dump_hex};
-
 use crate::{
     constants::{
         // 7609
@@ -215,7 +213,7 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
     ///
     /// During these calls, we can be in states: Idle, Receiving, Dispatching.
     pub(crate) fn read_and_handle_packet(&mut self) {
-        // blocking::info!("got a packet!").ok();
+        // info_now!("got a packet!");
         let mut packet = [0u8; PACKET_SIZE];
         match self.read_endpoint.read(&mut packet) {
             Ok(PACKET_SIZE) => {},
@@ -225,8 +223,8 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
                 // HID report descriptors) and although all bytes may not be needed in a
                 // particular packet, the full size always has to be sent.
                 // Unused bytes SHOULD be set to zero."
-                // !("OK but size {}", size).ok();
-                info!("error unexpected size {}", _size).ok();
+                // !("OK but size {}", size);
+                info!("error unexpected size {}", _size);
                 return;
             },
             // usb-device lists WouldBlock or BufferOverflow as possible errors.
@@ -234,31 +232,32 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
             // Err(UsbError::WouldBlock) => { return; },
             // Err(UsbError::BufferOverflow) => { return; },
             Err(error) => {
-                info!("error no {}", error as i32).ok();
+                info!("error no {}", error as i32);
                 return;
             },
         };
-        info!(">> ").ok(); dump_hex(&packet, 16).ok();
+        info!(">> ");
+        info!("{}", hex_str!(&packet[..16]));
 
         // packet is 64 bytes, reading 4 will not panic
         let channel = u32::from_be_bytes(packet[..4].try_into().unwrap());
-        // blocking::info!("channel {}", channel).ok();
+        // info_now!("channel {}", channel);
 
         let is_initialization = (packet[4] >> 7) != 0;
-        // blocking::info!("is_initialization {}", is_initialization).ok();
+        // info_now!("is_initialization {}", is_initialization);
 
         if is_initialization {
             // case of initialization packet
-            info!("init").ok();
+            info!("init");
 
             let command_number = packet[4] & !0x80;
-            // blocking::info!("command number {}", command_number).ok();
+            // info_now!("command number {}", command_number);
 
             let command = match Command::try_from(command_number) {
                 Ok(command) => command,
                 // `solo ls` crashes here as it uses command 0x86
-                Err(_) => { 
-                    info!("Ignoring invalid command.").ok();
+                Err(_) => {
+                    info!("Ignoring invalid command.");
                     return; },
             };
 
@@ -276,20 +275,20 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
                     State::Receiving((request, _message_state)) => {
                         request
                     },
-                    _ => { 
-                        info!("Ignoring transaction as we're already transmitting.").ok();
+                    _ => {
+                        info!("Ignoring transaction as we're already transmitting.");
                         return;
                     },
                 };
                 if packet[4] == 0x86 {
-                    info!("Resyncing!").ok();
+                    info!("Resyncing!");
                     self.cancel_ongoing_activity();
                 } else {
                     if channel == request.channel {
-                        info!("Expected seq").ok();
+                        info!("Expected seq");
                         self.start_sending_error(request, AuthenticatorError::InvalidSeq);
                     } else {
-                        info!("busy.").ok();
+                        info!("busy.");
                         self.send_error_now(current_request, AuthenticatorError::ChannelBusy);
                     }
 
@@ -299,7 +298,7 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
 
 
             if length > MESSAGE_SIZE as u16 {
-                info!("Error message too big.").ok();
+                info!("Error message too big.");
                 self.send_error_now(current_request, AuthenticatorError::InvalidLength);
                 return;
             }
@@ -311,7 +310,7 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
                     .copy_from_slice(&packet[7..]);
                 self.state = State::Receiving((current_request, {
                     let state = MessageState::default();
-                    // blocking::info!("got {} so far", state.transmitted).ok();
+                    // info_now!("got {} so far", state.transmitted);
                     state
                 }));
                 // we're done... wait for next packet
@@ -328,33 +327,33 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
             match self.state {
                 State::Receiving((request, mut message_state)) => {
                     let sequence = packet[4];
-                    // blocking::info!("receiving continuation packet {}", sequence).ok();
+                    // info_now!("receiving continuation packet {}", sequence);
                     if sequence != message_state.next_sequence {
                         // error handling?
-                        // blocking::info!("wrong sequence for continuation packet, expected {} received {}",
-                        //           message_state.next_sequence, sequence).ok();
-                        info!("Error invalid cont pkt").ok();
+                        // info_now!("wrong sequence for continuation packet, expected {} received {}",
+                        //           message_state.next_sequence, sequence);
+                        info!("Error invalid cont pkt");
                         self.start_sending_error(request, AuthenticatorError::InvalidSeq);
                         return;
                     }
                     if channel != request.channel {
                         // error handling?
-                        // blocking::info!("wrong channel for continuation packet, expected {} received {}",
-                        //           request.channel, channel).ok();
-                        info!("Ignore invalid channel").ok();
+                        // info_now!("wrong channel for continuation packet, expected {} received {}",
+                        //           request.channel, channel);
+                        info!("Ignore invalid channel");
                         return;
                     }
 
                     let payload_length = request.length as usize;
                     if message_state.transmitted + (PACKET_SIZE - 5) < payload_length {
-                        // blocking::info!("transmitted {} + (PACKET_SIZE - 5) < {}",
-                        //           message_state.transmitted, payload_length).ok();
+                        // info_now!("transmitted {} + (PACKET_SIZE - 5) < {}",
+                        //           message_state.transmitted, payload_length);
                         // store received part of payload
                         self.buffer[message_state.transmitted..][..PACKET_SIZE - 5]
                             .copy_from_slice(&packet[5..]);
                         message_state.absorb_packet();
                         self.state = State::Receiving((request, message_state));
-                        // blocking::info!("absorbed packet, awaiting next").ok();
+                        // info_now!("absorbed packet, awaiting next");
                         return;
                     } else {
                         let missing = request.length as usize - message_state.transmitted;
@@ -365,13 +364,13 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
                 },
                 _ => {
                     // unexpected continuation packet
-                    info!("Ignore unexpected cont pkt").ok();
+                    info!("Ignore unexpected cont pkt");
                     return;
                 },
             }
         }
     }
-    
+
     pub fn check_timeout(&mut self, milliseconds: u32) {
         // At any point the RP application could crash or something,
         // so its up to the device to timeout those transactions.
@@ -382,7 +381,7 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
                 if (milliseconds > request.timestamp && (milliseconds - request.timestamp) > 600)
                 || (milliseconds < request.timestamp && milliseconds > 600)
                 {
-                    info!("Channel timeout.").ok();
+                    info!("Channel timeout.");
                     self.start_sending_error(request, AuthenticatorError::Timeout);
                 } else {
                 }
@@ -405,8 +404,8 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
         // dispatch request further
         match request.command {
             Command::Init => {
-                // blocking::info!("command INIT!").ok();
-                // blocking::info!("data: {:?}", &self.buffer[..request.length as usize]).ok();
+                // info_now!("command INIT!");
+                // info_now!("data: {:?}", &self.buffer[..request.length as usize]);
                 match request.channel {
                     0 => {
                         // this is an error / reserved number
@@ -417,11 +416,11 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
                     cid => {
                         if request.length != 8 {
                             // error
-                            info!("Invalid length for init.  ignore.").ok();
+                            info!("Invalid length for init.  ignore.");
                         } else {
                             self.last_channel += 1;
-                            // blocking::info!(
-                            //     "assigned channel {}", self.last_channel).ok();
+                            // info_now!(
+                            //     "assigned channel {}", self.last_channel);
                             let _nonce = &self.buffer[..8];
                             let response = Response {
                                 channel: cid,
@@ -466,26 +465,26 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
 
     pub fn handle_response(&mut self) {
         if let State::WaitingOnAuthenticator(request) = self.state {
-            
-            
+
+
             if let Some(response) = self.interchange.take_response() {
                 match response {
 
                     Err(hid_dispatch::app::Error::InvalidCommand) => {
-                        info!("Got waiting reply from authenticator??").ok();
+                        info!("Got waiting reply from authenticator??");
                         self.start_sending_error(request, AuthenticatorError::InvalidCommand);
 
                     }
                     Err(hid_dispatch::app::Error::InvalidLength) => {
-                        info!("Error, payload needed app command.").ok();
+                        info!("Error, payload needed app command.");
                         self.start_sending_error(request, AuthenticatorError::InvalidLength);
                     }
                     Err(hid_dispatch::app::Error::NoResponse) => {
-                        info!("Got waiting noresponse from authenticator??").ok();
+                        info!("Got waiting noresponse from authenticator??");
                     }
 
                     Ok(message) => {
-                        info!("Got {} bytes response from authenticator, starting send", message.len()).ok();
+                        info!("Got {} bytes response from authenticator, starting send", message.len());
                         let response = Response::from_request_and_size(request, message.len());
                         self.buffer[..message.len()]
                             .copy_from_slice(&message);
@@ -544,43 +543,43 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
                 }
 
                 // try actually sending
-                // blocking::info!("attempting to write init packet {:?}, {:?}",
-                //           &packet[..32], &packet[32..]).ok();
+                // info_now!("attempting to write init packet {:?}, {:?}",
+                //           &packet[..32], &packet[32..]);
                 let result = self.write_endpoint.write(&packet);
 
                 match result {
                     Err(UsbError::WouldBlock) => {
                         // fine, can't write try later
                         // this shouldn't happen probably
-                        info!("hid usb WouldBlock").ok();
+                        info!("hid usb WouldBlock");
                     },
                     Err(_) => {
-                        // blocking::info!("weird USB errrorrr").ok();
+                        // info_now!("weird USB errrorrr");
                         panic!("unexpected error writing packet!");
                     },
                     Ok(PACKET_SIZE) => {
                         // goodie, this worked
                         if fits_in_one_packet {
                             self.state = State::Idle;
-                            // blocking::info!("StartSent {} bytes, idle again", response.length).ok();
-                            // blocking::info!("IDLE again").ok();
+                            // info_now!("StartSent {} bytes, idle again", response.length);
+                            // info_now!("IDLE again");
                         } else {
                             self.state = State::Sending((response, MessageState::default()));
-                            // blocking::info!(
+                            // info_now!(
                             //     "StartSent {} of {} bytes, waiting to send again",
-                            //     PACKET_SIZE - 7, response.length).ok();
-                            // blocking::info!("State: {:?}", &self.state).ok();
+                            //     PACKET_SIZE - 7, response.length);
+                            // info_now!("State: {:?}", &self.state);
                         }
                     },
                     Ok(_) => {
-                        // blocking::info!("short write").ok();
+                        // info_now!("short write");
                         panic!("unexpected size writing packet!");
                     },
                 };
             },
 
             State::Sending((response, mut message_state)) => {
-                // blocking::info!("in StillSending").ok();
+                // info_now!("in StillSending");
                 let mut packet = [0u8; PACKET_SIZE];
                 packet[..4].copy_from_slice(&response.channel.to_be_bytes());
                 packet[4] = message_state.next_sequence;
@@ -597,36 +596,36 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
                 }
 
                 // try actually sending
-                // blocking::info!("attempting to write cont packet {:?}, {:?}",
-                //           &packet[..32], &packet[32..]).ok();
+                // info_now!("attempting to write cont packet {:?}, {:?}",
+                //           &packet[..32], &packet[32..]);
                 let result = self.write_endpoint.write(&packet);
 
                 match result {
                     Err(UsbError::WouldBlock) => {
                         // fine, can't write try later
                         // this shouldn't happen probably
-                        // blocking::info!("can't send seq {}, write endpoint busy",
-                        //           message_state.next_sequence).ok();
+                        // info_now!("can't send seq {}, write endpoint busy",
+                        //           message_state.next_sequence);
                     },
                     Err(_) => {
-                        // blocking::info!("weird USB error").ok();
+                        // info_now!("weird USB error");
                         panic!("unexpected error writing packet!");
                     },
                     Ok(PACKET_SIZE) => {
                         // goodie, this worked
                         if last_packet {
                             self.state = State::Idle;
-                            // blocking::info!("in IDLE state after {:?}", &message_state).ok();
+                            // info_now!("in IDLE state after {:?}", &message_state);
                         } else {
                             message_state.absorb_packet();
                             // DANGER! destructuring in the match arm copies out
                             // message state, so need to update state
-                            // blocking::info!("sent one more, now {:?}", &message_state).ok();
+                            // info_now!("sent one more, now {:?}", &message_state);
                             self.state = State::Sending((response, message_state));
                         }
                     },
                     Ok(_) => {
-                        debug!("short write").ok();
+                        debug!("short write");
                         panic!("unexpected size writing packet!");
                     },
                 };

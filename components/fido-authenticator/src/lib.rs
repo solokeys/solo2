@@ -2,9 +2,9 @@
 
 use core::convert::{TryFrom, TryInto};
 
-logging::add!(logger);
-
-use logger::{info, debug};
+#[macro_use]
+extern crate delog;
+generate_macros!();
 
 use trussed::{
     block, syscall,
@@ -158,7 +158,7 @@ where UP: UserPresence,
     }
 
     pub fn call_u2f(&mut self, request: &U2fCommand) -> U2fResult<U2fResponse> {
-        info!("called u2f").ok();
+        info!("called u2f");
         self.state.persistent.load_if_not_initialised(&mut self.trussed);
 
         let mut commitment = ByteBuf::<consts::U324>::new();
@@ -181,13 +181,13 @@ where UP: UserPresence,
 
                 let wrapping_key = &self.state.persistent.key_wrapping_key(&mut self.trussed)
                     .map_err(|_| U2fError::UnspecifiedCheckingError)?;
-                debug!("wrapping u2f private key").ok();
+                debug!("wrapping u2f private key");
                 let wrapped_key = syscall!(self.trussed.wrap_key_chacha8poly1305(
                     &wrapping_key,
                     &private_key,
                     &reg.app_id,
                 )).wrapped_key;
-                // debug!("wrapped_key = {:?}", &wrapped_key).ok();
+                // debug!("wrapped_key = {:?}", &wrapped_key);
 
                 let key = Key::WrappedKey(wrapped_key.try_to_byte_buf().map_err(|_| U2fError::UnspecifiedCheckingError)?);
                 let nonce = syscall!(self.trussed.random_bytes(12)).bytes.as_slice().try_into().unwrap();
@@ -222,7 +222,7 @@ where UP: UserPresence,
                     nonce,
                 );
 
-                // blocking::info!("made credential {:?}", &credential).ok();
+                // info_now!("made credential {:?}", &credential);
 
                 // 12.b generate credential ID { = AEAD(Serialize(Credential)) }
                 let kek = &self.state.persistent.key_encryption_key(&mut self.trussed).map_err(|_| U2fError::NotEnoughMemory)?;
@@ -252,7 +252,7 @@ where UP: UserPresence,
                         )).signature.to_byte_buf()
                     },
                     _ => {
-                        info!("Not provisioned with attestation key!").ok();
+                        info!("Not provisioned with attestation key!");
                         return Err(U2fError::KeyReferenceNotFound);
                     }
                 };
@@ -309,11 +309,11 @@ where UP: UserPresence,
                         )).key;
                         match key_result {
                             Some(key) => {
-                                info!("loaded u2f key!").ok();
+                                info!("loaded u2f key!");
                                 key
                             }
                             None => {
-                                info!("issue with unwrapping credential id key").ok();
+                                info!("issue with unwrapping credential id key");
                                 return Err(U2fError::IncorrectDataParameter);
                             }
                         }
@@ -322,7 +322,7 @@ where UP: UserPresence,
                 };
 
                 if cred.algorithm != -7 {
-                    info!("Unexpected mechanism for u2f").ok();
+                    info!("Unexpected mechanism for u2f");
                     return Err(U2fError::IncorrectDataParameter);
                 }
 
@@ -358,7 +358,7 @@ where UP: UserPresence,
 
     pub fn call(&mut self, request: &Request) -> Result<Response> {
         // if let Some(request) = self.interchange.take_request() {
-            // debug!("request: {:?}", &request).ok();
+            // debug!("request: {:?}", &request);
             self.state.persistent.load_if_not_initialised(&mut self.trussed);
 
             match request {
@@ -367,14 +367,14 @@ where UP: UserPresence,
 
                         // 0x4
                         ctap2::Request::GetInfo => {
-                            debug!("GI").ok();
+                            debug!("GI");
                             let response = self.get_info();
                             Ok(Response::Ctap2(ctap2::Response::GetInfo(response)))
                         }
 
                         // 0x2
                         ctap2::Request::MakeCredential(parameters) => {
-                            debug!("MC request").ok();
+                            debug!("MC request");
                             let response = self.make_credential(&parameters);
                             match response {
                                 Ok(response) => Ok(Response::Ctap2(ctap2::Response::MakeCredential(response))),
@@ -384,7 +384,7 @@ where UP: UserPresence,
 
                         // 0x1
                         ctap2::Request::GetAssertion(parameters) => {
-                            debug!("GA request").ok();
+                            debug!("GA request");
                             let response = self.get_assertion(&parameters);
                             match response {
                                 Ok(response) => Ok(Response::Ctap2(ctap2::Response::GetAssertion(response))),
@@ -394,7 +394,7 @@ where UP: UserPresence,
 
                         // 0x8
                         ctap2::Request::GetNextAssertion => {
-                            debug!("GNA request").ok();
+                            debug!("GNA request");
                             let response = self.get_next_assertion();
                             match response {
                                 Ok(response) => Ok(Response::Ctap2(ctap2::Response::GetNextAssertion(response))),
@@ -404,7 +404,7 @@ where UP: UserPresence,
 
                         // 0x7
                         ctap2::Request::Reset => {
-                            debug!("GA request").ok();
+                            debug!("GA request");
                             let response = self.reset();
                             match response {
                                 Ok(()) => Ok(Response::Ctap2(ctap2::Response::Reset)),
@@ -415,7 +415,7 @@ where UP: UserPresence,
 
                         // 0x6
                         ctap2::Request::ClientPin(parameters) => {
-                            debug!("CP request").ok();
+                            debug!("CP request");
                             let response = self.client_pin(&parameters);
                             match response {
                                 Ok(response) => Ok(Response::Ctap2(ctap2::Response::ClientPin(response))),
@@ -425,12 +425,12 @@ where UP: UserPresence,
 
                         // 0xA
                         ctap2::Request::CredentialManagement(parameters) => {
-                            debug!("CM request").ok();
+                            debug!("CM request");
                             let response = self.credential_management(&parameters);
                             match response {
                                 Ok(response) => {
                                     // let mut buf = [0u8; 512];
-                                    // blocking::info!("{:?}", ctap_types::serde::cbor_serialize(&response, &mut buf)).ok();
+                                    // info_now!("{:?}", ctap_types::serde::cbor_serialize(&response, &mut buf));
                                     Ok(Response::Ctap2(ctap2::Response::CredentialManagement(response)))
                                 }
                                 Err(error) => Err(error)
@@ -439,7 +439,7 @@ where UP: UserPresence,
 
 
                         ctap2::Request::Vendor(op) => {
-                            debug!("Vendor request").ok();
+                            debug!("Vendor request");
                             let response = self.vendor(*op);
                             match response {
                                 Ok(()) => Ok(Response::Ctap2(ctap2::Response::Vendor)),
@@ -448,14 +448,14 @@ where UP: UserPresence,
                         }
 
                         // _ => {
-                        //     // debug!("not implemented: {:?}", &request).ok();
-                        //     debug!("request not implemented").ok();
+                        //     // debug!("not implemented: {:?}", &request);
+                        //     debug!("request not implemented");
                         //     self.interchange.respond(Err(Error::InvalidCommand)).expect("internal error");
                         // }
                     }
                 }
                 Request::Ctap1(_request) => {
-                    debug!("ctap1 not implemented: {:?}", &_request).ok();
+                    debug!("ctap1 not implemented: {:?}", &_request);
                     Err(Error::InvalidCommand)
                 }
             }
@@ -464,8 +464,8 @@ where UP: UserPresence,
 
     fn client_pin(&mut self, parameters: &ctap2::client_pin::Parameters) -> Result<ctap2::client_pin::Response> {
         use ctap2::client_pin::PinV1Subcommand as Subcommand;
-        debug!("processing CP").ok();
-        // blocking::info!("{:?}", parameters).ok();
+        debug!("processing CP");
+        // info_now!("{:?}", parameters);
 
         if parameters.pin_protocol != 1{
             return Err(Error::InvalidParameter);
@@ -474,7 +474,7 @@ where UP: UserPresence,
         Ok(match parameters.sub_command {
 
             Subcommand::GetRetries => {
-                debug!("processing CP.GR").ok();
+                debug!("processing CP.GR");
 
                 ctap2::client_pin::Response {
                     key_agreement: None,
@@ -484,7 +484,7 @@ where UP: UserPresence,
             }
 
             Subcommand::GetKeyAgreement => {
-                debug!("processing CP.GKA").ok();
+                debug!("processing CP.GKA");
 
                 let private_key = self.state.runtime.key_agreement_key(&mut self.trussed);
                 let public_key = syscall!(self.trussed.derive_p256_public_key(&private_key, StorageLocation::Volatile)).key;
@@ -502,7 +502,7 @@ where UP: UserPresence,
             }
 
             Subcommand::SetPin => {
-                debug!("processing CP.SP").ok();
+                debug!("processing CP.SP");
                 // 1. check mandatory parameters
                 let platform_kek = match parameters.key_agreement.as_ref() {
                     Some(key) => key,
@@ -549,7 +549,7 @@ where UP: UserPresence,
             }
 
             Subcommand::ChangePin => {
-                debug!("processing CP.CP").ok();
+                debug!("processing CP.CP");
 
                 // 1. check mandatory parameters
                 let platform_kek = match parameters.key_agreement.as_ref() {
@@ -612,7 +612,7 @@ where UP: UserPresence,
             }
 
             Subcommand::GetPinToken => {
-                debug!("processing CP.GPT").ok();
+                debug!("processing CP.GPT");
 
                 // 1. check mandatory parameters
                 let platform_kek = match parameters.key_agreement.as_ref() {
@@ -641,15 +641,15 @@ where UP: UserPresence,
                     }
                     Ok(_) => {}
                 }
-                // blocking::info!("exists? {}", syscall!(self.trussed.exists(shared_secret)).exists).ok();
+                // info_now!("exists? {}", syscall!(self.trussed.exists(shared_secret)).exists);
 
                 // 6. reset retries
                 self.state.reset_retries(&mut self.trussed)?;
 
                 // 7. return encrypted pinToken
                 let pin_token = self.state.runtime.pin_token(&mut self.trussed);
-                debug!("wrapping pin token").ok();
-                // blocking::info!("exists? {}", syscall!(self.trussed.exists(shared_secret)).exists).ok();
+                debug!("wrapping pin token");
+                // info_now!("exists? {}", syscall!(self.trussed.exists(shared_secret)).exists);
                 let pin_token_enc = syscall!(self.trussed.wrap_key_aes256cbc(&shared_secret, &pin_token)).wrapped_key;
 
                 syscall!(self.trussed.delete(shared_secret));
@@ -716,8 +716,8 @@ where UP: UserPresence,
 
         // // temp
         // let pin_length = pin.iter().position(|&b| b == b'\0').unwrap_or(pin.len());
-        // blocking::info!("pin.len() = {}, pin_length = {}, = {:?}",
-        //           pin.len(), pin_length, &pin).ok();
+        // info_now!("pin.len() = {}, pin_length = {}, = {:?}",
+        //           pin.len(), pin_length, &pin);
         // chop off null bytes
         let pin_length = pin.iter().position(|&b| b == b'\0').unwrap_or(pin.len());
         if pin_length < 4 || pin_length >= 64 {
@@ -759,7 +759,7 @@ where UP: UserPresence,
         parameters: &ctap2::credential_management::Parameters
     ) -> Result<()> {
 
-        // blocking::info!("CM params: {:?}", parameters).ok();
+        // info_now!("CM params: {:?}", parameters);
         use ctap2::credential_management::Subcommand;
         match parameters.sub_command {
             // are we Haskell yet lol
@@ -795,7 +795,7 @@ where UP: UserPresence,
                     _ => 0,
                 };
 
-                // blocking::info!("input to hmacsha256: {:?}", &data[..len]).ok();
+                // info_now!("input to hmacsha256: {:?}", &data[..len]);
                 let expected_pin_auth = syscall!(self.trussed.sign_hmacsha256(
                     &pin_token,
                     &data[..len],
@@ -805,10 +805,10 @@ where UP: UserPresence,
                     .pin_auth.as_ref().ok_or(Error::MissingParameter)?;
 
                 if &expected_pin_auth[..16] == &pin_auth[..] {
-                    info!("passed pinauth").ok();
+                    info!("passed pinauth");
                     Ok(())
                 } else {
-                    info!("failed pinauth!").ok();
+                    info!("failed pinauth!");
                     self.state.decrement_retries(&mut self.trussed)?;
                     self.state.pin_blocked()
                 }
@@ -925,8 +925,10 @@ where UP: UserPresence,
             allow_list.into_iter()
                 // discard not properly serialized encrypted credentials
                 .filter_map(|credential_descriptor| {
-                    info!("GA try from cred id:").ok();
-                    logging::dump_hex(&credential_descriptor.id, credential_descriptor.id.len()).ok();
+                    info!(
+                        "GA try from cred id: {}",
+                        hex_str!(&credential_descriptor.id),
+                    );
                     Credential::try_from(
                         self, rp_id_hash, credential_descriptor)
                         .ok()
@@ -942,7 +944,7 @@ where UP: UserPresence,
             // "If an allowList is present and is non-empty,
             // locate all denoted credentials present on this authenticator
             // and bound to the specified rpId."
-            debug!("allowedList passed with {} creds", allowed_credentials.len()).ok();
+            debug!("allowedList passed with {} creds", allowed_credentials.len());
             let mut applicable_credentials: CredentialList = allowed_credentials
                 .into_iter()
                 .filter(|credential| match credential.key.clone() {
@@ -950,13 +952,13 @@ where UP: UserPresence,
                     // On the other hand, we already decrypted a valid AEAD
                     Key::WrappedKey(_) => true,
                     Key::ResidentKey(key) => {
-                        debug!("checking if ResidentKey {:?} exists", &key).ok();
+                        debug!("checking if ResidentKey {:?} exists", &key);
                         match credential.algorithm {
                             -7 => syscall!(self.trussed.exists(Mechanism::P256, key)).exists,
                             -8 => syscall!(self.trussed.exists(Mechanism::Ed25519, key)).exists,
                             -9 => {
                                 let exists = syscall!(self.trussed.exists(Mechanism::Totp, key)).exists;
-                                info!("found it").ok();
+                                info!("found it");
                                 exists
                             }
                             _ => false,
@@ -965,7 +967,7 @@ where UP: UserPresence,
                 })
                 .filter(|credential| {
                     use credential::CredentialProtectionPolicy as Policy;
-                    debug!("CredentialProtectionPolicy {:?}", &credential.cred_protect).ok();
+                    debug!("CredentialProtectionPolicy {:?}", &credential.cred_protect);
                     match credential.cred_protect {
                         Policy::Optional => true,
                         Policy::OptionalWithCredentialIdList => allowed_credentials_passed || uv_performed,
@@ -1001,7 +1003,7 @@ where UP: UserPresence,
             // - these then go into a CredentialList
             // - (we don't need to keep that around even)
             //
-            debug!("no allowedList passed").ok();
+            debug!("no allowedList passed");
 
             let mut min_heap = MinCredentialHeap::new();
 
@@ -1039,7 +1041,7 @@ where UP: UserPresence,
                 };
 
                 min_heap.push(timestamp_path).map_err(drop).unwrap();
-                // blocking::info!("first: {:?}", &self.hash(&id.0)).ok();
+                // info_now!("first: {:?}", &self.hash(&id.0));
             }
 
             loop {
@@ -1072,7 +1074,7 @@ where UP: UserPresence,
                     // }
                     // let id = credential.id(&mut self.trussed, &kek)?;
                     // credentials.push(credential).unwrap();
-                    // blocking::info!("next: {:?}", &self.hash(&id.0)).ok();
+                    // info_now!("next: {:?}", &self.hash(&id.0));
 
                     if min_heap.capacity() > min_heap.len() {
                         min_heap.push(timestamp_path).map_err(drop).unwrap();
@@ -1100,7 +1102,7 @@ where UP: UserPresence,
         //    .into_iter()
         //    .filter(|credential| {
         //        use credential::CredentialProtectionPolicy as Policy;
-        //        debug!("CredentialProtectionPolicy {:?}", &credential.cred_protect).ok();
+        //        debug!("CredentialProtectionPolicy {:?}", &credential.cred_protect);
         //        match credential.cred_protect {
         //            Policy::Optional => true,
         //            Policy::OptionalWithCredentialIdList => allowed_credentials_passed || uv_performed,
@@ -1136,7 +1138,7 @@ where UP: UserPresence,
         // 4. select credential
         let max_heap = self.state.runtime.credential_heap();
         let timestamp_hash = max_heap.pop().unwrap();
-        info!("{:?} @ {}", &timestamp_hash.path, timestamp_hash.timestamp).ok();
+        info!("{:?} @ {}", &timestamp_hash.path, timestamp_hash.timestamp);
         let data = syscall!(self.trussed.read_file(
             StorageLocation::Internal,
             timestamp_hash.path,
@@ -1237,7 +1239,7 @@ where UP: UserPresence,
             None => {
                 let max_heap = self.state.runtime.credential_heap();
                 let timestamp_hash = max_heap.pop().unwrap();
-                info!("{:?} @ {}", &timestamp_hash.path, timestamp_hash.timestamp).ok();
+                info!("{:?} @ {}", &timestamp_hash.path, timestamp_hash.timestamp);
                 let data = syscall!(self.trussed.read_file(
                     StorageLocation::Internal,
                     timestamp_hash.path,
@@ -1256,7 +1258,7 @@ where UP: UserPresence,
             Some(n) => n,
             None => 1,
         };
-        info!("found {:?} applicable credentials", human_num_credentials).ok();
+        info!("found {:?} applicable credentials", human_num_credentials);
 
         // 6. process any options present
 
@@ -1308,7 +1310,7 @@ where UP: UserPresence,
 
         // 9./10. sign clientDataHash || authData with "first" credential
 
-        // blocking::info!("signing with credential {:?}", &credential).ok();
+        // info_now!("signing with credential {:?}", &credential);
         let kek = self.state.persistent.key_encryption_key(&mut self.trussed)?;
         let credential_id = credential.id_using_hash(&mut self.trussed, &kek, &rp_id_hash)?;
 
@@ -1351,7 +1353,7 @@ where UP: UserPresence,
             Key::ResidentKey(key) => (key, true),
             Key::WrappedKey(bytes) => {
                 let wrapping_key = self.state.persistent.key_wrapping_key(&mut self.trussed)?;
-                // blocking::info!("unwrapping {:?} with wrapping key {:?}", &bytes, &wrapping_key).ok();
+                // info_now!("unwrapping {:?} with wrapping key {:?}", &bytes, &wrapping_key);
                 let key_result = syscall!(self.trussed.unwrap_key_chacha8poly1305(
                     &wrapping_key,
                     &bytes.to_byte_buf(),
@@ -1359,8 +1361,8 @@ where UP: UserPresence,
                     // &rp_id_hash,
                     StorageLocation::Volatile,
                 )).key;
-                // debug!("key result: {:?}", &key_result).ok();
-                info!("key result").ok();
+                // debug!("key result: {:?}", &key_result);
+                info!("key result");
                 match key_result {
                     Some(key) => (key, false),
                     None => { return Err(Error::Other); }
@@ -1375,11 +1377,11 @@ where UP: UserPresence,
             _ => { return Err(Error::Other); }
         };
 
-        debug!("signing with {:?}, {:?}", &mechanism, &serialization).ok();
+        debug!("signing with {:?}, {:?}", &mechanism, &serialization);
         let signature = match mechanism {
             Mechanism::Totp => {
                 let timestamp = u64::from_le_bytes(data.client_data_hash[..8].try_into().unwrap());
-                info!("TOTP with timestamp {:?}", &timestamp).ok();
+                info!("TOTP with timestamp {:?}", &timestamp);
                 syscall!(self.trussed.sign_totp(&key, timestamp)).signature.to_byte_buf()
             }
             _ => syscall!(self.trussed.sign(mechanism, key.clone(), &commitment, serialization)).signature
@@ -1415,7 +1417,7 @@ where UP: UserPresence,
     }
 
     fn vendor(&mut self, op: VendorOperation) -> Result<()> {
-        info!("hello VO {:?}", &op).ok();
+        info!("hello VO {:?}", &op);
         match op.into() {
             0x79 => syscall!(self.trussed.debug_dump_store()),
             _ => return Err(Error::InvalidCommand),
@@ -1453,7 +1455,7 @@ where UP: UserPresence,
         loop {
             let dir = PathBuf::from(b"rk");
 
-            info!("reset start: reading {:?}", &dir).ok();
+            info!("reset start: reading {:?}", &dir);
             let entry = syscall!(self.trussed.read_dir_first(
                 StorageLocation::Internal,
                 dir,
@@ -1465,7 +1467,7 @@ where UP: UserPresence,
                 None => break,
                 Some(entry) => PathBuf::from(entry.path()),
             };
-            info!("got RP {:?}, looking for its RKs", &rp_path).ok();
+            info!("got RP {:?}, looking for its RKs", &rp_path);
 
             // delete all RKs for given RP
             let mut entry = syscall!(self.trussed.read_dir_first(
@@ -1475,7 +1477,7 @@ where UP: UserPresence,
             )).entry;
 
             loop {
-                // blocking::info!("this may be an RK: {:?}", &entry).ok();
+                // info_now!("this may be an RK: {:?}", &entry);
                 let rk_path = match entry {
                     // no more RKs left
                     // break breaks inner loop here
@@ -1521,17 +1523,17 @@ where UP: UserPresence,
     // )
         -> Result<()>
     {
-        info!("deleting RK {:?}", &rk_path).ok();
+        info!("deleting RK {:?}", &rk_path);
         let credential_data = syscall!(self.trussed.read_file(
             StorageLocation::Internal,
             PathBuf::from(rk_path),
         )).data;
         let credential = Credential::deserialize(&credential_data).unwrap();
-        // blocking::info!("deleting credential {:?}", &credential).ok();
+        // info_now!("deleting credential {:?}", &credential);
 
         match credential.key {
             credential::Key::ResidentKey(key) => {
-                info!(":: deleting resident key").ok();
+                info!(":: deleting resident key");
                 syscall!(self.trussed.delete(key));
             }
             credential::Key::WrappedKey(_) => {}
@@ -1540,14 +1542,14 @@ where UP: UserPresence,
         if let Some(secret) = credential.hmac_secret.clone() {
             match secret {
                 credential::CredRandom::Resident(secret) => {
-                    info!(":: deleting hmac secret").ok();
+                    info!(":: deleting hmac secret");
                     syscall!(self.trussed.delete(secret));
                 }
                 credential::CredRandom::Wrapped(_) => {}
             }
         }
 
-        info!(":: deleting RK file {:?} itself", &rk_path).ok();
+        info!(":: deleting RK file {:?} itself", &rk_path);
         syscall!(self.trussed.remove_file(
             StorageLocation::Internal,
             PathBuf::from(rk_path),
@@ -1587,7 +1589,7 @@ where UP: UserPresence,
             for descriptor in exclude_list.iter() {
                 let result = Credential::try_from(self, &rp_id_hash, descriptor);
                 if result.is_ok() {
-                    info!("Excluded!").ok();
+                    info!("Excluded!");
                     if self.up.user_present(&mut self.trussed, constants::FIDO2_UP_TIMEOUT) {
                         return Err(Error::CredentialExcluded);
                     } else {
@@ -1610,12 +1612,12 @@ where UP: UserPresence,
         }
         let algorithm = match algorithm {
             Some(algorithm) => {
-                info!("algo: {:?}", algorithm as i32).ok();
+                info!("algo: {:?}", algorithm as i32);
                 algorithm
             },
             None => { return Err(Error::UnsupportedAlgorithm); }
         };
-        // debug!("making credential, eddsa = {}", eddsa).ok();
+        // debug!("making credential, eddsa = {}", eddsa);
 
 
         // 8. process options; on known but unsupported error UnsupportedOption
@@ -1625,7 +1627,7 @@ where UP: UserPresence,
         let mut _uv_requested = false;
         let _up_requested = true; // can't be toggled
 
-        info!("MC options: {:?}", &parameters.options).ok();
+        info!("MC options: {:?}", &parameters.options);
         if let Some(ref options) = &parameters.options {
             if Some(true) == options.rk {
                 rk_requested = true;
@@ -1669,7 +1671,7 @@ where UP: UserPresence,
 
                     false => {
                         let wrapping_key = &self.state.persistent.key_wrapping_key(&mut self.trussed)?;
-                        info!("wrapping credRandom").ok();
+                        info!("wrapping credRandom");
                         let wrapped_key = syscall!(self.trussed.wrap_key_chacha8poly1305(
                             &wrapping_key,
                             &cred_random,
@@ -1691,7 +1693,7 @@ where UP: UserPresence,
             }
         }
 
-        // debug!("hmac-secret = {:?}, credProtect = {:?}", hmac_secret_requested, cred_protect_requested).ok();
+        // debug!("hmac-secret = {:?}, credProtect = {:?}", hmac_secret_requested, cred_protect_requested);
 
         // 10. get UP, if denied error OperationDenied
         if !self.up.user_present(&mut self.trussed, constants::FIDO2_UP_TIMEOUT) {
@@ -1714,8 +1716,8 @@ where UP: UserPresence,
                 cose_public_key = syscall!(self.trussed.serialize_key(
                     Mechanism::P256, public_key.clone(), KeySerialization::Cose
                 )).serialized_key;
-                let success = syscall!(self.trussed.delete(public_key)).success;
-                info!("deleted public P256 key: {}", success).ok();
+                let _success = syscall!(self.trussed.delete(public_key)).success;
+                info!("deleted public P256 key: {}", success);
             }
             SupportedAlgorithm::Ed25519 => {
                 private_key = syscall!(self.trussed.generate_ed25519_private_key(location)).key;
@@ -1723,8 +1725,8 @@ where UP: UserPresence,
                 cose_public_key = syscall!(self.trussed.serialize_key(
                     Mechanism::Ed25519, public_key.clone(), KeySerialization::Cose
                 )).serialized_key;
-                let success = syscall!(self.trussed.delete(public_key)).success;
-                info!("deleted public Ed25519 key: {}", success).ok();
+                let _success = syscall!(self.trussed.delete(public_key)).success;
+                info!("deleted public Ed25519 key: {}", success);
             }
             SupportedAlgorithm::Totp => {
                 if parameters.client_data_hash.len() != 32 {
@@ -1734,7 +1736,7 @@ where UP: UserPresence,
                 let totp_secret: [u8; 20] = parameters.client_data_hash[6..26].try_into().unwrap();
                 private_key = syscall!(self.trussed.unsafe_inject_totp_key(
                     &totp_secret, StorageLocation::Internal)).key;
-                // blocking::info!("totes injected").ok();
+                // info_now!("totes injected");
                 let fake_cose_pk = ctap_types::cose::TotpPublicKey {};
                 let mut fake_serialized_cose_pk = Message::new();
                 trussed::cbor_serialize_bytes(&fake_cose_pk, &mut fake_serialized_cose_pk)
@@ -1751,13 +1753,13 @@ where UP: UserPresence,
             false => {
                 // WrappedKey version
                 let wrapping_key = &self.state.persistent.key_wrapping_key(&mut self.trussed)?;
-                debug!("wrapping private key").ok();
+                debug!("wrapping private key");
                 let wrapped_key = syscall!(self.trussed.wrap_key_chacha8poly1305(
                     &wrapping_key,
                     &private_key,
                     &rp_id_hash,
                 )).wrapped_key;
-                // debug!("wrapped_key = {:?}", &wrapped_key).ok();
+                // debug!("wrapped_key = {:?}", &wrapped_key);
 
                 // 32B key, 12B nonce, 16B tag + some info on algorithm (P256/Ed25519)
                 // Turns out it's size 92 (enum serialization not optimized yet...)
@@ -1765,7 +1767,7 @@ where UP: UserPresence,
                 // wrapped_key.extend_from_slice(&wrapped_key_msg).unwrap();
                 let ret = Key::WrappedKey(wrapped_key.try_to_byte_buf().map_err(|_| Error::Other)?);
                 ret
-                // debug!("len wrapped key = {}", wrapped_key.len()).ok();
+                // debug!("len wrapped key = {}", wrapped_key.len());
                 // Key::WrappedKey(wrapped_key.try_to_byte_buf().unwrap())
 
             }
@@ -1773,7 +1775,7 @@ where UP: UserPresence,
 
         // injecting this is a bit mehhh..
         let nonce = syscall!(self.trussed.random_bytes(12)).bytes.as_slice().try_into().unwrap();
-        info!("nonce = {:?}", &nonce).ok();
+        info!("nonce = {:?}", &nonce);
 
         let credential = Credential::new(
             credential::CtapVersion::Fido21Pre,
@@ -1787,7 +1789,7 @@ where UP: UserPresence,
             nonce,
         );
 
-        // blocking::info!("made credential {:?}", &credential).ok();
+        // info_now!("made credential {:?}", &credential);
 
         // 12.b generate credential ID { = AEAD(Serialize(Credential)) }
         let kek = &self.state.persistent.key_encryption_key(&mut self.trussed)?;
@@ -1814,8 +1816,8 @@ where UP: UserPresence,
 
         // 13.a AuthenticatorData and its serialization
         use ctap2::AuthenticatorDataFlags as Flags;
-        info!("MC created cred id:").ok();
-        logging::dump_hex(&credential_id.0, credential_id.0.len()).ok();
+        info!("MC created cred id:");
+        info!("{}", hex_str!(&credential_id.0));
         let authenticator_data = ctap2::make_credential::AuthenticatorData {
             rp_id_hash: rp_id_hash.try_to_byte_buf().map_err(|_| Error::Other)?,
 
@@ -1836,13 +1838,13 @@ where UP: UserPresence,
             sign_count: self.state.persistent.timestamp(&mut self.trussed)?,
 
             attested_credential_data: {
-                // debug!("acd in, cid len {}, pk len {}", credential_id.0.len(), cose_public_key.len()).ok();
+                // debug!("acd in, cid len {}, pk len {}", credential_id.0.len(), cose_public_key.len());
                 let attested_credential_data = ctap2::make_credential::AttestedCredentialData {
                     aaguid: self.state.identity.aaguid(),
                     credential_id: credential_id.0.try_to_byte_buf().unwrap(),
                     credential_public_key: cose_public_key.try_to_byte_buf().unwrap(),
                 };
-                // debug!("cose PK = {:?}", &attested_credential_data.credential_public_key).ok();
+                // debug!("cose PK = {:?}", &attested_credential_data.credential_public_key);
                 Some(attested_credential_data)
             },
 
@@ -1850,20 +1852,20 @@ where UP: UserPresence,
                 parameters.extensions.clone()
             },
         };
-        // debug!("authData = {:?}", &authenticator_data).ok();
+        // debug!("authData = {:?}", &authenticator_data);
 
         let serialized_auth_data = authenticator_data.serialize();
 
         // 13.b The Signature
 
         // can we write Sum<M, N> somehow?
-        // debug!("seeking commitment, {} + {}", serialized_auth_data.len(), parameters.client_data_hash.len()).ok();
+        // debug!("seeking commitment, {} + {}", serialized_auth_data.len(), parameters.client_data_hash.len());
         let mut commitment = ByteBuf::<consts::U1024>::new();
         commitment.extend_from_slice(&serialized_auth_data).map_err(|_| Error::Other)?;
-        // debug!("serialized_auth_data ={:?}", &serialized_auth_data).ok();
+        // debug!("serialized_auth_data ={:?}", &serialized_auth_data);
         commitment.extend_from_slice(&parameters.client_data_hash).map_err(|_| Error::Other)?;
-        // debug!("client_data_hash = {:?}", &parameters.client_data_hash).ok();
-        // debug!("commitment = {:?}", &commitment).ok();
+        // debug!("client_data_hash = {:?}", &parameters.client_data_hash);
+        // debug!("commitment = {:?}", &commitment);
 
         // NB: the other/normal one is called "basic" or "batch" attestation,
         // because it attests the authenticator is part of a batch: the model
@@ -1914,11 +1916,11 @@ where UP: UserPresence,
                 (signature.try_to_byte_buf().map_err(|_| Error::Other)?, -7)
             }
         };
-        // debug!("SIG = {:?}", &signature).ok();
+        // debug!("SIG = {:?}", &signature);
 
         if !rk_requested {
-            let success = syscall!(self.trussed.delete(private_key)).success;
-            info!("deleted private credential key: {}", success).ok();
+            let _success = syscall!(self.trussed.delete(private_key)).success;
+            info!("deleted private credential key: {}", success);
         }
 
         let packed_attn_stmt = ctap2::make_credential::PackedAttestationStatement {
@@ -1966,41 +1968,41 @@ where UP: UserPresence,
         // let ser_pk = syscall!(self.trussed.serialize_key(
         //     Mechanism::P256, public_key.clone(), KeySerialization::Raw
         // )).serialized_key;
-        // debug!("ser pk = {:?}", &ser_pk).ok();
+        // debug!("ser pk = {:?}", &ser_pk);
 
         // let cose_ser_pk = syscall!(self.trussed.serialize_key(
         //     Mechanism::P256, public_key.clone(), KeySerialization::Cose
         // )).serialized_key;
-        // debug!("COSE ser pk = {:?}", &cose_ser_pk).ok();
+        // debug!("COSE ser pk = {:?}", &cose_ser_pk);
 
         // let deser_pk = syscall!(self.trussed.deserialize_key(
         //     Mechanism::P256, ser_pk.clone(), KeySerialization::Raw,
         //     StorageAttributes::new().set_persistence(StorageLocation::Volatile)
         // )).key;
-        // debug!("deser pk = {:?}", &deser_pk).ok();
+        // debug!("deser pk = {:?}", &deser_pk);
 
         // let cose_deser_pk = syscall!(self.trussed.deserialize_key(
         //     Mechanism::P256, cose_ser_pk.clone(), KeySerialization::Cose,
         //     StorageAttributes::new().set_persistence(StorageLocation::Volatile)
         // )).key;
-        // debug!("COSE deser pk = {:?}", &cose_deser_pk).ok();
+        // debug!("COSE deser pk = {:?}", &cose_deser_pk);
         // debug!("raw ser of COSE deser pk = {:?}",
         //           syscall!(self.trussed.serialize_key(Mechanism::P256, cose_deser_pk.clone(), KeySerialization::Raw)).
-        //           serialized_key).ok();
+        //           serialized_key);
 
-        // debug!("priv {:?}", &private_key).ok();
-        // debug!("pub {:?}", &public_key).ok();
+        // debug!("priv {:?}", &private_key);
+        // debug!("pub {:?}", &public_key);
 
         // let _loaded_credential = syscall!(self.trussed.load_blob(
         //     prefix.clone(),
         //     blob_id,
         //     StorageLocation::Volatile,
         // )).data;
-        // // debug!("loaded credential = {:?}", &loaded_credential).ok();
+        // // debug!("loaded credential = {:?}", &loaded_credential);
 
-        // debug!("credential = {:?}", &Credential::deserialize(&serialized_credential)?).ok();
+        // debug!("credential = {:?}", &Credential::deserialize(&serialized_credential)?);
 
-    //     // debug!("unwrapped_key = {:?}", &unwrapped_key).ok();
+    //     // debug!("unwrapped_key = {:?}", &unwrapped_key);
 
     fn get_info(&mut self) -> ctap2::get_info::Response {
 

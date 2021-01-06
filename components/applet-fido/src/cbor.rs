@@ -6,8 +6,6 @@ use ctap_types::{
     serde::{cbor_deserialize, error::Error as SerdeError},
 };
 
-use crate::logger::{info};
-
 pub enum CtapMappingError {
     InvalidCommand(u8),
     ParsingError(SerdeError),
@@ -52,7 +50,7 @@ pub fn parse_cbor(data: &[u8]) -> core::result::Result<Request, CtapMappingError
 
     match operation {
         Operation::MakeCredential => {
-            info!("authenticatorMakeCredential").ok();
+            info!("authenticatorMakeCredential");
             match cbor_deserialize(&data[1..]) {
                 Ok(params) => {
                     Ok(Request::Ctap2(ctap2::Request::MakeCredential(params)))
@@ -65,7 +63,7 @@ pub fn parse_cbor(data: &[u8]) -> core::result::Result<Request, CtapMappingError
         }
 
         Operation::GetAssertion => {
-            info!("authenticatorGetAssertion").ok();
+            info!("authenticatorGetAssertion");
 
             match cbor_deserialize(&data[1..]) {
                 Ok(params) => {
@@ -79,14 +77,14 @@ pub fn parse_cbor(data: &[u8]) -> core::result::Result<Request, CtapMappingError
         }
 
         Operation::GetNextAssertion => {
-            info!("authenticatorGetNextAssertion").ok();
+            info!("authenticatorGetNextAssertion");
 
             // TODO: ensure earlier that RPC send queue is empty
             Ok(Request::Ctap2(ctap2::Request::GetNextAssertion))
         }
 
         Operation::CredentialManagement => {
-            info!("authenticatorCredentialManagement").ok();
+            info!("authenticatorCredentialManagement");
 
             match cbor_deserialize(&data[1..]) {
                 Ok(params) => {
@@ -100,20 +98,20 @@ pub fn parse_cbor(data: &[u8]) -> core::result::Result<Request, CtapMappingError
         }
 
         Operation::Reset => {
-            info!("authenticatorReset").ok();
+            info!("authenticatorReset");
 
             // TODO: ensure earlier that RPC send queue is empty
             Ok(Request::Ctap2(ctap2::Request::Reset))
         }
 
         Operation::GetInfo => {
-            info!("authenticatorGetInfo").ok();
+            info!("authenticatorGetInfo");
             // TODO: ensure earlier that RPC send queue is empty
             Ok(Request::Ctap2(ctap2::Request::GetInfo))
         }
 
         Operation::ClientPin => {
-            info!("authenticatorClientPin").ok();
+            info!("authenticatorClientPin");
             match cbor_deserialize(&data[1..])
             {
                 Ok(params) => {
@@ -129,7 +127,7 @@ pub fn parse_cbor(data: &[u8]) -> core::result::Result<Request, CtapMappingError
         }
 
         Operation::Vendor(vendor_operation) => {
-            info!("authenticatorVendor({:?})", &vendor_operation).ok();
+            info!("authenticatorVendor({:?})", &vendor_operation);
 
             let vo_u8: u8 = vendor_operation.into();
             if vo_u8 == 0x41 {

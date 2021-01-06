@@ -1,6 +1,5 @@
 use core::convert::{TryFrom, TryInto};
 
-use crate::logger::{info, blocking};
 pub use rand_core::{RngCore, SeedableRng};
 use heapless::ByteBuf;
 use interchange::Responder;
@@ -102,13 +101,13 @@ impl<B: Board> ServiceResources<B> {
     pub fn reply_to(&mut self, request: Request) -> Result<Reply, Error> {
         // TODO: what we want to do here is map an enum to a generic type
         // Is there a nicer way to do this?
-        // blocking::info!("trussed request: {:?}", &request).ok();
-        // blocking::info!("IFS/EFS/VFS available BEFORE: {}/{}/{}",
+        // info_now!("trussed request: {:?}", &request).ok();
+        // info_now!("IFS/EFS/VFS available BEFORE: {}/{}/{}",
         //       self.board.store().ifs().available_blocks().unwrap(),
         //       self.board.store().efs().available_blocks().unwrap(),
         //       self.board.store().vfs().available_blocks().unwrap(),
         // ).ok();
-        blocking::debug!("trussed request: {:?}", &request).ok();
+        debug_now!("trussed request: {:?}", &request);
         match request {
             Request::DummyRequest => {
                 // #[cfg(test)]
@@ -237,7 +236,7 @@ impl<B: Board> ServiceResources<B> {
                 };
                 let base_path = self.dataspace_path(&user_dir);
                 let base_path = self.namespace_path(&base_path);
-                blocking::info!("base path {:?}", &base_path).ok();
+                info_now!("base path {:?}", &base_path);
 
                 fn recursively_locate<S: 'static + crate::types::LfsStorage>(
                     fs: &'static crate::store::Fs<S>,
@@ -246,17 +245,17 @@ impl<B: Board> ServiceResources<B> {
                 )
                     -> Result<Option<PathBuf>, littlefs2::io::Error>
                 {
-                    // blocking::info!("entering `rec-loc` with path {:?} and filename {:?}",
-                              // &path, filename).ok();
+                    // info_now!("entering `rec-loc` with path {:?} and filename {:?}",
+                              // &path, filename);
                     // let fs = store.vfs();
                     fs.read_dir_and_then(&path, |dir| {
-                        // blocking::info!("looking in {:?}", &path).ok();
+                        // info_now!("looking in {:?}", &path).ok();
                         for (i, entry) in dir.enumerate() {
                             let entry = entry.unwrap();
                             let mut is_special_dir = PathBuf::from(entry.file_name()) == PathBuf::from(b".");
                             is_special_dir |= PathBuf::from(entry.file_name()) == PathBuf::from(b"..");
                             if (i < 2) != is_special_dir {
-                                // blocking::info!("i = {}, is_special_dir = {:?}", i, is_special_dir).ok();
+                                // info_now!("i = {}, is_special_dir = {:?}", i, is_special_dir).ok();
                                 panic!("i = {}, is_special_dir = {:?}, filename = {:?}",
                                     i,
                                     is_special_dir,
@@ -265,19 +264,19 @@ impl<B: Board> ServiceResources<B> {
 
                             }
                             if i < 2 {
-                                // blocking::info!(":: skipping {:?}", &entry.path()).ok();
+                                // info_now!(":: skipping {:?}", &entry.path()).ok();
                                 continue;
                             }
                             if entry.file_type().is_file() {
-                                // blocking::info!(":: comparing with {:?}", entry.file_name()).ok();
+                                // info_now!(":: comparing with {:?}", entry.file_name()).ok();
                                 if PathBuf::from(entry.file_name()) == PathBuf::from(filename) {
-                                    blocking::info!("found it").ok();
+                                    info_now!("found it");
                                     return Ok(Some(PathBuf::from(entry.path())));
                                 }
                                 continue;
                             }
                             if entry.file_type().is_dir() {
-                                // blocking::info!("recursing into {:?} with path {:?}",
+                                // info_now!("recursing into {:?} with path {:?}",
                                 //           &entry.file_name(),
                                 //           &entry.path(),
                                 //           ).ok();
@@ -304,10 +303,10 @@ impl<B: Board> ServiceResources<B> {
 
             Request::DebugDumpStore(_request) => {
 
-                blocking::info!(":: PERSISTENT").ok();
+                info_now!(":: PERSISTENT");
                 recursively_list(self.board.store().ifs(), PathBuf::from(b"/"));
 
-                blocking::info!(":: VOLATILE").ok();
+                info_now!(":: VOLATILE");
                 recursively_list(self.board.store().vfs(), PathBuf::from(b"/"));
 
                 fn recursively_list<S: 'static + crate::types::LfsStorage>(fs: &'static crate::store::Fs<S>, path: PathBuf) {
@@ -316,17 +315,17 @@ impl<B: Board> ServiceResources<B> {
                         for (i, entry) in dir.enumerate() {
                             let entry = entry.unwrap();
                             if i < 2 {
-                                // blocking::info!("skipping {:?}", &entry.path()).ok();
+                                // info_now!("skipping {:?}", &entry.path()).ok();
                                 continue;
                             }
-                            blocking::info!("{:?} p({:?})", entry.path(), &path).ok();
+                            info_now!("{:?} p({:?})", entry.path(), &path);
                             if entry.file_type().is_dir() {
                                 recursively_list(fs, PathBuf::from(entry.path()));
                             }
                             if entry.file_type().is_file() {
                                 let _contents: Vec<u8, consts::U256> = fs.read(entry.path()).unwrap();
-                                // blocking::info!("{} ?= {}", entry.metadata().len(), contents.len()).ok();
-                                // blocking::info!("{:?}", &contents).ok();
+                                // info_now!("{} ?= {}", entry.metadata().len(), contents.len()).ok();
+                                // info_now!("{:?}", &contents).ok();
                             }
                         }
                         Ok(())
@@ -463,7 +462,7 @@ impl<B: Board> ServiceResources<B> {
                             path.push(name);
                             let attribute = fs.attribute(&path, crate::config::USER_ATTRIBUTE_NUMBER)
                                 .map_err(|e| {
-                                    info!("error getting attribute: {:?}", &e).ok();
+                                    info!("error getting attribute: {:?}", &e);
                                     littlefs2::io::Error::Io
                                 }
                             )?;
@@ -485,7 +484,7 @@ impl<B: Board> ServiceResources<B> {
                 });
                 let entry = if result.is_err() {
                     let err = result.err().unwrap();
-                    blocking::info!("read_dir error: {:?}", &err).ok();
+                    info_now!("read_dir error: {:?}", &err);
                     return match err {
                         // Return no data if path is invalid
                         littlefs2::io::Error::NoSuchEntry =>
@@ -538,24 +537,24 @@ impl<B: Board> ServiceResources<B> {
 
                         if !found_last {
                             let name: PathBuf = name.into();
-                            // blocking::info!("comparing {:} with last {:?}", &name, &last).ok();
+                            // info_now!("comparing {:} with last {:?}", &name, &last).ok();
                             // TODO: This failed when all bytes (including trailing null) were
                             // compared. It turned out that `last` had a trailing 240 instead.
                             if last == name {
                                 found_last = true;
-                                // blocking::info!("found last").ok();
+                                // info_now!("found last").ok();
                             }
                             continue;
                         }
 
-                        // blocking::info!("next file found: {:?}", name.as_ref()).ok();
+                        // info_now!("next file found: {:?}", name.as_ref()).ok();
 
                         if let Some(user_attribute) = request.user_attribute.as_ref() {
                             let mut path = path.clone();
                             path.push(name);
                             let attribute = fs.attribute(&path, crate::config::USER_ATTRIBUTE_NUMBER)
                                 .map_err(|e| {
-                                    info!("error getting attribute: {:?}", &e).ok();
+                                    info!("error getting attribute: {:?}", &e);
                                     littlefs2::io::Error::Io
                                 }
                             )?;
@@ -683,7 +682,7 @@ impl<B: Board> ServiceResources<B> {
             Request::WriteFile(request) => {
                 let path = self.dataspace_path(&request.path);
                 let path = self.namespace_path(&path);
-                info!("WriteFile of size {}", request.data.len()).ok();
+                info!("WriteFile of size {}", request.data.len());
                 store::store(self.board.store(), request.location, &path, &request.data)?;
                 Ok(Reply::WriteFile(reply::WriteFile {}))
             }
@@ -790,7 +789,7 @@ impl<B: Board> ServiceResources<B> {
     }
 
     pub fn denamespace_path(&self, path: &Path) -> PathBuf {
-        // blocking::info!("denamespacing {:?}", path).ok();
+        // info_now!("denamespacing {:?}", path).ok();
         let bytes = path.as_ref().as_bytes();
         let absolute = bytes[0] == b'/';
         let offset = if absolute { 1 } else { 0 };
@@ -799,12 +798,12 @@ impl<B: Board> ServiceResources<B> {
             // oh oh oh
             .unwrap();
         let buf = PathBuf::from(&bytes[end_of_namespace + 1 + offset..]);
-        // blocking::info!("buf out: {:?}", &buf).ok();
+        // info_now!("buf out: {:?}", &buf).ok();
         buf
     }
 
     pub fn dedataspace_path(&self, path: &Path) -> PathBuf {
-        // blocking::info!("dedataspacing {:?}", path).ok();
+        // info_now!("dedataspacing {:?}", path).ok();
         let bytes = path.as_ref().as_bytes();
         let absolute = bytes[0] == b'/';
         let offset = if absolute { 1 } else { 0 };
@@ -813,7 +812,7 @@ impl<B: Board> ServiceResources<B> {
             // oh oh oh
             .unwrap();
         let buf = PathBuf::from(&bytes[end_of_dataspace + 1 + offset..]);
-        // blocking::info!("buf out: {:?}", &buf).ok();
+        // info_now!("buf out: {:?}", &buf).ok();
         buf
     }
 
@@ -836,7 +835,7 @@ impl<B: Board> ServiceResources<B> {
     }
 
     pub fn store_key(&mut self, location: StorageLocation, key_type: KeyType, key_kind: KeyKind, key_material: &[u8]) -> Result<UniqueId, Error> {
-        blocking::info!("STORING {:?} -> {:?}", &key_kind, location).ok();
+        info_now!("STORING {:?} -> {:?}", &key_kind, location);
         let serialized_key = SerializedKey::try_from((key_kind, key_material))?;
 
         let mut buf = [0u8; 128];
@@ -887,7 +886,7 @@ impl<B: Board> ServiceResources<B> {
     pub fn load_key(&self, key_type: KeyType, key_kind: Option<KeyKind>, key_id: &UniqueId)
         -> Result<SerializedKey, Error>  {
 
-        // blocking::info!("LOADING {:?}", &key_kind).ok();
+        // info_now!("LOADING {:?}", &key_kind).ok();
         let path = self.key_path(key_type, key_id);
 
         let location = match self.key_id_location(key_type, key_id) {
@@ -901,7 +900,7 @@ impl<B: Board> ServiceResources<B> {
 
         if let Some(kind) = key_kind {
             if serialized_key.kind != kind {
-                blocking::info!("wrong key kind, expected {:?} got {:?}", &kind, &serialized_key.kind).ok();
+                info_now!("wrong key kind, expected {:?} got {:?}", &kind, &serialized_key.kind);
                 Err(Error::WrongKeyKind)?;
             }
         }
@@ -1033,11 +1032,11 @@ impl<B: Board> Service<B> {
 
             }
         }
-        blocking::debug!("I/E/V : {}/{}/{} >",
+        debug_now!("I/E/V : {}/{}/{} >",
               self.resources.board.store().ifs().available_blocks().unwrap(),
               self.resources.board.store().efs().available_blocks().unwrap(),
               self.resources.board.store().vfs().available_blocks().unwrap(),
-        ).ok();
+        );
     }
 }
 

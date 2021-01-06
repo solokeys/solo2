@@ -96,8 +96,8 @@ impl<'de> Deserializer<'de> {
     fn expect_major(&mut self, major: u8) -> Result<u8> {
         let byte = self.try_take_n(1)?[0];
         if major != (byte >> 5) {
-            // logging::blocking::info!("expecting {}, got {} in byte {}", major, byte >> 5, byte).ok();
-            // logging::blocking::info!("remaining data: {:?}", &self.input).ok();
+            // logging::info_now!("expecting {}, got {} in byte {}", major, byte >> 5, byte).ok();
+            // logging::info_now!("remaining data: {:?}", &self.input).ok();
             return Err(Error::DeserializeBadMajor);
         }
         Ok(byte & ((1 << 5) - 1))

@@ -10,8 +10,6 @@ use ctap_types::{
 };
 
 use crate::cbor::{parse_cbor};
-use crate::logger::{info, blocking};
-use logging::hex::*;
 
 use trussed::Client as TrussedClient;
 use fido_authenticator::{Authenticator, UserPresence};
@@ -63,7 +61,7 @@ where UP: UserPresence,
         let result = self.authenticator.call(request);
         match &result {
             Err(error) => {
-                info!("error {}", *error as u8).ok();
+                info!("error {}", *error as u8);
                 Ok(applet::Response::Respond(ByteBuf::from_slice(
                     & [*error as u8]
                 ).unwrap()))
@@ -78,7 +76,6 @@ where UP: UserPresence,
 
                     Response::Ctap2(response) => {
                         use ctap_types::authenticator::ctap2::Response;
-                        // hprintln!("authnr c2 resp: {:?}", &response).ok();
                         match response {
                             Response::GetInfo(response) => {
                                 self.response_from_object(Some(response))
@@ -189,12 +186,12 @@ where UP: UserPresence,
                             Ok(FidoCommand::Cbor) => {
                                 match parse_cbor(apdu.data()) {
                                     Ok(request) => {
-                                        info!("parsed cbor").ok();
+                                        info!("parsed cbor");
                                         self.call_authenticator(&request)
                                     }
                                     Err(mapping_error) => {
                                         let authenticator_error: AuthenticatorError = mapping_error.into();
-                                        info!("cbor mapping error: {}", authenticator_error as u8).ok();
+                                        info!("cbor mapping error: {}", authenticator_error as u8);
                                         Ok(applet::Response::Respond(ByteBuf::from_slice(
                                         & [authenticator_error as u8]
                                         ).unwrap()))
@@ -209,7 +206,7 @@ where UP: UserPresence,
                                 Ok(applet::Response::Respond(Default::default()))
                             }
                             _ => {
-                                info!("Unsupported ins for fido app {}", ins.hex()).ok();
+                                info!("Unsupported ins for fido app {}", ins.hex());
                                 Err(Status::InstructionNotSupportedOrInvalid)
                             }
                         }
@@ -218,7 +215,7 @@ where UP: UserPresence,
 
             }
             _ => {
-                info!("Unsupported ins for fido app").ok();
+                info!("Unsupported ins for fido app");
                 Err(Status::InstructionNotSupportedOrInvalid)
             }
         }
@@ -241,8 +238,8 @@ where UP: UserPresence,
         if message.len() < 1 {
             return Err(hid::Error::InvalidLength);
         }
-        // blocking::info!("request: ").ok();
-        // blocking::dump_hex(message, message.len()).ok();
+        // info_now!("request: ");
+        // blocking::dump_hex(message, message.len());
         match command {
             hid::Command::Cbor => {
                 match parse_cbor(message) {
@@ -252,19 +249,19 @@ where UP: UserPresence,
                             Ok(applet::Response::Respond(buffer)) => {
                                 message.clear();
                                 message.extend_from_slice(buffer).ok();
-                                // blocking::info!("response: ").ok();
+                                // info_now!("response: ").ok();
                                 // blocking::dump_hex(message, message.len()).ok();
                                 Ok(())
                             }
                             _ => {
-                                info!("Authenticator ignoring request!").ok();
+                                info!("Authenticator ignoring request!");
                                 Err(hid::Error::NoResponse)
                             }
                         }
                     }
                     Err(mapping_error) => {
                         let authenticator_error: AuthenticatorError = mapping_error.into();
-                        info!("authenticator_error: {}", authenticator_error as u8).ok();
+                        info!("authenticator_error: {}", authenticator_error as u8);
                         message.clear();
                         message.extend_from_slice(&[
                             authenticator_error as u8
@@ -279,12 +276,12 @@ where UP: UserPresence,
                 message.clear();
                 let (response, is_success) = match response {
                     Ok(applet::Response::Respond(data)) => {
-                        info!("U2F response {} bytes", data.len()).ok();
+                        info!("U2F response {} bytes", data.len());
                         (data,true)
                     },
                     Err(status) => {
                         let code: u16 = status.into();
-                        info!("U2F error. {}", code).ok();
+                        info!("U2F error. {}", code);
                         (iso7816::Response::Status(status).into_message(), false)
                     },
                     _ => {
@@ -300,8 +297,7 @@ where UP: UserPresence,
                     message.extend_from_slice(&[0x90, 0x00]).ok();
                     // blocking::dump_hex(&message, message.len());
                 } else {
-
-                    blocking::dump_hex(&message, message.len()).ok();
+                    info_now!("{}", hex_str!(&message));
                 }
 
                 Ok(())

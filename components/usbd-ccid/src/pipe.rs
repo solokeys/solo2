@@ -2,7 +2,6 @@ use core::convert::TryFrom;
 
 use apdu_dispatch::types::ContactInterchange;
 use interchange::Requester;
-use crate::logger::{blocking};
 
 use crate::{
     constants::*,
@@ -144,20 +143,20 @@ where
             if self.long_packet_missing > 0 {
                 return;
             } else {
-                // blocking::info!("pl {}, p {}, missing {}, in_chain {}", self.packet_len, packet.len(), self.long_packet_missing, self.in_chain).ok();
-                // blocking::info!("packet: {:X?}", &self.ext_packet).ok();
+                // info_now!("pl {}, p {}, missing {}, in_chain {}", self.packet_len, packet.len(), self.long_packet_missing, self.in_chain).ok();
+                // info_now!("packet: {:X?}", &self.ext_packet).ok();
                 self.receiving_long = false;
             }
         }
 
-        // blocking::info!("handle packet").ok();
-        // blocking::info!("{:X?}", &packet).ok();
+        // info_now!("handle packet").ok();
+        // info_now!("{:X?}", &packet).ok();
         // let p = packet.clone();
         // match PacketCommand::try_from(packet) {
         match PacketCommand::try_from(self.ext_packet.clone()) {
             Ok(command) => {
                 self.seq = command.seq();
-                blocking::info!(">> {:?}", &command).ok();
+                info_now!(">> {:?}", &command);
 
                 // happy path
                 match command {
@@ -181,7 +180,7 @@ where
             }
 
             Err(PacketError::UnknownCommand(p)) => {
-                blocking::info!("unknown command {:X?}", &p).ok();
+                info_now!("unknown command {:X?}", &p);
                 self.seq = self.ext_packet[6];
                 self.send_slot_status_error(Error::CommandNotSupported);
             }
@@ -194,15 +193,15 @@ where
         //
         // conts: BeginsAndEnds, Begins, Ends, Continues, ExpectDataBlock,
 
-        // blocking::info!("handle xfrblock").ok();
-        blocking::info!("{:X?}", &command).ok();
+        // info_now!("handle xfrblock").ok();
+        info_now!("{:X?}", &command);
         match self.state {
 
             State::Idle => {
                 // invariant: BUFFER_SIZE >= PACKET_SIZE
                 match command.chain() {
                     Chain::BeginsAndEnds => {
-                        blocking::info!("begins and ends").ok();
+                        info_now!("begins and ends");
                         self.message.clear();
                         self.message.extend_from_slice(command.data()).unwrap();
                         self.call_app();
@@ -210,7 +209,7 @@ where
                         // self.send_empty_datablock();
                     }
                     Chain::Begins => {
-                        blocking::info!("begins").ok();
+                        info_now!("begins");
                         self.message.clear();
                         self.message.extend_from_slice(command.data()).unwrap();
                         self.state = State::Receiving;
@@ -223,13 +222,13 @@ where
             State::Receiving => {
                 match command.chain() {
                     Chain::Continues => {
-                        blocking::info!("continues").ok();
+                        info_now!("continues");
                         assert!(command.data().len() + self.message.len() <= MAX_MSG_LENGTH);
                         self.message.extend_from_slice(command.data()).unwrap();
                         self.send_empty_datablock(Chain::ExpectingMore);
                     }
                     Chain::Ends => {
-                        blocking::info!("ends").ok();
+                        info_now!("ends");
                         assert!(command.data().len() + self.message.len() <= MAX_MSG_LENGTH);
                         self.message.extend_from_slice(command.data()).unwrap();
                         self.call_app();
@@ -240,8 +239,8 @@ where
             }
 
             State::Processing => {
-                // blocking::info!("handle xfrblock").ok();
-                // blocking::info!("{:X?}", &command).ok();
+                // info_now!("handle xfrblock").ok();
+                // info_now!("{:X?}", &command).ok();
                 panic!("ccid pipe unexpectedly received command while in processing state: {:?}", &command);
             }
 
@@ -261,18 +260,18 @@ where
     }
 
     fn call_app(&mut self) {
-        blocking::info!("called piv app").ok();
+        info_now!("called piv app");
         let command = match iso7816::command::Data::from_slice(&self.message) {
             Ok(command) => command,
             Err(_) => {
-                blocking::info!("could fit payload into Apdu buffer. Ignoring. {:?}", &self.message).ok();
+                info_now!("could fit payload into Apdu buffer. Ignoring. {:?}", &self.message);
                 return;
             }
         };
         self.interchange.request(command).expect("could not deposit command");
             // apdu::Command::try_from(&self.message).unwrap()
         // ).expect("could not deposit command");
-        // blocking::info!("set ccid state to processing").ok();
+        // info_now!("set ccid state to processing").ok();
         self.state = State::Processing;
         // todo!("have message of length {} to dispatch", self.message.len());
     }
@@ -283,11 +282,11 @@ where
         //     if i < 100 {
         //         i += 1;
         //     } else {
-        //         blocking::info!(".").ok();
+        //         info_now!(".").ok();
         //     }
         // }
         if let State::Processing = self.state {
-            // blocking::info!("processing, checking for response, interchange state {:?}",
+            // info_now!("processing, checking for response, interchange state {:?}",
             //           self.interchange.state()).ok();
 
             if let Some(message) = self.interchange.take_response() {
@@ -325,7 +324,7 @@ where
         };
 
         let primed_packet = DataBlock::new(self.seq, chain, chunk);
-        // blocking::info!("priming {:?}", &primed_packet).ok();
+        // info_now!("priming {:?}", &primed_packet).ok();
         self.outbox = Some(primed_packet.into());
 
         // fast-lane response attempt
@@ -470,13 +469,13 @@ where
             match self.write.write(packet) {
                 Ok(n) if n == packet.len() => {
                     // if packet.len() > 8 {
-                    //     blocking::info!("--> sent {:?}... successfully", &packet[..8]).ok();
+                    //     info_now!("--> sent {:?}... successfully", &packet[..8]).ok();
                     // } else {
-                    //     blocking::info!("--> sent {:?} successfully", packet).ok();
+                    //     info_now!("--> sent {:?} successfully", packet).ok();
                     // }
 
                     if needs_zlp {
-                        // blocking::info!("sending ZLP").ok();
+                        // info_now!("sending ZLP").ok();
                         self.outbox = Some(RawPacket::new());
                     } else {
                         self.outbox = None;
@@ -488,7 +487,7 @@ where
                 Err(UsbError::WouldBlock) => {
                     // fine, can't write try later
                     // this shouldn't happen probably
-                    blocking::info!("waiting to send").ok();
+                    info_now!("waiting to send");
                 },
 
                 Err(_) => panic!("unexpected send error"),
@@ -506,7 +505,7 @@ where
 
     pub fn expect_abort(&mut self, slot: u8, _seq: u8) {
         debug_assert!(slot == 0);
-        blocking::info!("ABORT expected for seq = {}", _seq).ok();
+        info_now!("ABORT expected for seq = {}", _seq);
         todo!();
     }
 

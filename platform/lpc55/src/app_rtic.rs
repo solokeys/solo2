@@ -17,9 +17,10 @@ use rtic::cyccnt::{Instant, U32Ext as _};
 const CLOCK_FREQ: u32 = 96_000_000;
 const PERIOD: u32 = CLOCK_FREQ/16;
 
-// use logging::hex::*;
-logging::add!(logger);
-use logger::{info,};
+#[macro_use]
+extern crate delog;
+generate_macros!();
+
 #[rtic::app(device = app::hal::raw, peripherals = true, monotonic = rtic::cyccnt::CYCCNT)]
 const APP: () = {
 
@@ -104,6 +105,7 @@ const APP: () = {
         }
             = c.resources;
 
+        info_now!("inside IDLE");
         loop {
 
             let mut time = 0;
@@ -114,18 +116,20 @@ const APP: () = {
                 }
             });
             if time > 1_000_000 {
-                // Only drain outside of a 1s window of any NFC activity.
-                #[cfg(feature = "log-serial")]
-                usb_classes.lock(|usb_classes_maybe| {
-                    match usb_classes_maybe.as_mut() {
-                        Some(usb_classes) => {
-                            app::drain_log_to_serial(&mut usb_classes.serial);
-                        }
-                        _=>{}
-                    }
-                });
-                #[cfg(not(feature = "log-serial"))]
-                app::drain_log_to_semihosting();
+                // cortex_m_semihosting::hprintln!("flushing");
+                app::Delogger::flush();
+                // // Only drain outside of a 1s window of any NFC activity.
+                // #[cfg(feature = "log-serial")]
+                // usb_classes.lock(|usb_classes_maybe| {
+                //     match usb_classes_maybe.as_mut() {
+                //         Some(usb_classes) => {
+                //             app::drain_log_to_serial(&mut usb_classes.serial);
+                //         }
+                //         _=>{}
+                //     }
+                // });
+                // #[cfg(not(feature = "log-serial"))]
+                // app::drain_log_to_semihosting();
             }
 
             apdu_dispatch.poll(&mut [ndef, piv, fido, root]);
@@ -185,19 +189,19 @@ const APP: () = {
         let after = Instant::now();
         let length = (after - before).as_cycles();
         if length > 10_000 {
-            info!("poll took {:?} cycles", length).ok();
+            info!("poll took {:?} cycles", length);
         }
         let inten = usb.inten.read().bits();
         let intstat = usb.intstat.read().bits();
         let mask = inten & intstat;
         if mask != 0 {
-            info!("uncleared interrupts: {:?}", mask).ok();
+            info!("uncleared interrupts: {:?}", mask);
             for i in 0..5 {
                 if mask & (1 << 2*i) != 0 {
-                    info!("EP{}OUT", i).ok();
+                    info!("EP{}OUT", i);
                 }
                 if mask & (1 << (2*i + 1)) != 0 {
-                    info!("EP{}IN", i).ok();
+                    info!("EP{}IN", i);
                 }
             }
             // Serial sends a stray 0x70 ("p") to CDC-ACM "data" OUT endpoint (3)
@@ -206,6 +210,28 @@ const APP: () = {
             // usb.intstat.write(|w| unsafe{ w.bits( usb.intstat.read().bits() ) });
         }
 
+    }
+
+    #[task(binds = MAILBOX, resources = [usb_classes], priority = 5)]
+    fn mailbox(mut c: mailbox::Context) {
+        #[cfg(feature = "log-serial")]
+        c.resources.usb_classes.lock(|usb_classes_maybe| {
+            match usb_classes_maybe.as_mut() {
+                Some(usb_classes) => {
+                    // usb_classes.serial.write(logs.as_bytes()).ok();
+                    usb_classes.serial.write(b"dummy test string\n").ok();
+                    // app::drain_log_to_serial(&mut usb_classes.serial);
+                }
+                _=>{}
+            }
+        });
+        // // let usb_classes = c.resources.usb_classes.as_mut().unwrap();
+
+        // let mailbox::Resources { usb_classes } = c.resources;
+        // let x: () = usb_classes;
+        // // if let Some(usb_classes) = usb_classes.as_mut() {
+        // //     usb_classes.serial.write(b"dummy test string\n").ok();
+        // // }
     }
 
     #[task(binds = OS_EVENT, resources = [trussed], priority = 5)]
@@ -239,7 +265,7 @@ const APP: () = {
             // clear the interrupt
             hw_scheduler.cancel().ok();
 
-            info!("<{}", perf_timer.lap().0/100).ok();
+            info!("<{}", perf_timer.lap().0/100);
             let status = contactless.poll_wait_extensions();
             match status {
                 iso14443::Iso14443Status::Idle => {}
@@ -247,7 +273,7 @@ const APP: () = {
                     hw_scheduler.start(duration.subsec_millis().ms());
                 }
             }
-            info!(" {}>", perf_timer.lap().0/100).ok();
+            info!(" {}>", perf_timer.lap().0/100);
         }
     }
 
@@ -266,7 +292,7 @@ const APP: () = {
         let contactless = contactless.as_mut().unwrap();
         let starttime = perf_timer.lap().0/100;
 
-        info!("[").ok();
+        info!("[");
         let status = contactless.poll();
         match status {
             iso14443::Iso14443Status::Idle => {}
@@ -275,7 +301,7 @@ const APP: () = {
                 hw_scheduler.start(duration.subsec_millis().ms());
             }
         }
-        info!("{}-{}]", starttime,perf_timer.lap().0/100).ok();
+        info!("{}-{}]", starttime,perf_timer.lap().0/100);
 
         perf_timer.cancel().ok();
         perf_timer.start(60_000.ms());

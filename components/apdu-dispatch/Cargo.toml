@@ -12,7 +12,7 @@ heapless = { version = "0.5.5" }
 
 # Components
 iso7816 = { path = "../iso7816" }
-logging = {path = "../logging"}
+delog = "0.1.0-alpha.2"
 interchange = {path = "../interchange"}
 
 # Testing
@@ -20,7 +20,7 @@ serial_test = { version = "*", optional=true }
 
 [features]
 default = []
-std = ["logging/std", "serial_test"]
+std = ["delog/std", "serial_test"]
 
 log-all = []
 log-none = []

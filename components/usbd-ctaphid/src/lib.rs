@@ -8,6 +8,10 @@ https://fidoalliance.org/specs/fido-v2.0-ps-20190130/fido-client-to-authenticato
 
 */
 
+#[macro_use]
+extern crate delog;
+generate_macros!();
+
 // use heapless_bytes as bytes;
 
 // pub mod authenticator;
@@ -16,8 +20,6 @@ pub mod constants;
 pub mod class;
 pub use class::CtapHid;
 pub mod pipe;
-
-logging::add!(logger);
 
 // #[cfg(feature = "insecure-ram-authenticator")]
 // pub mod insecure;

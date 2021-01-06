@@ -17,7 +17,7 @@ hid-dispatch = {path = "../hid-dispatch"}
 iso7816 = { path = "../iso7816" }
 interchange= { path = "../interchange" }
 ctap-types = { path = "../ctap-types" }
-logging = { path = "../logging" }
+delog = "0.1.0-alpha.2"
 trussed = { path = "../trussed" }
 
 [features]

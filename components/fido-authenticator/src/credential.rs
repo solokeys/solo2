@@ -155,7 +155,7 @@ impl Credential {
     )
         -> Self
     {
-        crate::logger::info!("credential for algorithm {}", algorithm).ok();
+        info!("credential for algorithm {}", algorithm);
         let data = CredentialData {
             rp: rp.clone(),
             user: user.clone(),
