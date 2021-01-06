@@ -1,15 +1,12 @@
 #![allow(unused_variables)]
 
 use core::fmt::{Display, Formatter};
-#[cfg(feature = "ufmt")]
-use ufmt::derive::uDebug;
 
 /// This is the Result type used by ctapcbor.
 pub type Result<T> = core::result::Result<T, Error>;
 
 /// This is the error type used by ctapcbor
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[cfg_attr(feature = "ufmt", derive(uDebug))]
 #[repr(u8)]
 pub enum Error {
     /// This is a feature that ctapcbor will never implement

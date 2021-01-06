@@ -6,7 +6,7 @@ use littlefs2::{
 use littlefs2::fs::{Allocation, Filesystem};
 use trussed::types::{LfsResult, LfsStorage};
 
-use trussed::traits::platform::{
+use trussed::platform::{
     ui,
     reboot,
     consent,
@@ -138,29 +138,29 @@ store!(Store,
 
 
 
-#[derive(Default)]
-pub struct Rng {
-    count: u64,
-}
+// #[derive(Default)]
+// pub struct Rng {
+//     count: u64,
+// }
 
-impl rng::Read for Rng {
-    type Error = core::convert::Infallible;
-    fn read(&mut self, buffer: &mut [u8]) -> core::result::Result<(), Self::Error> {
-        // bad
-        for i in 0 .. buffer.len() {
-            self.count += 1;
-            buffer[i] = (self.count & 0xff) as u8;
-        }
-        Ok(())
-    }
-}
+// impl rng::Read for Rng {
+//     type Error = core::convert::Infallible;
+//     fn read(&mut self, buffer: &mut [u8]) -> core::result::Result<(), Self::Error> {
+//         // bad
+//         for i in 0 .. buffer.len() {
+//             self.count += 1;
+//             buffer[i] = (self.count & 0xff) as u8;
+//         }
+//         Ok(())
+//     }
+// }
 
 
 #[derive(Default)]
 pub struct UserInterface {
 }
 
-impl trussed::traits::platform::UserInterface for UserInterface
+impl trussed::platform::UserInterface for UserInterface
 {
     fn check_user_presence(&mut self) -> consent::Level {
         consent::Level::Normal
@@ -188,7 +188,7 @@ impl trussed::traits::platform::UserInterface for UserInterface
 }
 
 board!(Board,
-    R: Rng,
+    R: chacha20::ChaCha8Rng,
     S: Store,
     UI: UserInterface,
 );
@@ -241,7 +241,8 @@ fn main () {
     }
 
 
-    let rng: Rng = Default::default();
+    use trussed::service::SeedableRng;
+    let rng = chacha20::ChaCha8Rng::from_seed([0u8; 32]);
     let pc_interface: UserInterface = Default::default();
 
     let board = Board::new(rng, store, pc_interface);

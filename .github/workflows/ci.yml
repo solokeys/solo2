@@ -53,3 +53,31 @@ jobs:
           use-tool-cache: true
       - name: Size
         run: cargo size --release --features ${{ matrix.board }}
+
+  build-pc:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust:
+          - stable
+        target:
+          - x86_64-unknown-linux-gnu
+          # - x86_64-apple-darwin
+    defaults:
+      run:
+        working-directory: platform/pc
+    steps:
+      - uses: actions/checkout@v1
+      - name: Install littlefs2-sys/micro-ecc-sys build dependencies
+        shell: bash
+        run: |
+          sudo apt update -y -qq && sudo apt install -y -qq llvm libclang-dev
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.rust }}
+          target: ${{ matrix.target }}
+          override: true
+      - name: Build
+        run: cargo build --release
+

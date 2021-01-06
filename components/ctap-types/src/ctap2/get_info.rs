@@ -4,7 +4,7 @@ use serde_indexed::{DeserializeIndexed, SerializeIndexed};
 
 pub type AuthenticatorInfo = Response;
 
-#[derive(Clone,Debug,uDebug,Eq,PartialEq,SerializeIndexed,DeserializeIndexed)]
+#[derive(Clone,Debug, Eq,PartialEq,SerializeIndexed,DeserializeIndexed)]
 #[serde_indexed(offset = 1)]
 pub struct Response {
 
@@ -77,7 +77,7 @@ impl Default for Response {
     }
 }
 
-#[derive(Copy,Clone,Debug,uDebug,Eq,PartialEq,Serialize,Deserialize)]
+#[derive(Copy,Clone,Debug, Eq,PartialEq,Serialize,Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CtapOptions {
     pub rk: bool,

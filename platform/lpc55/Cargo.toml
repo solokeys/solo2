@@ -15,9 +15,8 @@ path = "src/app_rtic.rs"
 cortex-m-rtic = "0.5.1"
 cortex-m-semihosting = "0.3.5"
 delog = "0.1.0-alpha.2"
-heapless = { version = "0.5.5", features = ["ufmt"] }
+heapless = "0.5.5"
 nb = "1"
-ufmt = "0.1.0"
 usb-device = "0.2.3"
 usbd-serial = "0.1.0"
 
@@ -83,8 +82,6 @@ log-error = []
 
 [patch.crates-io]
 heapless = { git = "https://github.com/nicolas-solokeys/heapless", branch = "bytebuf" }
-ufmt = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty-enums" }
-ufmt-macros = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty-enums" }
 nisty = {git = "https://github.com/ycrypto/nisty", branch="main"}
 
 # micro-ecc-sys = { path = "../../../micro-ecc-sys" }

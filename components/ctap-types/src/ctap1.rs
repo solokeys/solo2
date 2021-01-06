@@ -10,7 +10,7 @@ pub const NO_ERROR: u16 = 0x9000;
 pub use iso7816::Status as Error;
 
 #[repr(u8)]
-#[derive(Copy,Clone,Debug,uDebug,Eq,PartialEq)]
+#[derive(Copy,Clone,Debug, Eq,PartialEq)]
 pub enum ControlByte {
 	// Conor:
     // I think U2F check-only maps to FIDO2 MakeCredential with the credID in the excludeList,
@@ -37,13 +37,13 @@ impl core::convert::TryFrom<u8> for ControlByte {
 
 pub type Result<T> = core::result::Result<T, Error>;
 
-#[derive(Clone,Debug,uDebug,Eq,PartialEq)]
+#[derive(Clone,Debug, Eq,PartialEq)]
 pub struct Register {
     pub challenge: ByteBuf<consts::U32>,
     pub app_id: ByteBuf<consts::U32>,
 }
 
-#[derive(Clone,Debug,uDebug,Eq,PartialEq)]
+#[derive(Clone,Debug, Eq,PartialEq)]
 pub struct RegisterResponse {
     pub header_byte: u8,
     pub public_key: ByteBuf<consts::U65>,
@@ -52,7 +52,7 @@ pub struct RegisterResponse {
     pub signature: ByteBuf<consts::U72>,
 }
 
-#[derive(Clone,Debug,uDebug,Eq,PartialEq)]
+#[derive(Clone,Debug, Eq,PartialEq)]
 pub struct Authenticate {
     pub control_byte: ControlByte,
     pub challenge: ByteBuf<consts::U32>,
@@ -60,21 +60,21 @@ pub struct Authenticate {
     pub key_handle: ByteBuf<consts::U255>,
 }
 
-#[derive(Clone,Debug,uDebug,Eq,PartialEq)]
+#[derive(Clone,Debug, Eq,PartialEq)]
 pub struct AuthenticateResponse {
     user_presence: u8,
     count: u32,
     signature: ByteBuf<consts::U72>,
 }
 
-#[derive(Clone,Debug,uDebug,Eq,PartialEq)]
+#[derive(Clone,Debug, Eq,PartialEq)]
 pub enum Command {
     Register(Register),
     Authenticate(Authenticate),
     Version,
 }
 
-#[derive(Clone,Debug,uDebug,Eq,PartialEq)]
+#[derive(Clone,Debug, Eq,PartialEq)]
 pub enum Response {
     Register(RegisterResponse),
     Authenticate(AuthenticateResponse),

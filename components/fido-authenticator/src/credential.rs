@@ -32,7 +32,7 @@ pub enum CtapVersion {
     Fido21Pre,
 }
 
-#[derive(Clone, Debug, ufmt::derive::uDebug, Default, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct CredentialId(pub ByteBuf<MAX_CREDENTIAL_ID_LENGTH>);
 
 // TODO: how to determine necessary size?

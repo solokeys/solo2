@@ -21,22 +21,3 @@ pub mod class;
 pub use class::CtapHid;
 pub mod pipe;
 
-// #[cfg(feature = "insecure-ram-authenticator")]
-// pub mod insecure;
-
-// #[cfg(not(feature = "logging"))]
-// mod logging;
-
-// // TODO: not really sure what's going on here...
-// // Goal: have `logging` feature, that can be completely turned off
-
-// #[cfg(feature = "logging")]
-// // use ufmt::UnstableDoAsFormatter;
-
-// #[cfg(feature = "logging")]
-// use funnel::debug;
-
-// #[cfg(feature = "logging")]
-// use funnel::error;
-
-// pub mod types;

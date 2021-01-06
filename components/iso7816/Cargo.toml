@@ -11,6 +11,4 @@ heapless = "0.5.5"
 heapless-bytes = { git = "https://github.com/ycrypto/heapless-bytes", branch = "main" }
 
 [patch.crates-io]
-ufmt = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty-enums" }
-ufmt-macros = { git = "https://github.com/nickray/ufmt", branch = "nickray-derive-empty-enums" }
 heapless = { git = "https://github.com/nickray/heapless", branch = "nickray-udebug" }
