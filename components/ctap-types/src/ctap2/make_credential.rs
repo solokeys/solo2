@@ -59,16 +59,17 @@ impl core::convert::TryFrom<u8> for CredentialProtectionPolicy {
 // Approach 2:
 #[derive(Clone,Debug, Eq,PartialEq,Serialize,Deserialize)]
 pub struct Extensions {
-    #[serde(rename = "hmac-secret")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub hmac_secret: Option<bool>,
-
     #[serde(rename = "credProtect")]
     #[serde(skip_serializing_if = "Option::is_none")]
     // pub cred_protect: Option<CredentialProtectionPolicy>,
     pub cred_protect: Option<u8>,
     // #[serde(serialize_with = "u8::from")]
     // pub cred_protect: Option<u8>,
+
+    #[serde(rename = "hmac-secret")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hmac_secret: Option<bool>,
+
 }
 
 // // Approach 3:
