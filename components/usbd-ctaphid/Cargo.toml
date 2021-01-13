@@ -7,7 +7,7 @@ edition = "2018"
 
 [dependencies]
 ctap-types = { path = "../ctap-types" }
-delog = "0.1.0-alpha.2"
+delog = "0.1.0-alpha.3"
 heapless = { version = "0.5.5" }
 hid-dispatch = { path = "../hid-dispatch" }
 interchange = { path = "../interchange" }

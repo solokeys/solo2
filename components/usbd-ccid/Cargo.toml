@@ -9,7 +9,7 @@ edition = "2018"
 [dependencies]
 apdu-dispatch = { path = "../apdu-dispatch" }
 asn1derpy = "0.1.0"
-delog = "0.1.0-alpha.2"
+delog = "0.1.0-alpha.3"
 heapless = "0.5.5"
 heapless-bytes = { git = "https://github.com/ycrypto/heapless-bytes", branch = "main" }
 interchange = { path = "../interchange" }

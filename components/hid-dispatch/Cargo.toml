@@ -10,7 +10,7 @@ edition = "2018"
 heapless = { version = "0.5.5" }
 
 # Components
-delog = "0.1.0-alpha.2"
+delog = "0.1.0-alpha.3"
 interchange = {path = "../interchange"}
 
 [features]
