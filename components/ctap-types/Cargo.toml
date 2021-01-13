@@ -9,7 +9,7 @@ edition = "2018"
 [dependencies]
 bitflags = "1.2.1"
 cosey = "0.1.0-alpha.0" # { git = "https://github.com/ycrypto/cosey", branch = "main" }
-delog = "0.1.0-alpha.2"
+delog = "0.1.0-alpha.3"
 heapless = { version = "0.5.5", default-features = false, features = ["serde"] }
 interchange = { path = "../interchange" }
 iso7816 = { path = "../iso7816" }

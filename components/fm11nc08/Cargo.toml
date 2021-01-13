@@ -9,7 +9,7 @@ edition = "2018"
 [dependencies]
 cortex-m = "0.6.1"
 cortex-m-rt = "0.6.10"
-delog = "0.1.0-alpha.2"
+delog = "0.1.0-alpha.3"
 iso14443 = {path = "../iso14443"}
 nb = "1"
 

@@ -37,7 +37,7 @@ hid-dispatch = {path = "./../../components/hid-dispatch"}
 applet-ndef = {path = "./../../components/applet-ndef"}
 applet-root = {path = "./../../components/applet-root"}
 applet-fido = {path = "./../../components/applet-fido"}
-delog = "0.1.0-alpha.2"
+delog = "0.1.0-alpha.3"
 
 # storage
 # littlefs2 = { git = "https://github.com/nickray/littlefs2", branch = "main" }
