@@ -1,3 +1,5 @@
+//! TODO: split this out into a separate `trussed-board` traits crate.
+
 pub use rand_core::RngCore;
 pub use crate::store::Store;
 pub use crate::types::{ui, reboot};

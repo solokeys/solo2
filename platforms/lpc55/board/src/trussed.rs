@@ -1,9 +1,12 @@
+//! Implementation of `trussed::Platform` for the board,
+//! using the specific implementation of our `crate::traits`.
+
 use crate::hal::{
     peripherals::rtc::Rtc,
     typestates::init_state,
 };
-use board_traits::buttons::{Press, Edge};
-use board_traits::rgb_led::RgbLed;
+use crate::traits::buttons::{Press, Edge};
+use crate::traits::rgb_led::RgbLed;
 use trussed::platform::{
     ui,
     reboot,

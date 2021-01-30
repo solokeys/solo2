@@ -1,7 +1,7 @@
-#![no_std]
+use core::convert::Infallible;
 use core::time::Duration;
-use board_traits::timer;
-use lpc55_hal as hal;
+// use board_traits::timer;
+use crate::hal;
 
 use hal::traits::wg::timer::CountDown;
 use hal::drivers::timer::Lap;
@@ -27,6 +27,23 @@ use hal::time::*;
 /// // 1 second ~ 100056 us
 /// ```
 
+pub enum Error{
+    TimerCompleted
+}
+
+pub trait TimerTrait {
+    /// Starts the timer.  It will run for the input duration.
+    fn start(&mut self, count: Duration);
+
+    /// Read the current time elapsed since `start(...)` was last called.
+    /// The time returned is only valid is the total running time hasn't elapsed yet.
+    /// This returns an error if the running time has elapsed.
+    fn lap(&mut self) -> nb::Result<Duration, Error>;
+
+    /// Nonblockingly wait until the timer running duration has elapsed.
+    fn wait(&mut self) -> nb::Result<(), Infallible>;
+}
+
 pub struct Timer<CTIMER>
 where CTIMER: ctimer::Ctimer<Enabled>
 {
@@ -43,7 +60,7 @@ where CTIMER: ctimer::Ctimer<Enabled>
     }
 }
 
-impl <CTIMER> timer::Timer for Timer <CTIMER>
+impl <CTIMER> TimerTrait for Timer <CTIMER>
 where CTIMER: ctimer::Ctimer<Enabled>
 {
     /// Starts the timer.  It will run for the input duration.
@@ -54,11 +71,11 @@ where CTIMER: ctimer::Ctimer<Enabled>
     /// Read the current time elapsed since `start(...)` was last called.
     /// The time returned is only valid is the total running time hasn't elapsed yet.
     /// This returns an error if the running time has elapsed.
-    fn lap(&mut self) -> nb::Result<Duration, timer::Error> {
+    fn lap(&mut self) -> nb::Result<Duration, Error> {
         if ! self.timer.wait().is_ok() {
             Ok(Duration::from_micros(self.timer.lap().0 as u64))
         } else {
-            Err(nb::Error::Other(timer::Error::TimerCompleted))
+            Err(nb::Error::Other(Error::TimerCompleted))
         }
     }
 

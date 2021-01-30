@@ -13,13 +13,15 @@ use crate::hal::{
     traits::wg::Pwm,
     Iocon,
 };
+
+use crate::traits::rgb_led;
+
+
 pub enum Color {
     Red,
     Green,
     Blue,
 }
-
-use board_traits::rgb_led;
 
 pub type RedLedPin = pins::Pio0_5;
 pub type GreenLedPin = pins::Pio1_21;
@@ -30,19 +32,13 @@ type RedLed = hal::Pin<
     pin::state::Special<function::MATCH_OUTPUT0<ctimer::Ctimer3<init_state::Enabled>>>
 >;
 type GreenLed = hal::Pin<
-    GreenLedPin, 
+    GreenLedPin,
     pin::state::Special<function::MATCH_OUTPUT2<ctimer::Ctimer3<init_state::Enabled>>>
 >;
 type BlueLed = hal::Pin<
-    BlueLedPin, 
+    BlueLedPin,
     pin::state::Special<function::MATCH_OUTPUT1<ctimer::Ctimer3<init_state::Enabled>>>
 >;
-
-type RedLedUnenabled = hal::Pin<RedLedPin, pin::state::Unused>;
-type GreenLedUnenabled = hal::Pin<GreenLedPin,pin::state::Unused >;
-type BlueLedUnenabled = hal::Pin<BlueLedPin, pin::state::Unused>;
-
-
 
 type PwmDriver = pwm::Pwm<ctimer::Ctimer3<init_state::Enabled>>;
 
@@ -52,12 +48,13 @@ pub struct RgbLed {
 
 impl RgbLed {
     pub fn new(
-        red: RedLedUnenabled,
-        green: GreenLedUnenabled,
-        blue: BlueLedUnenabled,
         mut pwm: PwmDriver,
         iocon: &mut Iocon<init_state::Enabled>
     ) -> RgbLed{
+
+        let red = RedLedPin::take().unwrap();
+        let green = RedLedPin::take().unwrap();
+        let blue = RedLedPin::take().unwrap();
 
         pwm.set_duty(RedLed::CHANNEL,0);
         pwm.set_duty(GreenLed::CHANNEL, 0);

@@ -18,10 +18,6 @@ nb = "1"
 embedded-hal = { version = "0.2", features = ["unproven"] }
 generic-array = "0.14.3"
 
-# board
-# pc = { path = "../../boards/pc", optional = true }
-board-traits = { path = "../../boards/board-traits" }
-
 # components
 c-stubs = { path = "../../components/c-stubs" }
 trussed = { path = "../../components/trussed", features = ["clients-3"] }

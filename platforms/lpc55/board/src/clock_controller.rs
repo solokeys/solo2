@@ -2,21 +2,39 @@ use crate::hal;
 use hal::prelude::*;
 use crate::hal::{
     Adc,
+    Enabled,
+    Gpio,
+    Iocon,
     peripherals::adc::{
         self,
         ChannelType,
     },
     Syscon,
     Pmc,
-    drivers::clocks::Clocks,
+    drivers::{
+        clocks::Clocks,
+        pins::{self, Pin},
+        // ,SpiMaster, timer};
+    },
+    typestates::{
+        pin::{
+            state,
+            gpio::{
+                direction,
+            }
+        }
+    },
 };
-use crate::types;
+// use crate::types;
+
+pub type SignalPin = pins::Pio0_23;
+pub type SignalButton = Pin<SignalPin, state::Gpio<direction::Output>>;
 
 // pub type DynamicClockController = Adc<hal::typestates::init_state::Enabled>;
 pub struct DynamicClockController {
     adc: hal::raw::ADC0,
     #[allow(dead_code)]
-    signal_button: types::SignalButton,
+    signal_button: SignalButton,
     clocks: Clocks,
     pmc: Pmc,
     syscon: Syscon,
@@ -35,11 +53,14 @@ impl DynamicClockController {
     }
     pub fn new(
         adc: Adc<hal::typestates::init_state::Enabled>,
-        signal_button: types::SignalButton,
         clocks: Clocks,
         pmc: Pmc,
         syscon: Syscon,
+        gpio: &mut Gpio<Enabled>,
+        iocon: &mut Iocon<Enabled>,
     ) -> DynamicClockController {
+
+        let signal_button = SignalPin::take().unwrap().into_gpio_pin(iocon, gpio).into_output_high();
 
         let adc = adc.release();
 
