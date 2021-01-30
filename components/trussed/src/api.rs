@@ -377,25 +377,3 @@ pub mod reply {
     }
 
 }
-
-// TODO: can we find a nicer syntax for this?
-generate_api! {
-    CreateObject: 1
-    in: {
-        attributes: Attributes
-    }
-    out: {
-        object: ObjectHandle
-    }
-
-    DeriveKey: 2
-    in: {
-        mechanism: Mechanism
-        base_key: ObjectHandle
-    }
-    out: {
-        derived_key: ObjectHandle
-    }
-
-}
-

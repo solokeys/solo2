@@ -17,19 +17,19 @@ jobs:
     strategy:
       matrix:
         board:
-          - board-lpcxpresso
-          - board-prototype
+          - board-lpcxpresso55
+          - board-solov2
         rust:
           - stable
     defaults:
       run:
-        working-directory: platform/lpc55
+        working-directory: platforms/lpc55/runner
     steps:
       - uses: actions/checkout@v1
       - name: Install littlefs2-sys/micro-ecc-sys build dependencies
         shell: bash
         run: |
-          sudo apt update -y -qq && sudo apt install -y -qq llvm libc6-dev-i386 libclang-dev
+          env && pwd && sudo apt-get update -y -qq && sudo apt-get install -y -qq llvm libc6-dev-i386 libclang-dev
       - uses: fiam/arm-none-eabi-gcc@v1
         with:
           release: "9-2020-q2"
@@ -64,7 +64,7 @@ jobs:
           - stable
     defaults:
       run:
-        working-directory: platform/pc
+        working-directory: platforms/pc
     steps:
       - uses: actions/checkout@v1
       - name: Install Linux build dependencies

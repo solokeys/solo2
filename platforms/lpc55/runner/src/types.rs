@@ -1,28 +1,13 @@
 include!(concat!(env!("OUT_DIR"), "/build_constants.rs"));
 use crate::hal;
-use hal::drivers::{pins,pins::Pin,SpiMaster, timer};
+use hal::drivers::{pins, timer};
 use littlefs2::{
     const_ram_storage,
 };
 use trussed::types::{LfsResult, LfsStorage};
 use trussed::{board, store};
 use ctap_types::consts;
-use fm11nc08::FM11NC08;
-use hal::{
-    typestates::{
-        pin::flexcomm::{
-            NoPio,
-        },
-        pin::{
-            state,
-            function,
-            gpio::{
-                direction,
-            }
-        }
-    },
-    peripherals::ctimer,
-};
+use hal::peripherals::ctimer;
 
 #[cfg(feature = "no-encrypted-storage")]
 use hal::littlefs2_filesystem;
@@ -71,13 +56,13 @@ store!(Store,
     Volatile: VolatileStorage
 );
 
-pub type ThreeButtons = crate::board::button::ThreeButtons;
-pub type RgbLed = crate::board::led::RgbLed;
+pub type ThreeButtons = board::ThreeButtons;
+pub type RgbLed = board::RgbLed;
 
 board!(Board,
     R: hal::peripherals::rng::Rng<hal::Enabled>,
     S: Store,
-    UI: crate::solo_trussed::UserInterface<ThreeButtons, RgbLed>,
+    UI: board::trussed::UserInterface<ThreeButtons, RgbLed>,
 );
 
 #[derive(Default)]
@@ -86,7 +71,7 @@ pub struct Syscall {}
 impl trussed::client::Syscall for Syscall {
     #[inline]
     fn syscall(&mut self) {
-        rtic::pend(lpc55_hal::raw::Interrupt::OS_EVENT);
+        rtic::pend(board::hal::raw::Interrupt::OS_EVENT);
     }
 }
 
@@ -99,24 +84,8 @@ pub type NfcMisoPin = pins::Pio0_25;
 pub type NfcCsPin = pins::Pio1_20;
 pub type NfcIrqPin = pins::Pio0_19;
 
-pub type NfcChip = FM11NC08<
-            SpiMaster<
-                NfcSckPin,
-                NfcMosiPin,
-                NfcMisoPin,
-                NoPio,
-                hal::peripherals::flexcomm::Spi0,
-                (
-                    Pin<NfcSckPin, state::Special<function::FC0_SCK>>,
-                    Pin<NfcMosiPin, state::Special<function::FC0_RXD_SDA_MOSI_DATA>>,
-                    Pin<NfcMisoPin, state::Special<function::FC0_TXD_SCL_MISO_WS>>,
-                    hal::typestates::pin::flexcomm::NoCs,
-                )
-                >,
-                Pin<NfcCsPin, state::Gpio<direction::Output>>,
-                Pin<NfcIrqPin, state::Gpio<direction::Input>>,
-            >;
-pub type Iso14443 = iso14443::Iso14443<NfcChip>;
+// pub use board::NfcChip;
+pub type Iso14443 = iso14443::Iso14443<board::nfc::NfcChip>;
 
 pub type ExternalInterrupt = hal::Pint<hal::typestates::init_state::Enabled>;
 
@@ -132,9 +101,9 @@ pub type RootApp = applet_root::Root<TrussedClient>;
 
 pub type PerfTimer = timer::Timer<ctimer::Ctimer4<hal::typestates::init_state::Enabled>>;
 
-pub type DynamicClockController = crate::clock_controller::DynamicClockController;
+pub type DynamicClockController = board::clock_controller::DynamicClockController;
 
-pub type SignalPin = pins::Pio0_23;
-pub type SignalButton = Pin<SignalPin, state::Gpio<direction::Output>>;
+// pub type SignalPin = pins::Pio0_23;
+// pub type SignalButton = Pin<SignalPin, state::Gpio<direction::Output>>;
 
 pub type HwScheduler = timer::Timer<ctimer::Ctimer0<hal::typestates::init_state::Enabled>>;

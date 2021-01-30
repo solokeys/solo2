@@ -1,5 +1,5 @@
 [package]
-name = "app"
+name = "runner"
 version = "0.1.0"
 authors = ["Nicolas Stalder <n@stalder.io>", "Conor Patrick <conor@solokeys.com>"]
 edition = "2018"
@@ -8,8 +8,8 @@ edition = "2018"
 name = "app"
 
 [[bin]]
-name = "rtic"
-path = "src/app_rtic.rs"
+name = "runner"
+path = "src/main.rs"
 
 [dependencies]
 cortex-m-rtic = "0.5.1"
@@ -21,27 +21,28 @@ usb-device = "0.2.3"
 usbd-serial = "0.1.0"
 
 # board
-lpc55-hal = { git = "https://github.com/lpc55/lpc55-hal", branch = "main" }
-lpcxpresso55 = { path = "../../boards/lpcxpresso55", optional = true }
-prototype-bee = { path = "../../boards/prototype-bee", optional = true }
-board-traits = { path = "../../boards/board-traits" }
+# lpc55-hal = { git = "https://github.com/lpc55/lpc55-hal", branch = "main" }
+# lpcxpresso55 = { path = "../../boards/lpcxpresso55", optional = true }
+# prototype-bee = { path = "../../boards/prototype-bee", optional = true }
+# board-traits = { path = "../../boards/board-traits" }
+board = { path = "../board" }
 
 # components
-c-stubs = { path = "../../components/c-stubs" }
-trussed = { path = "../../components/trussed", features = ["clients-3"] }
-ctap-types = { path = "../../components/ctap-types" }
-fido-authenticator = { path = "../../components/fido-authenticator" }
-interchange = { path = "../../components/interchange" }
-piv-card = { path = "../../components/piv-card" }
-usbd-ccid = { path = "../../components/usbd-ccid" }
-usbd-ctaphid = { path = "../../components/usbd-ctaphid" }
-fm11nc08 = {path = "../../components/fm11nc08"}
-iso14443 = {path = "../../components/iso14443"}
-apdu-dispatch = {path = "../../components/apdu-dispatch"}
-hid-dispatch = {path = "../../components/hid-dispatch"}
-applet-ndef = {path = "../../components/applet-ndef"}
-applet-root = {path = "../../components/applet-root"}
-applet-fido = {path = "../../components/applet-fido"}
+c-stubs = { path = "../../../components/c-stubs" }
+trussed = { path = "../../../components/trussed", features = ["clients-3"] }
+ctap-types = { path = "../../../components/ctap-types" }
+fido-authenticator = { path = "../../../components/fido-authenticator" }
+interchange = { path = "../../../components/interchange" }
+piv-card = { path = "../../../components/piv-card" }
+usbd-ccid = { path = "../../../components/usbd-ccid" }
+usbd-ctaphid = { path = "../../../components/usbd-ctaphid" }
+fm11nc08 = {path = "../../../components/fm11nc08"}
+iso14443 = {path = "../../../components/iso14443"}
+apdu-dispatch = {path = "../../../components/apdu-dispatch"}
+hid-dispatch = {path = "../../../components/hid-dispatch"}
+applet-ndef = {path = "../../../components/applet-ndef"}
+applet-root = {path = "../../../components/applet-root"}
+applet-fido = {path = "../../../components/applet-fido"}
 
 # panic
 panic-halt = "0.2.0"
@@ -54,14 +55,16 @@ littlefs2 = { git = "https://github.com/nickray/littlefs2", branch = "closures-i
 [features]
 default = []
 
+develop = ["no-encrypted-storage", "no-buttons"]
+
 # Do not use encryption for the filesystem
 no-encrypted-storage = []
 
 # Use to auto-succeed every user presence check
 no-buttons= []
 
-board-lpcxpresso = ["lpcxpresso55"]
-board-prototype = ["prototype-bee"]
+board-lpcxpresso55 = ["board/board-lpcxpresso55"]
+board-solov2 = ["board/board-solov2"]
 
 log-serial = []
 

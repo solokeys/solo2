@@ -2,25 +2,23 @@ use core::convert::Infallible;
 use crate::hal::{
     self,
     drivers::pins,
-    drivers::Pin,
+    // drivers::Pin,
     drivers::touch::{Compare, Edge, TouchSensor, ButtonPins, TouchSensorChannel},
+    peripherals::ctimer,
+    typestates::{
+        init_state,
+        pin::PinId,
+        // pin::state::{Special, Analog},
+        // pin::gpio::direction,
+        // pin::function,
+        ClocksSupportTouchToken
+    },
 };
-use crate::hal::peripherals::{
-    ctimer,
-};
-use board_traits::buttons::{
+
+use crate::traits::buttons::{
     self,
     Button,
 };
-use crate::hal::typestates::{
-    init_state,
-    pin::PinId,
-    pin::state::{Special, Analog},
-    pin::gpio::direction,
-    pin::function,
-    ClocksSupportTouchToken
-};
-
 
 pub type ChargeMatchPin = pins::Pio1_16;
 pub type ButtonTopPin = pins::Pio0_23;
@@ -32,10 +30,10 @@ type Dma = hal::peripherals::dma::Dma<init_state::Enabled>;
 
 type AdcTimer = ctimer::Ctimer1<init_state::Enabled>;
 type SampleTimer = ctimer::Ctimer2<init_state::Enabled>;
-type ChargeMatch = Pin<ChargeMatchPin, Special<function::MATCH_OUTPUT3<ctimer::Ctimer1<init_state::Enabled>>>>;
-type ButtonTop = Pin<ButtonTopPin, Analog<direction::Input>>;
-type ButtonBot = Pin<ButtonBotPin, Analog<direction::Input>>;
-type ButtonMid = Pin<ButtonMidPin, Analog<direction::Input>>;
+// type ChargeMatch = Pin<ChargeMatchPin, Special<function::MATCH_OUTPUT3<ctimer::Ctimer1<init_state::Enabled>>>>;
+// type ButtonTop = Pin<ButtonTopPin, Analog<direction::Input>>;
+// type ButtonBot = Pin<ButtonBotPin, Analog<direction::Input>>;
+// type ButtonMid = Pin<ButtonMidPin, Analog<direction::Input>>;
 
 pub type ThreeButtons = SoloThreeTouchButtons<ButtonTopPin, ButtonBotPin, ButtonMidPin>;
 
@@ -51,13 +49,19 @@ impl SoloThreeTouchButtons<ButtonTopPin, ButtonBotPin, ButtonMidPin>
         adc: Adc,
         adc_timer: AdcTimer,
         sample_timer: SampleTimer,
-        charge_match: ChargeMatch,
-        top: ButtonTop,
-        bot: ButtonBot,
-        mid: ButtonMid,
+        // charge_match: ChargeMatch,
+        // top: ButtonTop,
+        // bot: ButtonBot,
+        // mid: ButtonMid,
         dma: &mut Dma,
         token: ClocksSupportTouchToken,
+        gpio: &mut hal::Gpio<hal::Enabled>,
+        iocon: &mut hal::Iocon<hal::Enabled>,
     ) -> SoloThreeTouchButtons<ButtonTopPin, ButtonBotPin, ButtonMidPin> {
+        let top = ButtonTopPin::take().unwrap().into_analog_input(iocon, gpio);
+        let mid = ButtonMidPin::take().unwrap().into_analog_input(iocon, gpio);
+        let bot = ButtonBotPin::take().unwrap().into_analog_input(iocon, gpio);
+        let charge_match = ChargeMatchPin::take().unwrap().into_match_output(iocon);
         let button_pins = ButtonPins(
             top,bot,mid,
         );

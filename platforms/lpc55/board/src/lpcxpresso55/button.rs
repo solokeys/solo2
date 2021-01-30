@@ -10,7 +10,7 @@ use crate::hal::drivers::timer;
 use crate::hal::peripherals::{
     ctimer,
 };
-use board_traits::buttons::{
+use crate::traits::buttons::{
     Button,State,
     Press,Edge,
 };
@@ -41,7 +41,10 @@ where CTIMER: ctimer::Ctimer<init_state::Enabled>
 impl <CTIMER> XpressoButtons <CTIMER>
 where CTIMER: ctimer::Ctimer<init_state::Enabled>
 {
-    pub fn new (timer: timer::Timer<CTIMER>, user_button: UserButton, wakeup_button: WakeupButton) -> XpressoButtons<CTIMER> {
+    // pub fn new (timer: timer::Timer<CTIMER>, user_button: UserButton, wakeup_button: WakeupButton) -> XpressoButtons<CTIMER> {
+    pub fn new (timer: timer::Timer<CTIMER>, gpio: &mut hal::Gpio<hal::Enabled>, iocon: &mut hal::Iocon<hal::Enabled>) -> XpressoButtons<CTIMER> {
+        let user_button = UserButtonPin::take().unwrap().into_gpio_pin(iocon, gpio).into_input();
+        let wakeup_button = WakeupButtonPin::take().unwrap().into_gpio_pin(iocon, gpio).into_input();
         let buts = State {
             a: user_button.is_high().ok().unwrap(),
             b: wakeup_button.is_high().ok().unwrap(),

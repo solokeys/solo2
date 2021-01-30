@@ -125,7 +125,7 @@ const APP: () = {
                 match contactless.as_ref() {
                     Some(contactless) => {
                         if contactless.is_ready_to_transmit() {
-                            rtic::pend(lpc55_hal::raw::Interrupt::PIN_INT0);
+                            rtic::pend(board::hal::raw::Interrupt::PIN_INT0);
                         }
                     }
                     _ => {}
