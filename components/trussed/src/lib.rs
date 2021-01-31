@@ -11,6 +11,8 @@
 extern crate delog;
 generate_macros!();
 
+pub use interchange::Interchange;
+
 pub mod api;
 pub mod client;
 pub mod config;
