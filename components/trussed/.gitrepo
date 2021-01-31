@@ -4,8 +4,9 @@
 ; git-subrepo command. See https://github.com/git-commands/git-subrepo#readme
 ;
 [subrepo]
-	remote = none
-	branch = master
-	commit = 
+	remote = git@github.com:trussed-dev/trussed.git
+	branch = dev
+	commit = 0a463c6a27673360b93d06ba8b0023fd3b0ee95d
 	method = merge
 	cmdver = 0.4.3
+	parent = e03bb72f681ad72925140ecf828d1f0cacaa3db3
