@@ -15,7 +15,7 @@ use iso7816::{
 };
 use interchange::Interchange;
 
-use heapless::ByteBuf;
+use heapless_bytes::Bytes;
 
 #[macro_use]
 extern crate serial_test;
@@ -60,7 +60,7 @@ impl Applet for TestApp1 {
         println!("TestApp1::call");
         match apdu.instruction().into() {
             0x10 => {
-                let mut buf = ByteBuf::new();
+                let mut buf = Bytes::new();
                 // Just echo 5x 0's for the request apdu header
                 buf.push(0).unwrap();
                 buf.push(0).unwrap();
@@ -72,7 +72,7 @@ impl Applet for TestApp1 {
             }
             // For measuring the stack burden of dispatch
             0x15 => {
-                let mut buf = ByteBuf::new();
+                let mut buf = Bytes::new();
                 let addr = (&buf as *const iso7816::response::Data ) as u32;
                 buf.extend_from_slice(&addr.to_be_bytes()).unwrap();
                 Ok(AppletResponse::Respond(buf))
@@ -113,7 +113,7 @@ impl Applet for TestApp2 {
         println!("TestApp2::call");
         match apdu.instruction().into() {
             0x20 => {
-                let mut buf = ByteBuf::new();
+                let mut buf = Bytes::new();
                 buf.push(0).unwrap();
                 buf.push(0).unwrap();
                 buf.push(0).unwrap();

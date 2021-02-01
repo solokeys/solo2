@@ -1,7 +1,7 @@
 pub mod class;
 pub mod instruction;
 
-pub type Data = heapless::ByteBuf<crate::MAX_COMMAND_DATA>;
+pub type Data = crate::Bytes<crate::MAX_COMMAND_DATA>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Command {
@@ -11,7 +11,7 @@ pub struct Command {
     pub p1: u8,
     pub p2: u8,
 
-    /// The main reason this is modeled as ByteBuf and not
+    /// The main reason this is modeled as Bytes and not
     /// a fixed array is for serde purposes.
     data: Data,
 
@@ -97,7 +97,7 @@ impl core::convert::TryFrom<&[u8]> for Command {
             p1: header[2],
             p2: header[3],
             le: parsed.le,
-            data: Data::from_slice(data_slice).unwrap(),
+            data: Data::try_from_slice(data_slice).unwrap(),
             extended: parsed.extended,
         })
     }

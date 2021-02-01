@@ -1,6 +1,6 @@
 use core::convert::TryFrom;
 use iso7816::{Command, Instruction, Status};
-use heapless::ByteBuf;
+use heapless_bytes::Bytes;
 use hid_dispatch::command::Command as FidoCommand;
 use ctap_types::{
     authenticator::Error as AuthenticatorError,
@@ -32,7 +32,7 @@ where UP: UserPresence,
     }
 
     fn response_from_object<T: serde::Serialize>(&mut self, object: Option<T>) -> applet::Result {
-        let mut buffer = ByteBuf::new();
+        let mut buffer = Bytes::new();
         buffer.resize_to_capacity();
 
         if let Some(object) = object {
@@ -62,7 +62,7 @@ where UP: UserPresence,
         match &result {
             Err(error) => {
                 info!("error {}", *error as u8);
-                Ok(applet::Response::Respond(ByteBuf::from_slice(
+                Ok(applet::Response::Respond(Bytes::try_from_slice(
                     & [*error as u8]
                 ).unwrap()))
             }
@@ -163,7 +163,7 @@ where UP: UserPresence,
 
     fn select(&mut self, _apdu: &Command) -> applet::Result {
         // U2F_V2
-        Ok(applet::Response::Respond(ByteBuf::from_slice(
+        Ok(applet::Response::Respond(Bytes::try_from_slice(
             & [0x55, 0x32, 0x46, 0x5f, 0x56, 0x32,]
         ).unwrap()))
     }
@@ -192,7 +192,7 @@ where UP: UserPresence,
                                     Err(mapping_error) => {
                                         let authenticator_error: AuthenticatorError = mapping_error.into();
                                         info!("cbor mapping error: {}", authenticator_error as u8);
-                                        Ok(applet::Response::Respond(ByteBuf::from_slice(
+                                        Ok(applet::Response::Respond(Bytes::try_from_slice(
                                         & [authenticator_error as u8]
                                         ).unwrap()))
                                     }

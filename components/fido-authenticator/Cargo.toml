@@ -8,16 +8,14 @@ edition = "2018"
 
 [dependencies]
 ctap-types = { path = "../ctap-types" }
-trussed = { path = "../trussed" } # , default-features = false }
-heapless = "0.5.5"
-interchange = { path = "../interchange" }
 delog = "0.1.0-alpha.3"
-# littlefs2 = { path = "../../../littlefs2" }
-littlefs2 = { git = "https://github.com/nickray/littlefs2", branch = "closures-instead-of-ub" }
-# embedded-hal = { version = "0.2", features = ["unproven"] }
+heapless = "0.5.6"
+interchange = "0.1.0"
+littlefs2 = "0.1.0"
 serde = { version = "1.0", default-features = false }
 serde_cbor = { version = "0.11.0", default-features = false }
-serde-indexed = "0.0.3"
+serde-indexed = "0.1.0"
+trussed = { git = "ssh://git@github.com/trussed-dev/trussed.git", branch = "main" }
 
 [features]
 enable-fido-pre = []

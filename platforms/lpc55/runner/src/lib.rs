@@ -198,7 +198,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     perf_timer.start(60_000.ms());
 
 
-    let (contactless_requester, contactless_responder) = apdu_dispatch::types::ContactlessInterchange::claim(0)
+    let (contactless_requester, contactless_responder) = apdu_dispatch::types::ContactlessInterchange::claim()
         .expect("could not setup iso14443 ApduInterchange");
     let mut iso14443 = {
         let token = clocks.support_flexcomm_token().unwrap();
@@ -231,13 +231,13 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         }
     };
 
-    // #[cfg(feature = "board-lpcxpresso55")]
-    // let mut rgb = board::RgbLed::new(
-    //     Pwm::new(hal.ctimer.2.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap())),
-    //     &mut iocon,
-    // );
+    #[cfg(feature = "board-lpcxpresso55")]
+    let mut rgb = board::RgbLed::new(
+        Pwm::new(hal.ctimer.2.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap())),
+        &mut iocon,
+    );
 
-    // #[cfg(feature = "board-solov2")]
+    #[cfg(feature = "board-solov2")]
     let mut rgb = board::RgbLed::new(
         Pwm::new(hal.ctimer.3.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap())),
         &mut iocon,
@@ -337,23 +337,23 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
     if let Some(iso14443) = &mut iso14443 { iso14443.poll(); }
 
-    let (fido_trussed_requester, fido_trussed_responder) = trussed::pipe::TrussedInterchange::claim(0)
+    let (fido_trussed_requester, fido_trussed_responder) = trussed::pipe::TrussedInterchange::claim()
         .expect("could not setup FIDO TrussedInterchange");
     let mut fido_client_id = littlefs2::path::PathBuf::new();
     fido_client_id.push(b"fido2\0".try_into().unwrap());
 
-    let (root_trussed_requester, root_trussed_responder) = trussed::pipe::TrussedInterchange::claim(1)
+    let (root_trussed_requester, root_trussed_responder) = trussed::pipe::TrussedInterchange::claim()
         .expect("could not setup FIDO TrussedInterchange");
     let mut root_client_id = littlefs2::path::PathBuf::new();
     root_client_id.push(b"root\0".try_into().unwrap());
 
-    let (contact_requester, contact_responder) = apdu_dispatch::types::ContactInterchange::claim(0)
+    let (contact_requester, contact_responder) = apdu_dispatch::types::ContactInterchange::claim()
         .expect("could not setup ccid ApduInterchange");
 
-    let (hid_requester, hid_responder) = hid_dispatch::types::HidInterchange::claim(0)
+    let (hid_requester, hid_responder) = hid_dispatch::types::HidInterchange::claim()
         .expect("could not setup HidInterchange");
 
-    let (piv_trussed_requester, piv_trussed_responder) = trussed::pipe::TrussedInterchange::claim(2)
+    let (piv_trussed_requester, piv_trussed_responder) = trussed::pipe::TrussedInterchange::claim()
         .expect("could not setup PIV TrussedInterchange");
 
     info!("usb class start {} ms",perf_timer.lap().0/1000);

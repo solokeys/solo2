@@ -1,4 +1,4 @@
-use heapless::ByteBuf;
+use heapless_bytes::Bytes;
 use trussed::{
     block,
     Client as TrussedClient,
@@ -51,7 +51,7 @@ impl State {
 #[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct Pin {
     // padded_pin: [u8; 8]
-    padded_pin: heapless::ByteBuf<heapless::consts::U8>,
+    padded_pin: heapless_bytes::Bytes<heapless::consts::U8>,
 }
 
 // impl Default for Pin {
@@ -80,7 +80,7 @@ impl Pin {
         if valid_bytes {
             Ok(Self {
                 // padded_pin: padded_pin.try_into().unwrap(),
-                padded_pin: ByteBuf::from_slice(padded_pin).unwrap(),//padded_pin.try_into().unwrap(),
+                padded_pin: Bytes::try_from_slice(padded_pin).unwrap(),//padded_pin.try_into().unwrap(),
             })
         } else {
             Err(())

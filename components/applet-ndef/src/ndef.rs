@@ -1,5 +1,5 @@
 use iso7816::{Command, Instruction, Status};
-use heapless::ByteBuf;
+use heapless_bytes::Bytes;
 
 use apdu_dispatch::applet;
 
@@ -87,7 +87,7 @@ impl<'a> applet::Applet for NdefApplet<'a> {
                         }
                     };
 
-                Ok(applet::Response::Respond(ByteBuf::from_slice(
+                Ok(applet::Response::Respond(Bytes::try_from_slice(
                     & self.reader[offset .. offset + len_to_read]
                 ).unwrap()))
             }

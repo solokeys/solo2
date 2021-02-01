@@ -9,3 +9,4 @@ pub mod dispatch;
 pub mod types;
 pub use iso7816;
 pub use heapless;
+pub use heapless_bytes;

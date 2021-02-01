@@ -8,9 +8,10 @@ edition = "2018"
 [dependencies]
 ctap-types = { path = "../ctap-types" }
 delog = "0.1.0-alpha.3"
-heapless = { version = "0.5.5" }
+heapless = "0.5.6"
+heapless-bytes = "0.1.1"
 hid-dispatch = { path = "../hid-dispatch" }
-interchange = { path = "../interchange" }
+interchange = "0.1.0"
 serde = { version = "1.0", default-features = false }
 usb-device = "0.2.3"
 

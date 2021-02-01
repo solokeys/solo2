@@ -7,11 +7,10 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-heapless = { version = "0.5.5" }
-
-# Components
 delog = "0.1.0-alpha.3"
-interchange = {path = "../interchange"}
+heapless = "0.5.6"
+heapless-bytes = "0.1.1"
+interchange = "0.1.0"
 
 [features]
 default = []
@@ -23,6 +22,3 @@ log-info = []
 log-debug = []
 log-warn = []
 log-error = []
-
-[patch.crates-io]
-heapless = { git = "https://github.com/nicolas-solokeys/heapless", branch = "bytebuf" }

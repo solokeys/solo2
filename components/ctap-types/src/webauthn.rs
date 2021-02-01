@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use crate::{ByteBuf, consts, String};
+use crate::{Bytes, consts, String};
 use crate::sizes::*;
 
 #[derive(Clone,Debug, Eq,PartialEq,Serialize,Deserialize)]
@@ -14,7 +14,7 @@ pub struct PublicKeyCredentialRpEntity {
 #[derive(Clone,Debug, Eq,PartialEq,Serialize,Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PublicKeyCredentialUserEntity {
-    pub id: ByteBuf<consts::U64>,
+    pub id: Bytes<consts::U64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub icon: Option<String<consts::U128>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -24,7 +24,7 @@ pub struct PublicKeyCredentialUserEntity {
 }
 
 impl PublicKeyCredentialUserEntity {
-    pub fn from(id: ByteBuf<consts::U64>) -> Self {
+    pub fn from(id: Bytes<consts::U64>) -> Self {
         Self { id, icon: None, name: None, display_name: None }
     }
 }
@@ -41,7 +41,7 @@ pub struct PublicKeyCredentialParameters {
 pub struct PublicKeyCredentialDescriptor {
     // NB: if this is too small, get a nasty error
     // See serde::error/custom for more info
-    pub id: ByteBuf<MAX_CREDENTIAL_ID_LENGTH>,
+    pub id: Bytes<MAX_CREDENTIAL_ID_LENGTH>,
     #[serde(rename = "type")]
     pub key_type: String<consts::U32>,
     // https://w3c.github.io/webauthn/#enumdef-authenticatortransport

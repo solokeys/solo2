@@ -1,4 +1,5 @@
 use core::convert::TryInto;
+use apdu_dispatch::heapless_bytes::Bytes;
 use hid_dispatch::app::{self as hid, App, Command as HidCommand, Message, Response};
 use hid_dispatch::command::VendorCommand;
 use apdu_dispatch::applet;
@@ -144,20 +145,20 @@ where T: TrussedClient
             RNG => {
                 // Random bytes
                 Ok(applet::Response::Respond(
-                    syscall!(self.trussed.random_bytes(57)).bytes.as_slice().try_into().unwrap()
+                    Bytes::try_from_slice(&syscall!(self.trussed.random_bytes(57)).bytes.as_slice()).unwrap()
                 ))
             }
             VERSION => {
                 // Get version
                 Ok(applet::Response::Respond(
-                    (&self.version.to_be_bytes()[..]).try_into().unwrap()
+                    Bytes::try_from_slice(&self.version.to_be_bytes()[..]).unwrap()
                 ))
             }
 
             UUID => {
                 // Get UUID
                 Ok(applet::Response::Respond(
-                    apdu_dispatch::heapless::ByteBuf::from_slice(&self.uuid).unwrap()
+                    Bytes::try_from_slice(&self.uuid).unwrap()
                 ))
             }
 

@@ -16,6 +16,7 @@ cortex-m-rtic = "0.5.1"
 cortex-m-semihosting = "0.3.5"
 delog = "0.1.0-alpha.3"
 heapless = "0.5.5"
+interchange = "0.1.0"
 nb = "1"
 usb-device = "0.2.3"
 usbd-serial = "0.1.0"
@@ -28,29 +29,28 @@ usbd-serial = "0.1.0"
 board = { path = "../board" }
 
 # components
-c-stubs = { path = "../../../components/c-stubs" }
-trussed = { path = "../../../components/trussed", features = ["clients-3"] }
-ctap-types = { path = "../../../components/ctap-types" }
-fido-authenticator = { path = "../../../components/fido-authenticator" }
-interchange = { path = "../../../components/interchange" }
-piv-card = { path = "../../../components/piv-card" }
-usbd-ccid = { path = "../../../components/usbd-ccid" }
-usbd-ctaphid = { path = "../../../components/usbd-ctaphid" }
-fm11nc08 = {path = "../../../components/fm11nc08"}
-iso14443 = {path = "../../../components/iso14443"}
 apdu-dispatch = {path = "../../../components/apdu-dispatch"}
-hid-dispatch = {path = "../../../components/hid-dispatch"}
+applet-fido = {path = "../../../components/applet-fido"}
 applet-ndef = {path = "../../../components/applet-ndef"}
 applet-root = {path = "../../../components/applet-root"}
-applet-fido = {path = "../../../components/applet-fido"}
+c-stubs = { path = "../../../components/c-stubs" }
+ctap-types = { path = "../../../components/ctap-types" }
+fido-authenticator = { path = "../../../components/fido-authenticator" }
+fm11nc08 = {path = "../../../components/fm11nc08"}
+hid-dispatch = {path = "../../../components/hid-dispatch"}
+iso14443 = {path = "../../../components/iso14443"}
+piv-card = { path = "../../../components/piv-card" }
+# trussed = { path = "../../../components/trussed", features = ["clients-3"] }
+trussed = { git = "ssh://git@github.com/trussed-dev/trussed.git", branch = "main", features = ["clients-3"] }
+usbd-ccid = { path = "../../../components/usbd-ccid" }
+usbd-ctaphid = { path = "../../../components/usbd-ctaphid" }
 
 # panic
 panic-halt = "0.2.0"
 panic-semihosting = { version = "0.5.3", features = ["jlink-quirks"] }
 
 # storage
-# littlefs2 = { git = "https://github.com/nickray/littlefs2", branch = "main" }
-littlefs2 = { git = "https://github.com/nickray/littlefs2", branch = "closures-instead-of-ub" }
+littlefs2 = "0.1.1"
 
 [features]
 default = []
@@ -61,7 +61,7 @@ develop = ["no-encrypted-storage", "no-buttons"]
 no-encrypted-storage = []
 
 # Use to auto-succeed every user presence check
-no-buttons= []
+no-buttons= ["board/no-buttons"]
 
 board-lpcxpresso55 = ["board/board-lpcxpresso55"]
 board-solov2 = ["board/board-solov2"]
@@ -71,8 +71,8 @@ log-serial = []
 highspeed = []
 serial = []
 reconfig = []
-no-clock-controller = []
-enable-clock-controller-signal-pin = []
+no-clock-controller = ["board/no-clock-controller"]
+enable-clock-controller-signal-pin = ["board/enable-clock-controller-signal-pin"]
 
 log-all = []
 log-none = []
@@ -82,16 +82,6 @@ log-warn = []
 log-error = []
 
 # patch dependencies like so to test local changes
-
-[patch.crates-io]
-heapless = { git = "https://github.com/nickray/heapless", branch = "bytebuf-0.5.6" }
-nisty = {git = "https://github.com/ycrypto/nisty", branch="main"}
-
-# micro-ecc-sys = { path = "../../../micro-ecc-sys" }
-# littlefs2-sys = { path = "../../../littlefs2-sys" }
-
-# [patch."https://github.com/lpc55/lpc55-hal"]
-# lpc55-hal = {git = "https://github.com/nickray/lpc55-hal", branch = "rand-core" }
 
 [profile.release]
 codegen-units = 1

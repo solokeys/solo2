@@ -8,21 +8,20 @@ edition = "2018"
 
 [dependencies]
 bitflags = "1.2.1"
-cosey = "0.1.0-alpha.0" # { git = "https://github.com/ycrypto/cosey", branch = "main" }
+cbor-smol = "0.1.0"
+cosey = "0.1.0"
 delog = "0.1.0-alpha.3"
-heapless = { version = "0.5.5", default-features = false, features = ["serde"] }
-interchange = { path = "../interchange" }
+heapless = { version = "0.5.6", default-features = false, features = ["serde"] }
+heapless-bytes = "0.1.1"
+interchange = "0.1.0"
 iso7816 = { path = "../iso7816" }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
-serde-indexed = "0.0.4"
+serde-indexed = "0.1.0"
 serde_repr = "0.1"
-
-[dependencies.heapless-bytes]
-# version = "0.1.0"
-# path = "../../../heapless-bytes"
-git = "https://github.com/ycrypto/heapless-bytes"
-branch = "main"
 
 [features]
 log-all = []
 log-none = []
+
+# [patch.crates-io]
+# heapless = { git = "https://github.com/nickray/heapless", branch = "bytebuf-0.5.6" }

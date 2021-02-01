@@ -10,9 +10,9 @@ edition = "2018"
 apdu-dispatch = { path = "../apdu-dispatch" }
 asn1derpy = "0.1.0"
 delog = "0.1.0-alpha.3"
-heapless = "0.5.5"
-heapless-bytes = { git = "https://github.com/ycrypto/heapless-bytes", branch = "main" }
-interchange = { path = "../interchange" }
+heapless = "0.5.6"
+heapless-bytes = "0.1.1"
+interchange = "0.1.0"
 iso7816 = { path = "../iso7816" }
 usb-device = { version = "0.2.3", features = ["control-buffer-256"] }
 

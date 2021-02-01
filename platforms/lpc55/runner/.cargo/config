@@ -1,3 +1,6 @@
+[net]
+git-fetch-with-cli = true
+
 [target.thumbv8m.main-none-eabi]
 # runner = "gdb-multiarch -q -x jlink.gdb"
 runner = "arm-none-eabi-gdb -q -x jlink.gdb"

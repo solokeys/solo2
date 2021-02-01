@@ -1,4 +1,4 @@
-use crate::{ByteBuf16, ByteBuf32};
+use crate::{Bytes16, Bytes32};
 use serde_indexed::{DeserializeIndexed, SerializeIndexed};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
@@ -28,7 +28,7 @@ pub enum Subcommand  {
 pub struct SubcommandParameters {
     // 0x01
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub rp_id_hash: Option<ByteBuf32>,
+    pub rp_id_hash: Option<Bytes32>,
     // 0x02
     #[serde(skip_serializing_if = "Option::is_none")]
     pub credential_id: Option<PublicKeyCredentialDescriptor>,
@@ -47,7 +47,7 @@ pub struct Parameters {
     pub pin_protocol: Option<u8>,
     // 0x04
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub pin_auth: Option<ByteBuf16>,
+    pub pin_auth: Option<Bytes16>,
 }
 
 #[derive(Clone,Debug, Default,Eq,PartialEq,SerializeIndexed)]
@@ -71,7 +71,7 @@ pub struct Response {
     pub rp: Option<PublicKeyCredentialRpEntity>,
     // 0x04
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub rp_id_hash: Option<ByteBuf32>,
+    pub rp_id_hash: Option<Bytes32>,
     // 0x05
     #[serde(skip_serializing_if = "Option::is_none")]
     pub total_rps: Option<u32>,
@@ -87,7 +87,7 @@ pub struct Response {
     // 0x08
     #[serde(skip_serializing_if = "Option::is_none")]
     pub public_key: Option<PublicKey>,
-    // pub public_key: Option<ByteBuf<COSE_KEY_LENGTH>>,  // <-- AAAAHH. no ByteBuf, just COSE_Key
+    // pub public_key: Option<Bytes<COSE_KEY_LENGTH>>,  // <-- AAAAHH. no Bytes, just COSE_Key
     // 0x09
     #[serde(skip_serializing_if = "Option::is_none")]
     pub total_credentials: Option<u32>,

@@ -278,7 +278,7 @@ where T: TrussedClient
         }).unwrap();
         // blocking::dbg!(&der);
 
-        let response_data: ResponseData = der.to_byte_buf();
+        let response_data: ResponseData = der.to_bytes();
         // blocking::dbg!(&response_data);
         return Ok(response_data);
 
@@ -337,7 +337,7 @@ where T: TrussedClient
             der.raw_tlv(0x82, &encrypted_challenge)
         }).unwrap();
 
-        let response_data: ResponseData = der.to_byte_buf();
+        let response_data: ResponseData = der.to_bytes();
         // blocking::dbg!(&response_data);
         return Ok(response_data);
     }
@@ -368,7 +368,7 @@ where T: TrussedClient
             der.raw_tlv(0x80, &encrypted_challenge)
         }).unwrap();
 
-        return Ok(der.to_byte_buf());
+        return Ok(der.to_bytes());
 
     }
 
@@ -636,7 +636,7 @@ where T: TrussedClient
         // let l2 = 65;
         let l2 = 32;
         let l1 = l2 + 2;
-        let mut data = ResponseData::from_slice(&[0x7f, 0x49, l1, 0x86, l2]).unwrap();
+        let mut data = ResponseData::try_from_slice(&[0x7f, 0x49, l1, 0x86, l2]).unwrap();
         // data.extend_from_slice(&[0x04]).unwrap();
         data.extend_from_slice(&serialized_public_key).unwrap();
 
@@ -693,7 +693,7 @@ where T: TrussedClient
             block!(self.trussed.write_file(
                 trussed::types::StorageLocation::Internal,
                 trussed::types::PathBuf::from(b"printed-information"),
-                trussed::types::Message::from_slice(data).unwrap(),
+                trussed::types::Message::try_from_slice(data).unwrap(),
                 None,
             ).unwrap()).map_err(|_| Status::NotEnoughMemory)?;
 
@@ -718,7 +718,7 @@ where T: TrussedClient
             block!(self.trussed.write_file(
                 trussed::types::StorageLocation::Internal,
                 trussed::types::PathBuf::from(b"authentication-key.x5c"),
-                trussed::types::Message::from_slice(data).unwrap(),
+                trussed::types::Message::try_from_slice(data).unwrap(),
                 None,
             ).unwrap()).map_err(|_| Status::NotEnoughMemory)?;
 
@@ -766,7 +766,7 @@ where T: TrussedClient
         match data {
             DataObjects::DiscoveryObject => {
                 // Err(Status::InstructionNotSupportedOrInvalid)
-                let data = ResponseData::from_slice(DISCOVERY_OBJECT).unwrap();
+                let data = ResponseData::try_from_slice(DISCOVERY_OBJECT).unwrap();
                 Ok(data)
                 // todo!("discovery object"),
             }
@@ -794,7 +794,7 @@ where T: TrussedClient
                     Ok(())
                 }).unwrap();
 
-                Ok(der.to_byte_buf())
+                Ok(der.to_bytes())
             }
 
             // '5FC1 05' (351B)
@@ -816,12 +816,12 @@ where T: TrussedClient
 
                 let mut der: Der<consts::U1024> = Default::default();
                 der.raw_tlv(0x53, &data).unwrap();
-                Ok(der.to_byte_buf())
+                Ok(der.to_bytes())
             }
 
             // '5F FF01' (754B)
             YubicoObjects::AttestationCertificate => {
-                let data = ResponseData::from_slice(YUBICO_ATTESTATION_CERTIFICATE).unwrap();
+                let data = ResponseData::try_from_slice(YUBICO_ATTESTATION_CERTIFICATE).unwrap();
                 Ok(data)
             }
 
@@ -834,14 +834,14 @@ where T: TrussedClient
         match instruction {
             YubicoPivExtension::GetSerial => {
                 // make up a 4-byte serial
-                let data = ResponseData::from_slice(
+                let data = ResponseData::try_from_slice(
                     &[0x00, 0x52, 0xf7, 0x43]).unwrap();
                 Ok(data)
             }
 
             YubicoPivExtension::GetVersion => {
                 // make up a version, be >= 5.0.0
-                let data = ResponseData::from_slice(
+                let data = ResponseData::try_from_slice(
                     &[0x06, 0x06, 0x06]).unwrap();
                 Ok(data)
             }
@@ -854,7 +854,7 @@ where T: TrussedClient
                 let slot = command.p1;
 
                 if slot == 0x9a {
-                    let data = ResponseData::from_slice(YUBICO_ATTESTATION_CERTIFICATE_FOR_9A).unwrap();
+                    let data = ResponseData::try_from_slice(YUBICO_ATTESTATION_CERTIFICATE_FOR_9A).unwrap();
                     return Ok(data);
                 }
 
@@ -983,7 +983,7 @@ where T: TrussedClient
             })
         }).unwrap();
 
-        return Ok(applet::Response::Respond(der.to_byte_buf()));
+        return Ok(applet::Response::Respond(der.to_bytes()));
     }
 
     fn deselect(&mut self) {}
