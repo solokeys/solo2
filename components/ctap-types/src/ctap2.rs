@@ -1,7 +1,7 @@
 use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
 
-use crate::{ByteBuf, consts};
+use crate::{Bytes, consts};
 use crate::sizes::*;
 
 pub mod client_pin;
@@ -45,14 +45,14 @@ pub struct AuthenticatorOptions {
 // #[serde_indexed(offset = 1)]
 // pub struct GetAssertionParameters {
 //     pub rp_id: String<consts::U64>,
-//     pub client_data_hash: ByteBuf<consts::U32>,
+//     pub client_data_hash: Bytes<consts::U32>,
 //     pub allow_list: Vec<PublicKeyCredentialDescriptor, consts::U8>,
 //     #[serde(skip_serializing_if = "Option::is_none")]
 //     pub extensions: Option<AuthenticatorExtensions>,
 //     #[serde(skip_serializing_if = "Option::is_none")]
 //     pub options: Option<AuthenticatorOptions>,
 //     #[serde(skip_serializing_if = "Option::is_none")]
-//     pub pin_auth: Option<ByteBuf<consts::U16>>,
+//     pub pin_auth: Option<Bytes<consts::U16>>,
 //     #[serde(skip_serializing_if = "Option::is_none")]
 //     pub pin_protocol: Option<u32>,
 // }
@@ -82,21 +82,21 @@ pub struct AuthenticatorOptions {
 //pub struct CredentialPublicKey {
 //}
 
-pub type PinAuth = ByteBuf<consts::U16>;
+pub type PinAuth = Bytes<consts::U16>;
 
 // #[derive(Clone,Debug,Eq,PartialEq)]
 // // #[serde(rename_all = "camelCase")]
 // pub struct AuthenticatorData {
-//     pub rp_id_hash: ByteBuf<consts::U32>,
+//     pub rp_id_hash: Bytes<consts::U32>,
 //     pub flags: u8,
 //     pub sign_count: u32,
 //     // this can get pretty long
-//     pub attested_credential_data: Option<ByteBuf<ATTESTED_CREDENTIAL_DATA_LENGTH>>,
+//     pub attested_credential_data: Option<Bytes<ATTESTED_CREDENTIAL_DATA_LENGTH>>,
 //     // pub extensions: ?
 // }
 
 // impl AuthenticatorData {
-//     pub fn serialize(&self) -> ByteBuf<AUTHENTICATOR_DATA_LENGTH> {
+//     pub fn serialize(&self) -> Bytes<AUTHENTICATOR_DATA_LENGTH> {
 //         let mut bytes = Vec::<u8, AUTHENTICATOR_DATA_LENGTH>::new();
 
 //         // 32 bytes, the RP id's hash
@@ -113,7 +113,7 @@ pub type PinAuth = ByteBuf<consts::U16>;
 //             None => {},
 //         }
 
-//         ByteBuf::from(bytes)
+//         Bytes::from(bytes)
 //     }
 // }
 
@@ -128,22 +128,22 @@ bitflags! {
 }
 
 pub trait SerializeAttestedCredentialData {
-    fn serialize(&self) -> ByteBuf<ATTESTED_CREDENTIAL_DATA_LENGTH>;
+    fn serialize(&self) -> Bytes<ATTESTED_CREDENTIAL_DATA_LENGTH>;
 }
 
 #[derive(Clone,Debug,Eq,PartialEq)]
 // #[serde(rename_all = "camelCase")]
 pub struct AuthenticatorData<A, E> {
-    pub rp_id_hash: ByteBuf<consts::U32>,
+    pub rp_id_hash: Bytes<consts::U32>,
     pub flags: AuthenticatorDataFlags,
     pub sign_count: u32,
     // this can get pretty long
-    // pub attested_credential_data: Option<ByteBuf<ATTESTED_CREDENTIAL_DATA_LENGTH>>,
+    // pub attested_credential_data: Option<Bytes<ATTESTED_CREDENTIAL_DATA_LENGTH>>,
     pub attested_credential_data: Option<A>,
     pub extensions: Option<E>
 }
 
-pub type SerializedAuthenticatorData = ByteBuf<AUTHENTICATOR_DATA_LENGTH>;
+pub type SerializedAuthenticatorData = Bytes<AUTHENTICATOR_DATA_LENGTH>;
 
 // The reason for this non-use of CBOR is for compatibility with
 // FIDO U2F authentication signatures.

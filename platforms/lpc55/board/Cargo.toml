@@ -10,7 +10,7 @@ cortex-m-rt = "0.6.10"
 delog = "0.1.0-alpha.3"
 fm11nc08 = {path = "../../../components/fm11nc08"}
 nb = "1"
-trussed = { path = "../../../components/trussed", features = ["clients-3"] }
+trussed = { git = "ssh://git@github.com/trussed-dev/trussed.git", branch = "main", features = ["clients-3"] }
 
 [dependencies.lpc55-hal]
 git = "https://github.com/lpc55/lpc55-hal"
@@ -22,9 +22,16 @@ features = ["littlefs", "rtic-peripherals"]
 board-solov2 = []
 board-lpcxpresso55 = []
 
-[patch.crates-io]
-heapless = { git = "https://github.com/nickray/heapless", branch = "bytebuf-0.5.6" }
-nisty = {git = "https://github.com/ycrypto/nisty", branch="main"}
+no-buttons = []
+no-clock-controller = []
+enable-clock-controller-signal-pin = []
+
+log-all = []
+log-none = []
+log-info = []
+log-debug = []
+log-warn = []
+log-error = []
 
 [profile.release]
 codegen-units = 1
@@ -32,3 +39,4 @@ codegen-units = 1
 # opt-level = "s"
 incremental = false
 debug = true
+

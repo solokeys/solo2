@@ -21,9 +21,9 @@ generate_macros!();
 
 pub use heapless::{consts, ArrayLength, String, Vec};
 pub use heapless::spsc::{Consumer, Producer, Queue};
-pub use heapless::ByteBuf;
-pub type ByteBuf16 = ByteBuf<consts::U16>;
-pub type ByteBuf32 = ByteBuf<consts::U32>;
+pub use heapless_bytes::Bytes as Bytes;
+pub type Bytes16 = Bytes<consts::U16>;
+pub type Bytes32 = Bytes<consts::U32>;
 
 pub mod authenticator;
 pub mod cose;
@@ -31,7 +31,8 @@ pub mod ctap1;
 pub mod ctap2;
 pub mod operation;
 pub mod rpc;
-pub mod serde;
+// pub mod serde;
+pub use cbor_smol as serde;
 pub mod sizes;
 pub mod webauthn;
 

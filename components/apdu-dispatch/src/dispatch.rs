@@ -87,7 +87,7 @@ impl ApduDispatch
 {
     fn apdu_type(apdu: &Command) -> RequestType {
         if apdu.instruction() == Instruction::Select && (apdu.p1 & 0x04) != 0 {
-            RequestType::Select(Aid::from_slice(apdu.data()).unwrap())
+            RequestType::Select(Aid::try_from_slice(apdu.data()).unwrap())
         } else if apdu.instruction() == Instruction::GetResponse {
             RequestType::GetResponse
         } else {
@@ -289,7 +289,7 @@ impl ApduDispatch
 
                     let to_send = &res[..boundary];
                     let remaining = &res[boundary..];
-                    let mut message = response::Data::from_slice(to_send).unwrap();
+                    let mut message = response::Data::try_from_slice(to_send).unwrap();
                     let return_code = if remaining.len() > 255 {
                         // XX = 00 indicates more than 255 bytes of data
                         0x6100u16
@@ -308,7 +308,7 @@ impl ApduDispatch
                     } else {
                         info!("Still {} bytes in response buffer", remaining.len());
                         (
-                            RawApduBuffer::Response(response::Data::from_slice(remaining).unwrap()),
+                            RawApduBuffer::Response(response::Data::try_from_slice(remaining).unwrap()),
                             message
                         )
                     }

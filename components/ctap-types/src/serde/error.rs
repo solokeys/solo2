@@ -127,7 +127,7 @@ impl serde::de::Error for Error {
         // Particularly helpful would be better errors when receiving
         // structures are undersized.
         //
-        // E.g. if there is a `ByteBuf<N>` and more than N bytes are delivered,
+        // E.g. if there is a `Bytes<N>` and more than N bytes are delivered,
         // currently the error _msg: T is:
         //
         // `invalid length 297, expected a sequence`

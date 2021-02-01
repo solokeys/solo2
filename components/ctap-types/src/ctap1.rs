@@ -3,7 +3,7 @@ use iso7816::{
     Instruction,
 };
 
-use crate::{ByteBuf, consts};
+use crate::{Bytes, consts};
 
 pub const NO_ERROR: u16 = 0x9000;
 
@@ -39,32 +39,32 @@ pub type Result<T> = core::result::Result<T, Error>;
 
 #[derive(Clone,Debug, Eq,PartialEq)]
 pub struct Register {
-    pub challenge: ByteBuf<consts::U32>,
-    pub app_id: ByteBuf<consts::U32>,
+    pub challenge: Bytes<consts::U32>,
+    pub app_id: Bytes<consts::U32>,
 }
 
 #[derive(Clone,Debug, Eq,PartialEq)]
 pub struct RegisterResponse {
     pub header_byte: u8,
-    pub public_key: ByteBuf<consts::U65>,
-    pub key_handle: ByteBuf<consts::U255>,
-    pub attestation_certificate: ByteBuf<consts::U1024>,
-    pub signature: ByteBuf<consts::U72>,
+    pub public_key: Bytes<consts::U65>,
+    pub key_handle: Bytes<consts::U255>,
+    pub attestation_certificate: Bytes<consts::U1024>,
+    pub signature: Bytes<consts::U72>,
 }
 
 #[derive(Clone,Debug, Eq,PartialEq)]
 pub struct Authenticate {
     pub control_byte: ControlByte,
-    pub challenge: ByteBuf<consts::U32>,
-    pub app_id: ByteBuf<consts::U32>,
-    pub key_handle: ByteBuf<consts::U255>,
+    pub challenge: Bytes<consts::U32>,
+    pub app_id: Bytes<consts::U32>,
+    pub key_handle: Bytes<consts::U255>,
 }
 
 #[derive(Clone,Debug, Eq,PartialEq)]
 pub struct AuthenticateResponse {
     user_presence: u8,
     count: u32,
-    signature: ByteBuf<consts::U72>,
+    signature: Bytes<consts::U72>,
 }
 
 #[derive(Clone,Debug, Eq,PartialEq)]
@@ -83,10 +83,10 @@ pub enum Response {
 
 impl RegisterResponse {
     pub fn new(
-        header_byte: u8, 
+        header_byte: u8,
         public_key: &crate::cose::EcdhEsHkdf256PublicKey,
         key_handle: &[u8],
-        signature: ByteBuf<consts::U72>,
+        signature: Bytes<consts::U72>,
         attestation_certificate: &[u8],
     ) -> Self {
 
@@ -94,9 +94,9 @@ impl RegisterResponse {
         debug_assert!(attestation_certificate.len()<=1024);
         debug_assert!(signature.len()<=72);
 
-        let mut public_key_bytes = ByteBuf::new();
-        let mut key_handle_bytes = ByteBuf::new();
-        let mut cert_bytes = ByteBuf::new();
+        let mut public_key_bytes = Bytes::new();
+        let mut key_handle_bytes = Bytes::new();
+        let mut cert_bytes = Bytes::new();
 
         public_key_bytes.push(0x04).unwrap();
         public_key_bytes.extend_from_slice(&public_key.x).unwrap();
@@ -118,9 +118,9 @@ impl RegisterResponse {
 
 impl AuthenticateResponse {
     pub fn new(
-        user_presence: u8, 
+        user_presence: u8,
         count: u32,
-        signature: ByteBuf<consts::U72>,
+        signature: Bytes<consts::U72>,
     ) -> Self {
         Self {
             user_presence: user_presence,
@@ -187,8 +187,8 @@ impl core::convert::TryFrom<&ApduCommand> for Command {
                     return Err(Error::IncorrectDataParameter);
                 }
                 Ok(Command::Register(Register {
-                    challenge: ByteBuf::from_slice(&request[..32]).unwrap(),
-                    app_id: ByteBuf::from_slice(&request[32..]).unwrap(),
+                    challenge: Bytes::try_from_slice(&request[..32]).unwrap(),
+                    app_id: Bytes::try_from_slice(&request[32..]).unwrap(),
                 }))
             },
 
@@ -204,9 +204,9 @@ impl core::convert::TryFrom<&ApduCommand> for Command {
                 }
                 Ok(Command::Authenticate(Authenticate {
                     control_byte,
-                    challenge: ByteBuf::from_slice(&request[..32]).unwrap(),
-                    app_id: ByteBuf::from_slice(&request[32..64]).unwrap(),
-                    key_handle: ByteBuf::from_slice(&request[65..]).unwrap(),
+                    challenge: Bytes::try_from_slice(&request[..32]).unwrap(),
+                    app_id: Bytes::try_from_slice(&request[32..64]).unwrap(),
+                    key_handle: Bytes::try_from_slice(&request[65..]).unwrap(),
                 }))
             },
 

@@ -53,8 +53,8 @@ impl RgbLed {
     ) -> RgbLed{
 
         let red = RedLedPin::take().unwrap();
-        let green = RedLedPin::take().unwrap();
-        let blue = RedLedPin::take().unwrap();
+        let green = GreenLedPin::take().unwrap();
+        let blue = BlueLedPin::take().unwrap();
 
         pwm.set_duty(RedLed::CHANNEL,0);
         pwm.set_duty(GreenLed::CHANNEL, 0);

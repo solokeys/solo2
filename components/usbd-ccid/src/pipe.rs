@@ -261,7 +261,7 @@ where
 
     fn call_app(&mut self) {
         info_now!("called piv app");
-        let command = match iso7816::command::Data::from_slice(&self.message) {
+        let command = match iso7816::command::Data::try_from_slice(&self.message) {
             Ok(command) => command,
             Err(_) => {
                 info_now!("could fit payload into Apdu buffer. Ignoring. {:?}", &self.message);

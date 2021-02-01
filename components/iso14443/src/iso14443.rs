@@ -1,6 +1,6 @@
 use core::mem::MaybeUninit;
 use core::time::Duration;
-use heapless::ByteBuf;
+use heapless_bytes::Bytes;
 use crate::traits::{
     nfc,
 };
@@ -22,7 +22,7 @@ pub enum Iso14443Status {
 }
 
 // Max iso14443 frame is 256 bytes
-type Iso14443Frame = heapless::ByteBuf<heapless::consts::U256>;
+type Iso14443Frame = heapless_bytes::Bytes<heapless::consts::U256>;
 type Iso7816Data = iso7816::response::Data;
 
 #[derive(Clone)]
@@ -119,7 +119,7 @@ where
             last_rblock_recv: None,
             last_block_num_recv: None,
 
-            buffer: ByteBuf::new(),
+            buffer: Bytes::new(),
 
             interchange: interchange,
         }
@@ -199,7 +199,7 @@ where
                             if duplicate_rblock {
                                 info!("Duplicate rblock, retransmitting");
                                 self.send_frame(
-                                    &ByteBuf::from_slice(
+                                    &Bytes::try_from_slice(
                                         &self.buffer[last_frame_range]
                                     ).unwrap()
                                 ).ok();
@@ -367,7 +367,7 @@ where
         info!("{}", hex_str!(&self.buffer));
         // logging::dump_hex(packet, l as usize);
 
-        let command = command::Data::from_slice(&self.buffer);
+        let command = command::Data::try_from_slice(&self.buffer);
         self.buffer.clear();
         if command.is_ok() {
             if self.interchange.request(

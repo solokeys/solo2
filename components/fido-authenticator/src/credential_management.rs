@@ -12,7 +12,7 @@ use trussed::{
 };
 
 use ctap_types::{
-    ByteBuf32,
+    Bytes32,
     authenticator::{
         Error,
         ctap2::{
@@ -284,7 +284,7 @@ where UP: UserPresence,
         Ok((num_rks, first_rk))
     }
 
-    pub fn first_credential(&mut self, rp_id_hash: &ByteBuf32) -> Result<Response> {
+    pub fn first_credential(&mut self, rp_id_hash: &Bytes32) -> Result<Response> {
         info_now!("first credential");
 
         self.state.runtime.cache = None;

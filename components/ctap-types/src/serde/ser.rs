@@ -55,7 +55,7 @@ impl<'a> Writer for SliceWriter<'a> {
     }
 }
 
-impl<'a, N> Writer for &'a mut heapless::ByteBuf<N>
+impl<'a, N> Writer for &'a mut heapless_bytes::Bytes<N>
 where
     N: heapless::ArrayLength<u8>,
 {

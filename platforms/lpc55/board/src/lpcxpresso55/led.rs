@@ -21,15 +21,15 @@ pub enum Color {
 
 use crate::traits::rgb_led;
 
-pub type RedLedPin = pins::Pio1_4;
+pub type RedLedPin = pins::Pio1_6;
 pub type GreenLedPin = pins::Pio1_7;
-pub type BlueLedPin = pins::Pio1_6;
+pub type BlueLedPin = pins::Pio1_4;
 
 type RedLed = hal::Pin<RedLedPin, pin::state::Special<function::MATCH_OUTPUT1<ctimer::Ctimer2<init_state::Enabled>>>>;
 type GreenLed = hal::Pin<GreenLedPin, pin::state::Special<function::MATCH_OUTPUT2<ctimer::Ctimer2<init_state::Enabled>>>>;
 type BlueLed = hal::Pin<BlueLedPin, pin::state::Special<function::MATCH_OUTPUT1<ctimer::Ctimer2<init_state::Enabled>>>>;
 
-type PwmDriver = pwm::Pwm<ctimer::Ctimer3<init_state::Enabled>>;
+type PwmDriver = pwm::Pwm<ctimer::Ctimer2<init_state::Enabled>>;
 
 pub struct RgbLed {
     // red: RedLed,
@@ -45,8 +45,8 @@ impl RgbLed {
     ) -> RgbLed{
 
         let red = RedLedPin::take().unwrap();
-        let green = RedLedPin::take().unwrap();
-        let blue = RedLedPin::take().unwrap();
+        let green = GreenLedPin::take().unwrap();
+        let blue = BlueLedPin::take().unwrap();
 
         pwm.set_duty(RedLed::CHANNEL,0);
         pwm.set_duty(GreenLed::CHANNEL, 0);

@@ -6,12 +6,13 @@ edition = "2018"
 
 [dependencies]
 delog = "0.1.0-alpha.3"
-heapless = "0.5.5"
+heapless = "0.5.6"
+heapless-bytes = "0.1.1"
 nb = "1"
 
 apdu-dispatch = { path = "../apdu-dispatch" }
 iso7816 = {path = "../iso7816"}
-interchange = { path = "../interchange" }
+interchange = "0.1.0"
 
 [features]
 default = []
