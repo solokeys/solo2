@@ -101,6 +101,22 @@ fn validate_cfpa(pfr: &mut Pfr<hal::typestates::init_state::Enabled>) {
     );
 }
 
+fn get_serial_number() -> &'static str {
+    static mut serial_number: heapless::String<heapless::consts::U36> = heapless::String(heapless::i::String::new());
+    use core::fmt::Write;
+    unsafe {
+        let uuid = crate::hal::uuid();
+        serial_number.write_fmt(format_args!("{}-{}-{}-{}-{}",
+            hexstr!(&uuid[..4]),
+            hexstr!(&uuid[4..6]),
+            hexstr!(&uuid[6..8]),
+            hexstr!(&uuid[8..10]),
+            hexstr!(&uuid[10..]),
+        )).unwrap();
+        &serial_number
+    }
+}
+
 // SoloKeys stores a product string in the first 64 bytes of CMPA.
 fn get_product_string(pfr: &mut Pfr<hal::typestates::init_state::Enabled>) -> &'static str {
     let data = pfr.cmpa_customer_data();
@@ -119,7 +135,7 @@ fn get_product_string(pfr: &mut Pfr<hal::typestates::init_state::Enabled>) -> &'
     }
 
     // Use a default string
-    "Solo B Custom Device"
+    "Custom Solo 🐝"
 }
 
 // // filesystem starting at 320KB
@@ -389,12 +405,14 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
             let device_release = ((build_constants::CARGO_PKG_VERSION_MAJOR as u16) << 8) |
                                 (build_constants::CARGO_PKG_VERSION_MINOR as u16);
 
+            // our composite USB device
             let product_string = get_product_string(&mut pfr);
-                // our composite USB device
+            let serial_number = get_serial_number();
+
             let usbd = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0x1209, 0xbeee))
-                .manufacturer("SoloKeys")
+                .manufacturer("SoloKeys, Inc")
                 .product(product_string)
-                .serial_number("20/20")
+                .serial_number(serial_number)
                 .device_release(device_release)
                 .max_packet_size_0(64)
                 .composite_with_iads()
