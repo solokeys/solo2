@@ -19,8 +19,9 @@ features = ["littlefs", "rtic-peripherals"]
 # path = "../../../../lpc55-hal"
 
 [features]
-board-solov2 = []
 board-lpcxpresso55 = []
+board-okdoe1 = ["board-lpcxpresso55"]
+board-solov2 = []
 
 no-buttons = []
 no-clock-controller = []
