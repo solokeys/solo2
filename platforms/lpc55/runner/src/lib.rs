@@ -138,12 +138,7 @@ fn get_product_string(pfr: &mut Pfr<hal::typestates::init_state::Enabled>) -> &'
     "Custom Solo 🐝"
 }
 
-// // filesystem starting at 320KB
-// // this needs to be synchronized with contents of `memory.x`
-// const FS_BASE: usize = 0x50_000;
-
 // TODO: move board-specifics to BSPs
-// #[cfg(feature = "board-lpcxpresso")]
 pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: rtic::Peripherals) -> (
     // types::Authenticator,
     types::ApduDispatch,

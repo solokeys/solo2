@@ -21,9 +21,19 @@ pub enum Color {
 
 use crate::traits::rgb_led;
 
+// OKdo E1 has pins switched for red+blue LED
+#[cfg(not(feature = "board-okdoe1"))]
 pub type RedLedPin = pins::Pio1_6;
+#[cfg(feature = "board-okdoe1")]
+pub type RedLedPin = pins::Pio1_4;
+
 pub type GreenLedPin = pins::Pio1_7;
+
+#[cfg(not(feature = "board-okdoe1"))]
 pub type BlueLedPin = pins::Pio1_4;
+#[cfg(feature = "board-okdoe1")]
+pub type BlueLedPin = pins::Pio1_6;
+
 
 type RedLed = hal::Pin<RedLedPin, pin::state::Special<function::MATCH_OUTPUT1<ctimer::Ctimer2<init_state::Enabled>>>>;
 type GreenLed = hal::Pin<GreenLedPin, pin::state::Special<function::MATCH_OUTPUT2<ctimer::Ctimer2<init_state::Enabled>>>>;
@@ -32,9 +42,6 @@ type BlueLed = hal::Pin<BlueLedPin, pin::state::Special<function::MATCH_OUTPUT1<
 type PwmDriver = pwm::Pwm<ctimer::Ctimer2<init_state::Enabled>>;
 
 pub struct RgbLed {
-    // red: RedLed,
-    // green: GreenLed,
-    // blue: BlueLed,
     pwm: PwmDriver,
 }
 
