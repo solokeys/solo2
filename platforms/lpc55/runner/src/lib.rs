@@ -102,18 +102,18 @@ fn validate_cfpa(pfr: &mut Pfr<hal::typestates::init_state::Enabled>) {
 }
 
 fn get_serial_number() -> &'static str {
-    static mut serial_number: heapless::String<heapless::consts::U36> = heapless::String(heapless::i::String::new());
+    static mut SERIAL_NUMBER: heapless::String<heapless::consts::U36> = heapless::String(heapless::i::String::new());
     use core::fmt::Write;
     unsafe {
         let uuid = crate::hal::uuid();
-        serial_number.write_fmt(format_args!("{}-{}-{}-{}-{}",
+        SERIAL_NUMBER.write_fmt(format_args!("{}-{}-{}-{}-{}",
             hexstr!(&uuid[..4]),
             hexstr!(&uuid[4..6]),
             hexstr!(&uuid[6..8]),
             hexstr!(&uuid[8..10]),
             hexstr!(&uuid[10..]),
         )).unwrap();
-        &serial_number
+        &SERIAL_NUMBER
     }
 }
 
@@ -376,6 +376,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     let usb_classes =
     {
         if !is_passive_mode {
+            #[cfg(not(feature = "usbfs-peripheral"))]
             let mut usbd = hal.usbhs.enabled_as_device(
                 &mut anactrl,
                 &mut pmc,
@@ -383,7 +384,14 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
                 &mut delay_timer,
                 clocks.support_usbhs_token().unwrap(),
             );
-            #[cfg(not(feature = "highspeed"))]
+            #[cfg(feature = "usbfs-peripheral")]
+            let mut usbd = hal.usbfs.enabled_as_device(
+                &mut anactrl,
+                &mut pmc,
+                &mut syscon,
+                clocks.support_usbfs_token().unwrap(),
+            );
+            #[cfg(not(any(feature = "highspeed", feature = "usbfs-peripheral")))]
             usbd.disable_high_speed();
             let _: EnabledUsbPeripheral = usbd;
 
@@ -418,7 +426,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
                 .composite_with_iads()
                 .build();
 
-            Some(types::UsbClasses::new(usbd, ccid, ctaphid, serial))
+            Some(types::UsbClasses::new(usbd, ccid, ctaphid, /*keyboard,*/ serial))
         } else {
             None
         }
@@ -514,7 +522,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
     let fido = applet_fido::Fido::new(authnr);
 
-    let piv = piv_card::App::new(piv_trussed);
+    let piv = piv_authenticator::App::new(piv_trussed);
     let ndef = applet_ndef::NdefApplet::new();
     let root = types::RootApp::new(root_trussed, hal::uuid(), build_constants::CARGO_PKG_VERSION);
 

@@ -1,4 +1,3 @@
-
 # This is a configuration file for the bacon tool
 # More info at https://github.com/Canop/bacon
 
@@ -7,7 +6,7 @@ default_job = "check"
 [jobs]
 
 [jobs.check]
-command = ["cargo", "check", "--color", "always", "--features", "board-solov2"]
+command = ["cargo", "check", "--color", "always", "--features", "board-lpcxpresso55,no-encrypted-storage,no-buttons"]
 need_stdout = false
 
 [jobs.check-all]

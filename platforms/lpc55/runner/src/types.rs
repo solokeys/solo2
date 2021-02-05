@@ -5,7 +5,7 @@ use littlefs2::{
     const_ram_storage,
 };
 use trussed::types::{LfsResult, LfsStorage};
-use trussed::{board, store};
+use trussed::{platform, store};
 use ctap_types::consts;
 use hal::peripherals::ctimer;
 
@@ -59,7 +59,7 @@ store!(Store,
 pub type ThreeButtons = board::ThreeButtons;
 pub type RgbLed = board::RgbLed;
 
-board!(Board,
+platform!(Board,
     R: hal::peripherals::rng::Rng<hal::Enabled>,
     S: Store,
     UI: board::trussed::UserInterface<ThreeButtons, RgbLed>,
@@ -93,7 +93,7 @@ pub type ApduDispatch = apdu_dispatch::dispatch::ApduDispatch;
 
 pub type HidDispatch = hid_dispatch::dispatch::Dispatch;
 
-pub type Piv = piv_card::App<TrussedClient>;
+pub type Piv = piv_authenticator::App<TrussedClient>;
 
 pub type FidoApplet<UP> = applet_fido::Fido<UP, TrussedClient>;
 

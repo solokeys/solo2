@@ -24,7 +24,7 @@ trussed = { path = "../../components/trussed", features = ["clients-3"] }
 ctap-types = { path = "../../components/ctap-types" }
 fido-authenticator = { path = "../../components/fido-authenticator" }
 interchange = { path = "../../components/interchange" }
-piv-card = { path = "../../components/piv-card" }
+piv-authenticator = { path = "../../components/piv-authenticator" }
 usbd-ccid = { path = "../../components/usbd-ccid" }
 usbd-ctaphid = { path = "../../components/usbd-ctaphid" }
 iso14443 = {path = "./../../components/iso14443"}
