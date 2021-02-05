@@ -1,8 +1,11 @@
+# cargo-features = ["resolver"]
+
 [package]
 name = "runner"
 version = "0.1.0"
 authors = ["Nicolas Stalder <n@stalder.io>", "Conor Patrick <conor@solokeys.com>"]
 edition = "2018"
+# resolver = "2"
 
 [lib]
 name = "app"
@@ -19,13 +22,12 @@ heapless = "0.5.5"
 interchange = "0.1.0"
 nb = "1"
 usb-device = "0.2.3"
+# usbd-hid = { version = "0.4.5", optional = true }
 usbd-serial = "0.1.0"
 
+trussed = { git = "ssh://git@github.com/trussed-dev/trussed.git", branch = "main", features = ["clients-3"] }
+
 # board
-# lpc55-hal = { git = "https://github.com/lpc55/lpc55-hal", branch = "main" }
-# lpcxpresso55 = { path = "../../boards/lpcxpresso55", optional = true }
-# prototype-bee = { path = "../../boards/prototype-bee", optional = true }
-# board-traits = { path = "../../boards/board-traits" }
 board = { path = "../board" }
 
 # components
@@ -39,9 +41,7 @@ fido-authenticator = { path = "../../../components/fido-authenticator" }
 fm11nc08 = {path = "../../../components/fm11nc08"}
 hid-dispatch = {path = "../../../components/hid-dispatch"}
 iso14443 = {path = "../../../components/iso14443"}
-piv-card = { path = "../../../components/piv-card" }
-# trussed = { path = "../../../components/trussed", features = ["clients-3"] }
-trussed = { git = "ssh://git@github.com/trussed-dev/trussed.git", branch = "main", features = ["clients-3"] }
+piv-authenticator = { path = "../../../components/piv-authenticator" }
 usbd-ccid = { path = "../../../components/usbd-ccid" }
 usbd-ctaphid = { path = "../../../components/usbd-ctaphid" }
 
@@ -69,10 +69,12 @@ board-solov2 = ["board/board-solov2"]
 log-serial = []
 
 highspeed = []
+usbfs-peripheral = []
 serial = []
 reconfig = []
 no-clock-controller = ["board/no-clock-controller"]
 enable-clock-controller-signal-pin = ["board/enable-clock-controller-signal-pin"]
+# very-twitchy-mouse = ["usbd-hid"]
 
 log-all = []
 log-none = []
