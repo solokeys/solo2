@@ -4,6 +4,9 @@
 extern crate delog;
 generate_macros!();
 
+#[macro_use(hex)]
+extern crate hex_literal;
+
 pub mod constants;
 pub mod state;
 pub mod derp;
@@ -19,25 +22,25 @@ use iso7816::{
         Data as ResponseData,
     },
 };
+#[cfg(feature = "applet")]
 use apdu_dispatch::applet;
-// use apdu_dispatch::{Aid, Applet, Result as applet::Result, applet::Response};
-use trussed::Client as TrussedClient;
-use trussed::{block, syscall};
+use trussed::client;
+use trussed::{syscall, try_syscall};
 
 use der::Der;
 
 use constants::*;
 
-pub struct App<T>
-where T: TrussedClient
+pub struct Authenticator<T>
 {
     state: state::State,
     trussed: T,
     // trussed: RefCell<Trussed>,
 }
 
-impl<T> App<T>
-where T: TrussedClient
+impl<T> Authenticator<T>
+where
+    T: client::Ed255 + client::Tdes,
 {
     pub fn new(
         trussed: T,
@@ -54,7 +57,7 @@ where T: TrussedClient
         }
     }
 
-    fn try_handle(&mut self, command: &Command) -> ResponseResult {
+    pub fn respond(&mut self, command: &Command) -> ResponseResult {
 
         // TEMP
         // blocking::dbg!(self.state.persistent(&mut self.trussed).timestamp(&mut self.trussed));
@@ -250,7 +253,7 @@ where T: TrussedClient
             return Err(Status::IncorrectDataParameter);
         }
 
-        let mechanism = trussed::types::Mechanism::Ed25519;
+        let mechanism = trussed::types::Mechanism::Ed255;
         let commitment = data; // 32B of data // 150B for ed25519
         // blocking::dbg!(commitment);
         let serialization = trussed::types::SignatureSerialization::Asn1Der; // ed25519 disregards
@@ -261,7 +264,7 @@ where T: TrussedClient
             None => return Err(Status::KeyReferenceNotFound),
         };
 
-        let signature = block!(self.trussed.sign(mechanism, key_handle, commitment, serialization).unwrap())
+        let signature = try_syscall!(self.trussed.sign(mechanism, key_handle, commitment, serialization))
             .map_err(|_error| {
                 // NoSuchKey
                 debug_now!("{:?}", &_error);
@@ -359,7 +362,7 @@ where T: TrussedClient
         let command_cache = state::AuthenticateManagement { challenge: challenge[..].try_into().unwrap() };
         self.state.runtime.command_cache = Some(state::CommandCache::AuthenticateManagement(command_cache));
 
-        let encrypted_challenge = block!(self.trussed.encrypt_tdes(&key, &challenge).unwrap()).unwrap().ciphertext;
+        let encrypted_challenge = syscall!(self.trussed.encrypt_tdes(&key, &challenge)).ciphertext;
 
         let mut der: Der<consts::U12> = Default::default();
         // 7c = Dynamic Authentication Template tag
@@ -577,7 +580,7 @@ where T: TrussedClient
         })?;
 
         // if mechanism != &[0x11] {
-        // HA! patch in Ed25519
+        // HA! patch in Ed255
         if mechanism != &[0x22] {
             return Err(Status::InstructionNotSupportedOrInvalid);
         }
@@ -590,7 +593,7 @@ where T: TrussedClient
 
         // let key = syscall!(self.trussed.generate_p256_private_key(
         // let key = syscall!(self.trussed.generate_p256_private_key(
-        let key = syscall!(self.trussed.generate_ed25519_private_key(
+        let key = syscall!(self.trussed.generate_ed255_private_key(
             trussed::types::StorageLocation::Internal,
         )).key;
 
@@ -618,21 +621,21 @@ where T: TrussedClient
         self.state.persistent(&mut self.trussed).save(&mut self.trussed);
 
         // let public_key = syscall!(self.trussed.derive_p256_public_key(
-        let public_key = syscall!(self.trussed.derive_ed25519_public_key(
+        let public_key = syscall!(self.trussed.derive_ed255_public_key(
             &key,
             trussed::types::StorageLocation::Volatile,
         )).key;
 
         let serialized_public_key = syscall!(self.trussed.serialize_key(
             // trussed::types::Mechanism::P256,
-            trussed::types::Mechanism::Ed25519,
+            trussed::types::Mechanism::Ed255,
             public_key.clone(),
             trussed::types::KeySerialization::Raw,
         )).serialized_key;
 
         // info_now!("supposed SEC1 pubkey, len {}: {:X?}", serialized_public_key.len(), &serialized_public_key);
 
-        // P256 SEC1 has 65 bytes, Ed25519 pubkeys have 32
+        // P256 SEC1 has 65 bytes, Ed255 pubkeys have 32
         // let l2 = 65;
         let l2 = 32;
         let l1 = l2 + 2;
@@ -690,12 +693,12 @@ where T: TrussedClient
                 return Err(Status::UnspecifiedCheckingError);
             }
 
-            block!(self.trussed.write_file(
+            try_syscall!(self.trussed.write_file(
                 trussed::types::StorageLocation::Internal,
                 trussed::types::PathBuf::from(b"printed-information"),
                 trussed::types::Message::try_from_slice(data).unwrap(),
                 None,
-            ).unwrap()).map_err(|_| Status::NotEnoughMemory)?;
+            )).map_err(|_| Status::NotEnoughMemory)?;
 
             return Ok(Default::default());
         }
@@ -715,12 +718,12 @@ where T: TrussedClient
                 return Err(Status::UnspecifiedCheckingError);
             }
 
-            block!(self.trussed.write_file(
+            try_syscall!(self.trussed.write_file(
                 trussed::types::StorageLocation::Internal,
                 trussed::types::PathBuf::from(b"authentication-key.x5c"),
                 trussed::types::Message::try_from_slice(data).unwrap(),
                 None,
-            ).unwrap()).map_err(|_| Status::NotEnoughMemory)?;
+            )).map_err(|_| Status::NotEnoughMemory)?;
 
             return Ok(Default::default());
         }
@@ -805,10 +808,10 @@ where T: TrussedClient
                 // it seems like fetching this certificate is the way Filo's agent decides
                 // whether the key is "already setup":
                 // https://github.com/FiloSottile/yubikey-agent/blob/8781bc0082db5d35712a2244e3ab3086f415dd59/setup.go#L69-L70
-                let data = block!(self.trussed.read_file(
+                let data = try_syscall!(self.trussed.read_file(
                     trussed::types::StorageLocation::Internal,
                     trussed::types::PathBuf::from(b"authentication-key.x5c"),
-                ).unwrap()).map_err(|_| {
+                )).map_err(|_| {
                     // info_now!("error loading: {:?}", &e);
                     Status::NotFound
                 } )?.data;
@@ -874,15 +877,15 @@ where T: TrussedClient
                 self.state.runtime.app_security_status.puk_verified = false;
                 self.state.runtime.app_security_status.management_verified = false;
 
-                block!(self.trussed.remove_file(
+                try_syscall!(self.trussed.remove_file(
                     trussed::types::StorageLocation::Internal,
                     trussed::types::PathBuf::from(b"printed-information"),
-                ).unwrap()).ok();
+                )).ok();
 
-                block!(self.trussed.remove_file(
+                try_syscall!(self.trussed.remove_file(
                     trussed::types::StorageLocation::Internal,
                     trussed::types::PathBuf::from(b"authentication-key.x5c"),
-                ).unwrap()).ok();
+                )).ok();
 
                 Ok(Default::default())
             }
@@ -925,9 +928,8 @@ where T: TrussedClient
 }
 
 
-impl<T> applet::Aid for App<T>
-where T: TrussedClient
-{
+#[cfg(feature = "applet")]
+impl<T> applet::Aid for Authenticator<T> {
 
     fn aid(&self) -> &'static [u8] {
         &constants::PIV_AID
@@ -939,8 +941,10 @@ where T: TrussedClient
 }
 
 
-impl<T> applet::Applet for App<T>
-where T: TrussedClient
+#[cfg(feature = "applet")]
+impl<T> applet::Applet for Authenticator<T>
+where
+    T: client::Ed255 + client::Tdes
 {
     fn select(&mut self, _apdu: &Command) -> applet::Result {
         let mut der: Der<consts::U256> = Default::default();
@@ -968,7 +972,7 @@ where T: TrussedClient
                 // 11: ECC-P256
                 der.raw_tlv(0x80, &[0x11])?;
 
-                // 22 (non-standard!): Ed25519
+                // 22 (non-standard!): Ed255
                 der.raw_tlv(0x80, &[0x22])?;
 
                 // mandatory "Object identifier" with value set to 0x00
@@ -989,7 +993,7 @@ where T: TrussedClient
     fn deselect(&mut self) {}
 
     fn call(&mut self, _type: applet::InterfaceType, apdu: &Command) -> applet::Result {
-        match self.try_handle(apdu) {
+        match self.respond(apdu) {
             Ok(data) => {
                 Ok(applet::Response::Respond(data))
             }

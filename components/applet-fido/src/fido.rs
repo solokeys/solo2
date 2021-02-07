@@ -11,21 +11,27 @@ use ctap_types::{
 
 use crate::cbor::{parse_cbor};
 
-use trussed::Client as TrussedClient;
+use trussed::client;
 use fido_authenticator::{Authenticator, UserPresence};
 use apdu_dispatch::applet;
 use hid_dispatch::app as hid;
 
 pub struct Fido<UP, T>
 where UP: UserPresence,
-      T: TrussedClient
 {
     authenticator: Authenticator<UP, T>,
 }
 
 impl<UP, TRUSSED> Fido<UP, TRUSSED>
 where UP: UserPresence,
-      TRUSSED: TrussedClient
+      TRUSSED:
+         client::P256
+       + client::Chacha8Poly1305
+       + client::Aes256Cbc
+       + client::Sha256
+       + client::HmacSha256
+       + client::Ed255
+       + client::Totp
 {
     pub fn new(authenticator: Authenticator<UP, TRUSSED>) -> Fido<UP, TRUSSED> {
         Self { authenticator }
@@ -145,7 +151,6 @@ where UP: UserPresence,
 
 impl<UP, T> applet::Aid for Fido<UP, T>
 where UP: UserPresence,
-      T: TrussedClient
 {
     fn aid(&self) -> &'static [u8] {
         &[ 0xA0, 0x00, 0x00, 0x06, 0x47, 0x2F, 0x00, 0x01 ]
@@ -157,7 +162,13 @@ where UP: UserPresence,
 
 impl<UP, T> applet::Applet for Fido<UP, T>
 where UP: UserPresence,
-      T: TrussedClient
+      T: client::P256
+       + client::Chacha8Poly1305
+       + client::Aes256Cbc
+       + client::Sha256
+       + client::HmacSha256
+       + client::Ed255
+       + client::Totp
 {
 
 
@@ -225,7 +236,13 @@ where UP: UserPresence,
 
 impl<UP, T> hid::App for Fido<UP, T>
 where UP: UserPresence,
-      T: TrussedClient
+      T: client::P256
+       + client::Chacha8Poly1305
+       + client::Aes256Cbc
+       + client::Sha256
+       + client::HmacSha256
+       + client::Ed255
+       + client::Totp
 {
 
     fn commands(&self,) -> &'static [hid::Command] {

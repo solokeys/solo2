@@ -10,6 +10,131 @@ use crate::constants::*;
 
 pub type Result<T> = core::result::Result<T, ()>;
 
+pub enum Key {
+    Ed255(ObjectHandle),
+    P256(ObjectHandle),
+    X255(ObjectHandle),
+}
+pub enum PinPolicy {
+    Never,
+    Once,
+    Always,
+}
+pub enum TouchPolicy {
+    Never,
+    Always,
+    Cached,
+}
+
+pub struct Slot {
+    pub key: Option<ObjectHandle>,
+    pub pin_policy: PinPolicy,
+    // touch_policy: TouchPolicy,
+}
+
+impl Default for Slot {
+    fn default() -> Self {
+        Self { key: None, pin_policy: PinPolicy::Once, /*touch_policy: TouchPolicy::Never*/ }
+    }
+}
+
+impl Slot {
+    pub fn default(name: SlotName) -> Self {
+        use SlotName::*;
+        match name {
+            // Management => Slot { pin_policy: PinPolicy::Never, ..Default::default() },
+            Signature => Slot { pin_policy: PinPolicy::Always, ..Default::default() },
+            Pinless => Slot { pin_policy: PinPolicy::Never, ..Default::default() },
+            _ => Default::default(),
+
+        }
+    }
+}
+
+pub struct RetiredSlotIndex(u8);
+
+impl core::convert::TryFrom<u8> for RetiredSlotIndex {
+    type Error = u8;
+    fn try_from(i: u8) -> core::result::Result<Self, Self::Error> {
+        if 1 <= i && i <= 20 {
+            Ok(Self(i))
+        } else {
+            Err(i)
+        }
+    }
+}
+pub enum SlotName {
+    Identity,
+    Management,  // Personalization? Administration?
+    Signature,
+    Decryption,  // Management after all?
+    Pinless,
+    Retired(RetiredSlotIndex),
+    Attestation,
+}
+
+impl SlotName {
+    pub fn default_pin_policy(&self) -> PinPolicy {
+        use SlotName::*;
+        use PinPolicy::*;
+        match *self {
+            Signature => Always,
+            Pinless | Management | Attestation => Never,
+            _ => Once,
+        }
+    }
+
+    pub fn default_slot(&self) -> Slot {
+        Slot { key: None, pin_policy: self.default_pin_policy() }
+    }
+
+    pub fn reference(&self) -> u8 {
+        use SlotName::*;
+        match *self {
+            Identity => 0x9a,
+            Management => 0x9b,
+            Signature => 0x9c,
+            Decryption => 0x9d,
+            Pinless => 0x9e,
+            Retired(RetiredSlotIndex(i)) => 0x81 + i,
+            Attestation => 0xf9,
+        }
+    }
+    pub fn tag(&self) -> u32 {
+        use SlotName::*;
+        match *self {
+            Identity => 0x5fc105,
+            Management => 0,
+            Signature => 0x5fc10a,
+            Decryption => 0x5fc10b,
+            Pinless => 0x5fc101,
+            Retired(RetiredSlotIndex(i)) => 0x5fc10c + i as u32,
+            Attestation => 0x5fff01,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+pub struct Keys {
+    // 9a "PIV Authentication Key" (YK: PIV Authentication)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub authentication_key: Option<ObjectHandle>,
+    // 9b "PIV Card Application Administration Key" (YK: PIV Management)
+    pub management_key: ObjectHandle,
+    // 9c "Digital Signature Key" (YK: Digital Signature)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub signature_key: Option<ObjectHandle>,
+    // 9d "Key Management Key" (YK: Key Management)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub encryption_key: Option<ObjectHandle>,
+    // 9e "Card Authentication Key" (YK: Card Authentication)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pinless_authentication_key: Option<ObjectHandle>,
+    // 0x82..=0x95 (130-149)
+    pub retired_keys: [Option<ObjectHandle>; 20],
+}
+
+
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct State {
     // at startup, trussed is not callable yet.
@@ -30,7 +155,10 @@ impl State {
     //
     // TODO: it is really not good to overwrite user data on failure to decode old state.
     // To fix this, need a flag to detect if we're "fresh", and/or initialize state in factory.
-    pub fn persistent<T: TrussedClient>(&mut self, trussed: &mut T) -> &mut Persistent {
+    pub fn persistent<T>(&mut self, trussed: &mut T) -> &mut Persistent
+    where T: TrussedClient
+        + trussed::client::Tdes
+    {
         if self.persistent.is_none() {
             self.persistent = Some(match Persistent::load(trussed) {
                 Ok(previous_self) => {
@@ -196,24 +324,6 @@ pub struct AuthenticateManagement {
     pub challenge: [u8; 8],
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
-pub struct Keys {
-    // 9a "PIV Authentication Key" (YK: PIV Authentication)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub authentication_key: Option<ObjectHandle>,
-    // 9b "PIV Card Application Administration Key" (YK: PIV Management)
-    pub management_key: ObjectHandle,
-    // 9c "Digital Signature Key" (YK: Digital Signature)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub signature_key: Option<ObjectHandle>,
-    // 9d "Key Management Key" (YK: Key Management)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub encryption_key: Option<ObjectHandle>,
-    // 9e "Card Authentication Key" (YK: Card Authentication)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub pinless_authentication_key: Option<ObjectHandle>,
-}
-
 impl Persistent
 {
     pub const PIN_RETRIES_DEFAULT: u8 = 3;
@@ -307,11 +417,17 @@ impl Persistent
         Self::PUK_RETRIES_DEFAULT
     }
 
-    pub fn reset_management_key<T: TrussedClient>(&mut self, trussed: &mut T) {
+    pub fn reset_management_key<T>(&mut self, trussed: &mut T)
+    where T: TrussedClient
+        + trussed::client::Tdes
+    {
         self.set_management_key(trussed, YUBICO_DEFAULT_MANAGEMENT_KEY);
     }
 
-    pub fn set_management_key<T: TrussedClient>(&mut self, trussed: &mut T, management_key: &[u8; 24]) {
+    pub fn set_management_key<T>(&mut self, trussed: &mut T, management_key: &[u8; 24])
+    where T: TrussedClient
+        + trussed::client::Tdes
+    {
         let new_management_key = syscall!(trussed.unsafe_inject_tdes_key(
             management_key,
             trussed::types::StorageLocation::Internal,
@@ -322,7 +438,10 @@ impl Persistent
         syscall!(trussed.delete(old_management_key));
     }
 
-    pub fn initialize<T: TrussedClient>(trussed: &mut T) -> Self {
+    pub fn initialize<T: TrussedClient>(trussed: &mut T) -> Self
+    where T: TrussedClient
+        + trussed::client::Tdes
+    {
         let management_key = syscall!(trussed.unsafe_inject_tdes_key(
             YUBICO_DEFAULT_MANAGEMENT_KEY,
             trussed::types::StorageLocation::Internal,
@@ -334,6 +453,7 @@ impl Persistent
             signature_key: None,
             encryption_key: None,
             pinless_authentication_key: None,
+            retired_keys: Default::default(),
         };
 
         Self {

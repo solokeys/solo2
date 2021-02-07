@@ -1,8 +1,7 @@
 use core::convert::{TryFrom, TryInto};
 
 use trussed::{
-    block, syscall,
-    Client as TrussedClient,
+    client, syscall, try_syscall,
     types::{
         ObjectHandle,
     },
@@ -176,7 +175,7 @@ impl Credential {
         }
     }
 
-    pub fn id_using_hash<'a, T: TrussedClient>(
+    pub fn id_using_hash<'a, T: client::Chacha8Poly1305>(
         &self,
         crypto: &mut T,
         key_encryption_key: &ObjectHandle,
@@ -197,7 +196,7 @@ impl Credential {
         Ok(credential_id)
     }
 
-    pub fn id<'a, T: TrussedClient>(
+    pub fn id<'a, T: client::Chacha8Poly1305 + client::Sha256>(
         &self,
         trussed: &mut T,
         key_encryption_key: &ObjectHandle,
@@ -242,7 +241,7 @@ impl Credential {
         }
     }
 
-    pub fn try_from<UP: UserPresence, T: TrussedClient>(
+    pub fn try_from<UP: UserPresence, T: client::Chacha8Poly1305>(
         authnr: &mut Authenticator<UP,T>,
         rp_id_hash: &Bytes<consts::U32>,
         descriptor: &PublicKeyCredentialDescriptor,
@@ -252,7 +251,7 @@ impl Credential {
         Self::try_from_bytes(authnr, rp_id_hash, &descriptor.id)
     }
 
-    pub fn try_from_bytes<UP: UserPresence, T: TrussedClient>(
+    pub fn try_from_bytes<UP: UserPresence, T: client::Chacha8Poly1305>(
         authnr: &mut Authenticator<UP, T>,
         rp_id_hash: &Bytes<consts::U32>,
         id: &[u8],
@@ -269,14 +268,14 @@ impl Credential {
 
         let kek = authnr.state.persistent.key_encryption_key(&mut authnr.trussed)?;
 
-        let serialized = block!(authnr.trussed.decrypt_chacha8poly1305(
+        let serialized = try_syscall!(authnr.trussed.decrypt_chacha8poly1305(
             // TODO: use RpId as associated data here?
             &kek,
             &encrypted_serialized.0.ciphertext,
             &rp_id_hash[..],
             &encrypted_serialized.0.nonce,
             &encrypted_serialized.0.tag,
-        ).unwrap())
+        ))
             .map_err(|_| Error::InvalidCredential)?.plaintext
             .ok_or(Error::InvalidCredential)?;
 

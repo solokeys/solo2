@@ -517,7 +517,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
     let fido = applet_fido::Fido::new(authnr);
 
-    let piv = piv_authenticator::App::new(piv_trussed);
+    let piv = piv_authenticator::Authenticator::new(piv_trussed);
     let ndef = applet_ndef::NdefApplet::new();
     let root = types::RootApp::new(root_trussed, hal::uuid(), build_constants::CARGO_PKG_VERSION);
 

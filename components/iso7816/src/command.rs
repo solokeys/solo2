@@ -88,15 +88,17 @@ impl core::convert::TryFrom<&[u8]> for Command {
         let (header, body) = apdu.split_at(4);
         let class = class::Class::try_from(header[0])?;
         let instruction = instruction::Instruction::from(header[1]);
+        let p1 = header[2];
+        let p2 = header[3];
         let parsed = parse_lengths(body)?;
         let data_slice = &body[parsed.offset..][..parsed.lc];
 
         Ok(Self {
-            class,
-            instruction,
-            p1: header[2],
-            p2: header[3],
+            // header
+            class, instruction, p1, p2,
+            // maximum expected response length
             le: parsed.le,
+            // payload
             data: Data::try_from_slice(data_slice).unwrap(),
             extended: parsed.extended,
         })
