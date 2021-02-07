@@ -126,35 +126,35 @@ impl<N: ArrayLength<u8>> Der<N> {
         self.extend_from_slice(value)
     }
 
-    ///// Write the given input as integer.
-    /////
-    ///// Assumes `input` is the big-endian representation of a non-negative `Integer`
-    /////
-    ///// Not sure about good references, maybe:
-    ///// https://docs.microsoft.com/en-us/windows/win32/seccertenroll/about-integer
-    /////
-    ///// From: https://docs.rs/ecdsa/0.3.0/src/ecdsa/convert.rs.html#205-219
-    ///// Compute ASN.1 DER encoded length for the provided scalar.
-    ///// The ASN.1 encoding is signed, so its leading bit must have value 0;
-    ///// it must also be of minimal length (so leading bytes of value 0 must be
-    ///// removed, except if that would contradict the rule about the sign bit).
-    //pub fn non_negative_integer(&mut self, mut integer: &[u8]) -> Result {
-    //    self.extend_from_slice(&[Tag::Integer as u8])?;
+    /// Write the given input as integer.
+    ///
+    /// Assumes `input` is the big-endian representation of a non-negative `Integer`
+    ///
+    /// Not sure about good references, maybe:
+    /// https://docs.microsoft.com/en-us/windows/win32/seccertenroll/about-integer
+    ///
+    /// From: https://docs.rs/ecdsa/0.3.0/src/ecdsa/convert.rs.html#205-219
+    /// Compute ASN.1 DER encoded length for the provided scalar.
+    /// The ASN.1 encoding is signed, so its leading bit must have value 0;
+    /// it must also be of minimal length (so leading bytes of value 0 must be
+    /// removed, except if that would contradict the rule about the sign bit).
+    pub fn non_negative_integer(&mut self, mut integer: &[u8]) -> Result {
+        self.extend_from_slice(&[Tag::Integer as u8])?;
 
-    //    // strip leading zero bytes
-    //    while !integer.is_empty() && integer[0] == 0 {
-    //        integer = &integer[1..];
-    //    }
+        // strip leading zero bytes
+        while !integer.is_empty() && integer[0] == 0 {
+            integer = &integer[1..];
+        }
 
-    //    if integer.is_empty() || integer[0] >= 0x80 {
-    //        self.write_length_field(integer.len() + 1)?;
-    //        self.extend_from_slice(&[0x00])?;
-    //    } else {
-    //        self.write_length_field(integer.len())?;
-    //    }
+        if integer.is_empty() || integer[0] >= 0x80 {
+            self.write_length_field(integer.len() + 1)?;
+            self.extend_from_slice(&[0x00])?;
+        } else {
+            self.write_length_field(integer.len())?;
+        }
 
-    //    self.extend_from_slice(integer)
-    //}
+        self.extend_from_slice(integer)
+    }
 
     /// Write a nested structure by passing in a handling function that writes
     /// the serialized intermediate structure.

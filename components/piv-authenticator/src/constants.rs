@@ -5,25 +5,22 @@ pub const RID_LENGTH: usize = 5;
 // top nibble of first byte is "category", here "A" = International
 // this category has 5 byte "registered application provider identifier"
 // (international RID, the other 9 nibbles is between 0x0 and 0x9).
-pub const NIST_RID: &[u8; 5] = &[0xa0, 0x00, 0x00, 0x03, 0x08];
-pub const YUBICO_RID: &[u8; 5] = &[0xa0, 0x00, 0x00, 0x05, 0x27];
+pub const NIST_RID: &[u8; 5] = &hex!("A000000 308");
+pub const YUBICO_RID: &[u8; 5] = &hex!("A000000 527");
 // our very own RID (847 = 7*11*11 FWIW)
-pub const SOLOKEYS_RID: &[u8; 5] = &[0xa0, 0x00, 0x00, 0x08, 0x47];
+pub const SOLOKEYS_RID: &[u8; 5] = &hex!("A000000 847");
 
-pub const PIV_APP: [u8; 4] = [0x00, 0x00, 0x10, 0x00];
-pub const DERIVED_PIV_APP: [u8; 4] = [0x00, 0x00, 0x10, 0x00];
-pub const PIV_VERSION: [u8; 2] = [0x01, 0x00];
-pub const PIV_PIX: [u8; 6] = [0x00, 0x00, 0x10, 0x00, 0x01, 0x00];
-pub const DERIVED_PIV_PIX: [u8; 6] = [0x00, 0x00, 0x20, 0x00, 0x01, 0x00];
+pub const PIV_APP: [u8; 4] = hex!("0000 1000");
+pub const DERIVED_PIV_APP: [u8; 4] = hex!("0000 2000");
+pub const PIV_VERSION: [u8; 2] = hex!("0100");
+pub const PIV_PIX: [u8; 6] = hex!("0000 1000 0100");
+pub const DERIVED_PIV_PIX: [u8; 6] = hex!("0000 2000 0100");
 
-pub const PIV_TRUNCATED_AID: [u8; 9]
-    = [0xa0, 0x00, 0x00, 0x03, 0x08, 0x00, 0x00, 0x10, 0x00];
+pub const PIV_TRUNCATED_AID: [u8; 9] = hex!("A000000308 00001000");
 
-pub const PIV_AID: [u8; 11]
-    = [0xa0, 0x00, 0x00, 0x03, 0x08, 0x00, 0x00, 0x10, 0x00, 0x01, 0x00];
+pub const PIV_AID: [u8; 11] = hex!("A000000308 00001000 0100");
 
-pub const DERIVED_PIV_AID: [u8; 11]
-    = [0xa0, 0x00, 0x00, 0x03, 0x08, 0x00, 0x00, 0x20, 0x00, 0x01, 0x00];
+pub const DERIVED_PIV_AID: [u8; 11] = hex!("A000000308 00002000 0100");
 
 pub const APPLICATION_LABEL: &[u8] = b"SoloKeys PIV v1.0.0-alpha1";
 pub const APPLICATION_URL: &[u8] = b"https://piv.codes/SoloKeys/PIV/1.0.0-alpha1";
@@ -31,11 +28,11 @@ pub const APPLICATION_URL: &[u8] = b"https://piv.codes/SoloKeys/PIV/1.0.0-alpha1
 
 
 // https://git.io/JfWuD
-pub const YUBICO_OTP_PIX: &[u8; 3] = &[0x20, 0x01, 0x01];
-pub const YUBICO_OTP_AID: [u8; 8] = [0xa0, 0x00, 0x00, 0x05, 0x27, 0x20, 0x01, 0x01];
+pub const YUBICO_OTP_PIX: [u8; 3] = hex!("200101");
+pub const YUBICO_OTP_AID: [u8; 8] = hex!("A000000527 200101");
 // they use it to "deauthenticate user PIN and mgmt key": https://git.io/JfWgN
-pub const YUBICO_MGMT_PIX: &[u8; 3] = &[0x47, 0x11, 0x17];
-pub const YUBICO_MGMT_AID: &[u8; 8] = &[0xa0, 0x00, 0x00, 0x05, 0x27, 0x20, 0x01, 0x01];
+pub const YUBICO_MGMT_PIX: [u8; 3] = hex!("471117");
+pub const YUBICO_MGMT_AID: [u8; 8] = hex!("A000000527 471117");
 
 // https://git.io/JfW28
 // const (

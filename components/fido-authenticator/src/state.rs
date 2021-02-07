@@ -1,7 +1,7 @@
 use core::cmp::Ordering;
 
 use trussed::{
-    block, syscall,
+    client, syscall, try_syscall,
     Client as TrussedClient,
     types::{
         self,
@@ -187,14 +187,13 @@ impl PersistentState {
         Self::MAX_RESIDENT_CREDENTIALS_GUESSTIMATE
     }
 
-    pub fn load<T: TrussedClient>(trussed: &mut T) -> Result<Self> {
+    pub fn load<T: client::Chacha8Poly1305>(trussed: &mut T) -> Result<Self> {
 
         // TODO: add "exists_file" method instead?
-        let result = block!(trussed.read_file(
-                StorageLocation::Internal,
-                PathBuf::from(Self::FILENAME),
-            ).unwrap()
-        ).map_err(|_| Error::Other);
+        let result = try_syscall!(trussed.read_file(
+            StorageLocation::Internal,
+            PathBuf::from(Self::FILENAME),
+        )).map_err(|_| Error::Other);
 
         if result.is_err() {
             info_now!("err loading: {:?}", result.err().unwrap());
@@ -243,7 +242,7 @@ impl PersistentState {
         self.save(trussed)
     }
 
-    pub fn load_if_not_initialised<T: TrussedClient>(&mut self, trussed: &mut T) {
+    pub fn load_if_not_initialised<T: client::Chacha8Poly1305>(&mut self, trussed: &mut T) {
         if !self.initialised {
             match Self::load(trussed) {
                 Ok(previous_self) => {
@@ -265,7 +264,7 @@ impl PersistentState {
         Ok(now)
     }
 
-    pub fn key_encryption_key<T: TrussedClient>(&mut self, trussed: &mut T) -> Result<Key>
+    pub fn key_encryption_key<T: client::Chacha8Poly1305>(&mut self, trussed: &mut T) -> Result<Key>
     {
         match self.key_encryption_key {
             Some(key) => Ok(key),
@@ -273,7 +272,7 @@ impl PersistentState {
         }
     }
 
-    pub fn rotate_key_encryption_key<T: TrussedClient>(&mut self, trussed: &mut T) -> Result<Key> {
+    pub fn rotate_key_encryption_key<T: client::Chacha8Poly1305>(&mut self, trussed: &mut T) -> Result<Key> {
         if let Some(key) = self.key_encryption_key { syscall!(trussed.delete(key)); }
         let key = syscall!(trussed.generate_chacha8poly1305_key(StorageLocation::Internal)).key;
         self.key_encryption_key = Some(key);
@@ -281,7 +280,7 @@ impl PersistentState {
         Ok(key)
     }
 
-    pub fn key_wrapping_key<T: TrussedClient>(&mut self, trussed: &mut T) -> Result<Key>
+    pub fn key_wrapping_key<T: client::Chacha8Poly1305>(&mut self, trussed: &mut T) -> Result<Key>
     {
         match self.key_wrapping_key {
             Some(key) => Ok(key),
@@ -289,7 +288,7 @@ impl PersistentState {
         }
     }
 
-    pub fn rotate_key_wrapping_key<T: TrussedClient>(&mut self, trussed: &mut T) -> Result<Key> {
+    pub fn rotate_key_wrapping_key<T: client::Chacha8Poly1305>(&mut self, trussed: &mut T) -> Result<Key> {
         self.load_if_not_initialised(trussed);
         if let Some(key) = self.key_wrapping_key { syscall!(trussed.delete(key)); }
         let key = syscall!(trussed.generate_chacha8poly1305_key(StorageLocation::Internal)).key;
@@ -380,14 +379,14 @@ impl RuntimeState {
         self.credentials.as_mut().unwrap()
     }
 
-    pub fn key_agreement_key<T: TrussedClient>(&mut self, trussed: &mut T) -> Key {
+    pub fn key_agreement_key<T: client::P256>(&mut self, trussed: &mut T) -> Key {
         match self.key_agreement_key {
             Some(key) => key,
             None => self.rotate_key_agreement_key(trussed),
         }
     }
 
-    pub fn rotate_key_agreement_key<T: TrussedClient>(&mut self, trussed: &mut T) -> Key {
+    pub fn rotate_key_agreement_key<T: client::P256>(&mut self, trussed: &mut T) -> Key {
         // TODO: need to rotate pin token?
         if let Some(key) = self.key_agreement_key { syscall!(trussed.delete(key)); }
 
@@ -396,14 +395,14 @@ impl RuntimeState {
         key
     }
 
-    pub fn pin_token<T: TrussedClient>(&mut self, trussed: &mut T) -> Key {
+    pub fn pin_token(&mut self, trussed: &mut impl client::HmacSha256) -> Key {
         match self.pin_token {
             Some(token) => token,
             None => self.rotate_pin_token(trussed),
         }
     }
 
-    pub fn rotate_pin_token<T: TrussedClient>(&mut self, trussed: &mut T) -> Key {
+    pub fn rotate_pin_token<T: client::HmacSha256>(&mut self, trussed: &mut T) -> Key {
         // TODO: need to rotate key agreement key?
         if let Some(token) = self.pin_token { syscall!(trussed.delete(token)); }
         let token = syscall!(trussed.generate_hmacsha256_key(StorageLocation::Volatile)).key;
@@ -411,7 +410,7 @@ impl RuntimeState {
         token
     }
 
-    pub fn reset<T: TrussedClient>(&mut self, trussed: &mut T) {
+    pub fn reset<T: client::HmacSha256 + client::P256>(&mut self, trussed: &mut T) {
         self.rotate_key_agreement_key(trussed);
         self.rotate_pin_token(trussed);
         // self.drop_shared_secret(trussed);
@@ -420,15 +419,14 @@ impl RuntimeState {
     }
 
     // TODO: don't recalculate constantly
-    pub fn generate_shared_secret<T: TrussedClient>(&mut self, trussed: &mut T, platform_key_agreement_key: &CoseEcdhEsHkdf256PublicKey) -> Result<Key> {
+    pub fn generate_shared_secret<T: client::P256>(&mut self, trussed: &mut T, platform_key_agreement_key: &CoseEcdhEsHkdf256PublicKey) -> Result<Key> {
         let private_key = self.key_agreement_key(trussed);
 
         let serialized_pkak = cbor_serialize_message(platform_key_agreement_key).map_err(|_| Error::InvalidParameter)?;
-        let platform_kak = block!(
-            trussed.deserialize_key(
-                types::Mechanism::P256, serialized_pkak, types::KeySerialization::EcdhEsHkdf256,
-                types::StorageAttributes::new().set_persistence(types::StorageLocation::Volatile)
-            ).unwrap()).map_err(|_| Error::InvalidParameter)?.key;
+        let platform_kak = try_syscall!(trussed.deserialize_p256_key(
+            &serialized_pkak, types::KeySerialization::EcdhEsHkdf256,
+            types::StorageAttributes::new().set_persistence(types::StorageLocation::Volatile)
+        )).map_err(|_| Error::InvalidParameter)?.key;
 
         let pre_shared_secret = syscall!(trussed.agree(
             types::Mechanism::P256, private_key.clone(), platform_kak.clone(),

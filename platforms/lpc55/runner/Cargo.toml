@@ -41,7 +41,7 @@ fido-authenticator = { path = "../../../components/fido-authenticator" }
 fm11nc08 = {path = "../../../components/fm11nc08"}
 hid-dispatch = {path = "../../../components/hid-dispatch"}
 iso14443 = {path = "../../../components/iso14443"}
-piv-authenticator = { path = "../../../components/piv-authenticator" }
+piv-authenticator = { path = "../../../components/piv-authenticator", features = ["applet"] }
 usbd-ccid = { path = "../../../components/usbd-ccid" }
 usbd-ctaphid = { path = "../../../components/usbd-ctaphid" }
 

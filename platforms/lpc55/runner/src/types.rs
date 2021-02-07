@@ -2,7 +2,7 @@ include!(concat!(env!("OUT_DIR"), "/build_constants.rs"));
 use crate::hal;
 use hal::drivers::{pins, timer};
 use littlefs2::{
-    const_ram_storage,
+    const_ram_storage, fs::{Allocation, Filesystem},
 };
 use trussed::types::{LfsResult, LfsStorage};
 use trussed::{platform, store};
@@ -93,7 +93,7 @@ pub type ApduDispatch = apdu_dispatch::dispatch::ApduDispatch;
 
 pub type HidDispatch = hid_dispatch::dispatch::Dispatch;
 
-pub type Piv = piv_authenticator::App<TrussedClient>;
+pub type Piv = piv_authenticator::Authenticator<TrussedClient>;
 
 pub type FidoApplet<UP> = applet_fido::Fido<UP, TrussedClient>;
 

@@ -3,8 +3,8 @@
 use core::convert::TryFrom;
 
 use trussed::{
+    client,
     syscall,
-    Client as TrussedClient,
     types::{
         DirEntry,
         StorageLocation,
@@ -38,14 +38,12 @@ use crate::{
 
 pub struct CredentialManagement<'a, UP, T>
 where UP: UserPresence,
-      T: TrussedClient,
 {
     authnr: &'a mut Authenticator<UP, T>,
 }
 
 impl<UP, T> core::ops::Deref for CredentialManagement<'_, UP, T>
 where UP: UserPresence,
-      T: TrussedClient,
 {
     type Target = Authenticator<UP, T>;
     fn deref(&self) -> &Self::Target {
@@ -55,7 +53,6 @@ where UP: UserPresence,
 
 impl<UP, T> core::ops::DerefMut for CredentialManagement<'_, UP, T>
 where UP: UserPresence,
-      T: TrussedClient,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.authnr
@@ -64,7 +61,6 @@ where UP: UserPresence,
 
 impl<'a, UP, T> CredentialManagement<'a, UP, T>
 where UP: UserPresence,
-      T: TrussedClient,
 {
     pub fn new(authnr: &'a mut Authenticator<UP, T>) -> Self {
         Self { authnr }
@@ -73,7 +69,14 @@ where UP: UserPresence,
 
 impl<UP, T> CredentialManagement<'_, UP, T>
 where UP: UserPresence,
-      T: TrussedClient,
+      T: client::P256
+       + client::Chacha8Poly1305
+       + client::Aes256Cbc
+       + client::Sha256
+       + client::HmacSha256
+       + client::Ed255
+       + client::Totp
+       + client::P256
 {
     pub fn get_creds_metadata(&mut self) -> Result<Response> {
         info_now!("get metadata");
@@ -418,9 +421,10 @@ where UP: UserPresence,
                     .unwrap())
             }
             SupportedAlgorithm::Ed25519 => {
-                let public_key = syscall!(self.trussed.derive_ed25519_public_key(&private_key, StorageLocation::Volatile)).key;
-                let cose_public_key = syscall!(self.trussed.serialize_key(
-                    Mechanism::Ed25519, public_key.clone(), KeySerialization::Cose
+                let public_key = syscall!(self.trussed.derive_ed255_public_key(
+                    &private_key, StorageLocation::Volatile)).key;
+                let cose_public_key = syscall!(self.trussed.serialize_ed255_key(
+                    &public_key, KeySerialization::Cose
                 )).serialized_key;
                 syscall!(self.trussed.delete(public_key));
                 PublicKey::Ed25519Key(

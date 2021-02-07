@@ -7,7 +7,7 @@ extern crate delog;
 generate_macros!();
 
 use trussed::{
-    block, syscall,
+    client, syscall, try_syscall,
     Client as TrussedClient,
     types::{
         KeySerialization,
@@ -138,7 +138,6 @@ fn cbor_serialize_message<T: serde::Serialize>(object: &T) -> core::result::Resu
 
 pub struct Authenticator<UP, T>
 where UP: UserPresence,
-      T: TrussedClient,
 {
     trussed: T,
     state: state::State,
@@ -147,7 +146,14 @@ where UP: UserPresence,
 
 impl<UP, T> Authenticator<UP, T>
 where UP: UserPresence,
-      T: TrussedClient,
+      T: client::P256
+       + client::Chacha8Poly1305
+       + client::Aes256Cbc
+       + client::Sha256
+       + client::HmacSha256
+       + client::Ed255
+       + client::Totp
+       // + TrussedClient
 {
     pub fn new(trussed: T, up: UP) -> Self {
 
@@ -173,8 +179,8 @@ where UP: UserPresence,
                 let private_key = syscall!(self.trussed.generate_p256_private_key(StorageLocation::Volatile)).key;
                 let public_key = syscall!(self.trussed.derive_p256_public_key(&private_key, StorageLocation::Volatile)).key;
 
-                let serialized_cose_public_key = syscall!(self.trussed.serialize_key(
-                    Mechanism::P256, public_key.clone(), KeySerialization::EcdhEsHkdf256
+                let serialized_cose_public_key = syscall!(self.trussed.serialize_p256_key(
+                    &public_key, KeySerialization::EcdhEsHkdf256
                 )).serialized_key;
                 let cose_key: ctap_types::cose::EcdhEsHkdf256PublicKey
                     = trussed::cbor_deserialize(&serialized_cose_public_key).unwrap();
@@ -955,7 +961,7 @@ where UP: UserPresence,
                         debug!("checking if ResidentKey {:?} exists", &key);
                         match credential.algorithm {
                             -7 => syscall!(self.trussed.exists(Mechanism::P256, key)).exists,
-                            -8 => syscall!(self.trussed.exists(Mechanism::Ed25519, key)).exists,
+                            -8 => syscall!(self.trussed.exists(Mechanism::Ed255, key)).exists,
                             -9 => {
                                 let exists = syscall!(self.trussed.exists(Mechanism::Totp, key)).exists;
                                 info!("found it");
@@ -1372,7 +1378,7 @@ where UP: UserPresence,
 
         let (mechanism, serialization) = match credential.algorithm {
             -7 => (Mechanism::P256, SignatureSerialization::Asn1Der),
-            -8 => (Mechanism::Ed25519, SignatureSerialization::Raw),
+            -8 => (Mechanism::Ed255, SignatureSerialization::Raw),
             -9 => (Mechanism::Totp, SignatureSerialization::Raw),
             _ => { return Err(Error::Other); }
         };
@@ -1720,10 +1726,10 @@ where UP: UserPresence,
                 info!("deleted public P256 key: {}", _success);
             }
             SupportedAlgorithm::Ed25519 => {
-                private_key = syscall!(self.trussed.generate_ed25519_private_key(location)).key;
-                public_key = syscall!(self.trussed.derive_ed25519_public_key(&private_key, StorageLocation::Volatile)).key;
+                private_key = syscall!(self.trussed.generate_ed255_private_key(location)).key;
+                public_key = syscall!(self.trussed.derive_ed255_public_key(&private_key, StorageLocation::Volatile)).key;
                 cose_public_key = syscall!(self.trussed.serialize_key(
-                    Mechanism::Ed25519, public_key.clone(), KeySerialization::Cose
+                    Mechanism::Ed255, public_key.clone(), KeySerialization::Cose
                 )).serialized_key;
                 let _success = syscall!(self.trussed.delete(public_key)).success;
                 info!("deleted public Ed25519 key: {}", _success);
@@ -1803,14 +1809,14 @@ where UP: UserPresence,
 
         if rk_requested {
             let credential_id_hash = self.hash(&credential_id.0.as_ref());
-            block!(self.trussed.write_file(
+            try_syscall!(self.trussed.write_file(
                 StorageLocation::Internal,
                 rk_path(&rp_id_hash, &credential_id_hash),
                 serialized_credential.clone(),
                 // user attribute for later easy lookup
                 // Some(rp_id_hash.clone()),
                 None,
-            ).unwrap()).map_err(|_| Error::KeyStoreFull)?;
+            )).map_err(|_| Error::KeyStoreFull)?;
         }
         // 13. generate and return attestation statement using clientDataHash
 
@@ -1880,7 +1886,7 @@ where UP: UserPresence,
             if attestation_key.is_none() {
                 match algorithm {
                     SupportedAlgorithm::Ed25519 => {
-                        let signature = syscall!(self.trussed.sign_ed25519(&private_key, &commitment)).signature;
+                        let signature = syscall!(self.trussed.sign_ed255(&private_key, &commitment)).signature;
                         (signature.try_to_bytes().map_err(|_| Error::Other)?, -8)
                     }
 

@@ -1,3 +1,4 @@
+
 # This is a configuration file for the bacon tool
 # More info at https://github.com/Canop/bacon
 
@@ -5,12 +6,9 @@ default_job = "check"
 
 [jobs]
 
-[jobs.check-dev]
-command = ["cargo", "check", "--color", "always", "--features", "board-lpcxpresso55,no-encrypted-storage,no-buttons"]
-need_stdout = false
-
 [jobs.check]
-command = ["cargo", "check", "--color", "always", "--features"]
+# command = ["cargo", "check", "--color", "always", "--features", "clients-1"]
+command = ["cargo", "check", "--color", "always"]
 need_stdout = false
 
 [jobs.check-all]
@@ -27,5 +25,9 @@ need_stdout = false
 
 [jobs.test]
 command = ["cargo", "test", "--color", "always"]
+need_stdout = true
+
+[jobs.doc]
+command = ["cargo", "doc", "--color", "always"]
 need_stdout = true
 
