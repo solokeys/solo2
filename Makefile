@@ -8,3 +8,8 @@ bacon:
 run-dev:
 	make -C $(RUNNER) run-dev
 
+mount-fs:
+	scripts/fuse-bee
+
+umount-fs:
+	scripts/defuse-bee
