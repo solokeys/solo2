@@ -6,3 +6,4 @@ solo-bee.code-workspace
 ref/
 memory.x
 solo-state.bin
+bee.littlefs2

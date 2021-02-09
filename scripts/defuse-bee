@@ -1,0 +1,10 @@
+#!/usr/bin/bash -xe
+
+# load variable
+state=/tmp/bee-mount.state
+source ${state}
+
+# unmount
+umount ${mount}
+sudo losetup -d ${loop_device}
+rm ${state}
