@@ -10,11 +10,13 @@ edition = "2018"
 apdu-dispatch = { path = "../apdu-dispatch", optional = true }
 delog = "0.1.0-alpha.3"
 heapless = "0.6"
-heapless-bytes = "0.1"
+heapless-bytes = "0.1.1"
 hex-literal = "0.3"
 interchange = "0.1"
 iso7816 = { path = "../iso7816" }
 serde = { version = "1", default-features = false }
+# simple-tlv = { version = "0.1", features = ["derive"] }
+flexiber = { path = "../../../flexiber", features = ["derive"] }
 trussed = { git = "ssh://git@github.com/trussed-dev/trussed.git", branch = "main" }
 # trussed = { path = "../../../trussed" }
 untrusted = "0.7"

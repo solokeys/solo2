@@ -8,6 +8,7 @@ generate_macros!();
 extern crate hex_literal;
 
 pub mod constants;
+pub mod container;
 pub mod state;
 pub mod derp;
 pub mod der;
@@ -117,6 +118,7 @@ where
 
         // info_now!("INS = {:?}" &command.instruction());
         match command.instruction() {
+            Instruction::Select => self.select(command),
             Instruction::GetData => self.get_data(command),
             Instruction::PutData => self.put_data(command),
             Instruction::Verify => self.verify(command),
@@ -138,6 +140,50 @@ where
         }
     }
 
+    fn select(&mut self, _apdu: &Command) -> ResponseResult {
+        let mut der: Der<consts::U256> = Default::default();
+        der.nested(0x61, |der| {
+            // Application identifier of application:
+            // -> PIX (without RID, with version)
+            der.raw_tlv(0x4f, &PIV_PIX)?;
+
+            // Application label:
+            // "Text describing the application; e.g., for use on a man-machine interface."
+            der.raw_tlv(0x50, APPLICATION_LABEL)?;
+
+            // Uniform resource locator:
+            // "Reference to the specification describing the application."
+            der.raw_tlv2(0x5F50, APPLICATION_URL)?;
+
+            // Cryptographic algorithms supported:
+            // "Cryptographic algorithm identifier template. See Table 5."
+            der.nested(0xAC, |der| {
+                // 0x80: Cryptographic algorithm identifier
+                // "For values see [SP800-78, Table 6-2]"
+
+                // 0C: AES-256
+                der.raw_tlv(0x80, &[0x0C])?;
+                // 11: ECC-P256
+                der.raw_tlv(0x80, &[0x11])?;
+
+                // 22 (non-standard!): Ed255
+                der.raw_tlv(0x80, &[0x22])?;
+
+                // mandatory "Object identifier" with value set to 0x00
+                der.raw_tlv(0x06, &[0x00])
+            })?;
+
+            // Coexistent tag allocation authority
+            der.nested(0x79, |der| {
+                // Application identifier
+                der.raw_tlv(0x4f, NIST_RID)
+            // })?;
+            })
+        }).unwrap();
+
+        return Ok(der.to_bytes());
+    }
+
     // SP 800-73-4, Part 2, Section 3.2.4
     // https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-73-4.pdf#page=92
     //
@@ -156,7 +202,7 @@ where
     // - 80 witness
     // - 81 challenge
     // - 82 response
-    // - 83 exponentiation
+    // - 85 exponentiation
     //
     // Request for requests:
     // - '80 00' returns '80 TL <encrypted random>'
@@ -787,10 +833,10 @@ where
                 der.nested(0x53, |der| {
                     // der.raw_tlv(0x30, FASC_N)?; // pivy: 26B, TIG: 25B
                     der.raw_tlv(0x30, &[0x99, 0x99])?; // 9999 = non-federal; pivy: 26B, TIG: 25B
-                    // der.raw_tlv(0x34, DUNS)?; // ? - pivy skips
+                    // der.raw_tlv(0x33, DUNS)?; // ? - pivy skips
                     der.raw_tlv(0x34, GUID)?; // 16B type 1,2,4 UUID
                     // der.raw_tlv(0x35, EXPIRATION_DATE)?; // [u8; 8], YYYYMMDD
-                    der.raw_tlv(0x35, b"22220101")?; // [u8; 8], YYYYMMDD
+                    der.raw_tlv(0x35, b"99991231")?; // [u8; 8], YYYYMMDD
                     // der.raw_tlv(0x36, CARDHOLDER_UUID)?; // 16B, like GUID
                     // der.raw_tlv(0x3E, SIGNATURE)?; // ? - pivy only checks for non-zero entry
                     der.raw_tlv(0x3E, b" ")?; // ? - pivy only checks for non-zero entry
@@ -946,60 +992,13 @@ impl<T> applet::Applet for Authenticator<T>
 where
     T: client::Ed255 + client::Tdes
 {
-    fn select(&mut self, _apdu: &Command) -> applet::Result {
-        let mut der: Der<consts::U256> = Default::default();
-        der.nested(0x61, |der| {
-            // Application identifier of application:
-            // -> PIX (without RID, with version)
-            der.raw_tlv(0x4f, &PIV_PIX)?;
-
-            // Application label:
-            // "Text describing the application; e.g., for use on a man-machine interface."
-            der.raw_tlv(0x50, APPLICATION_LABEL)?;
-
-            // Uniform resource locator:
-            // "Reference to the specification describing the application."
-            der.raw_tlv2(0x5F50, APPLICATION_URL)?;
-
-            // Cryptographic algorithms supported:
-            // "Cryptographic algorithm identifier template. See Table 5."
-            der.nested(0xAC, |der| {
-                // 0x80: Cryptographic algorithm identifier
-                // "For values see [SP800-78, Table 6-2]"
-
-                // 0C: AES-256
-                der.raw_tlv(0x80, &[0x0C])?;
-                // 11: ECC-P256
-                der.raw_tlv(0x80, &[0x11])?;
-
-                // 22 (non-standard!): Ed255
-                der.raw_tlv(0x80, &[0x22])?;
-
-                // mandatory "Object identifier" with value set to 0x00
-                der.raw_tlv(0x06, &[0x00])
-            })?;
-
-            // Coexistent tag allocation authority
-            der.nested(0x79, |der| {
-                // Application identifier
-                der.raw_tlv(0x4f, NIST_RID)
-            // })?;
-            })
-        }).unwrap();
-
-        return Ok(applet::Response::Respond(der.to_bytes()));
+    fn select(&mut self, apdu: &Command) -> applet::Result {
+        self.respond(apdu).map(applet::Reponse::Respond)
     }
 
     fn deselect(&mut self) {}
 
     fn call(&mut self, _type: applet::InterfaceType, apdu: &Command) -> applet::Result {
-        match self.respond(apdu) {
-            Ok(data) => {
-                Ok(applet::Response::Respond(data))
-            }
-            Err(status) => {
-                Err(status)
-            }
-        }
+        self.respond(apdu).map(applet::Reponse::Respond)
     }
 }

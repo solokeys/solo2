@@ -1,0 +1,19 @@
+#!/usr/bin/bash -xe
+
+# Prerequisites:
+#
+# - lpc55: install via `cargo install lpc55-host`
+# - lfs: install via `yay -S littlefs2-fuse`
+# - the bee needs to be in ROM bootloader
+# - the mountpoint has to exist
+
+fs=./bee.littlefs2
+fs_offset=$((512 * 1024))  #  512K, start of 3rd PRINCE section
+expected_fs_size=$((239 * 512))  # 119.5K, or 239 flash pages
+
+# fetch the FS dump
+lpc55 write-memory --input-file ${fs} ${fs_offset}
+fs_size=$(stat -c%s ${fs})
+if (( ${fs_size} != ${expected_fs_size} )); then
+	exit 1
+fi
