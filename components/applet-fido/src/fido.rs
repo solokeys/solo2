@@ -22,10 +22,10 @@ where UP: UserPresence,
     authenticator: Authenticator<UP, T>,
 }
 
-impl<UP, TRUSSED> Fido<UP, TRUSSED>
+impl<UP, Trussed> Fido<UP, Trussed>
 where UP: UserPresence,
-      TRUSSED:
-         client::P256
+      Trussed: client::Client
+       + client::P256
        + client::Chacha8Poly1305
        + client::Aes256Cbc
        + client::Sha256
@@ -33,7 +33,7 @@ where UP: UserPresence,
        + client::Ed255
        + client::Totp
 {
-    pub fn new(authenticator: Authenticator<UP, TRUSSED>) -> Fido<UP, TRUSSED> {
+    pub fn new(authenticator: Authenticator<UP, Trussed>) -> Fido<UP, Trussed> {
         Self { authenticator }
     }
 
@@ -162,7 +162,8 @@ where UP: UserPresence,
 
 impl<UP, T> applet::Applet for Fido<UP, T>
 where UP: UserPresence,
-      T: client::P256
+      T: client::Client
+       + client::P256
        + client::Chacha8Poly1305
        + client::Aes256Cbc
        + client::Sha256
@@ -236,7 +237,8 @@ where UP: UserPresence,
 
 impl<UP, T> hid::App for Fido<UP, T>
 where UP: UserPresence,
-      T: client::P256
+      T: client::Client
+       + client::P256
        + client::Chacha8Poly1305
        + client::Aes256Cbc
        + client::Sha256

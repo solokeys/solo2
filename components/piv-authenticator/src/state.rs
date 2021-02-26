@@ -3,7 +3,7 @@ use trussed::{
     block,
     Client as TrussedClient,
     syscall,
-    types::{ObjectHandle, PathBuf, StorageLocation},
+    types::{ObjectHandle, PathBuf, Location},
 };
 
 use crate::constants::*;
@@ -430,7 +430,7 @@ impl Persistent
     {
         let new_management_key = syscall!(trussed.unsafe_inject_tdes_key(
             management_key,
-            trussed::types::StorageLocation::Internal,
+            trussed::types::Location::Internal,
         )).key;
         let old_management_key = self.keys.management_key;
         self.keys.management_key = new_management_key;
@@ -444,7 +444,7 @@ impl Persistent
     {
         let management_key = syscall!(trussed.unsafe_inject_tdes_key(
             YUBICO_DEFAULT_MANAGEMENT_KEY,
-            trussed::types::StorageLocation::Internal,
+            trussed::types::Location::Internal,
         )).key;
 
         let keys = Keys {
@@ -468,7 +468,7 @@ impl Persistent
 
     pub fn load<T: TrussedClient>(trussed: &mut T) -> Result<Self> {
         let data = block!(trussed.read_file(
-                StorageLocation::Internal,
+                Location::Internal,
                 PathBuf::from(Self::FILENAME),
             ).unwrap()
         ).map_err(|e| {
@@ -489,7 +489,7 @@ impl Persistent
         let data: trussed::types::Message = trussed::cbor_serialize_bytebuf(self).unwrap();
 
         syscall!(trussed.write_file(
-            StorageLocation::Internal,
+            Location::Internal,
             PathBuf::from(Self::FILENAME),
             data,
             None,

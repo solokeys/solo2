@@ -7,7 +7,7 @@ use trussed::{
         self,
         ObjectHandle as Key,
         UniqueId,
-        StorageLocation,
+        Location,
         Mechanism,
     },
 };
@@ -86,7 +86,7 @@ impl Identity {
 
     //     // TODO: inject properly
     //     let attestation_key = syscall!(trussed
-    //         .generate_p256_private_key(StorageLocation::Internal))
+    //         .generate_p256_private_key(Location::Internal))
     //         .key;
 
     //     Self {
@@ -187,11 +187,11 @@ impl PersistentState {
         Self::MAX_RESIDENT_CREDENTIALS_GUESSTIMATE
     }
 
-    pub fn load<T: client::Chacha8Poly1305>(trussed: &mut T) -> Result<Self> {
+    pub fn load<T: client::Client + client::Chacha8Poly1305>(trussed: &mut T) -> Result<Self> {
 
         // TODO: add "exists_file" method instead?
         let result = try_syscall!(trussed.read_file(
-            StorageLocation::Internal,
+            Location::Internal,
             PathBuf::from(Self::FILENAME),
         )).map_err(|_| Error::Other);
 
@@ -219,7 +219,7 @@ impl PersistentState {
         let data = crate::cbor_serialize_message(self).unwrap();
 
         syscall!(trussed.write_file(
-            StorageLocation::Internal,
+            Location::Internal,
             PathBuf::from(Self::FILENAME),
             data,
             None,
@@ -242,7 +242,7 @@ impl PersistentState {
         self.save(trussed)
     }
 
-    pub fn load_if_not_initialised<T: client::Chacha8Poly1305>(&mut self, trussed: &mut T) {
+    pub fn load_if_not_initialised<T: client::Client + client::Chacha8Poly1305>(&mut self, trussed: &mut T) {
         if !self.initialised {
             match Self::load(trussed) {
                 Ok(previous_self) => {
@@ -264,7 +264,7 @@ impl PersistentState {
         Ok(now)
     }
 
-    pub fn key_encryption_key<T: client::Chacha8Poly1305>(&mut self, trussed: &mut T) -> Result<Key>
+    pub fn key_encryption_key<T: client::Client + client::Chacha8Poly1305>(&mut self, trussed: &mut T) -> Result<Key>
     {
         match self.key_encryption_key {
             Some(key) => Ok(key),
@@ -272,15 +272,15 @@ impl PersistentState {
         }
     }
 
-    pub fn rotate_key_encryption_key<T: client::Chacha8Poly1305>(&mut self, trussed: &mut T) -> Result<Key> {
+    pub fn rotate_key_encryption_key<T: client::Client + client::Chacha8Poly1305>(&mut self, trussed: &mut T) -> Result<Key> {
         if let Some(key) = self.key_encryption_key { syscall!(trussed.delete(key)); }
-        let key = syscall!(trussed.generate_chacha8poly1305_key(StorageLocation::Internal)).key;
+        let key = syscall!(trussed.generate_chacha8poly1305_key(Location::Internal)).key;
         self.key_encryption_key = Some(key);
         self.save(trussed)?;
         Ok(key)
     }
 
-    pub fn key_wrapping_key<T: client::Chacha8Poly1305>(&mut self, trussed: &mut T) -> Result<Key>
+    pub fn key_wrapping_key<T: client::Client + client::Chacha8Poly1305>(&mut self, trussed: &mut T) -> Result<Key>
     {
         match self.key_wrapping_key {
             Some(key) => Ok(key),
@@ -288,10 +288,10 @@ impl PersistentState {
         }
     }
 
-    pub fn rotate_key_wrapping_key<T: client::Chacha8Poly1305>(&mut self, trussed: &mut T) -> Result<Key> {
+    pub fn rotate_key_wrapping_key<T: client::Client + client::Chacha8Poly1305>(&mut self, trussed: &mut T) -> Result<Key> {
         self.load_if_not_initialised(trussed);
         if let Some(key) = self.key_wrapping_key { syscall!(trussed.delete(key)); }
-        let key = syscall!(trussed.generate_chacha8poly1305_key(StorageLocation::Internal)).key;
+        let key = syscall!(trussed.generate_chacha8poly1305_key(Location::Internal)).key;
         self.key_wrapping_key = Some(key);
         self.save(trussed)?;
         Ok(key)
@@ -390,7 +390,7 @@ impl RuntimeState {
         // TODO: need to rotate pin token?
         if let Some(key) = self.key_agreement_key { syscall!(trussed.delete(key)); }
 
-        let key = syscall!(trussed.generate_p256_private_key(StorageLocation::Volatile)).key;
+        let key = syscall!(trussed.generate_p256_private_key(Location::Volatile)).key;
         self.key_agreement_key = Some(key);
         key
     }
@@ -405,7 +405,7 @@ impl RuntimeState {
     pub fn rotate_pin_token<T: client::HmacSha256>(&mut self, trussed: &mut T) -> Key {
         // TODO: need to rotate key agreement key?
         if let Some(token) = self.pin_token { syscall!(trussed.delete(token)); }
-        let token = syscall!(trussed.generate_hmacsha256_key(StorageLocation::Volatile)).key;
+        let token = syscall!(trussed.generate_hmacsha256_key(Location::Volatile)).key;
         self.pin_token = Some(token);
         token
     }
@@ -425,12 +425,12 @@ impl RuntimeState {
         let serialized_pkak = cbor_serialize_message(platform_key_agreement_key).map_err(|_| Error::InvalidParameter)?;
         let platform_kak = try_syscall!(trussed.deserialize_p256_key(
             &serialized_pkak, types::KeySerialization::EcdhEsHkdf256,
-            types::StorageAttributes::new().set_persistence(types::StorageLocation::Volatile)
+            types::StorageAttributes::new().set_persistence(types::Location::Volatile)
         )).map_err(|_| Error::InvalidParameter)?.key;
 
         let pre_shared_secret = syscall!(trussed.agree(
             types::Mechanism::P256, private_key.clone(), platform_kak.clone(),
-            types::StorageAttributes::new().set_persistence(types::StorageLocation::Volatile),
+            types::StorageAttributes::new().set_persistence(types::Location::Volatile),
         )).shared_secret;
         syscall!(trussed.delete(platform_kak));
 
@@ -439,7 +439,7 @@ impl RuntimeState {
         }
 
         let shared_secret = syscall!(trussed.derive_key(
-            types::Mechanism::Sha256, pre_shared_secret.clone(), types::StorageAttributes::new().set_persistence(types::StorageLocation::Volatile)
+            types::Mechanism::Sha256, pre_shared_secret.clone(), types::StorageAttributes::new().set_persistence(types::Location::Volatile)
         )).key;
         self.shared_secret = Some(shared_secret);
 

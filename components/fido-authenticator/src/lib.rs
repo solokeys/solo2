@@ -16,7 +16,7 @@ use trussed::{
         Message,
         ObjectHandle,
         SignatureSerialization,
-        StorageLocation,
+        Location,
     },
 };
 
@@ -146,7 +146,8 @@ where UP: UserPresence,
 
 impl<UP, T> Authenticator<UP, T>
 where UP: UserPresence,
-      T: client::P256
+      T: client::Client
+       + client::P256
        + client::Chacha8Poly1305
        + client::Aes256Cbc
        + client::Sha256
@@ -176,21 +177,21 @@ where UP: UserPresence,
                     return Err(U2fError::ConditionsOfUseNotSatisfied);
                 }
                 // Generate a new P256 key pair.
-                let private_key = syscall!(self.trussed.generate_p256_private_key(StorageLocation::Volatile)).key;
-                let public_key = syscall!(self.trussed.derive_p256_public_key(&private_key, StorageLocation::Volatile)).key;
+                let private_key = syscall!(self.trussed.generate_p256_private_key(Location::Volatile)).key;
+                let public_key = syscall!(self.trussed.derive_p256_public_key(private_key, Location::Volatile)).key;
 
                 let serialized_cose_public_key = syscall!(self.trussed.serialize_p256_key(
-                    &public_key, KeySerialization::EcdhEsHkdf256
+                    public_key, KeySerialization::EcdhEsHkdf256
                 )).serialized_key;
                 let cose_key: ctap_types::cose::EcdhEsHkdf256PublicKey
                     = trussed::cbor_deserialize(&serialized_cose_public_key).unwrap();
 
-                let wrapping_key = &self.state.persistent.key_wrapping_key(&mut self.trussed)
+                let wrapping_key = self.state.persistent.key_wrapping_key(&mut self.trussed)
                     .map_err(|_| U2fError::UnspecifiedCheckingError)?;
                 debug!("wrapping u2f private key");
                 let wrapped_key = syscall!(self.trussed.wrap_key_chacha8poly1305(
-                    &wrapping_key,
-                    &private_key,
+                    wrapping_key,
+                    private_key,
                     &reg.app_id,
                 )).wrapped_key;
                 // debug!("wrapped_key = {:?}", &wrapped_key);
@@ -231,8 +232,8 @@ where UP: UserPresence,
                 // info_now!("made credential {:?}", &credential);
 
                 // 12.b generate credential ID { = AEAD(Serialize(Credential)) }
-                let kek = &self.state.persistent.key_encryption_key(&mut self.trussed).map_err(|_| U2fError::NotEnoughMemory)?;
-                let credential_id = credential.id_using_hash(&mut self.trussed, &kek, &reg.app_id).map_err(|_| U2fError::NotEnoughMemory)?;
+                let kek = self.state.persistent.key_encryption_key(&mut self.trussed).map_err(|_| U2fError::NotEnoughMemory)?;
+                let credential_id = credential.id_using_hash(&mut self.trussed, kek, &reg.app_id).map_err(|_| U2fError::NotEnoughMemory)?;
                 syscall!(self.trussed.delete(public_key));
                 syscall!(self.trussed.delete(private_key));
 
@@ -265,7 +266,7 @@ where UP: UserPresence,
 
                 let file = syscall!(self.trussed
                     .read_file(
-                        StorageLocation::Internal,
+                        Location::Internal,
                         PathBuf::from(b"attestation.x5c")
                     ));
 
@@ -308,10 +309,10 @@ where UP: UserPresence,
                         let wrapping_key = self.state.persistent.key_wrapping_key(&mut self.trussed)
                             .map_err(|_| U2fError::IncorrectDataParameter)?;
                         let key_result = syscall!(self.trussed.unwrap_key_chacha8poly1305(
-                            &wrapping_key,
-                            &bytes.to_bytes(),
+                            wrapping_key,
+                            bytes,
                             b"",
-                            StorageLocation::Volatile,
+                            Location::Volatile,
                         )).key;
                         match key_result {
                             Some(key) => {
@@ -493,7 +494,7 @@ where UP: UserPresence,
                 debug!("processing CP.GKA");
 
                 let private_key = self.state.runtime.key_agreement_key(&mut self.trussed);
-                let public_key = syscall!(self.trussed.derive_p256_public_key(&private_key, StorageLocation::Volatile)).key;
+                let public_key = syscall!(self.trussed.derive_p256_public_key(private_key, Location::Volatile)).key;
                 let serialized_cose_key = syscall!(self.trussed.serialize_key(
                     Mechanism::P256, public_key.clone(), KeySerialization::EcdhEsHkdf256)).serialized_key;
                 let cose_key = trussed::cbor_deserialize(&serialized_cose_key).unwrap();
@@ -536,10 +537,10 @@ where UP: UserPresence,
                 // - do garbage collection outside of this?
 
                 // 4. verify pinAuth
-                self.verify_pin_auth(&shared_secret, new_pin_enc, pin_auth)?;
+                self.verify_pin_auth(shared_secret, new_pin_enc, pin_auth)?;
 
                 // 5. decrypt and verify new PIN
-                let new_pin = self.decrypt_pin_check_length(&shared_secret, new_pin_enc)?;
+                let new_pin = self.decrypt_pin_check_length(shared_secret, new_pin_enc)?;
 
                 syscall!(self.trussed.delete(shared_secret));
 
@@ -585,13 +586,13 @@ where UP: UserPresence,
                 let mut data = MediumData::new();
                 data.extend_from_slice(new_pin_enc).map_err(|_| Error::InvalidParameter)?;
                 data.extend_from_slice(pin_hash_enc).map_err(|_| Error::InvalidParameter)?;
-                self.verify_pin_auth(&shared_secret, &data, pin_auth)?;
+                self.verify_pin_auth(shared_secret, &data, pin_auth)?;
 
                 // 5. decrement retries
                 self.state.decrement_retries(&mut self.trussed)?;
 
                 // 6. decrypt pinHashEnc, compare with stored
-                match self.decrypt_pin_hash_and_maybe_escalate(&shared_secret, &pin_hash_enc) {
+                match self.decrypt_pin_hash_and_maybe_escalate(shared_secret, &pin_hash_enc) {
                     Err(e) => {
                         syscall!(self.trussed.delete(shared_secret));
                         return Err(e);
@@ -603,7 +604,7 @@ where UP: UserPresence,
                 self.state.reset_retries(&mut self.trussed)?;
 
                 // 8. decrypt and verify new PIN
-                let new_pin = self.decrypt_pin_check_length(&shared_secret, new_pin_enc)?;
+                let new_pin = self.decrypt_pin_check_length(shared_secret, new_pin_enc)?;
 
                 syscall!(self.trussed.delete(shared_secret));
 
@@ -640,7 +641,7 @@ where UP: UserPresence,
                 self.state.decrement_retries(&mut self.trussed)?;
 
                 // 5. decrypt and verify pinHashEnc
-                match self.decrypt_pin_hash_and_maybe_escalate(&shared_secret, &pin_hash_enc) {
+                match self.decrypt_pin_hash_and_maybe_escalate(shared_secret, &pin_hash_enc) {
                     Err(e) => {
                         syscall!(self.trussed.delete(shared_secret));
                         return Err(e);
@@ -656,7 +657,7 @@ where UP: UserPresence,
                 let pin_token = self.state.runtime.pin_token(&mut self.trussed);
                 debug!("wrapping pin token");
                 // info_now!("exists? {}", syscall!(self.trussed.exists(shared_secret)).exists);
-                let pin_token_enc = syscall!(self.trussed.wrap_key_aes256cbc(&shared_secret, &pin_token)).wrapped_key;
+                let pin_token_enc = syscall!(self.trussed.wrap_key_aes256cbc(shared_secret, pin_token)).wrapped_key;
 
                 syscall!(self.trussed.delete(shared_secret));
 
@@ -676,11 +677,11 @@ where UP: UserPresence,
         })
     }
 
-    fn decrypt_pin_hash_and_maybe_escalate(&mut self, shared_secret: &ObjectHandle, pin_hash_enc: &Bytes<consts::U64>)
+    fn decrypt_pin_hash_and_maybe_escalate(&mut self, shared_secret: ObjectHandle, pin_hash_enc: &Bytes<consts::U64>)
         -> Result<()>
     {
         let pin_hash = syscall!(self.trussed.decrypt_aes256cbc(
-            &shared_secret, pin_hash_enc)).plaintext.ok_or(Error::Other)?;
+            shared_secret, pin_hash_enc)).plaintext.ok_or(Error::Other)?;
 
         let stored_pin_hash = match self.state.persistent.pin_hash() {
             Some(hash) => hash,
@@ -710,7 +711,7 @@ where UP: UserPresence,
         Ok(())
     }
 
-    fn decrypt_pin_check_length(&mut self, shared_secret: &ObjectHandle, pin_enc: &[u8]) -> Result<Message> {
+    fn decrypt_pin_check_length(&mut self, shared_secret: ObjectHandle, pin_enc: &[u8]) -> Result<Message> {
         // pin is expected to be filled with null bytes to length at least 64
         if pin_enc.len() < 64 {
             // correct error?
@@ -718,7 +719,7 @@ where UP: UserPresence,
         }
 
         let mut pin = syscall!(self.trussed.decrypt_aes256cbc(
-            &shared_secret, &pin_enc)).plaintext.ok_or(Error::Other)?;
+            shared_secret, &pin_enc)).plaintext.ok_or(Error::Other)?;
 
         // // temp
         // let pin_length = pin.iter().position(|&b| b == b'\0').unwrap_or(pin.len());
@@ -739,7 +740,7 @@ where UP: UserPresence,
     // fn verify_pin(&mut self, pin_auth: &Bytes<consts::U16>, client_data_hash: &Bytes<consts::U32>) -> bool {
     fn verify_pin(&mut self, pin_auth: &[u8; 16], data: &[u8]) -> Result<()> {
         let key = self.state.runtime.pin_token(&mut self.trussed);
-        let tag = syscall!(self.trussed.sign_hmacsha256(&key, data)).signature;
+        let tag = syscall!(self.trussed.sign_hmacsha256(key, data)).signature;
         if pin_auth == &tag[..16] {
             Ok(())
         } else {
@@ -747,7 +748,7 @@ where UP: UserPresence,
         }
     }
 
-    fn verify_pin_auth(&mut self, shared_secret: &ObjectHandle, data: &[u8], pin_auth: &Bytes<consts::U16>)
+    fn verify_pin_auth(&mut self, shared_secret: ObjectHandle, data: &[u8], pin_auth: &Bytes<consts::U16>)
         -> Result<()>
     {
         let expected_pin_auth = syscall!(self.trussed.sign_hmacsha256(shared_secret, data)).signature;
@@ -803,7 +804,7 @@ where UP: UserPresence,
 
                 // info_now!("input to hmacsha256: {:?}", &data[..len]);
                 let expected_pin_auth = syscall!(self.trussed.sign_hmacsha256(
-                    &pin_token,
+                    pin_token,
                     &data[..len],
                 )).signature;
 
@@ -1016,7 +1017,7 @@ where UP: UserPresence,
             // let mut credentials = CredentialList::new();
 
             let data = syscall!(self.trussed.read_dir_files_first(
-                StorageLocation::Internal,
+                Location::Internal,
                 rp_rk_dir(&rp_id_hash),
                 None,
             )).data;
@@ -1038,7 +1039,7 @@ where UP: UserPresence,
             let kek = self.state.persistent.key_encryption_key(&mut self.trussed)?;
 
             if keep {
-                let id = credential.id_using_hash(&mut self.trussed, &kek, rp_id_hash)?;
+                let id = credential.id_using_hash(&mut self.trussed, kek, rp_id_hash)?;
                 let credential_id_hash = self.hash(&id.0.as_ref());
 
                 let timestamp_path = TimestampPath {
@@ -1067,7 +1068,7 @@ where UP: UserPresence,
 
                 if keep {
 
-                    let id = credential.id_using_hash(&mut self.trussed, &kek, rp_id_hash)?;
+                    let id = credential.id_using_hash(&mut self.trussed, kek, rp_id_hash)?;
                     let credential_id_hash = self.hash(&id.0.as_ref());
 
                     let timestamp_path = TimestampPath {
@@ -1146,7 +1147,7 @@ where UP: UserPresence,
         let timestamp_hash = max_heap.pop().unwrap();
         info!("{:?} @ {}", &timestamp_hash.path, timestamp_hash.timestamp);
         let data = syscall!(self.trussed.read_file(
-            StorageLocation::Internal,
+            Location::Internal,
             timestamp_hash.path,
         )).data;
         let credential = Credential::deserialize(&data).unwrap();
@@ -1247,7 +1248,7 @@ where UP: UserPresence,
                 let timestamp_hash = max_heap.pop().unwrap();
                 info!("{:?} @ {}", &timestamp_hash.path, timestamp_hash.timestamp);
                 let data = syscall!(self.trussed.read_file(
-                    StorageLocation::Internal,
+                    Location::Internal,
                     timestamp_hash.path,
                 )).data;
                 let credential = Credential::deserialize(&data).unwrap();
@@ -1318,7 +1319,7 @@ where UP: UserPresence,
 
         // info_now!("signing with credential {:?}", &credential);
         let kek = self.state.persistent.key_encryption_key(&mut self.trussed)?;
-        let credential_id = credential.id_using_hash(&mut self.trussed, &kek, &rp_id_hash)?;
+        let credential_id = credential.id_using_hash(&mut self.trussed, kek, &rp_id_hash)?;
 
         use ctap2::AuthenticatorDataFlags as Flags;
 
@@ -1361,11 +1362,11 @@ where UP: UserPresence,
                 let wrapping_key = self.state.persistent.key_wrapping_key(&mut self.trussed)?;
                 // info_now!("unwrapping {:?} with wrapping key {:?}", &bytes, &wrapping_key);
                 let key_result = syscall!(self.trussed.unwrap_key_chacha8poly1305(
-                    &wrapping_key,
-                    &bytes.to_bytes(),
+                    wrapping_key,
+                    &bytes,
                     b"",
                     // &rp_id_hash,
-                    StorageLocation::Volatile,
+                    Location::Volatile,
                 )).key;
                 // debug!("key result: {:?}", &key_result);
                 info!("key result");
@@ -1388,7 +1389,7 @@ where UP: UserPresence,
             Mechanism::Totp => {
                 let timestamp = u64::from_le_bytes(data.client_data_hash[..8].try_into().unwrap());
                 info!("TOTP with timestamp {:?}", &timestamp);
-                syscall!(self.trussed.sign_totp(&key, timestamp)).signature.to_bytes()
+                syscall!(self.trussed.sign_totp(key, timestamp)).signature.to_bytes()
             }
             _ => syscall!(self.trussed.sign(mechanism, key.clone(), &commitment, serialization)).signature
                      .to_bytes(),
@@ -1461,9 +1462,9 @@ where UP: UserPresence,
         loop {
             let dir = PathBuf::from(b"rk");
 
-            info!("reset start: reading {:?}", &dir);
+            info_now!("reset start: reading {:?}", &dir);
             let entry = syscall!(self.trussed.read_dir_first(
-                StorageLocation::Internal,
+                Location::Internal,
                 dir,
                 None,
             )).entry;
@@ -1473,11 +1474,11 @@ where UP: UserPresence,
                 None => break,
                 Some(entry) => PathBuf::from(entry.path()),
             };
-            info!("got RP {:?}, looking for its RKs", &rp_path);
+            info_now!("got RP {:?}, looking for its RKs", &rp_path);
 
             // delete all RKs for given RP
             let mut entry = syscall!(self.trussed.read_dir_first(
-                StorageLocation::Internal,
+                Location::Internal,
                 rp_path.clone(),
                 None,
             )).entry;
@@ -1495,14 +1496,14 @@ where UP: UserPresence,
 
                 // prepare for next loop iteration
                 entry = syscall!(self.trussed.read_dir_first(
-                    StorageLocation::Internal,
+                    Location::Internal,
                     rp_path.clone(),
                     None,
                 )).entry;
             }
 
             syscall!(self.trussed.remove_dir(
-                StorageLocation::Internal,
+                Location::Internal,
                 rp_path,
             ));
 
@@ -1531,7 +1532,7 @@ where UP: UserPresence,
     {
         info!("deleting RK {:?}", &rk_path);
         let credential_data = syscall!(self.trussed.read_file(
-            StorageLocation::Internal,
+            Location::Internal,
             PathBuf::from(rk_path),
         )).data;
         let credential = Credential::deserialize(&credential_data).unwrap();
@@ -1557,7 +1558,7 @@ where UP: UserPresence,
 
         info!(":: deleting RK file {:?} itself", &rk_path);
         syscall!(self.trussed.remove_file(
-            StorageLocation::Internal,
+            Location::Internal,
             PathBuf::from(rk_path),
         ));
 
@@ -1667,7 +1668,7 @@ where UP: UserPresence,
                 // TODO: Generate "CredRandom" (a 32B random value, to be used
                 // later via HMAC-SHA256(cred_random, salt)
                 let cred_random = syscall!(self.trussed.generate_hmacsha256_key(
-                    StorageLocation::Internal,
+                    Location::Internal,
                 )).key;
 
                 hmac_secret_requested = Some(match rk_requested {
@@ -1676,11 +1677,11 @@ where UP: UserPresence,
                     }
 
                     false => {
-                        let wrapping_key = &self.state.persistent.key_wrapping_key(&mut self.trussed)?;
+                        let wrapping_key = self.state.persistent.key_wrapping_key(&mut self.trussed)?;
                         info!("wrapping credRandom");
                         let wrapped_key = syscall!(self.trussed.wrap_key_chacha8poly1305(
-                            &wrapping_key,
-                            &cred_random,
+                            wrapping_key,
+                            cred_random,
                             // &rp_id_hash,
                             b"",
                         )).wrapped_key;
@@ -1708,8 +1709,8 @@ where UP: UserPresence,
 
         // 11. generate credential keypair
         let location = match rk_requested {
-            true => StorageLocation::Internal,
-            false => StorageLocation::Volatile,
+            true => Location::Internal,
+            false => Location::Volatile,
         };
 
         let private_key: ObjectHandle;
@@ -1718,7 +1719,7 @@ where UP: UserPresence,
         match algorithm {
             SupportedAlgorithm::P256 => {
                 private_key = syscall!(self.trussed.generate_p256_private_key(location)).key;
-                public_key = syscall!(self.trussed.derive_p256_public_key(&private_key, StorageLocation::Volatile)).key;
+                public_key = syscall!(self.trussed.derive_p256_public_key(private_key, Location::Volatile)).key;
                 cose_public_key = syscall!(self.trussed.serialize_key(
                     Mechanism::P256, public_key.clone(), KeySerialization::Cose
                 )).serialized_key;
@@ -1727,7 +1728,7 @@ where UP: UserPresence,
             }
             SupportedAlgorithm::Ed25519 => {
                 private_key = syscall!(self.trussed.generate_ed255_private_key(location)).key;
-                public_key = syscall!(self.trussed.derive_ed255_public_key(&private_key, StorageLocation::Volatile)).key;
+                public_key = syscall!(self.trussed.derive_ed255_public_key(private_key, Location::Volatile)).key;
                 cose_public_key = syscall!(self.trussed.serialize_key(
                     Mechanism::Ed255, public_key.clone(), KeySerialization::Cose
                 )).serialized_key;
@@ -1741,7 +1742,7 @@ where UP: UserPresence,
                 // b'TOTP---W\x0e\xf1\xe0\xd7\x83\xfe\t\xd1\xc1U\xbf\x08T_\x07v\xb2\xc6--TOTP'
                 let totp_secret: [u8; 20] = parameters.client_data_hash[6..26].try_into().unwrap();
                 private_key = syscall!(self.trussed.unsafe_inject_totp_key(
-                    &totp_secret, StorageLocation::Internal)).key;
+                    &totp_secret, Location::Internal)).key;
                 // info_now!("totes injected");
                 let fake_cose_pk = ctap_types::cose::TotpPublicKey {};
                 let mut fake_serialized_cose_pk = Message::new();
@@ -1758,11 +1759,11 @@ where UP: UserPresence,
             true => Key::ResidentKey(private_key.clone()),
             false => {
                 // WrappedKey version
-                let wrapping_key = &self.state.persistent.key_wrapping_key(&mut self.trussed)?;
+                let wrapping_key = self.state.persistent.key_wrapping_key(&mut self.trussed)?;
                 debug!("wrapping private key");
                 let wrapped_key = syscall!(self.trussed.wrap_key_chacha8poly1305(
-                    &wrapping_key,
-                    &private_key,
+                    wrapping_key,
+                    private_key,
                     &rp_id_hash,
                 )).wrapped_key;
                 // debug!("wrapped_key = {:?}", &wrapped_key);
@@ -1798,8 +1799,8 @@ where UP: UserPresence,
         // info_now!("made credential {:?}", &credential);
 
         // 12.b generate credential ID { = AEAD(Serialize(Credential)) }
-        let kek = &self.state.persistent.key_encryption_key(&mut self.trussed)?;
-        let credential_id = credential.id_using_hash(&mut self.trussed, &kek, &rp_id_hash)?;
+        let kek = self.state.persistent.key_encryption_key(&mut self.trussed)?;
+        let credential_id = credential.id_using_hash(&mut self.trussed, kek, &rp_id_hash)?;
 
         // store it.
         // TODO: overwrite, error handling with KeyStoreFull
@@ -1810,7 +1811,7 @@ where UP: UserPresence,
         if rk_requested {
             let credential_id_hash = self.hash(&credential_id.0.as_ref());
             try_syscall!(self.trussed.write_file(
-                StorageLocation::Internal,
+                Location::Internal,
                 rk_path(&rp_id_hash, &credential_id_hash),
                 serialized_credential.clone(),
                 // user attribute for later easy lookup
@@ -1886,13 +1887,13 @@ where UP: UserPresence,
             if attestation_key.is_none() {
                 match algorithm {
                     SupportedAlgorithm::Ed25519 => {
-                        let signature = syscall!(self.trussed.sign_ed255(&private_key, &commitment)).signature;
+                        let signature = syscall!(self.trussed.sign_ed255(private_key, &commitment)).signature;
                         (signature.try_to_bytes().map_err(|_| Error::Other)?, -8)
                     }
 
                     SupportedAlgorithm::P256 => {
                         // DO NOT prehash here, `trussed` does that
-                        let der_signature = syscall!(self.trussed.sign_p256(&private_key, &commitment, SignatureSerialization::Asn1Der)).signature;
+                        let der_signature = syscall!(self.trussed.sign_p256(private_key, &commitment, SignatureSerialization::Asn1Der)).signature;
                         (der_signature.try_to_bytes().map_err(|_| Error::Other)?, -7)
                     }
                     SupportedAlgorithm::Totp => {
@@ -1901,11 +1902,11 @@ where UP: UserPresence,
                         // micro-ecc is borked. let's self-sign anyway
                         let hash = syscall!(self.trussed.hash_sha256(&commitment.as_ref())).hash;
                         let tmp_key = syscall!(self.trussed
-                            .generate_p256_private_key(StorageLocation::Volatile))
+                            .generate_p256_private_key(Location::Volatile))
                             .key;
 
                         let signature = syscall!(self.trussed.sign_p256(
-                            &tmp_key,
+                            tmp_key,
                             &hash,
                             SignatureSerialization::Asn1Der,
                         )).signature;
@@ -1915,7 +1916,7 @@ where UP: UserPresence,
             } else {
 
                 let signature = syscall!(self.trussed.sign_p256(
-                    attestation_key.as_ref().unwrap(),
+                    attestation_key.unwrap(),
                     &commitment,
                     SignatureSerialization::Asn1Der,
                 )).signature;
@@ -1939,7 +1940,7 @@ where UP: UserPresence,
                     let mut x5c = Vec::new();
                     let file = syscall!(self.trussed
                         .read_file(
-                            StorageLocation::Internal,
+                            Location::Internal,
                             PathBuf::from(b"attestation.x5c")
                         ));
                     x5c.push(file.data).ok();
@@ -1968,7 +1969,7 @@ where UP: UserPresence,
     //     //     &wrapping_key,
     //     //     &wrapped_key,
     //     //     b"",
-    //     //     StorageLocation::Volatile,
+    //     //     Location::Volatile,
     //     // )).key;
         // // test public key ser/de
         // let ser_pk = syscall!(self.trussed.serialize_key(
@@ -1983,13 +1984,13 @@ where UP: UserPresence,
 
         // let deser_pk = syscall!(self.trussed.deserialize_key(
         //     Mechanism::P256, ser_pk.clone(), KeySerialization::Raw,
-        //     StorageAttributes::new().set_persistence(StorageLocation::Volatile)
+        //     StorageAttributes::new().set_persistence(Location::Volatile)
         // )).key;
         // debug!("deser pk = {:?}", &deser_pk);
 
         // let cose_deser_pk = syscall!(self.trussed.deserialize_key(
         //     Mechanism::P256, cose_ser_pk.clone(), KeySerialization::Cose,
-        //     StorageAttributes::new().set_persistence(StorageLocation::Volatile)
+        //     StorageAttributes::new().set_persistence(Location::Volatile)
         // )).key;
         // debug!("COSE deser pk = {:?}", &cose_deser_pk);
         // debug!("raw ser of COSE deser pk = {:?}",
@@ -2002,7 +2003,7 @@ where UP: UserPresence,
         // let _loaded_credential = syscall!(self.trussed.load_blob(
         //     prefix.clone(),
         //     blob_id,
-        //     StorageLocation::Volatile,
+        //     Location::Volatile,
         // )).data;
         // // debug!("loaded credential = {:?}", &loaded_credential);
 

@@ -178,7 +178,7 @@ impl Credential {
     pub fn id_using_hash<'a, T: client::Chacha8Poly1305>(
         &self,
         crypto: &mut T,
-        key_encryption_key: &ObjectHandle,
+        key_encryption_key: ObjectHandle,
         rp_id_hash: &Bytes32,
     )
         -> Result<CredentialId>
@@ -199,7 +199,7 @@ impl Credential {
     pub fn id<'a, T: client::Chacha8Poly1305 + client::Sha256>(
         &self,
         trussed: &mut T,
-        key_encryption_key: &ObjectHandle,
+        key_encryption_key: ObjectHandle,
     )
         -> Result<CredentialId>
     {
@@ -241,7 +241,7 @@ impl Credential {
         }
     }
 
-    pub fn try_from<UP: UserPresence, T: client::Chacha8Poly1305>(
+    pub fn try_from<UP: UserPresence, T: client::Client + client::Chacha8Poly1305>(
         authnr: &mut Authenticator<UP,T>,
         rp_id_hash: &Bytes<consts::U32>,
         descriptor: &PublicKeyCredentialDescriptor,
@@ -251,7 +251,7 @@ impl Credential {
         Self::try_from_bytes(authnr, rp_id_hash, &descriptor.id)
     }
 
-    pub fn try_from_bytes<UP: UserPresence, T: client::Chacha8Poly1305>(
+    pub fn try_from_bytes<UP: UserPresence, T: client::Client + client::Chacha8Poly1305>(
         authnr: &mut Authenticator<UP, T>,
         rp_id_hash: &Bytes<consts::U32>,
         id: &[u8],
@@ -270,7 +270,7 @@ impl Credential {
 
         let serialized = try_syscall!(authnr.trussed.decrypt_chacha8poly1305(
             // TODO: use RpId as associated data here?
-            &kek,
+            kek,
             &encrypted_serialized.0.ciphertext,
             &rp_id_hash[..],
             &encrypted_serialized.0.nonce,
@@ -307,7 +307,7 @@ impl Credential {
     //         prefix.clone(),
     //         // credential_id.0.clone(),
     //         serialized_credential.clone(),
-    //         StorageLocation::Internal,
+    //         Location::Internal,
     //         Some(rp_id_hash.clone()),
     //     )).blob;
 

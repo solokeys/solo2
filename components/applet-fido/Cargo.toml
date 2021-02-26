@@ -18,7 +18,7 @@ fido-authenticator = {path = "../fido-authenticator"}
 hid-dispatch = {path = "../hid-dispatch"}
 interchange = "0.1.0"
 iso7816 = { path = "../iso7816" }
-trussed = { git = "ssh://git@github.com/trussed-dev/trussed.git", branch = "main" }
+trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main" }
 
 [features]
 default = []

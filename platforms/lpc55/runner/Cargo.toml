@@ -25,7 +25,7 @@ usb-device = "0.2.3"
 # usbd-hid = { version = "0.4.5", optional = true }
 usbd-serial = "0.1.0"
 
-trussed = { git = "ssh://git@github.com/trussed-dev/trussed.git", branch = "main", features = ["clients-3"] }
+trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main", features = ["clients-3"] }
 
 # board
 board = { path = "../board" }
@@ -61,7 +61,10 @@ develop = ["no-encrypted-storage", "no-buttons"]
 no-encrypted-storage = []
 
 # Use to auto-succeed every user presence check
-no-buttons= ["board/no-buttons"]
+no-buttons = ["board/no-buttons"]
+
+# Format filesystem anyway
+format-filesystem = []
 
 board-lpcxpresso55 = ["board/board-lpcxpresso55"]
 board-okdoe1 = ["board/board-okdoe1", "board-lpcxpresso55", "usbfs-peripheral"]
