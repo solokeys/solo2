@@ -19,11 +19,12 @@ jobs:
         board:
           - board-lpcxpresso55
           - board-solov2
+          - board-okdoe1
         rust:
           - stable
     defaults:
       run:
-        working-directory: platforms/lpc55/runner
+        working-directory: runners/lpc55
     steps:
       - uses: actions/checkout@v1
       - name: Install littlefs2-sys/micro-ecc-sys build dependencies
@@ -64,7 +65,7 @@ jobs:
           - stable
     defaults:
       run:
-        working-directory: platforms/pc
+        working-directory: runners/pc
     steps:
       - uses: actions/checkout@v1
       - name: Install Linux build dependencies

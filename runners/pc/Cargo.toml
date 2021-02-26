@@ -1,29 +1,23 @@
 [package]
-name = "app"
+name = "solo-pc"
 version = "0.1.0"
 authors = ["Nicolas Stalder <n@stalder.io>", "Conor Patrick <conor@solokeys.com>"]
 edition = "2018"
 
-[lib]
-name = "app"
-
-[[bin]]
-name = "pc"
-path = "src/app_pc.rs"
-
 [dependencies]
 chacha20 = { version = "0.6.0", features = ["rng"] }
+delog = "0.1.0-alpha.3"
 heapless = "0.5.5"
 nb = "1"
 embedded-hal = { version = "0.2", features = ["unproven"] }
 generic-array = "0.14.3"
+interchange = "0.1.0"
+trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main", features = ["clients-3"] }
 
 # components
 c-stubs = { path = "../../components/c-stubs" }
-trussed = { path = "../../components/trussed", features = ["clients-3"] }
 ctap-types = { path = "../../components/ctap-types" }
 fido-authenticator = { path = "../../components/fido-authenticator" }
-interchange = { path = "../../components/interchange" }
 piv-authenticator = { path = "../../components/piv-authenticator" }
 usbd-ccid = { path = "../../components/usbd-ccid" }
 usbd-ctaphid = { path = "../../components/usbd-ctaphid" }
@@ -33,11 +27,9 @@ hid-dispatch = {path = "./../../components/hid-dispatch"}
 applet-ndef = {path = "./../../components/applet-ndef"}
 applet-root = {path = "./../../components/applet-root"}
 applet-fido = {path = "./../../components/applet-fido"}
-delog = "0.1.0-alpha.3"
 
 # storage
-# littlefs2 = { git = "https://github.com/nickray/littlefs2", branch = "main" }
-littlefs2 = { git = "https://github.com/nickray/littlefs2", branch = "closures-instead-of-ub" }
+littlefs2 = "0.1.1"
 
 [features]
 default = []
@@ -45,8 +37,8 @@ default = []
 # Use to auto-succeed every user presence check
 no-buttons= []
 
-
-reconfig = []
+# Reconfigure the NFC chip in any case
+reconfigure-nfc = []
 
 log-all = []
 log-none = []
@@ -56,10 +48,6 @@ log-warn = []
 log-error = []
 
 # patch dependencies like so to test local changes
-
-[patch.crates-io]
-heapless = { git = "https://github.com/nickray/heapless", branch = "bytebuf-0.5.6" }
-nisty = {git = "https://github.com/ycrypto/nisty", branch="main"}
 
 [profile.release]
 codegen-units = 1

@@ -21,11 +21,10 @@ delog = "0.1.0-alpha.3"
 heapless = "0.5.5"
 interchange = "0.1.0"
 nb = "1"
+trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main", features = ["clients-3"] }
 usb-device = "0.2.3"
 # usbd-hid = { version = "0.4.5", optional = true }
 usbd-serial = "0.1.0"
-
-trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main", features = ["clients-3"] }
 
 # board
 board = { path = "board" }
@@ -47,7 +46,7 @@ usbd-ctaphid = { path = "../../components/usbd-ctaphid" }
 
 # panic
 panic-halt = "0.2.0"
-panic-semihosting = { version = "0.5.3", features = ["jlink-quirks"] }
+panic-semihosting = "0.5.6"
 
 # storage
 littlefs2 = "0.1.1"
@@ -75,7 +74,8 @@ log-serial = []
 highspeed = []
 usbfs-peripheral = []
 serial = []
-reconfig = []
+# Reconfigure the NFC chip in any case
+reconfigure-nfc = []
 no-clock-controller = ["board/no-clock-controller"]
 enable-clock-controller-signal-pin = ["board/enable-clock-controller-signal-pin"]
 # very-twitchy-mouse = ["usbd-hid"]
