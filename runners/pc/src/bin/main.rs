@@ -11,7 +11,7 @@ use trussed::platform::{
     reboot,
     consent,
 };
-use trussed::{board, store};
+use trussed::{platform, store};
 use ctap_types::consts;
 
 pub use generic_array::{
@@ -187,7 +187,7 @@ impl trussed::platform::UserInterface for UserInterface
 
 }
 
-board!(Board,
+platform!(Board,
     R: chacha20::ChaCha8Rng,
     S: Store,
     UI: UserInterface,

@@ -221,7 +221,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         pint.enable_interrupt(&mut mux, &nfc_irq, hal::peripherals::pint::Slot::Slot0, hal::peripherals::pint::Mode::ActiveLow);
         mux.disabled(&mut syscon);
 
-        let force_nfc_reconfig = cfg!(feature = "reconfig");
+        let force_nfc_reconfig = cfg!(feature = "reconfigure-nfc");
 
         let maybe_fm = board::nfc::try_setup(
             spi,
@@ -380,7 +380,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
                 clocks.support_usbhs_token().unwrap(),
             );
             #[cfg(feature = "usbfs-peripheral")]
-            let mut usbd = hal.usbfs.enabled_as_device(
+            let usbd = hal.usbfs.enabled_as_device(
                 &mut anactrl,
                 &mut pmc,
                 &mut syscon,
