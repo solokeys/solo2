@@ -1,4 +1,5 @@
-RUNNER := platforms/lpc55/runner
+RUNNER := runners/lpc55
+
 build-dev:
 	make -C $(RUNNER) build-dev
 

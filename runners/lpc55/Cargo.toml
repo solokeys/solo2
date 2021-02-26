@@ -28,22 +28,22 @@ usbd-serial = "0.1.0"
 trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main", features = ["clients-3"] }
 
 # board
-board = { path = "../board" }
+board = { path = "board" }
 
 # components
-apdu-dispatch = {path = "../../../components/apdu-dispatch"}
-applet-fido = {path = "../../../components/applet-fido"}
-applet-ndef = {path = "../../../components/applet-ndef"}
-applet-root = {path = "../../../components/applet-root"}
-c-stubs = { path = "../../../components/c-stubs" }
-ctap-types = { path = "../../../components/ctap-types" }
-fido-authenticator = { path = "../../../components/fido-authenticator" }
-fm11nc08 = {path = "../../../components/fm11nc08"}
-hid-dispatch = {path = "../../../components/hid-dispatch"}
-iso14443 = {path = "../../../components/iso14443"}
-piv-authenticator = { path = "../../../components/piv-authenticator", features = ["applet"] }
-usbd-ccid = { path = "../../../components/usbd-ccid" }
-usbd-ctaphid = { path = "../../../components/usbd-ctaphid" }
+apdu-dispatch = {path = "../../components/apdu-dispatch"}
+applet-fido = {path = "../../components/applet-fido"}
+applet-ndef = {path = "../../components/applet-ndef"}
+applet-root = {path = "../../components/applet-root"}
+c-stubs = { path = "../../components/c-stubs" }
+ctap-types = { path = "../../components/ctap-types" }
+fido-authenticator = { path = "../../components/fido-authenticator" }
+fm11nc08 = {path = "../../components/fm11nc08"}
+hid-dispatch = {path = "../../components/hid-dispatch"}
+iso14443 = {path = "../../components/iso14443"}
+piv-authenticator = { path = "../../components/piv-authenticator", features = ["applet"] }
+usbd-ccid = { path = "../../components/usbd-ccid" }
+usbd-ctaphid = { path = "../../components/usbd-ctaphid" }
 
 # panic
 panic-halt = "0.2.0"
