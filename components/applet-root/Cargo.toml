@@ -10,4 +10,4 @@ edition = "2018"
 apdu-dispatch = {path = "../apdu-dispatch"}
 iso7816 = { path = "../iso7816" }
 hid-dispatch = {path = "../hid-dispatch"}
-trussed = { git = "ssh://git@github.com/trussed-dev/trussed.git", branch = "main" }
+trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main" }

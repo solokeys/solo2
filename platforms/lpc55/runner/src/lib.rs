@@ -318,7 +318,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     );
 
 
-    if result.is_err() {
+    if result.is_err() || cfg!(feature = "format-filesystem") {
         rgb.blue(200);
         rgb.red(200);
         delay_timer.start(300.ms()); nb::block!(delay_timer.wait()).ok();

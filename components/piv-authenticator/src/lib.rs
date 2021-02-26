@@ -40,7 +40,7 @@ pub struct Authenticator<T>
 
 impl<T> Authenticator<T>
 where
-    T: client::Ed255 + client::Tdes,
+    T: client::Client + client::Ed255 + client::Tdes,
 {
     pub fn new(
         trussed: T,
@@ -331,7 +331,7 @@ where
 
         let key = self.state.persistent(&mut self.trussed).keys.management_key;
 
-        let encrypted_challenge = syscall!(self.trussed.encrypt_tdes(&key, &challenge)).ciphertext;
+        let encrypted_challenge = syscall!(self.trussed.encrypt_tdes(key, challenge)).ciphertext;
 
         let mut der: Der<consts::U12> = Default::default();
         // 7c = Dynamic Authentication Template tag
@@ -362,7 +362,7 @@ where
         let command_cache = state::AuthenticateManagement { challenge: challenge[..].try_into().unwrap() };
         self.state.runtime.command_cache = Some(state::CommandCache::AuthenticateManagement(command_cache));
 
-        let encrypted_challenge = syscall!(self.trussed.encrypt_tdes(&key, &challenge)).ciphertext;
+        let encrypted_challenge = syscall!(self.trussed.encrypt_tdes(key, &challenge)).ciphertext;
 
         let mut der: Der<consts::U12> = Default::default();
         // 7c = Dynamic Authentication Template tag
@@ -594,7 +594,7 @@ where
         // let key = syscall!(self.trussed.generate_p256_private_key(
         // let key = syscall!(self.trussed.generate_p256_private_key(
         let key = syscall!(self.trussed.generate_ed255_private_key(
-            trussed::types::StorageLocation::Internal,
+            trussed::types::Location::Internal,
         )).key;
 
 
@@ -622,8 +622,8 @@ where
 
         // let public_key = syscall!(self.trussed.derive_p256_public_key(
         let public_key = syscall!(self.trussed.derive_ed255_public_key(
-            &key,
-            trussed::types::StorageLocation::Volatile,
+            key,
+            trussed::types::Location::Volatile,
         )).key;
 
         let serialized_public_key = syscall!(self.trussed.serialize_key(
@@ -694,7 +694,7 @@ where
             }
 
             try_syscall!(self.trussed.write_file(
-                trussed::types::StorageLocation::Internal,
+                trussed::types::Location::Internal,
                 trussed::types::PathBuf::from(b"printed-information"),
                 trussed::types::Message::try_from_slice(data).unwrap(),
                 None,
@@ -719,7 +719,7 @@ where
             }
 
             try_syscall!(self.trussed.write_file(
-                trussed::types::StorageLocation::Internal,
+                trussed::types::Location::Internal,
                 trussed::types::PathBuf::from(b"authentication-key.x5c"),
                 trussed::types::Message::try_from_slice(data).unwrap(),
                 None,
@@ -809,7 +809,7 @@ where
                 // whether the key is "already setup":
                 // https://github.com/FiloSottile/yubikey-agent/blob/8781bc0082db5d35712a2244e3ab3086f415dd59/setup.go#L69-L70
                 let data = try_syscall!(self.trussed.read_file(
-                    trussed::types::StorageLocation::Internal,
+                    trussed::types::Location::Internal,
                     trussed::types::PathBuf::from(b"authentication-key.x5c"),
                 )).map_err(|_| {
                     // info_now!("error loading: {:?}", &e);
@@ -878,12 +878,12 @@ where
                 self.state.runtime.app_security_status.management_verified = false;
 
                 try_syscall!(self.trussed.remove_file(
-                    trussed::types::StorageLocation::Internal,
+                    trussed::types::Location::Internal,
                     trussed::types::PathBuf::from(b"printed-information"),
                 )).ok();
 
                 try_syscall!(self.trussed.remove_file(
-                    trussed::types::StorageLocation::Internal,
+                    trussed::types::Location::Internal,
                     trussed::types::PathBuf::from(b"authentication-key.x5c"),
                 )).ok();
 
@@ -944,7 +944,7 @@ impl<T> applet::Aid for Authenticator<T> {
 #[cfg(feature = "applet")]
 impl<T> applet::Applet for Authenticator<T>
 where
-    T: client::Ed255 + client::Tdes
+    T: client::Client + client::Ed255 + client::Tdes
 {
     fn select(&mut self, _apdu: &Command) -> applet::Result {
         let mut der: Der<consts::U256> = Default::default();

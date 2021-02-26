@@ -10,7 +10,7 @@ cortex-m-rt = "0.6.10"
 delog = "0.1.0-alpha.3"
 fm11nc08 = {path = "../../../components/fm11nc08"}
 nb = "1"
-trussed = { git = "ssh://git@github.com/trussed-dev/trussed.git", branch = "main", features = ["clients-3"] }
+trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main", features = ["clients-3"] }
 
 [dependencies.lpc55-hal]
 git = "https://github.com/lpc55/lpc55-hal"

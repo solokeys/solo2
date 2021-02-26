@@ -15,7 +15,7 @@ hex-literal = "0.3"
 interchange = "0.1"
 iso7816 = { path = "../iso7816" }
 serde = { version = "1", default-features = false }
-trussed = { git = "ssh://git@github.com/trussed-dev/trussed.git", branch = "main" }
+trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main" }
 # trussed = { path = "../../../trussed" }
 untrusted = "0.7"
 

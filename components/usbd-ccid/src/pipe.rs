@@ -215,7 +215,7 @@ where
                         self.state = State::Receiving;
                         self.send_empty_datablock(Chain::ExpectingMore);
                     }
-                    _ =>  panic!("{:?} unexpected in idle state"),
+                    _ =>  panic!("unexpectedly in idle state"),
                 }
             }
 
@@ -234,7 +234,7 @@ where
                         self.call_app();
                         self.state = State::Processing;
                     }
-                    _ =>  panic!("{:?} unexpected in receiving state"),
+                    _ =>  panic!("unexpectedly in receiving state"),
                 }
             }
 
@@ -245,7 +245,7 @@ where
             }
 
             State::ReadyToSend => {
-                panic!("{:?} unexpected in ready-to-send state")
+                panic!("unexpectedly in ready-to-send state")
             }
 
             State::Sending => {
@@ -253,7 +253,7 @@ where
                     Chain::ExpectingMore => {
                         self.prime_outbox();
                     }
-                    _ =>  panic!("{:?} unexpected in receiving state"),
+                    _ =>  panic!("unexpectedly in receiving state"),
                 }
             }
         }

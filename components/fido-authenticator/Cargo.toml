@@ -15,7 +15,7 @@ littlefs2 = "0.1.0"
 serde = { version = "1.0", default-features = false }
 serde_cbor = { version = "0.11.0", default-features = false }
 serde-indexed = "0.1.0"
-trussed = { git = "ssh://git@github.com/trussed-dev/trussed.git", branch = "main" }
+trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main" }
 
 [features]
 enable-fido-pre = []
