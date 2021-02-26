@@ -24,15 +24,16 @@ Install [Rust and Cargo](https://www.rust-lang.org/tools/install) for your syste
 
 ### Boards
 
-Head to [platforms/lpc55/board](platforms/lpc55/board) for an overview on the possible embedded platforms the firmware
+Head to [runnners/lpc55/board](runners/lpc55/board) for an overview on the possible embedded platforms the firmware
 currently supports.
 
 ### Compiling
 
-Head to [platforms/lpc55/runner](platforms/lpc55/runner) to get started, and try `make build-dev`, which compiles
+Head to [runners/lpc55](runners/lpc55) to get started, and try `make build-dev`, which compiles
 the entire firmware bundle using features convenient for getting started.
 
 With `make run-dev`, it will try to connect to a GDB server to flash and run the firmware.
+One way to run a GDB server is `JLinkGDBServer -strict -device LPC55S69 -if SWD -vd`
 
 To enable logs, you can change the feature flags on each crate.  Then logs will be output via semihosting to your SWD debugger.
 ```
