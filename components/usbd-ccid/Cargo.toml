@@ -8,10 +8,9 @@ edition = "2018"
 
 [dependencies]
 apdu-dispatch = { path = "../apdu-dispatch" }
-asn1derpy = "0.1.0"
-delog = "0.1.0-alpha.3"
-heapless = "0.5.6"
-heapless-bytes = "0.1.1"
+delog = "0.1.0"
+heapless = "0.6"
+heapless-bytes = "0.2.0"
 interchange = "0.1.0"
 iso7816 = { path = "../iso7816" }
 usb-device = { version = "0.2.3", features = ["control-buffer-256"] }

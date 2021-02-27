@@ -15,10 +15,10 @@ name = "runner"
 path = "src/main.rs"
 
 [dependencies]
-cortex-m-rtic = "0.5.1"
+lpc55-rtic = "0.5.5"
 cortex-m-semihosting = "0.3.5"
-delog = "0.1.0-alpha.3"
-heapless = "0.5.5"
+delog = "0.1.0"
+heapless = "0.6"
 interchange = "0.1.0"
 nb = "1"
 trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main", features = ["clients-3"] }
@@ -49,7 +49,7 @@ panic-halt = "0.2.0"
 panic-semihosting = "0.5.6"
 
 # storage
-littlefs2 = "0.1.1"
+littlefs2 = "0.2.1"
 
 [features]
 default = []

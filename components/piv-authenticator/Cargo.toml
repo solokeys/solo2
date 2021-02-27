@@ -8,9 +8,9 @@ edition = "2018"
 
 [dependencies]
 apdu-dispatch = { path = "../apdu-dispatch", optional = true }
-delog = "0.1.0-alpha.3"
+delog = "0.1.0"
 heapless = "0.6"
-heapless-bytes = "0.1"
+heapless-bytes = "0.2"
 hex-literal = "0.3"
 interchange = "0.1"
 iso7816 = { path = "../iso7816" }
@@ -20,7 +20,7 @@ trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main" }
 untrusted = "0.7"
 
 [dev-dependencies]
-littlefs2 = "0.1.0"
+littlefs2 = "0.2.1"
 rand_core = { version = "0.5.1", features = ["getrandom"] }
 
 [features]

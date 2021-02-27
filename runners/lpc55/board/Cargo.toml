@@ -5,9 +5,9 @@ authors = ["Conor Patrick <conor@solokeys.com>"]
 edition = "2018"
 
 [dependencies]
-cortex-m = "0.6.1"
+cortex-m = "0.7"
 cortex-m-rt = "0.6.10"
-delog = "0.1.0-alpha.3"
+delog = "0.1.0"
 fm11nc08 = {path = "../../../components/fm11nc08"}
 nb = "1"
 trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main", features = ["clients-3"] }

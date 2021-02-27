@@ -6,8 +6,8 @@ edition = "2018"
 
 [dependencies]
 chacha20 = { version = "0.6.0", features = ["rng"] }
-delog = "0.1.0-alpha.3"
-heapless = "0.5.5"
+delog = "0.1.0"
+heapless = "0.6"
 nb = "1"
 embedded-hal = { version = "0.2", features = ["unproven"] }
 generic-array = "0.14.3"
@@ -29,7 +29,7 @@ applet-root = {path = "./../../components/applet-root"}
 applet-fido = {path = "./../../components/applet-fido"}
 
 # storage
-littlefs2 = "0.1.1"
+littlefs2 = "0.2.1"
 
 [features]
 default = []
