@@ -7,6 +7,7 @@ generate_macros!();
 #[macro_use(hex)]
 extern crate hex_literal;
 
+pub mod commands;
 pub mod constants;
 pub mod state;
 pub mod derp;
