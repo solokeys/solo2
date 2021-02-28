@@ -110,6 +110,8 @@ impl<'a> ApplicationPropertyTemplate<'a> {
 }
 
 
+/// TODO: This should be an enum of sorts, maybe.
+///
 /// The data objects that appear in the dynamic authentication template (tag '7C') in the data field
 /// of the GENERAL AUTHENTICATE card command depend on the authentication protocol being executed.
 ///
