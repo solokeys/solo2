@@ -10,19 +10,17 @@ extern crate hex_literal;
 pub mod constants;
 pub mod state;
 pub mod derp;
-pub mod der;
+pub mod piv_types;
 
 use core::convert::{TryFrom, TryInto};
 
-use heapless::consts;
+use flexiber::EncodableHeapless;
 use iso7816::{
     Instruction, Status,
 };
 use apdu_dispatch::{Command, response};
 use trussed::client;
 use trussed::{syscall, try_syscall};
-
-use der::Der;
 
 use constants::*;
 
@@ -52,6 +50,29 @@ where
             state: Default::default(),
             trussed,
         }
+    }
+
+    // TODO: we'd like to listen on multiple AIDs.
+    // The way apdu-dispatch currently works, this would deselect, resetting security indicators.
+    pub fn deselect(&mut self) {
+    }
+
+    pub fn select(&mut self, _apdu: &Command, reply: &mut response::Data) -> Result {
+        use piv_types::Algorithms::*;
+
+        let application_property_template = piv_types::ApplicationPropertyTemplate::default()
+            .with_application_label(APPLICATION_LABEL)
+            .with_application_url(APPLICATION_URL)
+            .with_supported_cryptographic_algorithms(&[
+                Aes256,
+                P256,
+                Ed255,
+            ]);
+
+        application_property_template
+            .encode_to_heapless_vec(reply)
+            .unwrap();
+        Ok(())
     }
 
     pub fn respond(&mut self, command: &Command, reply: &mut response::Data) -> Result {
@@ -220,35 +241,26 @@ where
             return Err(Status::IncorrectDataParameter);
         }
 
-        let mechanism = trussed::types::Mechanism::Ed255;
-        let commitment = data; // 32B of data // 150B for ed25519
-        // blocking::dbg!(commitment);
-        let serialization = trussed::types::SignatureSerialization::Asn1Der; // ed25519 disregards
-
         info_now!("looking for keyreference");
         let key_handle = match self.state.persistent(&mut self.trussed).keys.authentication_key {
             Some(key) => key,
             None => return Err(Status::KeyReferenceNotFound),
         };
 
-        let signature = try_syscall!(self.trussed.sign(mechanism, key_handle, commitment, serialization))
+        let commitment = data; // 32B of data // 150B for ed25519
+        let signature = try_syscall!(self.trussed.sign_ed255(key_handle, commitment))
             .map_err(|_error| {
                 // NoSuchKey
                 debug_now!("{:?}", &_error);
                 Status::UnspecifiedNonpersistentExecutionError }
             )?
             .signature;
-        // blocking::dbg!(&signature);
 
-        let mut der: Der<consts::U256> = Default::default();
-        // 7c = Dynamic Authentication Template tag
-        der.nested(0x7c, |der| {
-            // 82 = response
-            der.raw_tlv(0x82, &signature)
-        }).unwrap();
-        // blocking::dbg!(&der);
+        piv_types::DynamicAuthenticationTemplate::with_response(&signature)
+            .encode_to_heapless_vec(reply)
+            // todo: come up with error handling (in this case, shouldn't fail)
+            .unwrap();
 
-        reply.extend_from_slice(&der).ok();
         Ok(())
     }
 
@@ -296,14 +308,10 @@ where
 
         let encrypted_challenge = syscall!(self.trussed.encrypt_tdes(key, challenge)).ciphertext;
 
-        let mut der: Der<consts::U12> = Default::default();
-        // 7c = Dynamic Authentication Template tag
-        der.nested(0x7c, |der| {
-            // 82 = response
-            der.raw_tlv(0x82, &encrypted_challenge)
-        }).unwrap();
+        piv_types::DynamicAuthenticationTemplate::with_response(&encrypted_challenge)
+            .encode_to_heapless_vec(reply)
+            .unwrap();
 
-        reply.extend_from_slice(&der).ok();
         Ok(())
     }
 
@@ -326,14 +334,9 @@ where
 
         let encrypted_challenge = syscall!(self.trussed.encrypt_tdes(key, &challenge)).ciphertext;
 
-        let mut der: Der<consts::U12> = Default::default();
-        // 7c = Dynamic Authentication Template tag
-        der.nested(0x7c, |der| {
-            // 80 = witness
-            der.raw_tlv(0x80, &encrypted_challenge)
-        }).unwrap();
-
-        reply.extend_from_slice(&der).ok();
+        piv_types::DynamicAuthenticationTemplate::with_witness(&encrypted_challenge)
+            .encode_to_heapless_vec(reply)
+            .unwrap();
 
         Ok(())
 
@@ -745,23 +748,9 @@ where
 
             // '5FC1 02' (351B)
             DataObjects::CardHolderUniqueIdentifier => {
-                // pivy: https://git.io/JfzBo
-                // https://www.idmanagement.gov/wp-content/uploads/sites/1171/uploads/TIG_SCEPACS_v2.3.pdf
-                let mut der = Der::<consts::U1024>::default();
-                der.nested(0x53, |der| {
-                    // der.raw_tlv(0x30, FASC_N)?; // pivy: 26B, TIG: 25B
-                    der.raw_tlv(0x30, &[0x99, 0x99])?; // 9999 = non-federal; pivy: 26B, TIG: 25B
-                    // der.raw_tlv(0x34, DUNS)?; // ? - pivy skips
-                    der.raw_tlv(0x34, GUID)?; // 16B type 1,2,4 UUID
-                    // der.raw_tlv(0x35, EXPIRATION_DATE)?; // [u8; 8], YYYYMMDD
-                    der.raw_tlv(0x35, b"22220101")?; // [u8; 8], YYYYMMDD
-                    // der.raw_tlv(0x36, CARDHOLDER_UUID)?; // 16B, like GUID
-                    // der.raw_tlv(0x3E, SIGNATURE)?; // ? - pivy only checks for non-zero entry
-                    der.raw_tlv(0x3E, b" ")?; // ? - pivy only checks for non-zero entry
-                    Ok(())
-                }).unwrap();
-
-                reply.extend_from_slice(&der).ok();
+                piv_types::CardHolderUniqueIdentifier::default()
+                    .encode_to_heapless_vec(reply)
+                    .unwrap();
             }
 
             // '5FC1 05' (351B)
@@ -779,11 +768,13 @@ where
                     // info_now!("error loading: {:?}", &e);
                     Status::NotFound
                 } )?.data;
-                // info_now!("got the data: {:?}", &data);
 
-                let mut der: Der<consts::U1024> = Default::default();
-                der.raw_tlv(0x53, &data).unwrap();
-                reply.extend_from_slice(&der).ok();
+                // todo: cleanup
+                let tag = flexiber::Tag::application(0x13); // 0x53
+                flexiber::TaggedSlice::from(tag, &data)
+                    .unwrap()
+                    .encode_to_heapless_vec(reply)
+                    .unwrap();
             }
 
             // '5F FF01' (754B)
@@ -911,53 +902,11 @@ impl<T> apdu_dispatch::app::App<apdu_dispatch::command::Size, apdu_dispatch::res
 where
     T: client::Client + client::Ed255 + client::Tdes
 {
-    fn select(&mut self, _apdu: &Command, reply: &mut response::Data) -> Result {
-        let mut der: Der<consts::U256> = Default::default();
-        der.nested(0x61, |der| {
-            // Application identifier of application:
-            // -> PIX (without RID, with version)
-            der.raw_tlv(0x4f, &PIV_PIX)?;
-
-            // Application label:
-            // "Text describing the application; e.g., for use on a man-machine interface."
-            der.raw_tlv(0x50, APPLICATION_LABEL)?;
-
-            // Uniform resource locator:
-            // "Reference to the specification describing the application."
-            der.raw_tlv2(0x5F50, APPLICATION_URL)?;
-
-            // Cryptographic algorithms supported:
-            // "Cryptographic algorithm identifier template. See Table 5."
-            der.nested(0xAC, |der| {
-                // 0x80: Cryptographic algorithm identifier
-                // "For values see [SP800-78, Table 6-2]"
-
-                // 0C: AES-256
-                der.raw_tlv(0x80, &[0x0C])?;
-                // 11: ECC-P256
-                der.raw_tlv(0x80, &[0x11])?;
-
-                // 22 (non-standard!): Ed255
-                der.raw_tlv(0x80, &[0x22])?;
-
-                // mandatory "Object identifier" with value set to 0x00
-                der.raw_tlv(0x06, &[0x00])
-            })?;
-
-            // Coexistent tag allocation authority
-            der.nested(0x79, |der| {
-                // Application identifier
-                der.raw_tlv(0x4f, NIST_RID)
-            // })?;
-            })
-        }).unwrap();
-
-        reply.extend_from_slice(&der).ok();
-
-        return Ok(());
+    fn select(&mut self, apdu: &Command, reply: &mut response::Data) -> Result {
+        self.select(apdu, reply)
     }
 
-    fn deselect(&mut self) {}
+    fn deselect(&mut self) { self.deselect() }
 
     fn call(&mut self, _: iso7816::Interface, apdu: &Command, reply: &mut response::Data) -> Result {
         self.respond(apdu, reply)

@@ -31,3 +31,7 @@ need_stdout = true
 command = ["cargo", "doc", "--color", "always"]
 need_stdout = true
 
+[jobs.doc-no-deps]
+command = ["cargo", "doc", "--color", "always", "--no-deps"]
+need_stdout = true
+
