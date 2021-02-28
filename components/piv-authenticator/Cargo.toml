@@ -9,6 +9,7 @@ edition = "2018"
 [dependencies]
 apdu-dispatch = { git = "https://github.com/solokeys/apdu-dispatch", branch = "main", optional = true }
 delog = "0.1.0"
+flexiber = { path = "/home/nicolas/projects/flexiber", features = ["derive", "heapless"] }
 heapless = "0.6"
 heapless-bytes = "0.2"
 hex-literal = "0.3"
