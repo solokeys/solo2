@@ -1,3 +1,24 @@
+pub enum Error {
+    VerificationFailed { remaining: u8 }, // 63 00 or 63 CX
+    SecureMessagingNotSupported, // 68 82
+    SecurityStatusNotSatisfied, // 69 82
+    AuthenticationMethodBlocked,  // 69 83
+    // ExpectedSecureMessagingDataObjectsMissing, // 69 87
+    // SecureMessagingDataObjectsIncorrect, // 69 88
+    IncorrectParameterInCommandDataField, // 6A 80
+    FunctionNotSupported, // 6A 81
+    DataObjectOrApplicationNotFound, // 6A 82
+    NotEnoughMemory, // 6A 84
+    IncorrecParameterInP1OrP2, // 6A 86
+    ReferencedDataOrReferenceDataNotFound, // 6A 88
+}
+
+pub enum Success {
+    Success,  // 61 xx
+    SuccessResponseDataStillAvailable(u8), // 90 00
+}
+
+pub type Result = core::result::Result<Success, Error>;
 
 // macro_rules! status_word {
 //     ($($Name:ident: [$sw1:expr, $sw2:tt],)*) => {
@@ -69,6 +90,7 @@
 // pub trait StatusWordTrait {
 //     fn sw1(&self) -> u8;
 //     fn sw2(&self) -> u8;
+//
 //     fn sw(&self) -> [u8; 2] {
 //         [self.sw1(), self.sw2()]
 //     }

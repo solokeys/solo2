@@ -1,24 +1,55 @@
+//! Parsed PIV commands.
+//!
+//! The types here should enforce all restrictions in the spec (such as padded_piv_pin.len() == 8),
+//! but no implementation-specific ones (such as "GlobalPin not supported").
+
 use core::convert::{TryFrom, TryInto};
 
-use flexiber::Decodable;
-use iso7816::{Command as IsoCommand, command::Data, Instruction, Status};
+// use flexiber::Decodable;
+use iso7816::{Instruction, Status};
+use apdu_dispatch::{Command as IsoCommand, command::Data};
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum Command<'l> {
+    /// Select the application
+    ///
+    /// Resets security indicators if we are implicitly deselected.
     Select(Select<'l>),
+    /// Get a data object / container.
     GetData(GetData),
+    /// Check PIN
+    ///
+    /// This verifies that the sent PIN (global or PIV) is correct.
+    ///
+    /// In principle, other key references (biometric, pairing code) could
+    /// be verified, but this is not implemented.
     Verify(Verify),
+    /// Change PIN or PUK
     ChangeReference(ChangeReference),
-    ChangePin(ChangePin),
+    /// If the PIN is blocked, reset it using the PUK
+    ResetPinRetries(ResetPinRetries),
+    /// The most general purpose method, performing actual cryptographic operations
+    ///
+    /// In particular, this can also decrypt or similar.
     Authenticate(Authenticate),
+    /// Store a data object / container.
     PutData(PutData),
     GenerateAsymmetric(GenerateAsymmetric),
+}
+
+impl<'l> Command<'l> {
+    /// Core method, constructs a PIV command, if the iso7816::Command is valid.
+    ///
+    /// Inherent method re-exposing the `TryFrom` implementation.
+    pub fn try_from(command: &'l IsoCommand) -> Result<Self, Status> {
+        command.try_into()
+    }
 }
 
 /// TODO: change into enum
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub struct Select<'l> {
-    aid: &'l [u8],
+    pub aid: &'l [u8],
 }
 
 impl<'l> TryFrom<&'l Data> for Select<'l> {
@@ -58,30 +89,32 @@ pub enum VerifyKeyReference {
 impl TryFrom<u8> for VerifyKeyReference {
     type Error = Status;
     fn try_from(p2: u8) -> Result<Self, Self::Error> {
+        // If the PIV Card Application does not contain the Discovery Object as described in Part 1,
+        // then no other key reference shall be able to be verified by the PIV Card Application VERIFY command.
         match p2 {
             0x00 => Ok(Self::GlobalPin),
+            // 0x00 => Err(Status::FunctionNotSupported),
             0x80 => Ok(Self::PivPin),
-            0x96 => Err(Status::FunctionNotSupported),
-            0x97 => Err(Status::FunctionNotSupported),
-            0x98 => Err(Status::FunctionNotSupported),
+            0x96 => Ok(Self::PrimaryFingerOcc),
+            0x97 => Ok(Self::SecondaryFingerOcc),
+            0x98 => Ok(Self::PairingCode),
+            // 0x96 => Err(Status::FunctionNotSupported),
+            // 0x97 => Err(Status::FunctionNotSupported),
+            // 0x98 => Err(Status::FunctionNotSupported),
             _ => Err(Status::KeyReferenceNotFound),
         }
     }
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
-#[repr(u8)]
-pub enum VerifyParameter1 {
-    CheckOrVerify = 0x00,
-    Reset = 0xFF,
-}
+pub struct VerifyLogout(bool);
 
-impl TryFrom<u8> for VerifyParameter1 {
+impl TryFrom<u8> for VerifyLogout {
     type Error = Status;
     fn try_from(p1: u8) -> Result<Self, Self::Error> {
         match p1 {
-            0x00 => Ok(VerifyParameter1::CheckOrVerify),
-            0xFF => Ok(VerifyParameter1::Reset),
+            0x00 => Ok(Self(false)),
+            0xFF => Ok(Self(true)),
             _ => Err(Status::IncorrectP1OrP2Parameter),
         }
     }
@@ -89,19 +122,39 @@ impl TryFrom<u8> for VerifyParameter1 {
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub struct VerifyArguments<'l> {
-    key_reference: VerifyKeyReference,
-    parameter1: VerifyParameter1,
-    data: &'l Data
+    pub key_reference: VerifyKeyReference,
+    pub logout: VerifyLogout,
+    pub data: &'l Data
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum VerifyLogin {
+    PivPin([u8; 8]),
+    GlobalPin([u8; 8]),
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum Verify {
+    Login(VerifyLogin),
+    Logout(VerifyKeyReference),
+    Status(VerifyKeyReference),
 }
 
 impl TryFrom<VerifyArguments<'_>> for Verify {
     type Error = Status;
     fn try_from(arguments: VerifyArguments<'_>) -> Result<Self, Self::Error> {
-        todo!();
+        let VerifyArguments { key_reference, logout, data } = arguments;
+        if key_reference != VerifyKeyReference::PivPin {
+            return Err(Status::FunctionNotSupported);
+        }
+        Ok(match (logout.0, data.len()) {
+            (false, 0) => Verify::Status(key_reference),
+            (false, 8) => Verify::Login(VerifyLogin::PivPin(data.as_slice().try_into().map_err(|_| Status::IncorrectDataParameter)?)),
+            (false, _) => return Err(Status::IncorrectDataParameter),
+            (true, 0) => Verify::Logout(key_reference),
+            (true, _) => return Err(Status::IncorrectDataParameter),
+        })
     }
 }
 
@@ -127,8 +180,8 @@ impl TryFrom<u8> for ChangeReferenceKeyReference {
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub struct ChangeReferenceArguments<'l> {
-    key_reference: ChangeReferenceKeyReference,
-    data: &'l Data
+    pub key_reference: ChangeReferenceKeyReference,
+    pub data: &'l Data
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -143,12 +196,12 @@ impl TryFrom<ChangeReferenceArguments<'_>> for ChangeReference {
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
-pub struct ChangePin {
-    padded_pin: [u8; 8],
-    puk: [u8;  8],
+pub struct ResetPinRetries {
+    pub padded_pin: [u8; 8],
+    pub puk: [u8;  8],
 }
 
-impl TryFrom<&Data> for ChangePin {
+impl TryFrom<&Data> for ResetPinRetries {
     type Error = Status;
     fn try_from(data: &Data) -> Result<Self, Self::Error> {
         if data.len() != 16 {
@@ -229,9 +282,11 @@ impl TryFrom<u8> for AuthenticateKeyReference {
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub struct AuthenticateArguments<'l> {
-    unparsed_algorithm: u8,
-    key_reference: AuthenticateKeyReference,
-    data: &'l Data
+    /// To allow the authenticator to have additional algorithms beyond NIST SP 800-78-4,
+    /// this is passed through as-is.
+    pub unparsed_algorithm: u8,
+    pub key_reference: AuthenticateKeyReference,
+    pub data: &'l Data
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -282,8 +337,8 @@ impl TryFrom<u8> for GenerateAsymmetricKeyReference {
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub struct GenerateAsymmetricArguments<'l> {
-    key_reference: GenerateAsymmetricKeyReference,
-    data: &'l Data
+    pub key_reference: GenerateAsymmetricKeyReference,
+    pub data: &'l Data
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -330,9 +385,9 @@ impl<'l> TryFrom<&'l IsoCommand> for Command<'l> {
             }
 
             (0x00, Instruction::Verify, p1, p2) => {
-                let parameter1 = VerifyParameter1::try_from(p1)?;
+                let logout = VerifyLogout::try_from(p1)?;
                 let key_reference = VerifyKeyReference::try_from(p2)?;
-                Self::Verify(Verify::try_from(VerifyArguments { key_reference, parameter1, data })?)
+                Self::Verify(Verify::try_from(VerifyArguments { key_reference, logout, data })?)
             }
 
             (0x00, Instruction::ChangeReferenceData, 0x00, p2) => {
@@ -341,7 +396,7 @@ impl<'l> TryFrom<&'l IsoCommand> for Command<'l> {
             }
 
             (0x00, Instruction::ResetRetryCounter, 0x00, 0x80) => {
-                Self::ChangePin(ChangePin::try_from(data)?)
+                Self::ResetPinRetries(ResetPinRetries::try_from(data)?)
             }
 
             (0x00, Instruction::GeneralAuthenticate, p1, p2) => {
@@ -359,7 +414,7 @@ impl<'l> TryFrom<&'l IsoCommand> for Command<'l> {
                 Self::GenerateAsymmetric(GenerateAsymmetric::try_from(GenerateAsymmetricArguments { key_reference, data })?)
             }
 
-            _ => todo!(),
+            _ => return Err(Status::FunctionNotSupported),
         })
     }
 }
