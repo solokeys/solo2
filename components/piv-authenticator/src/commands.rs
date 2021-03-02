@@ -9,6 +9,8 @@ use core::convert::{TryFrom, TryInto};
 use iso7816::{Instruction, Status};
 use apdu_dispatch::{Command as IsoCommand, command::Data};
 
+pub use crate::{Pin, Puk};
+
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum Command<'l> {
     /// Select the application
@@ -130,7 +132,7 @@ pub struct VerifyArguments<'l> {
 #[derive(Clone, Copy, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum VerifyLogin {
-    PivPin([u8; 8]),
+    PivPin(Pin),
     GlobalPin([u8; 8]),
 }
 
@@ -186,12 +188,32 @@ pub struct ChangeReferenceArguments<'l> {
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum ChangeReference {
+    ChangePin { old_pin: Pin, new_pin: Pin },
+    ChangePuk { old_puk: Puk, new_puk: Puk },
 }
 
 impl TryFrom<ChangeReferenceArguments<'_>> for ChangeReference {
     type Error = Status;
     fn try_from(arguments: ChangeReferenceArguments<'_>) -> Result<Self, Self::Error> {
-        todo!();
+        let ChangeReferenceArguments { key_reference, data } = arguments;
+
+        use ChangeReferenceKeyReference::*;
+        Ok(match (key_reference, data) {
+            (GlobalPin, _) => return Err(Status::FunctionNotSupported),
+            (PivPin, data) => {
+                ChangeReference::ChangePin {
+                    old_pin: Pin::try_from(&data[..8]).map_err(|_| Status::IncorrectDataParameter)?,
+                    new_pin: Pin::try_from(&data[8..]).map_err(|_| Status::IncorrectDataParameter)?,
+                }
+            }
+            (Puk, data) => {
+                use crate::commands::Puk;
+                ChangeReference::ChangePuk {
+                    old_puk: Puk(data[..8].try_into().map_err(|_| Status::IncorrectDataParameter)?),
+                    new_puk: Puk(data[8..].try_into().map_err(|_| Status::IncorrectDataParameter)?),
+                }
+            }
+        })
     }
 }
 
