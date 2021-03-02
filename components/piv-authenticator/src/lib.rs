@@ -8,11 +8,12 @@ generate_macros!();
 extern crate hex_literal;
 
 pub mod commands;
-// pub use commands::Command;
+pub use commands::Command;
 pub mod constants;
 pub mod state;
 pub mod derp;
 pub mod piv_types;
+pub use piv_types::{Pin, Puk};
 
 use core::convert::{TryFrom, TryInto};
 
@@ -20,7 +21,7 @@ use flexiber::EncodableHeapless;
 use iso7816::{
     Instruction, Status,
 };
-use apdu_dispatch::{Command as Command, response};
+use apdu_dispatch::{Command as IsoCommand, response};
 use trussed::client;
 use trussed::{syscall, try_syscall};
 
@@ -59,7 +60,7 @@ where
     pub fn deselect(&mut self) {
     }
 
-    pub fn select(&mut self, _apdu: &Command, reply: &mut response::Data) -> Result {
+    pub fn select(&mut self, _apdu: &IsoCommand, reply: &mut response::Data) -> Result {
         use piv_types::Algorithms::*;
 
         let application_property_template = piv_types::ApplicationPropertyTemplate::default()
@@ -77,65 +78,63 @@ where
         Ok(())
     }
 
-    // pub fn old_respond(&mut self, command: &Command, reply: &mut response::Data) -> Result {
-    //     let last_or_only = command.class().chain().last_or_only();
+    pub fn respond(&mut self, command: &IsoCommand, reply: &mut response::Data) -> Result {
+        let last_or_only = command.class().chain().last_or_only();
 
-    //     // TODO: avoid owned copy?
-    //     let entire_command = match self.state.runtime.chained_command.as_mut() {
-    //         Some(command_so_far) => {
-    //             // TODO: make sure the header matches, e.g. '00 DB 3F FF'
-    //             command_so_far.data_mut().extend_from_slice(command.data()).unwrap();
+        // TODO: avoid owned copy?
+        let entire_command = match self.state.runtime.chained_command.as_mut() {
+            Some(command_so_far) => {
+                // TODO: make sure the header matches, e.g. '00 DB 3F FF'
+                command_so_far.data_mut().extend_from_slice(command.data()).unwrap();
 
-    //             if last_or_only {
-    //                 let entire_command = command_so_far.clone();
-    //                 self.state.runtime.chained_command = None;
-    //                 entire_command
-    //             } else {
-    //                 return Ok(Default::default());
-    //             }
-    //         }
+                if last_or_only {
+                    let entire_command = command_so_far.clone();
+                    self.state.runtime.chained_command = None;
+                    entire_command
+                } else {
+                    return Ok(Default::default());
+                }
+            }
 
-    //         None => {
-    //             if last_or_only {
-    //                 // IsoCommand
-    //                 command.clone()
-    //             } else {
-    //                 self.state.runtime.chained_command = Some(command.clone());
-    //                 return Ok(Default::default());
-    //             }
-    //         }
-    //     };
+            None => {
+                if last_or_only {
+                    // IsoCommand
+                    command.clone()
+                } else {
+                    self.state.runtime.chained_command = Some(command.clone());
+                    return Ok(Default::default());
+                }
+            }
+        };
 
-    //     // parse Iso7816Command as PivCommand
-    //     let command: Command = (&entire_command).try_into()?;
+        // parse Iso7816Command as PivCommand
+        let command: Command = (&entire_command).try_into()?;
 
-    //     match command {
-    //         Command::Verify(verify) => self.verify(verify),
-    //         _ => todo!(),
-    //     }
-    // }
+        match command {
+            Command::Verify(verify) => self.verify(verify),
+            Command::ChangeReference(change_reference) => self.change_reference(change_reference),
+            _ => todo!(),
+        }
+    }
 
     // maybe reserve this for the case VerifyLogin::PivPin?
     pub fn login(&mut self, login: commands::VerifyLogin) -> Result {
-        if let commands::VerifyLogin::PivPin(padded_pin) = login {
-            // TODO: improve this type
-            let sent_pin = state::Pin::try_new(&padded_pin)
-                .map_err(|_| Status::IncorrectDataParameter)?;
+        if let commands::VerifyLogin::PivPin(pin) = login {
 
             // the actual PIN verification
-            let persistent_state = self.state.persistent(&mut self.trussed);
+            let mut persistent_state = self.state.persistent(&mut self.trussed);
 
             if persistent_state.remaining_pin_retries() == 0 {
                 return Err(Status::OperationBlocked);
             }
 
-            if persistent_state.verify_pin(&sent_pin) {
-                persistent_state.reset_consecutive_pin_mismatches(&mut self.trussed);
+            if persistent_state.verify_pin(&pin) {
+                persistent_state.reset_consecutive_pin_mismatches();
                 self.state.runtime.app_security_status.pin_verified = true;
                 Ok(())
 
             } else {
-                let remaining = persistent_state.increment_consecutive_pin_mismatches(&mut self.trussed);
+                let remaining = persistent_state.increment_consecutive_pin_mismatches();
                 // should we logout here?
                 self.state.runtime.app_security_status.pin_verified = false;
                 Err(Status::RemainingRetries(remaining))
@@ -169,86 +168,130 @@ where
         }
     }
 
-    pub fn respond(&mut self, command: &Command, reply: &mut response::Data) -> Result {
-
-        // TEMP
-        // blocking::dbg!(self.state.persistent(&mut self.trussed).timestamp(&mut self.trussed));
-
-        // handle CLA
-        // - command chaining not supported
-        // - secure messaging not supported
-        // - only channel zero supported
-        // - ensure INS known to us
-
-        let last_or_only = command.class().chain().last_or_only();
-
-        // TODO: avoid owned copy?
-        let owned_command = match self.state.runtime.chained_command.as_mut() {
-            Some(command_so_far) => {
-                // TODO: make sure the prefix matches, e.g. '00 DB 3F FF'
-                command_so_far.data_mut().extend_from_slice(command.data()).unwrap();
-
-                if last_or_only {
-                    let total_command = command_so_far.clone();
-                    self.state.runtime.chained_command = None;
-                    total_command
-                } else {
-                    return Ok(Default::default());
-                }
-            }
-
-            None => {
-                if last_or_only {
-                    // IsoCommand
-                    command.clone()
-                } else {
-                    self.state.runtime.chained_command = Some(command.clone());
-                    return Ok(Default::default());
-                }
-            }
-        };
-
-        let command = &owned_command;
-
-        let class = command.class();
-
-        if !class.secure_messaging().none() {
-            return Err(Status::SecureMessagingNotSupported);
-        }
-
-        if class.channel() != Some(0) {
-            return Err(Status::LogicalChannelNotSupported);
-        }
-
-        // info_now!("CLA = {:?}", &command.class());
-        info_now!("INS = {:?}, P1 = {:X}, P2 = {:X}",
-                  &command.instruction(),
-                  command.p1, command.p2,
-                  );
-        // info_now!("extended = {:?}", command.extended);
-
-        // info_now!("INS = {:?}" &command.instruction());
-        match command.instruction() {
-            Instruction::GetData => self.get_data(command, reply),
-            Instruction::PutData => self.put_data(command),
-            Instruction::Verify => self.old_verify(command),
-            Instruction::ChangeReferenceData => self.change_reference_data(command),
-            Instruction::GeneralAuthenticate => self.general_authenticate(command, reply),
-            Instruction::GenerateAsymmetricKeyPair => self.generate_asymmetric_keypair(command, reply),
-
-            Instruction::Unknown(ins) => {
-
-                // see if it's a Yubico thing
-                if let Ok(instruction) = YubicoPivExtension::try_from(ins) {
-                    self.yubico_piv_extension(command, instruction, reply)
-                } else {
-                    Err(Status::FunctionNotSupported)
-                }
-            }
-
-            _ => Err(Status::FunctionNotSupported),
+    pub fn change_reference(&mut self, command: commands::ChangeReference) -> Result {
+        use commands::ChangeReference;
+        match command {
+            ChangeReference::ChangePin { old_pin, new_pin } => self.change_pin(old_pin, new_pin),
+            ChangeReference::ChangePuk { old_puk, new_puk } => self.change_puk(old_puk, new_puk),
         }
     }
+
+    pub fn change_pin(&mut self, old_pin: commands::Pin, new_pin: commands::Pin) -> Result {
+        let mut persistent_state = self.state.persistent(&mut self.trussed);
+        if persistent_state.remaining_pin_retries() == 0 {
+            return Err(Status::OperationBlocked);
+        }
+
+        if !persistent_state.verify_pin(&old_pin) {
+            let remaining = persistent_state.increment_consecutive_pin_mismatches();
+            self.state.runtime.app_security_status.pin_verified = false;
+            return Err(Status::RemainingRetries(remaining));
+        }
+
+        persistent_state.reset_consecutive_pin_mismatches();
+        persistent_state.set_pin(new_pin);
+        self.state.runtime.app_security_status.pin_verified = true;
+        return Ok(Default::default());
+    }
+
+    pub fn change_puk(&mut self, old_puk: commands::Puk, new_puk: commands::Puk) -> Result {
+        let mut persistent_state = self.state.persistent(&mut self.trussed);
+        if persistent_state.remaining_puk_retries() == 0 {
+            return Err(Status::OperationBlocked);
+        }
+
+        if !persistent_state.verify_puk(&old_puk) {
+            let remaining = persistent_state.increment_consecutive_puk_mismatches();
+            self.state.runtime.app_security_status.puk_verified = false;
+            return Err(Status::RemainingRetries(remaining));
+        }
+
+        persistent_state.reset_consecutive_puk_mismatches();
+        persistent_state.set_puk(new_puk);
+        self.state.runtime.app_security_status.puk_verified = true;
+        return Ok(Default::default());
+    }
+
+    // pub fn old_respond(&mut self, command: &IsoCommand, reply: &mut response::Data) -> Result {
+
+    //     // TEMP
+    //     // blocking::dbg!(self.state.persistent(&mut self.trussed).timestamp(&mut self.trussed));
+
+    //     // handle CLA
+    //     // - command chaining not supported
+    //     // - secure messaging not supported
+    //     // - only channel zero supported
+    //     // - ensure INS known to us
+
+    //     let last_or_only = command.class().chain().last_or_only();
+
+    //     // TODO: avoid owned copy?
+    //     let owned_command = match self.state.runtime.chained_command.as_mut() {
+    //         Some(command_so_far) => {
+    //             // TODO: make sure the prefix matches, e.g. '00 DB 3F FF'
+    //             command_so_far.data_mut().extend_from_slice(command.data()).unwrap();
+
+    //             if last_or_only {
+    //                 let total_command = command_so_far.clone();
+    //                 self.state.runtime.chained_command = None;
+    //                 total_command
+    //             } else {
+    //                 return Ok(Default::default());
+    //             }
+    //         }
+
+    //         None => {
+    //             if last_or_only {
+    //                 // IsoCommand
+    //                 command.clone()
+    //             } else {
+    //                 self.state.runtime.chained_command = Some(command.clone());
+    //                 return Ok(Default::default());
+    //             }
+    //         }
+    //     };
+
+    //     let command = &owned_command;
+
+    //     let class = command.class();
+
+    //     if !class.secure_messaging().none() {
+    //         return Err(Status::SecureMessagingNotSupported);
+    //     }
+
+    //     if class.channel() != Some(0) {
+    //         return Err(Status::LogicalChannelNotSupported);
+    //     }
+
+    //     // info_now!("CLA = {:?}", &command.class());
+    //     info_now!("INS = {:?}, P1 = {:X}, P2 = {:X}",
+    //               &command.instruction(),
+    //               command.p1, command.p2,
+    //               );
+    //     // info_now!("extended = {:?}", command.extended);
+
+    //     // info_now!("INS = {:?}" &command.instruction());
+    //     match command.instruction() {
+    //         Instruction::GetData => self.get_data(command, reply),
+    //         Instruction::PutData => self.put_data(command),
+    //         Instruction::Verify => panic!(),//self.old_verify(command),
+    //         Instruction::ChangeReferenceData => panic!(),//self.change_reference_data(command),
+    //         Instruction::GeneralAuthenticate => self.general_authenticate(command, reply),
+    //         Instruction::GenerateAsymmetricKeyPair => self.generate_asymmetric_keypair(command, reply),
+
+    //         Instruction::Unknown(ins) => {
+
+    //             // see if it's a Yubico thing
+    //             if let Ok(instruction) = YubicoPivExtension::try_from(ins) {
+    //                 self.yubico_piv_extension(command, instruction, reply)
+    //             } else {
+    //                 Err(Status::FunctionNotSupported)
+    //             }
+    //         }
+
+    //         _ => Err(Status::FunctionNotSupported),
+    //     }
+    // }
 
     // SP 800-73-4, Part 2, Section 3.2.4
     // https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-73-4.pdf#page=92
@@ -278,7 +321,7 @@ where
     // - 9000, 61XX for success
     // - 6982 security status
     // - 6A80, 6A86 for data, P1/P2 issue
-    fn general_authenticate(&mut self, command: &Command, reply: &mut response::Data) -> Result {
+    fn general_authenticate(&mut self, command: &IsoCommand, reply: &mut response::Data) -> Result {
 
         // For "SSH", we need implement A.4.2 in SP-800-73-4 Part 2, ECDSA signatures
         //
@@ -366,7 +409,7 @@ where
         }
 
         info_now!("looking for keyreference");
-        let key_handle = match self.state.persistent(&mut self.trussed).keys.authentication_key {
+        let key_handle = match self.state.persistent(&mut self.trussed).state.keys.authentication_key {
             Some(key) => key,
             None => return Err(Status::KeyReferenceNotFound),
         };
@@ -388,7 +431,7 @@ where
         Ok(())
     }
 
-    fn request_for_challenge(&mut self, command: &Command, remaining_data: &[u8], reply: &mut response::Data) -> Result {
+    fn request_for_challenge(&mut self, command: &IsoCommand, remaining_data: &[u8], reply: &mut response::Data) -> Result {
         // - data is of the form
         //     00 87 03 9B 16 7C 14 80 08 99 6D 71 40 E7 05 DF 7F 81 08 6E EF 9C 02 00 69 73 E8
         // - remaining data contains <decrypted challenge> 81 08 <encrypted counter challenge>
@@ -428,7 +471,7 @@ where
             return Err(Status::IncorrectDataParameter);
         }
 
-        let key = self.state.persistent(&mut self.trussed).keys.management_key;
+        let key = self.state.persistent(&mut self.trussed).state.keys.management_key;
 
         let encrypted_challenge = syscall!(self.trussed.encrypt_tdes(key, challenge)).ciphertext;
 
@@ -439,7 +482,7 @@ where
         Ok(())
     }
 
-    fn request_for_witness(&mut self, command: &Command, remaining_data: &[u8], reply: &mut response::Data) -> Result {
+    fn request_for_witness(&mut self, command: &IsoCommand, remaining_data: &[u8], reply: &mut response::Data) -> Result {
         // invariants: parsed data was '7C L1 80 00' + remaining_data
 
         if command.p1 != 0x03 || command.p2 != 0x9b {
@@ -450,7 +493,7 @@ where
             return Err(Status::IncorrectDataParameter);
         }
 
-        let key = self.state.persistent(&mut self.trussed).keys.management_key;
+        let key = self.state.persistent(&mut self.trussed).state.keys.management_key;
 
         let challenge = syscall!(self.trussed.random_bytes(8)).bytes;
         let command_cache = state::AuthenticateManagement { challenge: challenge[..].try_into().unwrap() };
@@ -466,155 +509,155 @@ where
 
     }
 
-    fn change_reference_data(&mut self, command: &Command) -> Result {
-        // The way `piv-go` blocks PUK (which it needs to do because Yubikeys only
-        // allow their Reset if PIN+PUK are blocked) is that it sends "change PUK"
-        // with random (i.e. incorrect) PUK listed as both old and new PUK.
-        //
-        // 00 24 00 81 10
-        //       32 38 36 34 31 39 30 36 32 38 36 34 31 39 30 36
-        //
-        // For now, we don't support PUK, so we can just return "Blocked" directly
-        // if the key reference in P2 is '81' = PUK
+    //fn change_reference_data(&mut self, command: &Command) -> Result {
+    //    // The way `piv-go` blocks PUK (which it needs to do because Yubikeys only
+    //    // allow their Reset if PIN+PUK are blocked) is that it sends "change PUK"
+    //    // with random (i.e. incorrect) PUK listed as both old and new PUK.
+    //    //
+    //    // 00 24 00 81 10
+    //    //       32 38 36 34 31 39 30 36 32 38 36 34 31 39 30 36
+    //    //
+    //    // For now, we don't support PUK, so we can just return "Blocked" directly
+    //    // if the key reference in P2 is '81' = PUK
 
-        // application PIN
-        if command.p2 == 0x80 {
-            let remaining_retries = self.state.persistent(&mut self.trussed).remaining_pin_retries();
+    //    // application PIN
+    //    if command.p2 == 0x80 {
+    //        let remaining_retries = self.state.persistent(&mut self.trussed).remaining_pin_retries();
 
-            if remaining_retries == 0 {
-                return Err(Status::OperationBlocked);
-            }
+    //        if remaining_retries == 0 {
+    //            return Err(Status::OperationBlocked);
+    //        }
 
-            if command.data().len() != 16 {
-                return Err(Status::IncorrectDataParameter);
-            }
+    //        if command.data().len() != 16 {
+    //            return Err(Status::IncorrectDataParameter);
+    //        }
 
-            let (old_pin, new_pin) = command.data().split_at(8);
+    //        let (old_pin, new_pin) = command.data().split_at(8);
 
-            let old_pin = match state::Pin::try_new(old_pin) {
-                Ok(pin) => pin,
-                _ => return Err(Status::IncorrectDataParameter),
-            };
+    //        let old_pin = match state::Pin::try_new(old_pin) {
+    //            Ok(pin) => pin,
+    //            _ => return Err(Status::IncorrectDataParameter),
+    //        };
 
-            let new_pin = match state::Pin::try_new(new_pin) {
-                Ok(pin) => pin,
-                _ => return Err(Status::IncorrectDataParameter),
-            };
+    //        let new_pin = match state::Pin::try_new(new_pin) {
+    //            Ok(pin) => pin,
+    //            _ => return Err(Status::IncorrectDataParameter),
+    //        };
 
-            if !self.state.persistent(&mut self.trussed).verify_pin(&old_pin) {
-                let remaining = self.state.persistent(&mut self.trussed).increment_consecutive_pin_mismatches(&mut self.trussed);
-                self.state.runtime.app_security_status.pin_verified = false;
-                return Err(Status::RemainingRetries(remaining));
-            }
+    //        if !self.state.persistent(&mut self.trussed).verify_pin(&old_pin) {
+    //            let remaining = self.state.persistent(&mut self.trussed).increment_consecutive_pin_mismatches(&mut self.trussed);
+    //            self.state.runtime.app_security_status.pin_verified = false;
+    //            return Err(Status::RemainingRetries(remaining));
+    //        }
 
-            self.state.persistent(&mut self.trussed).reset_consecutive_pin_mismatches(&mut self.trussed);
-            self.state.persistent(&mut self.trussed).set_pin(&mut self.trussed, new_pin);
-            self.state.runtime.app_security_status.pin_verified = true;
-            return Ok(());
-        }
+    //        self.state.persistent(&mut self.trussed).reset_consecutive_pin_mismatches(&mut self.trussed);
+    //        self.state.persistent(&mut self.trussed).set_pin(&mut self.trussed, new_pin);
+    //        self.state.runtime.app_security_status.pin_verified = true;
+    //        return Ok(());
+    //    }
 
-        // PUK
-        if command.p2 == 0x81 {
-            let remaining_retries = self.state.persistent(&mut self.trussed).remaining_puk_retries();
+    //    // PUK
+    //    if command.p2 == 0x81 {
+    //        let remaining_retries = self.state.persistent(&mut self.trussed).remaining_puk_retries();
 
-            if remaining_retries == 0 {
-                return Err(Status::OperationBlocked);
-            }
+    //        if remaining_retries == 0 {
+    //            return Err(Status::OperationBlocked);
+    //        }
 
-            if command.data().len() != 16 {
-                return Err(Status::IncorrectDataParameter);
-            }
+    //        if command.data().len() != 16 {
+    //            return Err(Status::IncorrectDataParameter);
+    //        }
 
-            let (old_puk, new_puk) = command.data().split_at(8);
+    //        let (old_puk, new_puk) = command.data().split_at(8);
 
-            let old_puk = match state::Pin::try_new(old_puk) {
-                Ok(puk) => puk,
-                _ => return Err(Status::IncorrectDataParameter),
-            };
+    //        let old_puk = match state::Pin::try_new(old_puk) {
+    //            Ok(puk) => puk,
+    //            _ => return Err(Status::IncorrectDataParameter),
+    //        };
 
-            let new_puk = match state::Pin::try_new(new_puk) {
-                Ok(puk) => puk,
-                _ => return Err(Status::IncorrectDataParameter),
-            };
+    //        let new_puk = match state::Pin::try_new(new_puk) {
+    //            Ok(puk) => puk,
+    //            _ => return Err(Status::IncorrectDataParameter),
+    //        };
 
-            if !self.state.persistent(&mut self.trussed).verify_puk(&old_puk) {
-                let remaining = self.state.persistent(&mut self.trussed).increment_consecutive_puk_mismatches(&mut self.trussed);
-                self.state.runtime.app_security_status.puk_verified = false;
-                return Err(Status::RemainingRetries(remaining));
-            }
+    //        if !self.state.persistent(&mut self.trussed).verify_puk(&old_puk) {
+    //            let remaining = self.state.persistent(&mut self.trussed).increment_consecutive_puk_mismatches(&mut self.trussed);
+    //            self.state.runtime.app_security_status.puk_verified = false;
+    //            return Err(Status::RemainingRetries(remaining));
+    //        }
 
-            self.state.persistent(&mut self.trussed).reset_consecutive_puk_mismatches(&mut self.trussed);
-            self.state.persistent(&mut self.trussed).set_puk(&mut self.trussed, new_puk);
-            self.state.runtime.app_security_status.puk_verified = true;
-            return Ok(());
-        }
+    //        self.state.persistent(&mut self.trussed).reset_consecutive_puk_mismatches(&mut self.trussed);
+    //        self.state.persistent(&mut self.trussed).set_puk(&mut self.trussed, new_puk);
+    //        self.state.runtime.app_security_status.puk_verified = true;
+    //        return Ok(());
+    //    }
 
 
-        Err(Status::KeyReferenceNotFound)
-    }
+    //    Err(Status::KeyReferenceNotFound)
+    //}
 
-    fn old_verify(&mut self, command: &Command) -> Result {
-        // we only implement our own PIN, not global Pin, not OCC data, not pairing code
-        if command.p2 != 0x80 {
-            return Err(Status::KeyReferenceNotFound);
-        }
+    //fn old_verify(&mut self, command: &Command) -> Result {
+    //    // we only implement our own PIN, not global Pin, not OCC data, not pairing code
+    //    if command.p2 != 0x80 {
+    //        return Err(Status::KeyReferenceNotFound);
+    //    }
 
-        let p1 = command.p1;
-        if p1 != 0x00 && p1 != 0xFF {
-            return Err(Status::IncorrectP1OrP2Parameter);
-        }
+    //    let p1 = command.p1;
+    //    if p1 != 0x00 && p1 != 0xFF {
+    //        return Err(Status::IncorrectP1OrP2Parameter);
+    //    }
 
-        // all above failures shall not change security status or retry counter
+    //    // all above failures shall not change security status or retry counter
 
-        // 1) If p1 is FF, "log out" of PIN
-        if p1 == 0xFF {
-            if command.data().len() != 0 {
-                return Err(Status::IncorrectDataParameter);
-            } else {
-                self.state.runtime.app_security_status.pin_verified = false;
-                return Ok(());
-            }
-        }
+    //    // 1) If p1 is FF, "log out" of PIN
+    //    if p1 == 0xFF {
+    //        if command.data().len() != 0 {
+    //            return Err(Status::IncorrectDataParameter);
+    //        } else {
+    //            self.state.runtime.app_security_status.pin_verified = false;
+    //            return Ok(());
+    //        }
+    //    }
 
-        // 2) Get retries (or whether verification is even needed) by passing no data
-        if p1 == 0x00 && command.data().len() == 0 {
-            if self.state.runtime.app_security_status.pin_verified {
-                return Ok(());
-            } else {
-                let retries = self.state.persistent(&mut self.trussed).remaining_pin_retries();
-                return Err(Status::RemainingRetries(retries));
-            }
-        }
+    //    // 2) Get retries (or whether verification is even needed) by passing no data
+    //    if p1 == 0x00 && command.data().len() == 0 {
+    //        if self.state.runtime.app_security_status.pin_verified {
+    //            return Ok(());
+    //        } else {
+    //            let retries = self.state.persistent(&mut self.trussed).remaining_pin_retries();
+    //            return Err(Status::RemainingRetries(retries));
+    //        }
+    //    }
 
-        // if malformed PIN is sent, no security implication
-        if command.data().len() != 8 {
-            return Err(Status::IncorrectDataParameter);
-        }
+    //    // if malformed PIN is sent, no security implication
+    //    if command.data().len() != 8 {
+    //        return Err(Status::IncorrectDataParameter);
+    //    }
 
-        let sent_pin = match state::Pin::try_new(&command.data()) {
-            Ok(pin) => pin,
-            _ => return Err(Status::IncorrectDataParameter),
-        };
+    //    let sent_pin = match state::Pin::try_new(&command.data()) {
+    //        Ok(pin) => pin,
+    //        _ => return Err(Status::IncorrectDataParameter),
+    //    };
 
-        // 3) Verify le PIN!
-        let remaining_retries = self.state.persistent(&mut self.trussed).remaining_pin_retries();
-        if remaining_retries == 0 {
-            return Err(Status::OperationBlocked);
-        }
+    //    // 3) Verify le PIN!
+    //    let remaining_retries = self.state.persistent(&mut self.trussed).remaining_pin_retries();
+    //    if remaining_retries == 0 {
+    //        return Err(Status::OperationBlocked);
+    //    }
 
-        if self.state.persistent(&mut self.trussed).verify_pin(&sent_pin) {
-            self.state.persistent(&mut self.trussed).reset_consecutive_pin_mismatches(&mut self.trussed);
-            self.state.runtime.app_security_status.pin_verified = true;
-            Ok(())
+    //    if self.state.persistent(&mut self.trussed).verify_pin(&sent_pin) {
+    //        self.state.persistent(&mut self.trussed).reset_consecutive_pin_mismatches(&mut self.trussed);
+    //        self.state.runtime.app_security_status.pin_verified = true;
+    //        Ok(())
 
-        } else {
-            let remaining = self.state.persistent(&mut self.trussed).increment_consecutive_pin_mismatches(&mut self.trussed);
-            self.state.runtime.app_security_status.pin_verified = false;
-            Err(Status::RemainingRetries(remaining))
-        }
-    }
+    //    } else {
+    //        let remaining = self.state.persistent(&mut self.trussed).increment_consecutive_pin_mismatches(&mut self.trussed);
+    //        self.state.runtime.app_security_status.pin_verified = false;
+    //        Err(Status::RemainingRetries(remaining))
+    //    }
+    //}
 
-    fn generate_asymmetric_keypair(&mut self, command: &Command, reply: &mut response::Data) -> Result {
+    fn generate_asymmetric_keypair(&mut self, command: &IsoCommand, reply: &mut response::Data) -> Result {
         if !self.state.runtime.app_security_status.management_verified {
             return Err(Status::SecurityStatusNotSatisfied);
         }
@@ -678,7 +721,7 @@ where
 
         // ble policy
 
-        if let Some(key) = self.state.persistent(&mut self.trussed).keys.authentication_key {
+        if let Some(key) = self.state.persistent(&mut self.trussed).state.keys.authentication_key {
             syscall!(self.trussed.delete(key));
         }
 
@@ -708,8 +751,8 @@ where
         //     .signature;
         // blocking::dbg!(&signature);
 
-        self.state.persistent(&mut self.trussed).keys.authentication_key = Some(key);
-        self.state.persistent(&mut self.trussed).save(&mut self.trussed);
+        self.state.persistent(&mut self.trussed).state.keys.authentication_key = Some(key);
+        self.state.persistent(&mut self.trussed).save();
 
         // let public_key = syscall!(self.trussed.derive_p256_public_key(
         let public_key = syscall!(self.trussed.derive_ed255_public_key(
@@ -737,7 +780,7 @@ where
         Ok(())
     }
 
-    fn put_data(&mut self, command: &Command) -> Result {
+    fn put_data(&mut self, command: &IsoCommand) -> Result {
         info_now!("PutData");
         if command.p1 != 0x3f || command.p2 != 0xff {
             return Err(Status::IncorrectP1OrP2Parameter);
@@ -822,7 +865,7 @@ where
         Err(Status::IncorrectDataParameter)
     }
 
-    fn get_data(&mut self, command: &Command, reply: &mut response::Data) -> Result {
+    fn get_data(&mut self, command: &IsoCommand, reply: &mut response::Data) -> Result {
         if command.p1 != 0x3f || command.p2 != 0xff {
             return Err(Status::IncorrectP1OrP2Parameter);
         }
@@ -912,7 +955,7 @@ where
         Ok(())
     }
 
-    fn yubico_piv_extension(&mut self, command: &Command, instruction: YubicoPivExtension, reply: &mut response::Data) -> Result {
+    fn yubico_piv_extension(&mut self, command: &IsoCommand, instruction: YubicoPivExtension, reply: &mut response::Data) -> Result {
         info_now!("yubico extension: {:?}", &instruction);
         match instruction {
             YubicoPivExtension::GetSerial => {
@@ -951,9 +994,9 @@ where
                 }
 
                 // TODO: find out what all needs resetting :)
-                self.state.persistent(&mut self.trussed).reset_pin(&mut self.trussed);
-                self.state.persistent(&mut self.trussed).reset_puk(&mut self.trussed);
-                self.state.persistent(&mut self.trussed).reset_management_key(&mut self.trussed);
+                self.state.persistent(&mut self.trussed).reset_pin();
+                self.state.persistent(&mut self.trussed).reset_puk();
+                self.state.persistent(&mut self.trussed).reset_management_key();
                 self.state.runtime.app_security_status.pin_verified = false;
                 self.state.runtime.app_security_status.puk_verified = false;
                 self.state.runtime.app_security_status.management_verified = false;
@@ -996,7 +1039,7 @@ where
                     return Err(Status::IncorrectDataParameter);
                 }
                 let new_management_key: [u8; 24] = new_management_key.try_into().unwrap();
-                self.state.persistent(&mut self.trussed).set_management_key(&mut self.trussed, &new_management_key);
+                self.state.persistent(&mut self.trussed).set_management_key(&new_management_key);
 
             }
 
@@ -1026,13 +1069,13 @@ impl<T> apdu_dispatch::app::App<apdu_dispatch::command::Size, apdu_dispatch::res
 where
     T: client::Client + client::Ed255 + client::Tdes
 {
-    fn select(&mut self, apdu: &Command, reply: &mut response::Data) -> Result {
+    fn select(&mut self, apdu: &IsoCommand, reply: &mut response::Data) -> Result {
         self.select(apdu, reply)
     }
 
     fn deselect(&mut self) { self.deselect() }
 
-    fn call(&mut self, _: iso7816::Interface, apdu: &Command, reply: &mut response::Data) -> Result {
+    fn call(&mut self, _: iso7816::Interface, apdu: &IsoCommand, reply: &mut response::Data) -> Result {
         self.respond(apdu, reply)
     }
 }
