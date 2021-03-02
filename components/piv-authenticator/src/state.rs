@@ -179,7 +179,7 @@ impl State {
 #[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct Pin {
     // padded_pin: [u8; 8]
-    padded_pin: heapless_bytes::Bytes<heapless::consts::U8>,
+    pin: heapless_bytes::Bytes<heapless::consts::U8>,
 }
 
 // impl Default for Pin {
@@ -208,7 +208,7 @@ impl Pin {
         if valid_bytes {
             Ok(Self {
                 // padded_pin: padded_pin.try_into().unwrap(),
-                padded_pin: Bytes::try_from_slice(padded_pin).unwrap(),//padded_pin.try_into().unwrap(),
+                pin: Bytes::try_from_slice(padded_pin).unwrap(),//padded_pin.try_into().unwrap(),
             })
         } else {
             Err(())
@@ -241,6 +241,7 @@ pub struct Runtime {
     pub currently_selected_application: SelectableAid,
     pub app_security_status: AppSecurityStatus,
     pub command_cache: Option<CommandCache>,
+    pub chained_command: Option<apdu_dispatch::Command>,
 }
 
 pub trait Aid {
@@ -298,6 +299,19 @@ impl Aid for YubicoOtpAid {
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct GlobalSecurityStatus {
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum SecurityStatus {
+    JustVerified,
+    Verified,
+    NotVerified,
+}
+
+impl Default for SecurityStatus {
+    fn default() -> Self {
+        Self::NotVerified
+    }
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
