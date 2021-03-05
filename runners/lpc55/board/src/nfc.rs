@@ -72,6 +72,11 @@ pub fn try_setup(
     //                      no limit      2mA resistor    3.3V
     const REGU_CONFIG: u8 = (0b11 << 4) | (0b10 << 2) | (0b11 << 0);
     let current_regu_config = fm.read_reg(fm11nc08::Register::ReguCfg);
+    let current_nfc_config = fm.read_reg(fm11nc08::Register::NfcCfg);
+
+    // regu_config gets configured by upstream vendor testing, so we need
+    // to additionally test on another value to see if eeprom is configured by us.
+    let is_select_int_masked = (current_nfc_config &  1) == 1;
 
     if current_regu_config == 0xff {
         // No nfc chip connected
@@ -79,7 +84,7 @@ pub fn try_setup(
         return Err(());
     }
 
-    let reconfig = always_reconfig || (current_regu_config != REGU_CONFIG);
+    let reconfig = always_reconfig || (current_regu_config != REGU_CONFIG) || (is_select_int_masked);
 
     if reconfig {
         // info!("{}", fm.dump_eeprom() );
@@ -95,7 +100,7 @@ pub fn try_setup(
             tl: 0x05,
             // (x[7:4], FSDI[3:0]) . FSDI[2] == 32 byte frame, FSDI[8] == 256 byte frame, 7==128byte
             t0: 0x78,
-            ta: 0x91,
+            ta: 0xf7,
             // (FWI[b4], SFGI[b4]), (256 * 16 / fc) * 2 ^ value
             tb: 0x78,
             tc: 0x02,
