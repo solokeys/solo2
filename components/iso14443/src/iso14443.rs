@@ -400,8 +400,28 @@ where
     }
 
     pub fn poll(&mut self) -> Iso14443Status {
-
         if interchange::State::Responded == self.interchange.state() {
+
+            // important to wait on wtx reply from the reader.
+            // If it wasn't sent, or we start replying before it's received,
+            // then we could "double-send", which isn't permitted in iso14443-4.
+            let mut wtx_wait_attempts = 0;
+            while self.wtx_requested {
+                info_now!("wait-for-wtx");
+                let _did_recv_apdu = self.check_for_apdu();
+                if !self.wtx_requested {
+                    break;
+                }
+                wtx_wait_attempts += 1;
+                if wtx_wait_attempts > 10 {
+                    info_now!("no wtx reply, dumping the response.");
+                    self.wtx_requested = false;
+                    self.interchange.take_response();
+                    return Iso14443Status::Idle;
+                }
+            }
+
+
             if let Some(msg) = self.interchange.take_response() {
                 if let Some(last_iblock_recv) = self.last_iblock_recv {
                     info!("send!");
