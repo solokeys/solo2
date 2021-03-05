@@ -367,7 +367,7 @@ where
         if main_irq & (Interrupt::TxDone as u8) != 0 {
             // Need to turn off transmit mode
             let _count = self.read_reg(Register::FifoCount);
-            info!("off transmit (-{}) {}", _count, main_irq.hex());
+            info!("off transmit (-{}) {:02x}", _count, main_irq);
         }
 
         let fifo_irq = if (main_irq & Interrupt::Fifo as u8) != 0 {
@@ -386,9 +386,9 @@ where
         if (fifo_irq & (1 << 2)) != 0 {
             info!("!OF! {} @{}", self.read_reg(Register::FifoCount), hal::get_cycle_count()/96_00);
             info!("{} {} {}",
-                    hex_str!(main_irq),
-                    hex_str!(fifo_irq),
-                    hex_str!(aux_irq),
+                    main_irq,
+                    fifo_irq,
+                    _aux_irq,
                 );
 
             // self.write_reg(Register::FifoFlush, 0xff);
@@ -446,9 +446,9 @@ where
         }
 
         info!(". {},{},{}",
-            hex_str!(main_irq),
-            hex_str!(fifo_irq),
-            hex_str!(aux_irq),
+            main_irq,
+            fifo_irq,
+            _aux_irq,
         );
 
         if new_session {
@@ -494,12 +494,12 @@ where
             }
             let _aux_irq = self.read_reg(Register::AuxIrq);
             let _rf_status = self.read_reg(Register::RfStatus);
-            info!("tx {}->{}. {} {} {}",
+            info!("tx {}->{}. {:02x} {:02x} {:02x}",
                 initial_count,
                 current_count,
-                hex_str!(_rf_status),
-                hex_str!(_aux_irq),
-                hex_str!(fifo_irq),
+                _rf_status,
+                _aux_irq,
+                fifo_irq,
             );
 
             if (fifo_irq & (FifoInterrupt::WaterLevel as u8)) != 0 {
