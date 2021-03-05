@@ -135,7 +135,7 @@ fn get_product_string(pfr: &mut Pfr<hal::typestates::init_state::Enabled>) -> &'
     }
 
     // Use a default string
-    "Custom Solo 🐝"
+    "Custom Solo v2"
 }
 
 // TODO: move board-specifics to BSPs
@@ -201,12 +201,72 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         (clocks, adc)
     };
 
-    let mut pfr = hal.pfr.enabled(&clocks).unwrap();
-    validate_cfpa(&mut pfr);
-
     let mut delay_timer = Timer::new(hal.ctimer.0.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap()));
     let mut perf_timer = Timer::new(hal.ctimer.4.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap()));
     perf_timer.start(60_000.ms());
+
+    #[cfg(feature = "board-lpcxpresso55")]
+    let mut rgb = board::RgbLed::new(
+        Pwm::new(hal.ctimer.2.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap())),
+        &mut iocon,
+    );
+
+    #[cfg(feature = "board-solov2")]
+    let mut rgb = board::RgbLed::new(
+        Pwm::new(hal.ctimer.3.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap())),
+        &mut iocon,
+    );
+
+    let (three_buttons,adc) = if is_passive_mode {
+        (None, Some(adc))
+    } else {
+        #[cfg(feature = "board-lpcxpresso55")]
+        let three_buttons = board::ThreeButtons::new(
+            Timer::new(hal.ctimer.1.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap())),
+            &mut gpio,
+            &mut iocon,
+        );
+
+        #[cfg(feature = "board-solov2")]
+        let three_buttons =
+        {
+            let mut dma = hal::Dma::from(hal.dma).enabled(&mut syscon);
+
+            board::ThreeButtons::new (
+                adc,
+                hal.ctimer.1.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap()),
+                hal.ctimer.2.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap()),
+                &mut dma,
+                clocks.support_touch_token().unwrap(),
+                &mut gpio,
+                &mut iocon,
+            )
+        };
+
+        // Boot to bootrom if buttons are all held for 5s
+        info!("button start {}",perf_timer.lap().0/1000);
+        delay_timer.start(5_000.ms());
+        while three_buttons.is_pressed(board::traits::buttons::Button::A) &&
+              three_buttons.is_pressed(board::traits::buttons::Button::B) &&
+              three_buttons.is_pressed(board::traits::buttons::Button::Middle) {
+            // info!("3 buttons pressed..");
+            if delay_timer.wait().is_ok() {
+                // Give a small red blink show success
+                rgb.red(200);
+                rgb.green(0);
+                rgb.blue(0);
+                delay_timer.start(100.ms()); nb::block!(delay_timer.wait()).ok();
+                board::trussed::boot_to_bootrom()
+            }
+        }
+        delay_timer.cancel().ok();
+
+        info!("button end {}",perf_timer.lap().0/1000);
+        (Some(three_buttons), None)
+    };
+
+    let mut pfr = hal.pfr.enabled(&clocks).unwrap();
+    validate_cfpa(&mut pfr);
 
 
     let (contactless_requester, contactless_responder) = apdu_dispatch::types::ContactlessInterchange::claim()
@@ -241,18 +301,6 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
             None
         }
     };
-
-    #[cfg(feature = "board-lpcxpresso55")]
-    let mut rgb = board::RgbLed::new(
-        Pwm::new(hal.ctimer.2.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap())),
-        &mut iocon,
-    );
-
-    #[cfg(feature = "board-solov2")]
-    let mut rgb = board::RgbLed::new(
-        Pwm::new(hal.ctimer.3.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap())),
-        &mut iocon,
-    );
 
     if let Some(iso14443) = &mut iso14443 { iso14443.poll(); }
     if is_passive_mode {
@@ -430,59 +478,19 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     let mut rtc = hal.rtc.enabled(&mut syscon, clocks.enable_32k_fro(&mut pmc));
     rtc.reset();
 
-    let (clock_controller, three_buttons) = if is_passive_mode {
-        let mut clock_controller = clock_controller::DynamicClockController::new(adc,
-            clocks, pmc, syscon, &mut gpio, &mut iocon);
-        clock_controller.start_high_voltage_compare();
-        (Some(clock_controller), None)
-    } else {
-        #[cfg(feature = "board-lpcxpresso55")]
-        let three_buttons = board::ThreeButtons::new(
-            Timer::new(hal.ctimer.1.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap())),
-            &mut gpio,
-            &mut iocon,
-        );
-
-        #[cfg(feature = "board-solov2")]
-        let three_buttons =
-        {
-            let mut dma = hal::Dma::from(hal.dma).enabled(&mut syscon);
-
-            board::ThreeButtons::new (
-                adc,
-                hal.ctimer.1.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap()),
-                hal.ctimer.2.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap()),
-                &mut dma,
-                clocks.support_touch_token().unwrap(),
-                &mut gpio,
-                &mut iocon,
-            )
-        };
-
-        // Boot to bootrom if buttons are all held for 5s
-        info!("button start {}",perf_timer.lap().0/1000);
-        delay_timer.start(5_000.ms());
-        while three_buttons.is_pressed(board::traits::buttons::Button::A) &&
-              three_buttons.is_pressed(board::traits::buttons::Button::B) &&
-              three_buttons.is_pressed(board::traits::buttons::Button::Middle) {
-            // info!("3 buttons pressed..");
-            if delay_timer.wait().is_ok() {
-                // Give a small red blink show success
-                rgb.red(200);
-                rgb.green(0);
-                rgb.blue(0);
-                delay_timer.start(100.ms()); nb::block!(delay_timer.wait()).ok();
-                board::trussed::boot_to_bootrom()
-            }
-        }
-        info!("button end {}",perf_timer.lap().0/1000);
-        (None, Some(three_buttons))
-    };
-
     let rgb = if is_passive_mode {
         None
     } else {
         Some(rgb)
+    };
+
+    let clock_controller = if is_passive_mode {
+        let mut clock_controller = clock_controller::DynamicClockController::new(adc.unwrap(),
+            clocks, pmc, syscon, &mut gpio, &mut iocon);
+        clock_controller.start_high_voltage_compare();
+        Some(clock_controller)
+    } else {
+        None
     };
 
     let mut solobee_interface = board::trussed::UserInterface::new(rtc, three_buttons, rgb);
