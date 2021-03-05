@@ -256,7 +256,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
                 rgb.green(0);
                 rgb.blue(0);
                 delay_timer.start(100.ms()); nb::block!(delay_timer.wait()).ok();
-                board::trussed::boot_to_bootrom()
+                board::hal::boot_to_bootrom()
             }
         }
         delay_timer.cancel().ok();
