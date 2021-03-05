@@ -38,12 +38,15 @@ pub struct DynamicClockController {
     clocks: Clocks,
     pmc: Pmc,
     syscon: Syscon,
+    decrease_count: u32,
 }
 
-/// ADC measurement of internal 1V reference when VDD is approximately 2.2V
+/// ADC measurement of internal 1V reference when VDD is approximately 2.35V
+/// (14000 >> 3)/(2**12) * 2.35 == 1V
 const ADC_VOLTAGE_LOW: u16 = 14_000;
-/// ADC measurement of internal 1V reference when VDD is approximately 3V
-const ADC_VOLTAGE_HIGH: u16 = 11_500;
+/// ADC measurement of internal 1V reference when VDD is approximately 2.6V
+/// (12700 >> 3)/(2**12) * 2.60 == 1V
+const ADC_VOLTAGE_HIGH: u16 = 12_700;
 
 impl DynamicClockController {
     pub fn adc_configuration() -> adc::Config {
@@ -77,7 +80,7 @@ impl DynamicClockController {
 
         adc.cmdl1.write(|w| unsafe {  w.adch().bits(13)     // 13 is internal 1v reference
                                     .ctype().ctype_0()
-                                    .mode().mode_0()
+                                    .mode().mode_0()        // 12 bit resolution
                                     } );
 
         // shouldn't use more than 2^2 averages or compare seems to lock up
@@ -94,6 +97,7 @@ impl DynamicClockController {
             pmc: pmc,
             clocks: clocks,
             syscon: syscon,
+            decrease_count: 0,
         }
     }
 
@@ -127,14 +131,21 @@ impl DynamicClockController {
             .system_frequency(12.mhz());
 
         self.clocks = unsafe { requirements.reconfigure(self.clocks, &mut self.pmc, &mut self.syscon) };
+        self.decrease_count += 1;
     }
 
     fn increase_clock(&mut self,){
         #[cfg(feature = "enable-clock-controller-signal-pin")]
         self.signal_button.set_high().ok();
 
-        let requirements = hal::ClockRequirements::default()
-            .system_frequency(48.mhz());
+        let requirements = if self.decrease_count > 2 {
+            // opt for slower freq if there's too many dips in power
+            hal::ClockRequirements::default()
+                .system_frequency(48.mhz())
+        } else {
+            hal::ClockRequirements::default()
+                .system_frequency(96.mhz())
+        };
 
         self.clocks = unsafe { requirements.reconfigure(self.clocks, &mut self.pmc, &mut self.syscon) };
     }
