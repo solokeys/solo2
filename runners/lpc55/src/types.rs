@@ -95,6 +95,8 @@ pub type HidDispatch = hid_dispatch::dispatch::Dispatch;
 
 pub type Piv = piv_authenticator::Authenticator<TrussedClient>;
 
+pub type Totp = totp_authenticator::Authenticator<TrussedClient>;
+
 pub type FidoApplet<UP> = applet_fido::Fido<UP, TrussedClient>;
 
 pub type RootApp = applet_root::Root<TrussedClient>;

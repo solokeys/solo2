@@ -124,7 +124,7 @@ impl ApduDispatch
         // }
         aid.and_then(move |aid|
             applets.iter_mut().find(|applet|
-                aid.starts_with(applet.rid())
+                aid.starts_with(applet.aid())
             )
         )
     }

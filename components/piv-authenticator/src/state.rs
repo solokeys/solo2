@@ -486,7 +486,7 @@ impl Persistent
     }
 
     pub fn save<T: TrussedClient>(&self, trussed: &mut T) {
-        let data: trussed::types::Message = trussed::cbor_serialize_bytebuf(self).unwrap();
+        let data: trussed::types::Message = trussed::cbor_serialize_bytes(self).unwrap();
 
         syscall!(trussed.write_file(
             Location::Internal,

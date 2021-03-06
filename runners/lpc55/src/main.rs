@@ -30,6 +30,7 @@ const APP: () = {
         trussed: app::types::Trussed,
 
         piv: app::types::Piv,
+        totp: app::types::Totp,
         fido: app::types::FidoApplet<fido_authenticator::NonSilentAuthenticator>,
         ndef: applet_ndef::NdefApplet<'static>,
         root: app::types::RootApp,
@@ -52,6 +53,7 @@ const APP: () = {
             trussed,
 
             piv,
+            totp,
             fido,
             ndef,
             root,
@@ -76,6 +78,7 @@ const APP: () = {
             trussed,
 
             piv,
+            totp,
             fido,
             ndef,
             root,
@@ -90,7 +93,7 @@ const APP: () = {
         }
     }
 
-    #[idle(resources = [usb_classes, apdu_dispatch, hid_dispatch, ndef, piv, fido, root, contactless, perf_timer])]
+    #[idle(resources = [usb_classes, apdu_dispatch, hid_dispatch, ndef, piv, totp, fido, root, contactless, perf_timer])]
     fn idle(c: idle::Context) -> ! {
         let idle::Resources {
             mut usb_classes,
@@ -98,6 +101,7 @@ const APP: () = {
             hid_dispatch,
             ndef,
             piv,
+            totp,
             fido,
             root,
             mut contactless,
@@ -119,7 +123,7 @@ const APP: () = {
                 app::Delogger::flush();
             }
 
-            apdu_dispatch.poll(&mut [ndef, piv, fido, root]);
+            apdu_dispatch.poll(&mut [ndef, piv, totp, fido, root]);
 
             contactless.lock(|contactless|  {
                 match contactless.as_ref() {

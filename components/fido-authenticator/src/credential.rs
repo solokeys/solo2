@@ -46,9 +46,7 @@ impl TryFrom<EncryptedSerializedCredential> for CredentialId {
     type Error = Error;
 
     fn try_from(esc: EncryptedSerializedCredential) -> Result<CredentialId> {
-        let mut credential_id = CredentialId::default();
-        ctap_types::serde::cbor_serialize_bytes(&esc.0, &mut credential_id.0).map_err(|_| Error::Other)?;
-        Ok(credential_id)
+        Ok(CredentialId(trussed::cbor_serialize_bytes(&esc.0).map_err(|_| Error::Other)?))
     }
 }
 
@@ -222,9 +220,7 @@ impl Credential {
     }
 
     pub fn serialize(&self) -> Result<SerializedCredential> {
-        let mut serialized = SerializedCredential::new();
-        let _size = ctap_types::serde::cbor_serialize_bytes(self, &mut serialized).map_err(|_| Error::Other)?;
-        Ok(serialized)
+        Ok(trussed::cbor_serialize_bytes(self).map_err(|_| Error::Other)?)
     }
 
     /// BIG TODO: currently, if the data is invalid (for instance, if we

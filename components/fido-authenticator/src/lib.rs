@@ -131,9 +131,7 @@ impl UserPresence for NonSilentAuthenticator {
 }
 
 fn cbor_serialize_message<T: serde::Serialize>(object: &T) -> core::result::Result<Message, ctap_types::serde::Error> {
-    let mut message = Message::new();
-    ctap_types::serde::cbor_serialize_bytes(object, &mut message)?;
-    Ok(message)
+    Ok(trussed::cbor_serialize_bytes(object)?)
 }
 
 pub struct Authenticator<UP, T>
@@ -1745,8 +1743,7 @@ where UP: UserPresence,
                     &totp_secret, Location::Internal)).key;
                 // info_now!("totes injected");
                 let fake_cose_pk = ctap_types::cose::TotpPublicKey {};
-                let mut fake_serialized_cose_pk = Message::new();
-                trussed::cbor_serialize_bytes(&fake_cose_pk, &mut fake_serialized_cose_pk)
+                let fake_serialized_cose_pk = trussed::cbor_serialize_bytes(&fake_cose_pk)
                     .map_err(|_| Error::NotAllowed)?;
                 cose_public_key = fake_serialized_cose_pk; // Bytes::try_from_slice(&[0u8; 20]).unwrap();
             }
