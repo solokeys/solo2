@@ -428,7 +428,7 @@ impl Persistent
     where T: TrussedClient
         + trussed::client::Tdes
     {
-        let new_management_key = syscall!(trussed.unsafe_inject_tdes_key(
+        let new_management_key = syscall!(trussed.unsafe_inject_shared_key(
             management_key,
             trussed::types::Location::Internal,
         )).key;
@@ -442,7 +442,7 @@ impl Persistent
     where T: TrussedClient
         + trussed::client::Tdes
     {
-        let management_key = syscall!(trussed.unsafe_inject_tdes_key(
+        let management_key = syscall!(trussed.unsafe_inject_shared_key(
             YUBICO_DEFAULT_MANAGEMENT_KEY,
             trussed::types::Location::Internal,
         )).key;
@@ -486,7 +486,7 @@ impl Persistent
     }
 
     pub fn save<T: TrussedClient>(&self, trussed: &mut T) {
-        let data: trussed::types::Message = trussed::cbor_serialize_bytebuf(self).unwrap();
+        let data: trussed::types::Message = trussed::cbor_serialize_bytes(self).unwrap();
 
         syscall!(trussed.write_file(
             Location::Internal,

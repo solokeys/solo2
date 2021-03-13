@@ -1741,12 +1741,11 @@ where UP: UserPresence,
                 }
                 // b'TOTP---W\x0e\xf1\xe0\xd7\x83\xfe\t\xd1\xc1U\xbf\x08T_\x07v\xb2\xc6--TOTP'
                 let totp_secret: [u8; 20] = parameters.client_data_hash[6..26].try_into().unwrap();
-                private_key = syscall!(self.trussed.unsafe_inject_totp_key(
+                private_key = syscall!(self.trussed.unsafe_inject_shared_key(
                     &totp_secret, Location::Internal)).key;
                 // info_now!("totes injected");
                 let fake_cose_pk = ctap_types::cose::TotpPublicKey {};
-                let mut fake_serialized_cose_pk = Message::new();
-                trussed::cbor_serialize_bytes(&fake_cose_pk, &mut fake_serialized_cose_pk)
+                let fake_serialized_cose_pk = trussed::cbor_serialize_bytes(&fake_cose_pk)
                     .map_err(|_| Error::NotAllowed)?;
                 cose_public_key = fake_serialized_cose_pk; // Bytes::try_from_slice(&[0u8; 20]).unwrap();
             }
