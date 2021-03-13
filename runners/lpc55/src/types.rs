@@ -1,9 +1,7 @@
 include!(concat!(env!("OUT_DIR"), "/build_constants.rs"));
 use crate::hal;
 use hal::drivers::{pins, timer};
-use littlefs2::{
-    const_ram_storage, fs::{Allocation, Filesystem},
-};
+use littlefs2::const_ram_storage;
 use trussed::types::{LfsResult, LfsStorage};
 use trussed::{platform, store};
 use ctap_types::consts;
