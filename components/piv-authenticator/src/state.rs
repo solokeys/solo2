@@ -1,6 +1,5 @@
 use core::convert::TryFrom;
 
-use heapless_bytes::Bytes;
 use trussed::{
     block,
     Client as TrussedClient,

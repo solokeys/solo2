@@ -15,12 +15,10 @@ pub mod derp;
 pub mod piv_types;
 pub use piv_types::{Pin, Puk};
 
-use core::convert::{TryFrom, TryInto};
+use core::convert::TryInto;
 
 use flexiber::EncodableHeapless;
-use iso7816::{
-    Instruction, Status,
-};
+use iso7816::Status;
 use apdu_dispatch::{Command as IsoCommand, response};
 use trussed::client;
 use trussed::{syscall, try_syscall};
