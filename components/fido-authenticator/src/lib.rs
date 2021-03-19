@@ -1644,62 +1644,6 @@ where UP: UserPresence,
             }
         }
 
-        // 9. process extensions
-        // TODO: need to figure out how to type-ify these
-        // let mut hmac_secret_requested = false;
-        // let mut cred_protect_requested = false;
-        // if let Some(extensions) = &parameters.extensions {
-        //     hmac_secret_requested = match extensions.get(&String::from("hmac-secret")) {
-        //         Some(true) => true,
-        //         _ => false,
-        //     };
-
-        //     cred_protect_requested = match extensions.get(&String::from("credProtect")) {
-        //         Some(true) => true,
-        //         _ => false,
-        //     };
-        // }
-        let mut hmac_secret_requested = None;
-        // let mut cred_protect_requested = CredentialProtectionPolicy::Optional;
-        let mut cred_protect_requested = CredentialProtectionPolicy::default();
-        if let Some(extensions) = &parameters.extensions {
-
-            if let Some(true) = extensions.hmac_secret {
-                // TODO: Generate "CredRandom" (a 32B random value, to be used
-                // later via HMAC-SHA256(cred_random, salt)
-                let cred_random = syscall!(self.trussed.generate_hmacsha256_key(
-                    Location::Internal,
-                )).key;
-
-                hmac_secret_requested = Some(match rk_requested {
-                    true => {
-                        CredRandom::Resident(cred_random)
-                    }
-
-                    false => {
-                        let wrapping_key = self.state.persistent.key_wrapping_key(&mut self.trussed)?;
-                        info!("wrapping credRandom");
-                        let wrapped_key = syscall!(self.trussed.wrap_key_chacha8poly1305(
-                            wrapping_key,
-                            cred_random,
-                            // &rp_id_hash,
-                            b"",
-                        )).wrapped_key;
-
-                        // 32B key, 12B nonce, 16B tag + some info on algorithm (P256/Ed25519)
-                        // Turns out it's size 92 (enum serialization not optimized yet...)
-                        // let mut wrapped_key = Bytes::<consts::U60>::new();
-                        // wrapped_key.extend_from_slice(&wrapped_key_msg).unwrap();
-                        CredRandom::Wrapped(wrapped_key.try_to_bytes().map_err(|_| Error::Other)?)
-                    }
-                });
-            }
-
-            if let Some(policy) = &extensions.cred_protect {
-                cred_protect_requested = CredentialProtectionPolicy::try_from(*policy)?;
-            }
-        }
-
         // debug!("hmac-secret = {:?}, credProtect = {:?}", hmac_secret_requested, cred_protect_requested);
 
         // 10. get UP, if denied error OperationDenied
@@ -1748,6 +1692,64 @@ where UP: UserPresence,
                 let fake_serialized_cose_pk = trussed::cbor_serialize_bytes(&fake_cose_pk)
                     .map_err(|_| Error::NotAllowed)?;
                 cose_public_key = fake_serialized_cose_pk; // Bytes::try_from_slice(&[0u8; 20]).unwrap();
+            }
+        }
+
+        // 9. process extensions
+        // TODO: need to figure out how to type-ify these
+        // let mut hmac_secret_requested = false;
+        // let mut cred_protect_requested = false;
+        // if let Some(extensions) = &parameters.extensions {
+        //     hmac_secret_requested = match extensions.get(&String::from("hmac-secret")) {
+        //         Some(true) => true,
+        //         _ => false,
+        //     };
+
+        //     cred_protect_requested = match extensions.get(&String::from("credProtect")) {
+        //         Some(true) => true,
+        //         _ => false,
+        //     };
+        // }
+        let mut hmac_secret_requested = None;
+        // let mut cred_protect_requested = CredentialProtectionPolicy::Optional;
+        let mut cred_protect_requested = CredentialProtectionPolicy::default();
+        if let Some(extensions) = &parameters.extensions {
+
+            if let Some(true) = extensions.hmac_secret {
+                // TODO: Generate "CredRandom" (a 32B random value, to be used
+                // later via HMAC-SHA256(cred_random, salt)
+                let cred_random = syscall!(self.trussed.hmacsha256_derive_key(
+                    private_key,
+                    b"cred-random 0",
+                    Location::Internal,
+                )).key;
+
+                hmac_secret_requested = Some(match rk_requested {
+                    true => {
+                        CredRandom::Resident(cred_random)
+                    }
+
+                    false => {
+                        let wrapping_key = self.state.persistent.key_wrapping_key(&mut self.trussed)?;
+                        info!("wrapping credRandom");
+                        let wrapped_key = syscall!(self.trussed.wrap_key_chacha8poly1305(
+                            wrapping_key,
+                            cred_random,
+                            // &rp_id_hash,
+                            b"",
+                        )).wrapped_key;
+
+                        // 32B key, 12B nonce, 16B tag + some info on algorithm (P256/Ed25519)
+                        // Turns out it's size 92 (enum serialization not optimized yet...)
+                        // let mut wrapped_key = Bytes::<consts::U60>::new();
+                        // wrapped_key.extend_from_slice(&wrapped_key_msg).unwrap();
+                        CredRandom::Wrapped(wrapped_key.try_to_bytes().map_err(|_| Error::Other)?)
+                    }
+                });
+            }
+
+            if let Some(policy) = &extensions.cred_protect {
+                cred_protect_requested = CredentialProtectionPolicy::try_from(*policy)?;
             }
         }
 

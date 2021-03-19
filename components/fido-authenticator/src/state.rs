@@ -405,7 +405,7 @@ impl RuntimeState {
     pub fn rotate_pin_token<T: client::HmacSha256>(&mut self, trussed: &mut T) -> Key {
         // TODO: need to rotate key agreement key?
         if let Some(token) = self.pin_token { syscall!(trussed.delete(token)); }
-        let token = syscall!(trussed.generate_hmacsha256_key(Location::Volatile)).key;
+        let token = syscall!(trussed.generate_secret_key(16, Location::Volatile)).key;
         self.pin_token = Some(token);
         token
     }
@@ -419,7 +419,7 @@ impl RuntimeState {
     }
 
     // TODO: don't recalculate constantly
-    pub fn generate_shared_secret<T: client::P256>(&mut self, trussed: &mut T, platform_key_agreement_key: &CoseEcdhEsHkdf256PublicKey) -> Result<Key> {
+    pub fn generate_shared_secret<T: client::P256 + client::Sha256>(&mut self, trussed: &mut T, platform_key_agreement_key: &CoseEcdhEsHkdf256PublicKey) -> Result<Key> {
         let private_key = self.key_agreement_key(trussed);
 
         let serialized_pkak = cbor_serialize_message(platform_key_agreement_key).map_err(|_| Error::InvalidParameter)?;
@@ -438,8 +438,8 @@ impl RuntimeState {
             syscall!(trussed.delete(previous_shared_secret));
         }
 
-        let shared_secret = syscall!(trussed.derive_key(
-            types::Mechanism::Sha256, pre_shared_secret.clone(), types::StorageAttributes::new().set_persistence(types::Location::Volatile)
+        let shared_secret = syscall!(trussed.sha256_derive_key(
+            pre_shared_secret.clone(), types::Location::Volatile
         )).key;
         self.shared_secret = Some(shared_secret);
 
