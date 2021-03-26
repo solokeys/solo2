@@ -127,6 +127,7 @@ pub struct ActiveGetAssertionData {
     pub uv_performed: bool,
     pub up_performed: bool,
     pub multiple_credentials: bool,
+    pub extensions: Option<ctap_types::ctap2::get_assertion::ExtensionsInput>,
 }
 
 #[derive(Clone, Debug, /*uDebug,*/ Default, /*PartialEq,*/ serde::Deserialize, serde::Serialize)]
@@ -379,6 +380,41 @@ impl RuntimeState {
         self.credentials.as_mut().unwrap()
     }
 
+    pub fn destroy_credential_heap<T: client::FilesystemClient>(&mut self, trussed: &mut T) -> () {
+        if self.credentials.is_some() {
+            let max_heap = self.credential_heap();
+            while max_heap.len() > 0 {
+                let timestamp_path = max_heap.pop().unwrap();
+                // Only assume that runtime credentials are still valid.
+                if timestamp_path.location == Location::Volatile {
+                    syscall!(trussed.remove_file(
+                        Location::Volatile,
+                        timestamp_path.path,
+                    ));
+                }
+
+            }
+        }
+    }
+
+    pub fn pop_credential_from_heap<T: client::FilesystemClient>(&mut self, trussed: &mut T) -> crate::Credential {
+        let max_heap = self.credential_heap();
+        let timestamp_hash = max_heap.pop().unwrap();
+        info_now!("{:?} @ {} {:?}", &timestamp_hash.path, timestamp_hash.timestamp, timestamp_hash.location);
+        let data = syscall!(trussed.read_file(
+            timestamp_hash.location,
+            timestamp_hash.path.clone(),
+        )).data;
+        // Remove any volatile creds
+        if timestamp_hash.location == Location::Volatile {
+            syscall!(trussed.remove_file(
+                timestamp_hash.location,
+                timestamp_hash.path,
+            ));
+        }
+        crate::Credential::deserialize(&data).unwrap()
+    }
+
     pub fn key_agreement_key<T: client::P256>(&mut self, trussed: &mut T) -> Key {
         match self.key_agreement_key {
             Some(key) => key,
@@ -388,10 +424,16 @@ impl RuntimeState {
 
     pub fn rotate_key_agreement_key<T: client::P256>(&mut self, trussed: &mut T) -> Key {
         // TODO: need to rotate pin token?
-        if let Some(key) = self.key_agreement_key { syscall!(trussed.delete(key)); }
+        if let Some(key) = self.key_agreement_key {
+            syscall!(trussed.delete(key));
+        }
+        if let Some(previous_shared_secret) = self.shared_secret {
+            syscall!(trussed.delete(previous_shared_secret));
+        }
 
         let key = syscall!(trussed.generate_p256_private_key(Location::Volatile)).key;
         self.key_agreement_key = Some(key);
+        self.shared_secret = None;
         key
     }
 
@@ -410,15 +452,15 @@ impl RuntimeState {
         token
     }
 
-    pub fn reset<T: client::HmacSha256 + client::P256>(&mut self, trussed: &mut T) {
+    pub fn reset<T: client::HmacSha256 + client::P256 + client::FilesystemClient>(&mut self, trussed: &mut T) {
         self.rotate_key_agreement_key(trussed);
         self.rotate_pin_token(trussed);
         // self.drop_shared_secret(trussed);
+        self.destroy_credential_heap(trussed);
         self.credentials = None;
         self.active_get_assertion = None;
     }
 
-    // TODO: don't recalculate constantly
     pub fn generate_shared_secret<T: client::P256>(&mut self, trussed: &mut T, platform_key_agreement_key: &CoseEcdhEsHkdf256PublicKey) -> Result<Key> {
         let private_key = self.key_agreement_key(trussed);
 
@@ -429,7 +471,7 @@ impl RuntimeState {
         )).map_err(|_| Error::InvalidParameter)?.key;
 
         let pre_shared_secret = syscall!(trussed.agree(
-            types::Mechanism::P256, private_key.clone(), platform_kak.clone(),
+            types::Mechanism::P256, private_key, platform_kak,
             types::StorageAttributes::new().set_persistence(types::Location::Volatile),
         )).shared_secret;
         syscall!(trussed.delete(platform_kak));
@@ -439,7 +481,7 @@ impl RuntimeState {
         }
 
         let shared_secret = syscall!(trussed.derive_key(
-            types::Mechanism::Sha256, pre_shared_secret.clone(), types::StorageAttributes::new().set_persistence(types::Location::Volatile)
+            types::Mechanism::Sha256, pre_shared_secret, types::StorageAttributes::new().set_persistence(types::Location::Volatile)
         )).key;
         self.shared_secret = Some(shared_secret);
 
@@ -454,6 +496,7 @@ impl RuntimeState {
 pub struct TimestampPath {
     pub timestamp: u32,
     pub path: PathBuf,
+    pub location: Location,
 }
 
 impl Ord for TimestampPath {

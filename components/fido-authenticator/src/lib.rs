@@ -131,9 +131,7 @@ impl UserPresence for NonSilentAuthenticator {
 }
 
 fn cbor_serialize_message<T: serde::Serialize>(object: &T) -> core::result::Result<Message, ctap_types::serde::Error> {
-    let mut message = Message::new();
-    ctap_types::serde::cbor_serialize_bytes(object, &mut message)?;
-    Ok(message)
+    Ok(trussed::cbor_serialize_bytes(object)?)
 }
 
 pub struct Authenticator<UP, T>
@@ -225,7 +223,7 @@ where UP: UserPresence,
                     key,
                     self.state.persistent.timestamp(&mut self.trussed).map_err(|_| U2fError::NotEnoughMemory)?,
                     None,
-                    credential::CredentialProtectionPolicy::Optional,
+                    None,
                     nonce,
                 );
 
@@ -267,7 +265,7 @@ where UP: UserPresence,
                 let file = syscall!(self.trussed
                     .read_file(
                         Location::Internal,
-                        PathBuf::from(b"attestation.x5c")
+                        PathBuf::from(constants::ATTESTATION_CERT_FILENAME)
                     ));
 
                 Ok(U2fResponse::Register(ctap1::RegisterResponse::new(
@@ -526,7 +524,7 @@ where UP: UserPresence,
 
                 // 2. is pin already set
                 if self.state.persistent.pin_is_set() {
-                    return Err(Error::PinAuthInvalid);
+                    return Err(Error::NotAllowed);
                 }
 
                 // 3. generate shared secret
@@ -592,13 +590,7 @@ where UP: UserPresence,
                 self.state.decrement_retries(&mut self.trussed)?;
 
                 // 6. decrypt pinHashEnc, compare with stored
-                match self.decrypt_pin_hash_and_maybe_escalate(shared_secret, &pin_hash_enc) {
-                    Err(e) => {
-                        syscall!(self.trussed.delete(shared_secret));
-                        return Err(e);
-                    }
-                    Ok(_) => {}
-                }
+                self.decrypt_pin_hash_and_maybe_escalate(shared_secret, &pin_hash_enc)?;
 
                 // 7. reset retries
                 self.state.reset_retries(&mut self.trussed)?;
@@ -641,14 +633,7 @@ where UP: UserPresence,
                 self.state.decrement_retries(&mut self.trussed)?;
 
                 // 5. decrypt and verify pinHashEnc
-                match self.decrypt_pin_hash_and_maybe_escalate(shared_secret, &pin_hash_enc) {
-                    Err(e) => {
-                        syscall!(self.trussed.delete(shared_secret));
-                        return Err(e);
-                    }
-                    Ok(_) => {}
-                }
-                // info_now!("exists? {}", syscall!(self.trussed.exists(shared_secret)).exists);
+                self.decrypt_pin_hash_and_maybe_escalate(shared_secret, &pin_hash_enc)?;
 
                 // 6. reset retries
                 self.state.reset_retries(&mut self.trussed)?;
@@ -919,16 +904,18 @@ where UP: UserPresence,
     ///
     /// If allow_list is none, pull applicable credentials, store
     /// in state's credential_heap, and return none
+    #[inline(never)]
     fn locate_credentials(
         &mut self, rp_id_hash: &Bytes32,
         allow_list: &Option<ctap2::get_assertion::AllowList>,
         uv_performed: bool,
     )
-        -> Result<Option<Credential>>
+        -> Result<()>
     {
         // validate allowList
+        let mut allow_list_len = 0;
         let allowed_credentials = if let Some(allow_list) = allow_list.as_ref() {
-
+            allow_list_len = allow_list.len();
             allow_list.into_iter()
                 // discard not properly serialized encrypted credentials
                 .filter_map(|credential_descriptor| {
@@ -936,18 +923,22 @@ where UP: UserPresence,
                         "GA try from cred id: {}",
                         hex_str!(&credential_descriptor.id),
                     );
-                    Credential::try_from(
+                    let cred_maybe = Credential::try_from(
                         self, rp_id_hash, credential_descriptor)
-                        .ok()
+                        .ok();
+                    info_now!("cred_maybe: {:?}", &cred_maybe);
+                    cred_maybe
                 } )
                 .collect()
         } else {
             CredentialList::new()
         };
 
+        let mut min_heap = MinCredentialHeap::new();
+
         let allowed_credentials_passed = allowed_credentials.len() > 0;
 
-        let allowed_credential = if allowed_credentials_passed {
+        if allowed_credentials_passed {
             // "If an allowList is present and is non-empty,
             // locate all denoted credentials present on this authenticator
             // and bound to the specified rpId."
@@ -976,19 +967,68 @@ where UP: UserPresence,
                     use credential::CredentialProtectionPolicy as Policy;
                     debug!("CredentialProtectionPolicy {:?}", &credential.cred_protect);
                     match credential.cred_protect {
-                        Policy::Optional => true,
-                        Policy::OptionalWithCredentialIdList => allowed_credentials_passed || uv_performed,
-                        Policy::Required => uv_performed,
+                        None | Some(Policy::Optional) => true,
+                        Some(Policy::OptionalWithCredentialIdList) => allowed_credentials_passed || uv_performed,
+                        Some(Policy::Required) => uv_performed,
 
                     }
                 })
                 .collect();
-            while applicable_credentials.len() > 1 {
-                applicable_credentials.pop().unwrap();
+            while applicable_credentials.len() > 0 {
+                // Store all other applicable credentials in volatile storage and add to our
+                // credential heap.
+                let credential = applicable_credentials.pop().unwrap();
+                let serialized = credential.serialize()?;
+
+                let mut path = [b'0', b'0'];
+                format_hex(&[applicable_credentials.len() as u8], &mut path);
+                let path = PathBuf::from(&path);
+                // let kek = self.state.persistent.key_encryption_key(&mut self.trussed)?;
+                // let id = credential.id_using_hash(&mut self.trussed, kek, rp_id_hash)?;
+                // let credential_id_hash = self.hash(&id.0.as_ref());
+
+                // let path = rk_path(&rp_id_hash, &credential_id_hash);
+
+
+                let timestamp_path = TimestampPath {
+                    timestamp: credential.creation_time,
+                    path: path.clone(),
+                    location: Location::Volatile,
+                };
+
+
+                info_now!("added volatile cred: {:?}", &timestamp_path);
+                info_now!("{}",hex_str!(&serialized));
+
+
+                try_syscall!(self.trussed.write_file(
+                    Location::Volatile,
+                    path.clone(),
+                    serialized,
+                    None,
+                )).map_err(|_| {
+                    Error::KeyStoreFull
+                })?;
+
+                // attempt to read back
+                let data = syscall!(self.trussed.read_file(
+                    Location::Volatile,
+                    timestamp_path.path.clone(),
+                )).data;
+                crate::Credential::deserialize(&data).unwrap();
+
+
+                if min_heap.capacity() > min_heap.len() {
+                    min_heap.push(timestamp_path).map_err(drop).unwrap();
+                } else {
+                    if timestamp_path.timestamp > min_heap.peek().unwrap().timestamp {
+                        min_heap.pop().unwrap();
+                        min_heap.push(timestamp_path).map_err(drop).unwrap();
+                    }
+                }
+
             }
-            // TODO: this can panic
-            Some(applicable_credentials.pop().unwrap())
-        } else {
+        } else if allow_list_len == 0 {
             // If an allowList is not present,
             // locate all credentials that are present on this authenticator
             // and bound to the specified rpId; sorted by reverse creation time
@@ -1012,8 +1052,6 @@ where UP: UserPresence,
             //
             debug!("no allowedList passed");
 
-            let mut min_heap = MinCredentialHeap::new();
-
             // let mut credentials = CredentialList::new();
 
             let data = syscall!(self.trussed.read_dir_files_first(
@@ -1031,9 +1069,9 @@ where UP: UserPresence,
 
             use credential::CredentialProtectionPolicy as Policy;
             let keep = match credential.cred_protect {
-                Policy::Optional => true,
-                Policy::OptionalWithCredentialIdList => allowed_credentials_passed || uv_performed,
-                Policy::Required => uv_performed,
+                None | Some(Policy::Optional) => true,
+                Some(Policy::OptionalWithCredentialIdList) => allowed_credentials_passed || uv_performed,
+                Some(Policy::Required) => uv_performed,
             };
 
             let kek = self.state.persistent.key_encryption_key(&mut self.trussed)?;
@@ -1045,6 +1083,7 @@ where UP: UserPresence,
                 let timestamp_path = TimestampPath {
                     timestamp: credential.creation_time,
                     path: rk_path(&rp_id_hash, &credential_id_hash),
+                    location: Location::Internal,
                 };
 
                 min_heap.push(timestamp_path).map_err(drop).unwrap();
@@ -1061,9 +1100,9 @@ where UP: UserPresence,
                 let credential = Credential::deserialize(&data).unwrap();
 
                 let keep = match credential.cred_protect {
-                    Policy::Optional => true,
-                    Policy::OptionalWithCredentialIdList => allowed_credentials_passed || uv_performed,
-                    Policy::Required => uv_performed,
+                    None | Some(Policy::Optional) => true,
+                    Some(Policy::OptionalWithCredentialIdList) => allowed_credentials_passed || uv_performed,
+                    Some(Policy::Required) => uv_performed,
                 };
 
                 if keep {
@@ -1074,14 +1113,8 @@ where UP: UserPresence,
                     let timestamp_path = TimestampPath {
                         timestamp: credential.creation_time,
                         path: rk_path(&rp_id_hash, &credential_id_hash),
+                        location: Location::Internal,
                     };
-
-                    // if credentials.len() == credentials.capacity() {
-                    //     panic!("too many credentials! >{}", &credentials.len());
-                    // }
-                    // let id = credential.id(&mut self.trussed, &kek)?;
-                    // credentials.push(credential).unwrap();
-                    // info_now!("next: {:?}", &self.hash(&id.0));
 
                     if min_heap.capacity() > min_heap.len() {
                         min_heap.push(timestamp_path).map_err(drop).unwrap();
@@ -1094,39 +1127,21 @@ where UP: UserPresence,
                 }
             }
 
-            // now sort them
-            let max_heap = self.state.runtime.credential_heap();
-            max_heap.clear();
-            while !min_heap.is_empty() {
-                max_heap.push(min_heap.pop().unwrap()).map_err(drop).unwrap();
-            }
-
-            None
         };
 
-        //// apply credential protection policy
-        //let applicable_credentials: CredentialList = existing_credentials
-        //    .into_iter()
-        //    .filter(|credential| {
-        //        use credential::CredentialProtectionPolicy as Policy;
-        //        debug!("CredentialProtectionPolicy {:?}", &credential.cred_protect);
-        //        match credential.cred_protect {
-        //            Policy::Optional => true,
-        //            Policy::OptionalWithCredentialIdList => allowed_credentials_passed || uv_performed,
-        //            Policy::Required => uv_performed,
-
-        //        }
-        //    })
-        //    .collect()
-        //    ;
-        ////
-
         // "If no applicable credentials were found, return CTAP2_ERR_NO_CREDENTIALS"
-        if allowed_credential.is_none() && self.state.runtime.credential_heap().is_empty() {
+        if min_heap.is_empty() {
             return Err(Error::NoCredentials);
         }
 
-        Ok(allowed_credential)
+        // now sort them
+        self.state.runtime.destroy_credential_heap(&mut self.trussed);
+        let max_heap = self.state.runtime.credential_heap();
+        while !min_heap.is_empty() {
+            max_heap.push(min_heap.pop().unwrap()).map_err(drop).unwrap();
+        }
+
+        Ok(())
     }
 
     fn get_next_assertion(&mut self) -> Result<ctap2::get_assertion::Response> {
@@ -1138,19 +1153,17 @@ where UP: UserPresence,
         // 3. previous GA/GNA >30s ago -> discard stat
         // this is optional over NFC
         if false {
-            self.state.runtime.credential_heap().clear();
+            self.state.runtime.destroy_credential_heap(&mut self.trussed);
             return Err(Error::NotAllowed);
         }
 
         // 4. select credential
-        let max_heap = self.state.runtime.credential_heap();
-        let timestamp_hash = max_heap.pop().unwrap();
-        info!("{:?} @ {}", &timestamp_hash.path, timestamp_hash.timestamp);
-        let data = syscall!(self.trussed.read_file(
-            Location::Internal,
-            timestamp_hash.path,
-        )).data;
-        let credential = Credential::deserialize(&data).unwrap();
+        // let data = syscall!(self.trussed.read_file(
+        //     timestamp_hash.location,
+        //     timestamp_hash.path,
+        // )).data;
+        let credential = self.state.runtime.pop_credential_from_heap(&mut self.trussed);
+        // Credential::deserialize(&data).unwrap();
 
         // 5. suppress PII if no UV was performed in original GA
 
@@ -1239,26 +1252,15 @@ where UP: UserPresence,
         // Note: If allowList is passed, credential is Some(credential)
         // If no allowList is passed, credential is None and the retrieved credentials
         // are stored in state.runtime.credential_heap
-        let credential = self.locate_credentials(&rp_id_hash, &parameters.allow_list, uv_performed)?;
+        self.locate_credentials(&rp_id_hash, &parameters.allow_list, uv_performed)?;
 
-        let (num_credentials, credential) = match credential {
-            Some(credential) =>  (None, credential),
-            None => {
-                let max_heap = self.state.runtime.credential_heap();
-                let timestamp_hash = max_heap.pop().unwrap();
-                info!("{:?} @ {}", &timestamp_hash.path, timestamp_hash.timestamp);
-                let data = syscall!(self.trussed.read_file(
-                    Location::Internal,
-                    timestamp_hash.path,
-                )).data;
-                let credential = Credential::deserialize(&data).unwrap();
-                let num_credentials = match max_heap.len() {
-                    0 => None,
-                    n => Some(n as u32 + 1),
-                };
-                (num_credentials, credential)
-            }
+        let credential = self.state.runtime.pop_credential_from_heap(&mut self.trussed);
+        let num_credentials = match self.state.runtime.credential_heap().len() {
+            0 => None,
+            n => Some(n as u32 + 1),
         };
+        info_now!("FIRST cred: {:?}",&credential);
+        info_now!("FIRST NUM creds: {:?}",num_credentials);
 
         // NB: misleading, if we have "1" we return "None"
         let human_num_credentials = match num_credentials {
@@ -1276,9 +1278,7 @@ where UP: UserPresence,
             true
         };
 
-        // 7. process any extensions present
-
-        // 8. collect user presence
+        // 7. collect user presence
         let up_performed = if do_up {
             if self.up.user_present(&mut self.trussed, constants::FIDO2_UP_TIMEOUT) {
                 true
@@ -1304,16 +1304,114 @@ where UP: UserPresence,
             uv_performed,
             up_performed,
             multiple_credentials,
+            extensions: parameters.extensions.clone(),
         });
 
         self.assert_with_credential(num_credentials, credential)
     }
+
+    #[inline(never)]
+    fn process_assertion_extensions(&mut self, 
+        get_assertion_state: &state::ActiveGetAssertionData, 
+        extensions: &ctap2::get_assertion::ExtensionsInput, 
+        _credential: &Credential,
+        credential_key_handle: ObjectHandle,
+    ) -> Result<Option<ctap2::get_assertion::ExtensionsOutput>> {
+        if let Some(hmac_secret) = &extensions.hmac_secret {
+
+            // We derive credRandom as an hmac of the existing private key.
+            // UV is used as input data since credRandom should depend UV
+            // i.e. credRandom = HMAC(private_key, uv)
+            let cred_random = syscall!(self.trussed.derive_new_key(
+                Mechanism::HmacSha256,
+                credential_key_handle,
+                Bytes::try_from_slice(&[get_assertion_state.uv_performed as u8]).unwrap(),
+                trussed::key::Kind::Symmetric(32),
+                trussed::types::StorageAttributes::new().set_persistence(Location::Volatile)
+            )).key;    
+
+            // Verify the auth tag, which uses the same process as the pinAuth
+            let kek = self.state.runtime.generate_shared_secret(&mut self.trussed, &hmac_secret.key_agreement)?;
+            self.verify_pin_auth(kek, &hmac_secret.salt_enc, &hmac_secret.salt_auth).map_err(|_| Error::ExtensionFirst)?;
+
+            if hmac_secret.salt_enc.len() != 32 && hmac_secret.salt_enc.len() != 64 {
+                return Err(Error::InvalidLength);
+            }
+
+            // decrypt input salt_enc to get salt1 or (salt1 || salt2)
+            let salts = syscall!(
+                self.trussed.decrypt(Mechanism::Aes256Cbc, kek, &hmac_secret.salt_enc, b"", b"", b"")
+            ).plaintext.ok_or(Error::InvalidOption)?;
+
+            let mut salt_output: Bytes<consts::U64> = Bytes::new();
+
+            // output1 = hmac_sha256(credRandom, salt1)
+            let output1 = syscall!(
+                self.trussed.sign_hmacsha256(cred_random, &salts[0..32])
+            ).signature;
+
+            salt_output.extend_from_slice(&output1).unwrap();
+
+            if salts.len() == 64 {
+                // output2 = hmac_sha256(credRandom, salt2)
+                let output2 = syscall!(
+                    self.trussed.sign_hmacsha256(cred_random, &salts[32..64])
+                ).signature;
+
+                salt_output.extend_from_slice(&output2).unwrap();
+            }
+
+            syscall!(self.trussed.delete(cred_random));
+
+            // output_enc = aes256-cbc(sharedSecret, IV=0, output1 || output2)
+            let output_enc = syscall!(
+                self.trussed.encrypt(Mechanism::Aes256Cbc, kek, &salt_output, b"", None)
+            ).ciphertext;
+
+            Ok(Some(ctap2::get_assertion::ExtensionsOutput {
+                hmac_secret: Some(Bytes::try_from_slice(&output_enc).unwrap())
+            }))
+
+        } else {
+            Ok(None)
+        }
+       
+    }
+
 
     fn assert_with_credential(&mut self, num_credentials: Option<u32>, credential: Credential)
         -> Result<ctap2::get_assertion::Response>
     {
         let data = self.state.runtime.active_get_assertion.clone().unwrap();
         let rp_id_hash = Bytes::try_from_slice(&data.rp_id_hash).unwrap();
+
+        let (key, is_rk) = match credential.key.clone() {
+            Key::ResidentKey(key) => (key, true),
+            Key::WrappedKey(bytes) => {
+                let wrapping_key = self.state.persistent.key_wrapping_key(&mut self.trussed)?;
+                // info_now!("unwrapping {:?} with wrapping key {:?}", &bytes, &wrapping_key);
+                let key_result = syscall!(self.trussed.unwrap_key_chacha8poly1305(
+                    wrapping_key,
+                    &bytes,
+                    b"",
+                    // &rp_id_hash,
+                    Location::Volatile,
+                )).key;
+                // debug!("key result: {:?}", &key_result);
+                info!("key result");
+                match key_result {
+                    Some(key) => (key, false),
+                    None => { return Err(Error::Other); }
+                }
+            }
+        };
+
+        // 8. process any extensions present
+        let extensions_output = if let Some(extensions) = &data.extensions {
+            self.process_assertion_extensions(&data, &extensions, &credential, key)?
+        } else {
+            None
+        };
 
         // 9./10. sign clientDataHash || authData with "first" credential
 
@@ -1336,18 +1434,15 @@ where UP: UserPresence,
                 if data.uv_performed {
                     flags |= Flags::USER_VERIFIED;
                 }
-                // if hmac_secret_requested.is_some() ||  cred_protect_requested != CredentialProtectionPolicy::Optional {
-                //     flags |= Flags::EXTENSION_DATA;
-                // }
+                if extensions_output.is_some() {
+                    flags |= Flags::EXTENSION_DATA;
+                }
                 flags
             },
 
             sign_count: sig_count,
             attested_credential_data: None,
-            extensions: None,
-            // extensions: {
-            //     parameters.extensions.clone()
-            // },
+            extensions: extensions_output
         };
 
         let serialized_auth_data = authenticator_data.serialize();
@@ -1355,27 +1450,6 @@ where UP: UserPresence,
         let mut commitment = Bytes::<consts::U1024>::new();
         commitment.extend_from_slice(&serialized_auth_data).map_err(|_| Error::Other)?;
         commitment.extend_from_slice(&data.client_data_hash).map_err(|_| Error::Other)?;
-
-        let (key, is_rk) = match credential.key.clone() {
-            Key::ResidentKey(key) => (key, true),
-            Key::WrappedKey(bytes) => {
-                let wrapping_key = self.state.persistent.key_wrapping_key(&mut self.trussed)?;
-                // info_now!("unwrapping {:?} with wrapping key {:?}", &bytes, &wrapping_key);
-                let key_result = syscall!(self.trussed.unwrap_key_chacha8poly1305(
-                    wrapping_key,
-                    &bytes,
-                    b"",
-                    // &rp_id_hash,
-                    Location::Volatile,
-                )).key;
-                // debug!("key result: {:?}", &key_result);
-                info!("key result");
-                match key_result {
-                    Some(key) => (key, false),
-                    None => { return Err(Error::Other); }
-                }
-            }
-        };
 
         let (mechanism, serialization) = match credential.algorithm {
             -7 => (Mechanism::P256, SignatureSerialization::Asn1Der),
@@ -1433,32 +1507,20 @@ where UP: UserPresence,
         Ok(())
     }
 
-    // SECURITY considerations:
-    // - we should "shred" the key material in trussed, not just delete it
-    // - how to handle aborted/failed resets
-    //
-    // RELIABILITY/COMPLEXITY considerations:
-    // - if it were just us, we could reformat (with shredding overwrite) the entire FS
-    // - still, we could tell trussed to delete all our stuff,
-    //   send our response,
-    //   and then trigger a reboot
     fn reset(&mut self) -> Result<()> {
         // 1. >10s after bootup -> NotAllowed
-
+        let uptime = syscall!(self.trussed.uptime()).uptime;
+        if uptime.as_secs() > 10 {
+            return Err(Error::NotAllowed);
+        }
         // 2. check for user presence
         // denied -> OperationDenied
         // timeout -> UserActionTimeout
-
+        if !self.up.user_present(&mut self.trussed, constants::U2F_UP_TIMEOUT) {
+            return Err(Error::OperationDenied);
+        }
 
         // DO IT
-
-        // a. iterate over RKs, delete them
-        // (can't just `remove_dir_all` as we need to delete all keys too!
-
-        // may revisit the dir-walking API, but currently
-        // we can only traverse one directory at once.
-
-        // syscall!(self.trussed.debug_dump_store());
         loop {
             let dir = PathBuf::from(b"rk");
 
@@ -1512,13 +1574,71 @@ where UP: UserPresence,
         // b. delete persistent state
         self.state.persistent.reset(&mut self.trussed)?;
 
-        // c. delete runtime state
-        self.state.runtime.reset(&mut self.trussed);
-
         // Missed anything?
         // One secret key remains currently, the fake attestation key
 
         Ok(())
+    }
+
+    pub fn delete_resident_key_by_user_id(
+        &mut self,
+        rp_id_hash: &Bytes32,
+        user_id: &Bytes<consts::U64>,
+    ) -> Result<()> {
+
+        // Prepare to iterate over all credentials associated to RP.
+        let rp_path = rp_rk_dir(&rp_id_hash);
+        let mut entry = syscall!(self.trussed.read_dir_first(
+            Location::Internal,
+            rp_path.clone(),
+            None,
+        )).entry;
+
+        loop {
+            info_now!("this may be an RK: {:?}", &entry);
+            let rk_path = match entry {
+                // no more RKs left
+                // break breaks inner loop here
+                None => break,
+                Some(entry) => PathBuf::from(entry.path()),
+            };
+
+            info_now!("checking RK {:?} for userId ", &rk_path);
+            let credential_data = syscall!(self.trussed.read_file(
+                Location::Internal,
+                PathBuf::from(rk_path.clone()),
+            )).data;
+            let credential_maybe = Credential::deserialize(&credential_data);
+
+            if let Ok(old_credential) = credential_maybe {
+                if old_credential.user.id == user_id {
+                    match old_credential.key {
+                        credential::Key::ResidentKey(key) => {
+                            info_now!(":: deleting resident key");
+                            syscall!(self.trussed.delete(key));
+                        }
+                        _ => {
+                            warn!(":: WARNING: unexpected server credential in rk.");
+                        }
+                    }
+                    syscall!(self.trussed.remove_file(
+                        Location::Internal,
+                        PathBuf::from(rk_path),
+                    ));
+
+                    info_now!("Overwriting previous rk tied to this userId.");
+                    break;
+                }
+            } else {
+                warn_now!("WARNING: Could not read RK.");
+            }
+
+            // prepare for next loop iteration
+            entry = syscall!(self.trussed.read_dir_next()).entry;
+        }
+
+        Ok(())
+
     }
 
     pub fn delete_resident_key_by_path(
@@ -1535,25 +1655,23 @@ where UP: UserPresence,
             Location::Internal,
             PathBuf::from(rk_path),
         )).data;
-        let credential = Credential::deserialize(&credential_data).unwrap();
+        let credential_maybe = Credential::deserialize(&credential_data);
         // info_now!("deleting credential {:?}", &credential);
 
-        match credential.key {
-            credential::Key::ResidentKey(key) => {
-                info!(":: deleting resident key");
-                syscall!(self.trussed.delete(key));
-            }
-            credential::Key::WrappedKey(_) => {}
-        }
 
-        if let Some(secret) = credential.hmac_secret.clone() {
-            match secret {
-                credential::CredRandom::Resident(secret) => {
-                    info!(":: deleting hmac secret");
-                    syscall!(self.trussed.delete(secret));
+        if let Ok(credential) = credential_maybe {
+
+            match credential.key {
+                credential::Key::ResidentKey(key) => {
+                    info!(":: deleting resident key");
+                    syscall!(self.trussed.delete(key));
                 }
-                credential::CredRandom::Wrapped(_) => {}
+                credential::Key::WrappedKey(_) => {}
             }
+        } else {
+            // If for some reason there becomes a corrupt credential,
+            // we can still at least orphan the key rather then crash.
+            info_now!("Warning!  Orpaning a key.");
         }
 
         info!(":: deleting RK file {:?} itself", &rk_path);
@@ -1595,12 +1713,15 @@ where UP: UserPresence,
         if let Some(exclude_list) = &parameters.exclude_list {
             for descriptor in exclude_list.iter() {
                 let result = Credential::try_from(self, &rp_id_hash, descriptor);
-                if result.is_ok() {
-                    info!("Excluded!");
-                    if self.up.user_present(&mut self.trussed, constants::FIDO2_UP_TIMEOUT) {
-                        return Err(Error::CredentialExcluded);
-                    } else {
-                        return Err(Error::OperationDenied);
+                if let Ok(excluded_cred) = result {
+                    // If UV is not performed, than CredProtectRequired credentials should not be visibile.
+                    if !(excluded_cred.cred_protect == Some(CredentialProtectionPolicy::Required) && !uv_performed) {
+                        info!("Excluded!");
+                        if self.up.user_present(&mut self.trussed, constants::FIDO2_UP_TIMEOUT) {
+                            return Err(Error::CredentialExcluded);
+                        } else {
+                            return Err(Error::OperationDenied);
+                        }
                     }
                 }
             }
@@ -1645,58 +1766,15 @@ where UP: UserPresence,
         }
 
         // 9. process extensions
-        // TODO: need to figure out how to type-ify these
-        // let mut hmac_secret_requested = false;
-        // let mut cred_protect_requested = false;
-        // if let Some(extensions) = &parameters.extensions {
-        //     hmac_secret_requested = match extensions.get(&String::from("hmac-secret")) {
-        //         Some(true) => true,
-        //         _ => false,
-        //     };
-
-        //     cred_protect_requested = match extensions.get(&String::from("credProtect")) {
-        //         Some(true) => true,
-        //         _ => false,
-        //     };
-        // }
         let mut hmac_secret_requested = None;
         // let mut cred_protect_requested = CredentialProtectionPolicy::Optional;
-        let mut cred_protect_requested = CredentialProtectionPolicy::default();
+        let mut cred_protect_requested = None;
         if let Some(extensions) = &parameters.extensions {
-
-            if let Some(true) = extensions.hmac_secret {
-                // TODO: Generate "CredRandom" (a 32B random value, to be used
-                // later via HMAC-SHA256(cred_random, salt)
-                let cred_random = syscall!(self.trussed.generate_hmacsha256_key(
-                    Location::Internal,
-                )).key;
-
-                hmac_secret_requested = Some(match rk_requested {
-                    true => {
-                        CredRandom::Resident(cred_random)
-                    }
-
-                    false => {
-                        let wrapping_key = self.state.persistent.key_wrapping_key(&mut self.trussed)?;
-                        info!("wrapping credRandom");
-                        let wrapped_key = syscall!(self.trussed.wrap_key_chacha8poly1305(
-                            wrapping_key,
-                            cred_random,
-                            // &rp_id_hash,
-                            b"",
-                        )).wrapped_key;
-
-                        // 32B key, 12B nonce, 16B tag + some info on algorithm (P256/Ed25519)
-                        // Turns out it's size 92 (enum serialization not optimized yet...)
-                        // let mut wrapped_key = Bytes::<consts::U60>::new();
-                        // wrapped_key.extend_from_slice(&wrapped_key_msg).unwrap();
-                        CredRandom::Wrapped(wrapped_key.try_to_bytes().map_err(|_| Error::Other)?)
-                    }
-                });
-            }
+            
+            hmac_secret_requested = extensions.hmac_secret;
 
             if let Some(policy) = &extensions.cred_protect {
-                cred_protect_requested = CredentialProtectionPolicy::try_from(*policy)?;
+                cred_protect_requested = Some(CredentialProtectionPolicy::try_from(*policy)?);
             }
         }
 
@@ -1755,7 +1833,7 @@ where UP: UserPresence,
 
         // 12.a generate credential
         let key_parameter = match rk_requested {
-            true => Key::ResidentKey(private_key.clone()),
+            true => Key::ResidentKey(private_key),
             false => {
                 // WrappedKey version
                 let wrapping_key = self.state.persistent.key_wrapping_key(&mut self.trussed)?;
@@ -1808,6 +1886,9 @@ where UP: UserPresence,
 
 
         if rk_requested {
+            // first delete any other RK cred with same RP + UserId if there is one.
+            self.delete_resident_key_by_user_id(&rp_id_hash, &credential.user.id).ok();
+
             let credential_id_hash = self.hash(&credential_id.0.as_ref());
             try_syscall!(self.trussed.write_file(
                 Location::Internal,
@@ -1835,7 +1916,7 @@ where UP: UserPresence,
                 if true {
                     flags |= Flags::ATTESTED_CREDENTIAL_DATA;
                 }
-                if hmac_secret_requested.is_some() ||  cred_protect_requested != CredentialProtectionPolicy::Optional {
+                if hmac_secret_requested.is_some() || cred_protect_requested.is_some() {
                     flags |= Flags::EXTENSION_DATA;
                 }
                 flags
@@ -1855,7 +1936,15 @@ where UP: UserPresence,
             },
 
             extensions: {
-                parameters.extensions.clone()
+                if hmac_secret_requested.is_some() || cred_protect_requested.is_some() {
+                    Some(ctap2::make_credential::Extensions {
+                        cred_protect: parameters.extensions.as_ref().unwrap().cred_protect.clone(),
+                        hmac_secret: parameters.extensions.as_ref().unwrap().hmac_secret.clone(),
+                    })
+
+                } else {
+                    None
+                }
             },
         };
         // debug!("authData = {:?}", &authenticator_data);
@@ -1940,7 +2029,7 @@ where UP: UserPresence,
                     let file = syscall!(self.trussed
                         .read_file(
                             Location::Internal,
-                            PathBuf::from(b"attestation.x5c")
+                            PathBuf::from(constants::ATTESTATION_CERT_FILENAME)
                         ));
                     x5c.push(file.data).ok();
                     Some(x5c)
@@ -2016,8 +2105,8 @@ where UP: UserPresence,
         let mut versions = Vec::<String<consts::U12>, consts::U3>::new();
         versions.push(String::from_str("U2F_V2").unwrap()).unwrap();
         versions.push(String::from_str("FIDO_2_0").unwrap()).unwrap();
-        #[cfg(feature = "enable-fido-pre")]
-        versions.push(String::from_str("FIDO_2_1_PRE").unwrap()).unwrap();
+        // #[cfg(feature = "enable-fido-pre")]
+        // versions.push(String::from_str("FIDO_2_1_PRE").unwrap()).unwrap();
 
         let mut extensions = Vec::<String<consts::U11>, consts::U4>::new();
         // extensions.push(String::from_str("credProtect").unwrap()).unwrap();

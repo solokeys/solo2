@@ -46,9 +46,7 @@ impl TryFrom<EncryptedSerializedCredential> for CredentialId {
     type Error = Error;
 
     fn try_from(esc: EncryptedSerializedCredential) -> Result<CredentialId> {
-        let mut credential_id = CredentialId::default();
-        ctap_types::serde::cbor_serialize_bytes(&esc.0, &mut credential_id.0).map_err(|_| Error::Other)?;
-        Ok(credential_id)
+        Ok(CredentialId(trussed::cbor_serialize_bytes(&esc.0).map_err(|_| Error::Other)?))
     }
 }
 
@@ -72,12 +70,6 @@ pub enum Key {
     WrappedKey(Bytes<consts::U128>),
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
-pub enum CredRandom {
-    Resident(ObjectHandle),
-    Wrapped(Bytes<consts::U92>),
-}
-
 #[derive(Clone, Debug, serde_indexed::DeserializeIndexed, serde_indexed::SerializeIndexed)]
 pub struct CredentialData {
     // id, name, url
@@ -99,8 +91,8 @@ pub struct CredentialData {
     pub key: Key,
 
     // extensions
-    pub hmac_secret: Option<CredRandom>,
-    pub cred_protect: CredentialProtectionPolicy,
+    pub hmac_secret: Option<bool>,
+    pub cred_protect: Option<CredentialProtectionPolicy>,
 
     // TODO: add `sig_counter: Option<ObjectHandle>`,
     // and grant RKs a per-credential sig-counter.
@@ -148,8 +140,8 @@ impl Credential {
         algorithm: i32,
         key: Key,
         timestamp: u32,
-        hmac_secret: Option<CredRandom>,
-        cred_protect: CredentialProtectionPolicy,
+        hmac_secret: Option<bool>,
+        cred_protect: Option<CredentialProtectionPolicy>,
         nonce: [u8; 12],
     )
         -> Self
@@ -222,21 +214,15 @@ impl Credential {
     }
 
     pub fn serialize(&self) -> Result<SerializedCredential> {
-        let mut serialized = SerializedCredential::new();
-        let _size = ctap_types::serde::cbor_serialize_bytes(self, &mut serialized).map_err(|_| Error::Other)?;
-        Ok(serialized)
+        Ok(trussed::cbor_serialize_bytes(self).map_err(|_| Error::Other)?)
     }
 
-    /// BIG TODO: currently, if the data is invalid (for instance, if we
-    /// rotated our encryption key), then this will crash...
     pub fn deserialize(bytes: &SerializedCredential) -> Result<Self> {
-        // ctap_types::serde::cbor_deserialize(bytes).map_err(|_| Error::Other)
-
-        // Ok(ctap_types::serde::cbor_deserialize(bytes).unwrap())
         match ctap_types::serde::cbor_deserialize(bytes) {
             Ok(s) => Ok(s),
             Err(_) => {
-                panic!("could not deserialize {:?}", bytes);
+                info_now!("could not deserialize {:?}", bytes);
+                Err(Error::Other)
             }
         }
     }
