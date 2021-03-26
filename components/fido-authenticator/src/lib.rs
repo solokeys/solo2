@@ -1322,11 +1322,10 @@ where UP: UserPresence,
             // We derive credRandom as an hmac of the existing private key.
             // UV is used as input data since credRandom should depend UV
             // i.e. credRandom = HMAC(private_key, uv)
-            let cred_random = syscall!(self.trussed.derive_new_key(
+            let cred_random = syscall!(self.trussed.derive_key(
                 Mechanism::HmacSha256,
                 credential_key_handle,
-                Bytes::try_from_slice(&[get_assertion_state.uv_performed as u8]).unwrap(),
-                trussed::key::Kind::Symmetric(32),
+                Some(Bytes::try_from_slice(&[get_assertion_state.uv_performed as u8]).unwrap()),
                 trussed::types::StorageAttributes::new().set_persistence(Location::Volatile)
             )).key;    
 

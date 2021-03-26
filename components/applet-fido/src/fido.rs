@@ -218,7 +218,7 @@ where UP: UserPresence,
                                 Ok(applet::Response::Respond(Default::default()))
                             }
                             _ => {
-                                info!("Unsupported ins for fido app {}", ins.hex());
+                                info!("Unsupported ins for fido app {:02x}", ins);
                                 Err(Status::InstructionNotSupportedOrInvalid)
                             }
                         }
