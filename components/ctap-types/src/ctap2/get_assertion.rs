@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_indexed::{DeserializeIndexed, SerializeIndexed};
 
 use super::{AuthenticatorOptions, PinAuth};
-use crate::cose::P256PublicKey;
+use crate::cose::EcdhEsHkdf256PublicKey;
 use crate::sizes::*;
 use crate::webauthn::*;
 
@@ -17,7 +17,7 @@ use crate::webauthn::*;
 #[derive(Clone,Debug, Eq,PartialEq,SerializeIndexed,DeserializeIndexed)]
 #[serde_indexed(offset = 1)]
 pub struct HmacSecretInput {
-    pub key_agreement: P256PublicKey,
+    pub key_agreement: EcdhEsHkdf256PublicKey,
     // *either* enc(salt1) *or* enc(salt1 || salt2)
     pub salt_enc: Bytes<consts::U64>,
     pub salt_auth: Bytes<consts::U16>,
@@ -25,10 +25,18 @@ pub struct HmacSecretInput {
 }
 
 #[derive(Clone,Debug, Eq,PartialEq,Serialize,Deserialize)]
-pub struct Extensions {
+pub struct ExtensionsInput {
     #[serde(rename = "hmac-secret")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hmac_secret: Option<HmacSecretInput>,
+}
+
+#[derive(Clone,Debug, Eq,PartialEq,Serialize,Deserialize,Default)]
+pub struct ExtensionsOutput {
+    #[serde(rename = "hmac-secret")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    // *either* enc(output1) *or* enc(output1 || output2)
+    pub hmac_secret: Option<Bytes<consts::U64>>,
 }
 
 pub struct NoAttestedCredentialData (core::marker::PhantomData<()>);
@@ -39,7 +47,7 @@ impl super::SerializeAttestedCredentialData for NoAttestedCredentialData {
     }
 }
 
-pub type AuthenticatorData = super::AuthenticatorData<NoAttestedCredentialData, Extensions>;
+pub type AuthenticatorData = super::AuthenticatorData<NoAttestedCredentialData, ExtensionsOutput>;
 
 pub type AllowList = Vec<PublicKeyCredentialDescriptor, MAX_CREDENTIAL_COUNT_IN_LIST>;
 
@@ -52,7 +60,7 @@ pub struct Parameters {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub allow_list: Option<AllowList>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub extensions: Option<Extensions>,
+    pub extensions: Option<ExtensionsInput>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub options: Option<AuthenticatorOptions>,
     #[serde(skip_serializing_if = "Option::is_none")]
