@@ -1510,6 +1510,7 @@ where UP: UserPresence,
         // 1. >10s after bootup -> NotAllowed
         let uptime = syscall!(self.trussed.uptime()).uptime;
         if uptime.as_secs() > 10 {
+            #[cfg(not(feature = "disable-reset-time-window"))]
             return Err(Error::NotAllowed);
         }
         // 2. check for user presence

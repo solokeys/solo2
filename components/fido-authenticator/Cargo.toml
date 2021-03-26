@@ -20,6 +20,8 @@ trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main" }
 [features]
 enable-fido-pre = []
 
+disable-reset-time-window = []
+
 log-all = []
 log-none = []
 log-info = []
