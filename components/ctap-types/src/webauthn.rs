@@ -15,6 +15,7 @@ pub struct PublicKeyCredentialRpEntity {
 #[serde(rename_all = "camelCase")]
 pub struct PublicKeyCredentialUserEntity {
     pub id: Bytes<consts::U64>,
+    #[serde(default, deserialize_with = "deserialize_from_str_and_skip_if_too_long")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub icon: Option<String<consts::U128>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -22,6 +23,24 @@ pub struct PublicKeyCredentialUserEntity {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String<consts::U64>>,
 }
+
+fn deserialize_from_str_and_skip_if_too_long<'de, L, D>(deserializer: D) -> Result<Option<String<L>>, D::Error>
+where
+    L: heapless_bytes::Unsigned + heapless_bytes::ArrayLength<u8>,
+    D: serde::Deserializer<'de>,
+{
+    let result: Result<String<L>, D::Error> = serde::Deserialize::deserialize(deserializer);
+    match result {
+        Ok(string) => {
+            Ok(Some(string))
+        },
+        Err(err) => {
+            info_now!("skipping field: {:?}", err);
+            Ok(None)
+        }
+    }
+}
+
 
 impl PublicKeyCredentialUserEntity {
     pub fn from(id: Bytes<consts::U64>) -> Self {
