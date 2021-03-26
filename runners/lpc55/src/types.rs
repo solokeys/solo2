@@ -35,7 +35,7 @@ const_ram_storage!(
     cache_size_ty=consts::U128,
     // this is a limitation of littlefs
     // https://git.io/JeHp9
-    block_size=104,
+    block_size=128,
     // block_size=128,
     block_count=8192/104,
     lookaheadwords_size_ty=consts::U8,
