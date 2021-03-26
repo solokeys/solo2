@@ -8,7 +8,7 @@ edition = "2018"
 
 [dependencies]
 bitflags = "1.2.1"
-cbor-smol = "0.2.0"
+cbor-smol = "0.3.0"
 cosey = "0.2.0"
 delog = "0.1.0"
 heapless = { version = "0.6", default-features = false, features = ["serde"] }
@@ -20,7 +20,7 @@ serde-indexed = "0.1.0"
 serde_repr = "0.1"
 
 [features]
-log-all = []
+log-all = ["cbor-smol/log-all"]
 log-none = []
 
 # [patch.crates-io]
