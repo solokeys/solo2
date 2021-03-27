@@ -262,18 +262,16 @@ where UP: UserPresence,
                     }
                 };
 
-                let file = syscall!(self.trussed
-                    .read_file(
-                        Location::Internal,
-                        PathBuf::from(constants::ATTESTATION_CERT_FILENAME)
-                    ));
+                let cert = syscall!(self.trussed.read_certificate(
+                   trussed::types::Id (constants::ATTESTATION_CERT_ID),
+                )).der;
 
                 Ok(U2fResponse::Register(ctap1::RegisterResponse::new(
                     0x05,
                     &cose_key,
                     &credential_id.0,
                     signature,
-                    &file.data,
+                    &cert,
                 )))
             }
             U2fCommand::Authenticate(auth) => {
@@ -1135,7 +1133,7 @@ where UP: UserPresence,
         }
 
         // now sort them
-        self.state.runtime.destroy_credential_heap(&mut self.trussed);
+        self.state.runtime.free_credential_heap(&mut self.trussed);
         let max_heap = self.state.runtime.credential_heap();
         while !min_heap.is_empty() {
             max_heap.push(min_heap.pop().unwrap()).map_err(drop).unwrap();
@@ -1153,7 +1151,7 @@ where UP: UserPresence,
         // 3. previous GA/GNA >30s ago -> discard stat
         // this is optional over NFC
         if false {
-            self.state.runtime.destroy_credential_heap(&mut self.trussed);
+            self.state.runtime.free_credential_heap(&mut self.trussed);
             return Err(Error::NotAllowed);
         }
 
@@ -1520,62 +1518,18 @@ where UP: UserPresence,
             return Err(Error::OperationDenied);
         }
 
-        // DO IT
-        loop {
-            let dir = PathBuf::from(b"rk");
-
-            info_now!("reset start: reading {:?}", &dir);
-            let entry = syscall!(self.trussed.read_dir_first(
-                Location::Internal,
-                dir,
-                None,
-            )).entry;
-
-            let rp_path = match entry {
-                // no more RPs left
-                None => break,
-                Some(entry) => PathBuf::from(entry.path()),
-            };
-            info_now!("got RP {:?}, looking for its RKs", &rp_path);
-
-            // delete all RKs for given RP
-            let mut entry = syscall!(self.trussed.read_dir_first(
-                Location::Internal,
-                rp_path.clone(),
-                None,
-            )).entry;
-
-            loop {
-                // info_now!("this may be an RK: {:?}", &entry);
-                let rk_path = match entry {
-                    // no more RKs left
-                    // break breaks inner loop here
-                    None => break,
-                    Some(entry) => PathBuf::from(entry.path()),
-                };
-
-                self.delete_resident_key_by_path(&rk_path)?;
-
-                // prepare for next loop iteration
-                entry = syscall!(self.trussed.read_dir_first(
-                    Location::Internal,
-                    rp_path.clone(),
-                    None,
-                )).entry;
-            }
-
-            syscall!(self.trussed.remove_dir(
-                Location::Internal,
-                rp_path,
-            ));
-
-        }
+        // Delete resident keys
+        syscall!(self.trussed.delete_all(Location::Internal));
+        syscall!(self.trussed.remove_dir_all(
+            Location::Internal,
+            PathBuf::from("rk"),
+        ));
 
         // b. delete persistent state
         self.state.persistent.reset(&mut self.trussed)?;
 
-        // Missed anything?
-        // One secret key remains currently, the fake attestation key
+        // c. Reset runtime state
+        self.state.runtime.reset(&mut self.trussed);
 
         Ok(())
     }
@@ -2026,12 +1980,10 @@ where UP: UserPresence,
                 true => {
                     // See: https://www.w3.org/TR/webauthn-2/#sctn-packed-attestation-cert-requirements
                     let mut x5c = Vec::new();
-                    let file = syscall!(self.trussed
-                        .read_file(
-                            Location::Internal,
-                            PathBuf::from(constants::ATTESTATION_CERT_FILENAME)
-                        ));
-                    x5c.push(file.data).ok();
+                    let cert = syscall!(self.trussed.read_certificate(
+                        trussed::types::Id (constants::ATTESTATION_CERT_ID),
+                    )).der;
+                    x5c.push(cert).ok();
                     Some(x5c)
                 }
             },
