@@ -380,7 +380,7 @@ impl RuntimeState {
         self.credentials.as_mut().unwrap()
     }
 
-    pub fn destroy_credential_heap<T: client::FilesystemClient>(&mut self, trussed: &mut T) -> () {
+    pub fn free_credential_heap<T: client::FilesystemClient>(&mut self, trussed: &mut T) -> () {
         if self.credentials.is_some() {
             let max_heap = self.credential_heap();
             while max_heap.len() > 0 {
@@ -453,10 +453,13 @@ impl RuntimeState {
     }
 
     pub fn reset<T: client::HmacSha256 + client::P256 + client::FilesystemClient>(&mut self, trussed: &mut T) {
-        self.rotate_key_agreement_key(trussed);
+        // Could use `free_credential_heap`, but since we're deleting everything here, this is quicker.
+        syscall!(trussed.delete_all(Location::Volatile));
+        self.credential_heap().clear();
+
         self.rotate_pin_token(trussed);
-        // self.drop_shared_secret(trussed);
-        self.destroy_credential_heap(trussed);
+        self.rotate_key_agreement_key(trussed);
+
         self.credentials = None;
         self.active_get_assertion = None;
     }
