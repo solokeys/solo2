@@ -245,16 +245,20 @@ where UP: UserPresence,
                 commitment.extend_from_slice(&cose_key.x).unwrap();
                 commitment.extend_from_slice(&cose_key.y).unwrap();
 
-                let attestation_key = self.state.identity.attestation_key(&mut self.trussed);
+                let attestation = self.state.identity.attestation(&mut self.trussed);
 
-                let signature = match attestation_key {
-                    Some(key) => {
-                        syscall!(
-                            self.trussed.sign(Mechanism::P256,
-                            key,
-                            &commitment,
-                            SignatureSerialization::Asn1Der
-                        )).signature.to_bytes()
+                let (signature, cert) = match attestation {
+                    (Some((key, cert)), _aaguid) => {
+                        info_now!("aaguid: {}", hex_str!(&_aaguid));
+                        (
+                            syscall!(
+                                self.trussed.sign(Mechanism::P256,
+                                key,
+                                &commitment,
+                                SignatureSerialization::Asn1Der
+                            )).signature.to_bytes(),
+                            cert
+                        )
                     },
                     _ => {
                         info!("Not provisioned with attestation key!");
@@ -262,9 +266,6 @@ where UP: UserPresence,
                     }
                 };
 
-                let cert = syscall!(self.trussed.read_certificate(
-                   trussed::types::Id (constants::ATTESTATION_CERT_ID),
-                )).der;
 
                 Ok(U2fResponse::Register(ctap1::RegisterResponse::new(
                     0x05,
@@ -1859,6 +1860,9 @@ where UP: UserPresence,
         use ctap2::AuthenticatorDataFlags as Flags;
         info!("MC created cred id:");
         info!("{}", hex_str!(&credential_id.0));
+
+        let (attestation_maybe, aaguid)= self.state.identity.attestation(&mut self.trussed);
+
         let authenticator_data = ctap2::make_credential::AuthenticatorData {
             rp_id_hash: rp_id_hash.try_to_bytes().map_err(|_| Error::Other)?,
 
@@ -1881,7 +1885,7 @@ where UP: UserPresence,
             attested_credential_data: {
                 // debug!("acd in, cid len {}, pk len {}", credential_id.0.len(), cose_public_key.len());
                 let attested_credential_data = ctap2::make_credential::AttestedCredentialData {
-                    aaguid: self.state.identity.aaguid(),
+                    aaguid: Bytes::try_from_slice(&aaguid).unwrap(),
                     credential_id: credential_id.0.try_to_bytes().unwrap(),
                     credential_public_key: cose_public_key.try_to_bytes().unwrap(),
                 };
@@ -1923,10 +1927,9 @@ where UP: UserPresence,
         //
         // we should also directly support "none" format, it's a bit weird
         // how browsers firefox this
-        let attestation_key = self.state.identity.attestation_key(&mut self.trussed);
 
         let (signature, attestation_algorithm) = {
-            if attestation_key.is_none() {
+            if attestation_maybe.is_none() {
                 match algorithm {
                     SupportedAlgorithm::Ed25519 => {
                         let signature = syscall!(self.trussed.sign_ed255(private_key, &commitment)).signature;
@@ -1958,7 +1961,7 @@ where UP: UserPresence,
             } else {
 
                 let signature = syscall!(self.trussed.sign_p256(
-                    attestation_key.unwrap(),
+                    attestation_maybe.as_ref().unwrap().0,
                     &commitment,
                     SignatureSerialization::Asn1Der,
                 )).signature;
@@ -1975,14 +1978,12 @@ where UP: UserPresence,
         let packed_attn_stmt = ctap2::make_credential::PackedAttestationStatement {
             alg: attestation_algorithm,
             sig: signature,
-            x5c: match attestation_key.is_some() {
+            x5c: match attestation_maybe.is_some() {
                 false => None,
                 true => {
                     // See: https://www.w3.org/TR/webauthn-2/#sctn-packed-attestation-cert-requirements
+                    let cert = attestation_maybe.as_ref().unwrap().1.clone();
                     let mut x5c = Vec::new();
-                    let cert = syscall!(self.trussed.read_certificate(
-                        trussed::types::Id (constants::ATTESTATION_CERT_ID),
-                    )).der;
                     x5c.push(cert).ok();
                     Some(x5c)
                 }
@@ -2078,12 +2079,13 @@ where UP: UserPresence,
             true => Some(true),
             false => Some(false),
         };
-        // options.client_pin = Some(true/false); // capable, is set/is not set
+
+        let (_, aaguid)= self.state.identity.attestation(&mut self.trussed);
 
         ctap2::get_info::Response {
             versions,
             extensions: Some(extensions),
-            aaguid: self.state.identity.aaguid(),
+            aaguid: Bytes::try_from_slice(&aaguid).unwrap(),
             options: Some(options),
             max_msg_size: Some(ctap_types::sizes::MESSAGE_SIZE),
             pin_protocols: Some(pin_protocols),

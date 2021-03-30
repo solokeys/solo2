@@ -12,7 +12,7 @@ use trussed::{
     },
 };
 use ctap_types::{
-    Bytes, Bytes32, consts,
+    Bytes32,
     authenticator::Error,
     cose::EcdhEsHkdf256PublicKey as CoseEcdhEsHkdf256PublicKey,
     sizes::MAX_CREDENTIAL_COUNT_IN_LIST, // U8 currently
@@ -81,34 +81,69 @@ pub struct Identity {
     attestation_key: Option<Key>,
 }
 
+pub type Aaguid = [u8; 16];
+pub type Certificate = trussed::types::Message;
+
 impl Identity {
-    // pub fn get(trussed: &mut TrussedClient) -> Self {
 
-    //     // TODO: inject properly
-    //     let attestation_key = syscall!(trussed
-    //         .generate_p256_private_key(Location::Internal))
-    //         .key;
+    // Attempt to yank out the aaguid of a certificate.
+    fn yank_aaguid(&mut self, der: &[u8]) -> Option<[u8; 16]> {
 
-    //     Self {
-    //         aaguid: Bytes::try_from_slice(b"AAGUID0123456789").unwrap(),
-    //         attestation_key,
-    //     }
-    // }
+        let aaguid_start_sequence = [ 
+            // OBJECT IDENTIFIER 1.3.6.1.4.1.45724.1.1.4 (AAGUID)
+            0x06u8, 0x0B, 0x2B, 0x06, 0x01, 0x04, 0x01, 0x82, 0xE5, 0x1C, 0x01, 0x01, 0x04,
+        
+            // Sequence, 16 bytes
+            0x04, 0x12, 0x04, 0x10
+        ];
 
-    pub fn aaguid(&self) -> Bytes<consts::U16> {
-        Bytes::try_from_slice(b"AAGUID0123456789").unwrap()
+        // Scan for the beginning sequence for AAGUID.
+        let mut cert_reader = der;
+
+        while !cert_reader.is_empty() {
+            if cert_reader.starts_with(&aaguid_start_sequence) {
+                info_now!("found aaguid");
+                break;
+            }
+            cert_reader = &cert_reader[1..];
+        }
+        if cert_reader.is_empty() {
+            return None;
+        }
+
+        cert_reader = &cert_reader[aaguid_start_sequence.len()..];
+
+        let mut aaguid = [0u8; 16];
+        for i in 0 .. 16 {
+            aaguid[i] = cert_reader[i]
+        }
+        
+        Some(aaguid)
     }
 
-    pub fn attestation_key<T: TrussedClient>(&mut self, trussed: &mut T) -> Option<Key>
+    pub fn attestation<T: TrussedClient>(&mut self, trussed: &mut T) -> (Option<(Key, Certificate)>, Aaguid)
     {
         let key = Key {
             object_id: UniqueId::from(0)
         };
         let attestation_key_exists = syscall!(trussed.exists(Mechanism::P256, key)).exists;
         if attestation_key_exists {
-            Some(key)
+
+            // Will panic if certificate does not exist.
+            let cert = syscall!(trussed.read_certificate(
+                trussed::types::Id (crate::constants::ATTESTATION_CERT_ID),
+            )).der;
+
+            let mut aaguid = self.yank_aaguid(&cert.as_slice());
+
+            if aaguid.is_none() {
+                // Provide a default
+                aaguid = Some(*b"AAGUID0123456789");
+            }
+
+            (Some((key, cert)), aaguid.unwrap())
         } else {
-            None
+            (None, *b"AAGUID0123456789")
         }
     }
 
