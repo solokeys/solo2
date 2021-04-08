@@ -2,7 +2,7 @@
 use heapless_bytes::Bytes;
 
 use crate::constants::*;
-
+use core::time::Duration;
 
 // pub mod apdu;
 pub mod packet;
@@ -15,6 +15,11 @@ pub enum ClassRequest {
     Abort = 1,
     GetClockFrequencies = 2,
     GetDataRates = 3,
+}
+
+pub enum Status {
+    Idle,
+    ReceivedData(Duration),
 }
 
 impl core::convert::TryFrom<u8> for ClassRequest {

@@ -49,7 +49,7 @@ impl Dispatch {
     pub fn poll<'a>(
         &mut self,
         apps: &'a mut [&'a mut dyn App],
-    ) {
+    ) -> bool {
         if State::Requested == self.responder.state() {
             let tuple: &mut (Command, Message) = unsafe { self.responder.interchange.as_mut().unwrap().rq_mut() };
             let command = tuple.0;
@@ -71,6 +71,7 @@ impl Dispatch {
             }
         }
 
+        self.responder.state() == interchange::State::Responded
     }
 
 }

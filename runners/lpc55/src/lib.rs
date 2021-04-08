@@ -146,6 +146,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     types::Trussed,
 
     types::Piv,
+    types::Totp,
     types::FidoApplet<fido_authenticator::NonSilentAuthenticator>,
     applet_ndef::NdefApplet<'static>,
     types::RootApp,
@@ -415,6 +416,9 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     let (piv_trussed_requester, piv_trussed_responder) = trussed::pipe::TrussedInterchange::claim()
         .expect("could not setup PIV TrussedInterchange");
 
+    let (totp_trussed_requester, totp_trussed_responder) = trussed::pipe::TrussedInterchange::claim()
+        .expect("could not setup TOTP TrussedInterchange");
+
     info!("usb class start {} ms",perf_timer.lap().0/1000);
     let usb_classes =
     {
@@ -461,7 +465,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
             let serial_number = get_serial_number();
 
             let usbd = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0x1209, 0xbeee))
-                .manufacturer("SoloKeys, Inc")
+                .manufacturer("SoloKeys")
                 .product(product_string)
                 .serial_number(serial_number)
                 .device_release(device_release)
@@ -500,12 +504,22 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     let mut trussed = trussed::service::Service::new(board);
 
     let mut piv_client_id = littlefs2::path::PathBuf::new();
-    piv_client_id.push(b"piv2\0".try_into().unwrap());
+    piv_client_id.push(b"piv\0".try_into().unwrap());
     assert!(trussed.add_endpoint(piv_trussed_responder, piv_client_id).is_ok());
+
+    let mut totp_client_id = littlefs2::path::PathBuf::new();
+    totp_client_id.push(b"totp\0".try_into().unwrap());
+    assert!(trussed.add_endpoint(totp_trussed_responder, totp_client_id).is_ok());
 
     let syscaller = types::Syscall::default();
     let piv_trussed = types::TrussedClient::new(
         piv_trussed_requester,
+        syscaller,
+    );
+
+    let syscaller = types::Syscall::default();
+    let totp_trussed = types::TrussedClient::new(
+        totp_trussed_requester,
         syscaller,
     );
 
@@ -528,6 +542,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     let piv = piv_authenticator::Authenticator::new(piv_trussed);
     let ndef = applet_ndef::NdefApplet::new();
     let root = types::RootApp::new(root_trussed, hal::uuid(), build_constants::CARGO_PKG_VERSION);
+    let totp = oath_authenticator::Authenticator::new(totp_trussed);
 
     let apdu_dispatch = types::ApduDispatch::new(contact_responder, contactless_responder);
     let hid_dispatch = types::HidDispatch::new(hid_responder);
@@ -542,6 +557,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         trussed,
 
         piv,
+        totp,
         fido,
         ndef,
         root,

@@ -21,7 +21,7 @@ delog = "0.1.1"
 heapless = "0.6"
 interchange = "0.1.0"
 nb = "1"
-trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main", features = ["clients-3"] }
+trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main", features = ["clients-4"] }
 usb-device = "0.2.3"
 # usbd-hid = { version = "0.4.5", optional = true }
 usbd-serial = "0.1.0"
@@ -43,6 +43,9 @@ iso14443 = {path = "../../components/iso14443"}
 piv-authenticator = { path = "../../components/piv-authenticator", features = ["applet"] }
 usbd-ccid = { path = "../../components/usbd-ccid" }
 usbd-ctaphid = { path = "../../components/usbd-ctaphid" }
+
+# TODO release oath-authenticator
+oath-authenticator = { path = "../../../oath-authenticator", features = ["applet"] }
 
 # panic
 panic-halt = "0.2.0"

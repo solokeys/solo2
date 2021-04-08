@@ -124,7 +124,7 @@ impl ApduDispatch
         // }
         aid.and_then(move |aid|
             applets.iter_mut().find(|applet|
-                aid.starts_with(applet.rid())
+                aid.starts_with(applet.aid())
             )
         )
     }
@@ -204,6 +204,7 @@ impl ApduDispatch
 
     fn parse_apdu(message: &iso7816::command::Data) -> core::result::Result<Command,Response> {
 
+        trace!(">> {}", hex_str!(message.as_slice()));
         match Command::try_from(message) {
             Ok(command) => {
                 Ok(command)
@@ -425,7 +426,7 @@ impl ApduDispatch
     pub fn poll<'a>(
         &mut self,
         applets: &'a mut [&'a mut dyn Applet],
-    ) {
+    ) -> Option<InterfaceType> {
 
         // Only take on one transaction at a time.
         let request_type = self.check_for_request();
@@ -440,7 +441,6 @@ impl ApduDispatch
                 info!("Select");
                 self.handle_app_select(applets,aid);
             }
-
 
             RequestType::GetResponse => {
                 info!("GetResponse");
@@ -458,10 +458,19 @@ impl ApduDispatch
             }
         }
 
+        // slight priority to contactless.
+        if self.contactless.state() == interchange::State::Responded {
+            Some(InterfaceType::Contactless)
+        } else if self.contact.state() == interchange::State::Responded {
+            Some(InterfaceType::Contact)
+        } else {
+            None
+        }
     }
 
     #[inline(never)]
     fn respond(&mut self, message: iso7816::response::Data){
+        trace!("<< {}", hex_str!(message.as_slice()));
         match self.current_interface {
             InterfaceType::Contactless =>
                 self.contactless.respond(message).expect("cant respond"),

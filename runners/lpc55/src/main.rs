@@ -17,6 +17,9 @@ use rtic::cyccnt::{Instant, U32Ext as _};
 const CLOCK_FREQ: u32 = 96_000_000;
 const PERIOD: u32 = CLOCK_FREQ/16;
 
+const USB_INTERRUPT: board::hal::raw::Interrupt = board::hal::raw::Interrupt::USB1;
+const NFC_INTERRUPT: board::hal::raw::Interrupt = board::hal::raw::Interrupt::PIN_INT0;
+
 #[macro_use]
 extern crate delog;
 generate_macros!();
@@ -30,6 +33,7 @@ const APP: () = {
         trussed: app::types::Trussed,
 
         piv: app::types::Piv,
+        totp: app::types::Totp,
         fido: app::types::FidoApplet<fido_authenticator::NonSilentAuthenticator>,
         ndef: applet_ndef::NdefApplet<'static>,
         root: app::types::RootApp,
@@ -43,7 +47,7 @@ const APP: () = {
         hw_scheduler: app::types::HwScheduler,
     }
 
-    #[init(schedule = [update_ui])]
+    #[init(schedule = [update_ui, check_hid_timeouts])]
     fn init(c: init::Context) -> init::LateResources {
 
         let (
@@ -52,6 +56,7 @@ const APP: () = {
             trussed,
 
             piv,
+            totp,
             fido,
             ndef,
             root,
@@ -68,6 +73,11 @@ const APP: () = {
         if usb_classes.is_some() {
             hal::enable_cycle_counter();
             c.schedule.update_ui(Instant::now() + PERIOD.cycles()).unwrap();
+
+            let millis = usbd_ctaphid::constants::MAX_TIMEOUT_PERIOD.as_millis() as u32;
+            c.schedule.check_hid_timeouts(
+                Instant::now() + (CLOCK_FREQ/1_000 * millis).cycles()
+            ).unwrap();
         }
 
         init::LateResources {
@@ -76,6 +86,7 @@ const APP: () = {
             trussed,
 
             piv,
+            totp,
             fido,
             ndef,
             root,
@@ -90,17 +101,16 @@ const APP: () = {
         }
     }
 
-    #[idle(resources = [usb_classes, apdu_dispatch, hid_dispatch, ndef, piv, fido, root, contactless, perf_timer])]
+    #[idle(resources = [apdu_dispatch, hid_dispatch, ndef, piv, totp, fido, root, perf_timer])]
     fn idle(c: idle::Context) -> ! {
         let idle::Resources {
-            mut usb_classes,
             apdu_dispatch,
             hid_dispatch,
             ndef,
             piv,
+            totp,
             fido,
             root,
-            mut contactless,
             mut perf_timer,
         }
             = c.resources;
@@ -119,76 +129,68 @@ const APP: () = {
                 app::Delogger::flush();
             }
 
-            apdu_dispatch.poll(&mut [ndef, piv, fido, root]);
+            match apdu_dispatch.poll(&mut [ndef, piv, totp, fido, root]) {
 
-            contactless.lock(|contactless|  {
-                match contactless.as_ref() {
-                    Some(contactless) => {
-                        if contactless.is_ready_to_transmit() {
-                            rtic::pend(board::hal::raw::Interrupt::PIN_INT0);
-                        }
-                    }
-                    _ => {}
+                Some(apdu_dispatch::dispatch::InterfaceType::Contact) => {
+                    rtic::pend(USB_INTERRUPT);
                 }
-            });
-
-            usb_classes.lock(|usb_classes_maybe| {
-                match usb_classes_maybe.as_mut() {
-                    Some(usb_classes) => {
-                        usb_classes.ctaphid.check_for_responses();
-                        // the `usbd.poll` only calls its classes if
-                        // there is activity on the bus. hence we need
-                        // to kick ccid to pick up responses...
-                        usb_classes.ccid.sneaky_poll();
-                        usb_classes.usbd.poll(&mut [
-                            &mut usb_classes.ccid,
-                            &mut usb_classes.ctaphid,
-                            &mut usb_classes.serial
-                        ]);
-                        usb_classes.ctaphid.check_timeout(time/1000);
-                    }
-                    _ => {}
+                Some(apdu_dispatch::dispatch::InterfaceType::Contactless) => {
+                    rtic::pend(NFC_INTERRUPT);
                 }
-            } );
+                _ => {}
+            }
 
-
-            hid_dispatch.poll(&mut [fido, root]);
+            if hid_dispatch.poll(&mut [fido, root]) {
+                rtic::pend(USB_INTERRUPT);
+            }
 
         }
     }
 
-    #[task(binds = USB1_NEEDCLK, resources = [usb_classes], priority=6)]
-    fn usb1_needclk(c: usb1_needclk::Context) {
-        let usb_classes = c.resources.usb_classes.as_mut().unwrap();
-        usb_classes.usbd.poll(&mut [&mut usb_classes.ccid, &mut usb_classes.ctaphid, &mut usb_classes.serial]);
+    #[task(binds = USB1_NEEDCLK, resources = [], schedule = [], priority=6)]
+    fn usb1_needclk(_c: usb1_needclk::Context) {
+        // Behavior is same as in USB1 handler
+        rtic::pend(USB_INTERRUPT);
     }
 
-    #[task(binds = USB1, resources = [usb_classes], priority=6)]
-    fn usb1(c: usb1::Context) {
+    /// Manages all traffic on the USB bus.
+    #[task(binds = USB1, resources = [usb_classes], schedule = [ccid_wait_extension], priority=6)]
+    fn usb(c: usb::Context) {
         let usb = unsafe { hal::raw::Peripherals::steal().USB1 } ;
         let before = Instant::now();
         let usb_classes = c.resources.usb_classes.as_mut().unwrap();
 
         //////////////
+        usb_classes.ctaphid.check_for_app_response();
+        usb_classes.ccid.check_for_app_response();
         usb_classes.usbd.poll(&mut [&mut usb_classes.ccid, &mut usb_classes.ctaphid, &mut usb_classes.serial]);
+
+        match usb_classes.ccid.did_start_processing() {
+            usbd_ccid::types::Status::ReceivedData(duration) => {
+                c.schedule.ccid_wait_extension(
+                    Instant::now() + (CLOCK_FREQ/1_000_000 * (duration.as_micros() as u32)).cycles()
+                ).ok();
+            }
+            _ => {}
+        }
         //////////////
 
         let after = Instant::now();
         let length = (after - before).as_cycles();
         if length > 10_000 {
-            info!("poll took {:?} cycles", length);
+            debug!("poll took {:?} cycles", length);
         }
         let inten = usb.inten.read().bits();
         let intstat = usb.intstat.read().bits();
         let mask = inten & intstat;
         if mask != 0 {
-            info!("uncleared interrupts: {:?}", mask);
+            debug!("uncleared interrupts: {:?}", mask);
             for i in 0..5 {
                 if mask & (1 << 2*i) != 0 {
-                    info!("EP{}OUT", i);
+                    debug!("EP{}OUT", i);
                 }
                 if mask & (1 << (2*i + 1)) != 0 {
-                    info!("EP{}IN", i);
+                    debug!("EP{}IN", i);
                 }
             }
             // Serial sends a stray 0x70 ("p") to CDC-ACM "data" OUT endpoint (3)
@@ -197,6 +199,36 @@ const APP: () = {
             // usb.intstat.write(|w| unsafe{ w.bits( usb.intstat.read().bits() ) });
         }
 
+    }
+
+    /// Need to periodically trim stale sessions (if any) for ctaphid.
+    #[task(resources = [usb_classes], schedule = [check_hid_timeouts], priority = 6)]
+    fn check_hid_timeouts(c: check_hid_timeouts::Context) {
+        // check
+        let millis = usbd_ctaphid::constants::MAX_TIMEOUT_PERIOD.as_millis() as u32;
+        c.resources.usb_classes.as_mut().unwrap().ctaphid.check_timeout(millis);
+
+        // reschedule
+        c.schedule.check_hid_timeouts(
+            Instant::now() + (CLOCK_FREQ/1_000 * millis).cycles()
+        ).unwrap();
+    }
+
+    /// Whenever we start waiting for an application to reply to CCID, this must be scheduled.
+    /// In case the application takes too long, this will periodically send wait extensions
+    /// until the application replied.
+    #[task(resources = [usb_classes], schedule = [ccid_wait_extension], priority = 6)]
+    fn ccid_wait_extension(c: ccid_wait_extension::Context) {
+        debug!("CCID WAIT EXTENSION");
+        let status = c.resources.usb_classes.as_mut().unwrap().ccid.send_wait_extension();
+        match status {
+            usbd_ccid::types::Status::ReceivedData(duration) => {
+                c.schedule.ccid_wait_extension(
+                    Instant::now() + (CLOCK_FREQ/1_000 * (duration.as_millis() as u32)).cycles()
+                ).ok();
+            }
+            _ => {}
+        }
     }
 
     #[task(binds = MAILBOX, resources = [usb_classes], priority = 5)]
@@ -239,6 +271,8 @@ const APP: () = {
 
         *UPDATES += 1;
     }
+
+
 
     #[task(binds = CTIMER0, resources = [contactless, perf_timer, hw_scheduler], priority = 7)]
     fn nfc_wait_extension(c: nfc_wait_extension::Context) {
@@ -307,6 +341,7 @@ const APP: () = {
     // something to dispatch software tasks from
     extern "C" {
         fn PLU();
+        fn PIN_INT5();
         fn PIN_INT7();
     }
 

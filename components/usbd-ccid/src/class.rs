@@ -1,4 +1,5 @@
 use core::convert::TryFrom;
+use core::time::Duration;
 
 use interchange::Requester;
 use apdu_dispatch::types::ContactInterchange;
@@ -8,6 +9,7 @@ use crate::{
     types::{
         ClassRequest,
         packet::RawPacket,
+        Status,
     },
     pipe::Pipe,
 };
@@ -46,9 +48,28 @@ where
         Self { interface_number, read, /* interrupt, */ pipe }
     }
 
-    // needs better name, maybe call directly
-    pub fn sneaky_poll(&mut self) {
+    /// Read response from application (if any) and start writing it to
+    /// the USB bus.  Should be called before managing Bus.
+    pub fn check_for_app_response(&mut self) {
         self.poll();
+    }
+
+    pub fn did_start_processing(&mut self) -> Status {
+        if self.pipe.did_started_processing() {
+            // We should send a wait extension later
+            Status::ReceivedData(Duration::from_millis(1000))
+        } else {
+            Status::Idle
+        }
+    }
+
+    pub fn send_wait_extension (&mut self) -> Status {
+        if self.pipe.send_wait_extension() {
+            // We should send another wait extension later
+            Status::ReceivedData(Duration::from_millis(1000))
+        } else {
+            Status::Idle
+        }
     }
 }
 
