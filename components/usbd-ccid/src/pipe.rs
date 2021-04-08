@@ -63,6 +63,7 @@ where
     receiving_long: bool,
     long_packet_missing: usize,
     in_chain: usize,
+    pub(crate) started_processing: bool,
 }
 
 impl<Bus> Pipe<Bus>
@@ -90,6 +91,7 @@ where
             receiving_long: false,
             long_packet_missing: 0,
             in_chain: 0,
+            started_processing: false,
         }
     }
 
@@ -149,14 +151,12 @@ where
             }
         }
 
-        // info!("handle packet").ok();
         // info!("{:X?}", &packet).ok();
         // let p = packet.clone();
         // match PacketCommand::try_from(packet) {
         match PacketCommand::try_from(self.ext_packet.clone()) {
             Ok(command) => {
                 self.seq = command.seq();
-                info!(">> {:?}", &command);
 
                 // happy path
                 match command {
@@ -194,7 +194,7 @@ where
         // conts: BeginsAndEnds, Begins, Ends, Continues, ExpectDataBlock,
 
         // info!("handle xfrblock").ok();
-        info!("{:X?}", &command);
+        // info!("{:X?}", &command);
         match self.state {
 
             State::Idle => {
@@ -259,6 +259,38 @@ where
         }
     }
 
+    pub fn send_wait_extension(&mut self) -> bool {
+        if self.state == State::Processing {
+            // Need to send a wait extension request.
+            let mut packet = RawPacket::new();
+            packet.resize_default(10).ok();
+            packet[0] = 0x80;
+            packet[6] = self.seq;
+
+            // CCID_Rev110 6.2-3: Time Extension is requested 
+            packet[7] = 2 << 6;
+            // Perhaps 1 is an ok multiplier?
+            packet[8] = 0x1;
+            self.send_packet_assuming_possible(packet);
+
+            // Indicate we should check back again for another possible wait extension
+            true
+        } else {
+            // No longer processing, so the reply has been sent, and we no longer need more time.
+            false
+        }
+    }
+
+    /// Turns false on read.  Intended for checking to see if a wait extension request needs to be started.
+    pub fn did_started_processing(&mut self) -> bool {
+        if self.started_processing {
+            self.started_processing = false;
+            true
+        } else {
+            false
+        }
+    }
+
     fn call_app(&mut self) {
         info!("called piv app");
         let command = match iso7816::command::Data::try_from_slice(&self.message) {
@@ -269,11 +301,8 @@ where
             }
         };
         self.interchange.request(command).expect("could not deposit command");
-            // apdu::Command::try_from(&self.message).unwrap()
-        // ).expect("could not deposit command");
-        // info!("set ccid state to processing").ok();
+        self.started_processing = true;
         self.state = State::Processing;
-        // todo!("have message of length {} to dispatch", self.message.len());
     }
 
     pub fn poll_app(&mut self) {
@@ -390,7 +419,7 @@ where
             // T=0, T=1, command chaining/extended Lc+Le/no logical channels, card issuer's data "Solo B"
             // 3B 8C 80 01 80 73 C0 21 C0 56 53 6F 6C 6F 20 42 D4
             // https://smartcard-atr.apdu.fr/parse?ATR=3B+8C+80+01+80+73+C0+21+C0+56+53+6F+6C+6F+20+42+D4
-            b";\x8c\x80\x01\x80s\xc0!\xc0VSolo B\xd4"
+            &[0x3B, 0x8C, 0x80, 0x01, 0x80, 0x73, 0xC0, 0x21, 0xC0, 0x56, 0x53, 0x6F, 0x6C, 0x6F, 0x20, 0x42, 0xD4]
             //
             // Not sure if we also need some TA/TB/TC data as in
             // https://smartcard-atr.apdu.fr/parse?ATR=3B+F8+13+00+00+81+31+FE+15+59+75+62+69+6B+65+79+34+D4
@@ -456,7 +485,11 @@ where
 
 
     fn send_packet_assuming_possible(&mut self, packet: RawPacket) {
-        assert!(self.outbox.is_none());
+        if !self.outbox.is_none() {
+            // Previous transaction will fail, but we'll be ready for new transactions.
+            self.state = State::Idle;
+            info_now!("overwriting last session..");
+        }
         self.outbox = Some(packet);
 
         // fast-lane response attempt
@@ -475,7 +508,6 @@ where
                     // }
 
                     if needs_zlp {
-                        // info!("sending ZLP").ok();
                         self.outbox = Some(RawPacket::new());
                     } else {
                         self.outbox = None;

@@ -70,10 +70,15 @@ where
         &mut self.pipe
     }
 
-    pub fn check_timeout(&mut self, now_milliseconds: u32) {
-        self.pipe.check_timeout(now_milliseconds);
+    pub fn check_timeout(&mut self, ms_since_last_check: u32) {
+        self.pipe.check_timeout(ms_since_last_check);
     }
 
+    /// Read response from application (if any) and start writing it to
+    /// the USB bus.  Should be called before managing Bus.
+    pub fn check_for_app_response(&mut self) {
+        self.poll();
+    }
 }
 
 const HID_INTERFACE_CLASS: u8 = 0x03;
@@ -235,10 +240,3 @@ where Bus: UsbBus
     }
 
 }
-
-impl<'alloc, Bus: UsbBus> CtapHid<'alloc, Bus> {
-    pub fn check_for_responses(&mut self) {
-        self.poll();
-    }
-}
-
