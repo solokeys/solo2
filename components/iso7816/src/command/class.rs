@@ -88,18 +88,10 @@ impl Class {
 
     #[inline]
     pub fn chain(&self) -> Chain {
-        match self.range {
-            Range::Interindustry(which) => match which {
-                Interindustry::First | Interindustry::Further => {
-                    if self.cla & (1 << 4) != 0 {
-                        Chain::NotTheLast
-                    } else {
-                        Chain::LastOrOnly
-                    }
-                }
-                _ => Chain::Unknown,
-            }
-            _ => Chain::Unknown,
+        if self.cla & (1 << 4) != 0 {
+            Chain::NotTheLast
+        } else {
+            Chain::LastOrOnly
         }
     }
 
