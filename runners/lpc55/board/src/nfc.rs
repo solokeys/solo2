@@ -87,8 +87,8 @@ pub fn try_setup(
     let reconfig = always_reconfig || (current_regu_config != REGU_CONFIG) || (is_select_int_masked);
 
     if reconfig {
-        // info!("{}", fm.dump_eeprom() );
-        // info!("{}", fm.dump_registers() );
+        // info_now!("{:?}", fm.dump_eeprom() );
+        // info_now!("{:?}", fm.dump_registers() );
 
         info!("writing EEPROM");
 
@@ -103,7 +103,7 @@ pub fn try_setup(
             ta: 0xf7,
             // (FWI[b4], SFGI[b4]), (256 * 16 / fc) * 2 ^ value
             tb: 0x78,
-            tc: 0x02,
+            tc: 0x00,
                 // enable P-on IRQ    14443-4 mode
             nfc:    (0b0 << 1) |       (0b00 << 2),
         }, timer);
