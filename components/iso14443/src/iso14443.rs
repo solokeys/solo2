@@ -25,7 +25,7 @@ pub enum Iso14443Status {
 type Iso14443Frame = heapless_bytes::Bytes<heapless::consts::U256>;
 type Iso7816Data = iso7816::response::Data;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 enum Iso14443State {
     Receiving,
     /// last_frame_transmitted, remaining_bytes_to_transmit.
@@ -159,9 +159,18 @@ where
     }
 
     fn send_wtx(&mut self) {
-        self.device.send(
-            &[0xf2, 0x01]
-        ).ok();
+        match self.last_iblock_recv.as_ref() {
+            Some(Block::IBlock(_block_num, _nad, Some(cid), _chaining, _offset)) => {
+                self.device.send(
+                    &[0xfa, *cid, 0x01]
+                ).ok();
+            }
+            _ => {
+                self.device.send(
+                    &[0xf2, 0x01]
+                ).ok();
+            }
+        }
     }
     // IBlock(BlockNum, Nad, Cid, Chaining, ),
     // RBlock(BlockNum, Cid, Ack, ),
@@ -171,6 +180,9 @@ where
         match block_header {
             Block::IBlock(block_num, _nad, _cid, chaining, offset) => {
 
+                if self.state != Iso14443State::Receiving {
+                    self.buffer.clear();
+                }
                 self.state = Iso14443State::Receiving;
 
                 self.buffer.extend_from_slice(& packet[offset .. ]).ok();
