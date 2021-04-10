@@ -415,6 +415,7 @@ where
 
             if self.offset <= 2 {
                 // too few bytes, ignore..
+                info!("RxDone read too few ({})", hex_str!(&buf[.. self.offset]));
                 self.offset = 0;
             }
             else {
@@ -573,6 +574,7 @@ where
 
 
 /// For logging
+#[derive(Debug)]
 pub struct Eeprom {
     pub regu_cfg: u8,
     pub atqa: u16,
@@ -589,6 +591,7 @@ pub struct Eeprom {
     pub rblock_nack: u8,
 }
 
+#[derive(Debug)]
 pub struct InterruptState {
     pub main: u8,
     pub fifo: u8,
@@ -596,6 +599,7 @@ pub struct InterruptState {
     pub count: u8,
 }
 
+#[derive(Debug)]
 pub struct RegisterBlock {
     pub fifo_count: u8,
     pub rf_status: u8,
