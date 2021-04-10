@@ -8,6 +8,7 @@ use apdu_dispatch::types::{
     ContactlessInterchange,
     ContactInterchange,
 };
+use apdu_dispatch::dispatch;
 use iso7816::{
     Command,
     Status,
@@ -56,7 +57,7 @@ impl Applet for TestApp1 {
     fn deselect(&mut self) {
     }
 
-    fn call (&mut self, apdu: &Command) -> AppletResult {
+    fn call (&mut self, _interface_type: dispatch::InterfaceType, apdu: &Command) -> AppletResult {
         println!("TestApp1::call");
         match apdu.instruction().into() {
             0x10 => {
@@ -109,7 +110,7 @@ impl Applet for TestApp2 {
     fn deselect(&mut self) {
     }
 
-    fn call (&mut self, apdu: &Command) -> AppletResult {
+    fn call (&mut self, _interface_type: dispatch::InterfaceType, apdu: &Command) -> AppletResult {
         println!("TestApp2::call");
         match apdu.instruction().into() {
             0x20 => {
@@ -155,7 +156,7 @@ impl Applet for PanicApp {
         panic!("Dont call the panic app");
     }
 
-    fn call (&mut self, _apdu: &Command) -> AppletResult {
+    fn call (&mut self, _interface_type: dispatch::InterfaceType, _apdu: &Command) -> AppletResult {
         panic!("Dont call the panic app");
     }
 
@@ -169,10 +170,12 @@ fn run_apdus(
 ){
     assert!(apdu_response_pairs.len() > 0);
     assert!((apdu_response_pairs.len() & 1) == 0);
-    let (mut contact_requester, contact_responder) = ContactInterchange::claim(0)
+    unsafe { ContactInterchange::reset_claims() };
+    unsafe { ContactlessInterchange::reset_claims() };
+    let (mut contact_requester, contact_responder) = ContactInterchange::claim()
         .expect("could not setup ccid ApduInterchange");
 
-    let (_contactless_requester, contactless_responder) = ContactlessInterchange::claim(0)
+    let (_contactless_requester, contactless_responder) = ContactlessInterchange::claim()
         .expect("could not setup iso14443 ApduInterchange");
 
     let mut apdu_dispatch = apdu_dispatch::dispatch::ApduDispatch::new(contact_responder, contactless_responder);
@@ -197,7 +200,7 @@ fn run_apdus(
         print!("<< "); 
         dump_hex(&raw_req);
 
-        contact_requester.request(command::Data::from_slice(&raw_req).unwrap())
+        contact_requester.request(command::Data::try_from_slice(&raw_req).unwrap())
             .expect("could not deposit command");
 
         apdu_dispatch.poll(&mut[&mut app0, &mut app1, &mut app2, &mut app3, &mut app4]);
@@ -759,19 +762,50 @@ fn multiple_chained_apdu_interruption (){
 
 #[test]
 #[serial]
+fn chaining_with_unknown_class_range(){
+    run_apdus(
+        &[
+            // Select 1
+            &[0x00u8, 0xA4, 0x04, 0x00, 0x05, 0x0A, 0x01, 0x00, 0x00, 0x01],
+            &[0x90, 0x00u8],
+
+            // Set chaining bit + upper range bit
+            &[0x90u8, 0x20, 0x00, 0x00, 0xFF,
+                /*      1             8               16              24              32 */
+                /* 1 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 
+                /* 2 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 
+                /* 3 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 
+                /* 4 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 
+                /* 5 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 
+                /* 6 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 
+                /* 7 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 
+                /* 8 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+            ],
+            &[ 0x90,00 ],
+        ]
+    )
+}
+
+
+
+#[test]
+#[serial]
 fn check_stack_burden(){
 
-    let (mut contact_requester, contact_responder) = ContactInterchange::claim(0)
+    unsafe { ContactInterchange::reset_claims() };
+    unsafe { ContactlessInterchange::reset_claims() };
+
+    let (mut contact_requester, contact_responder) = ContactInterchange::claim()
         .expect("could not setup ccid ApduInterchange");
 
-    let (_contactless_requester, contactless_responder) = ContactlessInterchange::claim(0)
+    let (_contactless_requester, contactless_responder) = ContactlessInterchange::claim()
         .expect("could not setup iso14443 ApduInterchange");
 
     let mut apdu_dispatch = apdu_dispatch::dispatch::ApduDispatch::new(contact_responder, contactless_responder);
 
     let mut app1 = TestApp1{};
 
-    contact_requester.request(command::Data::from_slice(
+    contact_requester.request(command::Data::try_from_slice(
         &[0x00u8, 0xA4, 0x04, 0x00, 0x05, 0x0A, 0x01, 0x00, 0x00, 0x01],
     ).unwrap()).expect("could not deposit command");
 
@@ -782,7 +816,7 @@ fn check_stack_burden(){
     print!(">> "); 
     dump_hex(&response);
 
-    contact_requester.request(command::Data::from_slice(
+    contact_requester.request(command::Data::try_from_slice(
         &[0x00u8, 0x15, 0x00, 0x00],
     ).unwrap()).expect("could not deposit command");
 
@@ -799,6 +833,6 @@ fn check_stack_burden(){
 
     println!("Burden: {} bytes", max_stack - min_stack);
 
-    assert!(false);
+    // assert!(false);
 
 }
