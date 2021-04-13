@@ -1,4 +1,4 @@
-FEATURES := board-lpcxpresso55,no-encrypted-storage,no-buttons
+FEATURES := board-lpcxpresso55,develop
 
 build-dev:
 	cargo build --release --features $(FEATURES)

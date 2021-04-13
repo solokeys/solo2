@@ -63,17 +63,17 @@ use hal::traits::wg::digital::v2::InputPin;
 #[derive(Debug)]
 pub struct Flusher {}
 
-#[cfg(feature = "log-serial")]
 impl delog::Flusher for Flusher {
-    fn flush(&self, logs: &str) {
+    fn flush(&self, _logs: &str) {
+        #[cfg(feature = "log-rtt")]
+        rtt_target::rprint!(_logs);
+
+        #[cfg(feature = "log-semihosting")]
+        cortex_m_semihosting::hprint!(_logs).ok();
+
+        #[cfg(feature = "log-serial")]
         // see https://git.io/JLARR for the plan on how to improve this once we switch to RTIC 0.6
         rtic::pend(hal::raw::Interrupt::MAILBOX);
-    }
-}
-#[cfg(not(feature = "log-serial"))]
-impl delog::Flusher for Flusher {
-    fn flush(&self, logs: &str) {
-        cortex_m_semihosting::hprint!(logs).ok();
     }
 }
 
@@ -162,6 +162,9 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     info_now!("entering init_board");
 
     let hal = hal::Peripherals::from((device_peripherals, core_peripherals));
+
+    #[cfg(feature = "log-rtt")]
+    rtt_target::rtt_init_print!();
 
     let mut anactrl = hal.anactrl;
     let mut pmc = hal.pmc;
