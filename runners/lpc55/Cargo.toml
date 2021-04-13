@@ -16,11 +16,12 @@ path = "src/main.rs"
 
 [dependencies]
 lpc55-rtic = "0.5.5"
-cortex-m-semihosting = "0.3.5"
+cortex-m-semihosting = {version = "0.3.5", optional = true }
 delog = "0.1.1"
 heapless = "0.6"
 interchange = "0.1.0"
 nb = "1"
+rtt-target = { version = "0.3", optional = true, features = ["cortex-m"] }
 trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main", features = ["clients-4"] }
 usb-device = "0.2.3"
 # usbd-hid = { version = "0.4.5", optional = true }
@@ -57,13 +58,16 @@ littlefs2 = "0.2.1"
 [features]
 default = []
 
-develop = ["no-encrypted-storage", "no-buttons"]
+develop = ["no-encrypted-storage", "no-buttons", "no-reset-time-window"]
 
 # Do not use encryption for the filesystem
 no-encrypted-storage = []
 
 # Use to auto-succeed every user presence check
 no-buttons = ["board/no-buttons"]
+
+# Allow resetting FIDO authenticator (and possibly others) even after 10s uptime
+no-reset-time-window = ["fido-authenticator/disable-reset-time-window"]
 
 # Format filesystem anyway
 format-filesystem = []
@@ -72,6 +76,8 @@ board-lpcxpresso55 = ["board/board-lpcxpresso55"]
 board-okdoe1 = ["board/board-okdoe1", "board-lpcxpresso55", "usbfs-peripheral"]
 board-solov2 = ["board/board-solov2"]
 
+log-rtt = ["rtt-target"]
+log-semihosting = ["cortex-m-semihosting"]
 log-serial = []
 
 highspeed = []

@@ -34,8 +34,8 @@ where
         Ok(string) => {
             Ok(Some(string))
         },
-        Err(err) => {
-            info_now!("skipping field: {:?}", err);
+        Err(_err) => {
+            info_now!("skipping field: {:?}", _err);
             Ok(None)
         }
     }
