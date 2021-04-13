@@ -103,5 +103,6 @@ debug = true
 [profile.release.package.salty]
 opt-level = 2
 
-[profile.release.package.nisty]
-opt-level = 2
+# TODO: see which if any settings are best for p256-cortex-m4
+# [profile.release.package.nisty]
+# opt-level = 2

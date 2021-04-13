@@ -89,10 +89,10 @@ impl Identity {
     // Attempt to yank out the aaguid of a certificate.
     fn yank_aaguid(&mut self, der: &[u8]) -> Option<[u8; 16]> {
 
-        let aaguid_start_sequence = [ 
+        let aaguid_start_sequence = [
             // OBJECT IDENTIFIER 1.3.6.1.4.1.45724.1.1.4 (AAGUID)
             0x06u8, 0x0B, 0x2B, 0x06, 0x01, 0x04, 0x01, 0x82, 0xE5, 0x1C, 0x01, 0x01, 0x04,
-        
+
             // Sequence, 16 bytes
             0x04, 0x12, 0x04, 0x10
         ];
@@ -117,7 +117,7 @@ impl Identity {
         for i in 0 .. 16 {
             aaguid[i] = cert_reader[i]
         }
-        
+
         Some(aaguid)
     }
 
@@ -131,7 +131,7 @@ impl Identity {
 
             // Will panic if certificate does not exist.
             let cert = syscall!(trussed.read_certificate(
-                trussed::types::Id (crate::constants::ATTESTATION_CERT_ID),
+                trussed::types::Id::from(crate::constants::ATTESTATION_CERT_ID),
             )).der;
 
             let mut aaguid = self.yank_aaguid(&cert.as_slice());
