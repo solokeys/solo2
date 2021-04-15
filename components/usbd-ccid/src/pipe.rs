@@ -2,6 +2,7 @@ use core::convert::TryFrom;
 
 use apdu_dispatch::types::ContactInterchange;
 use interchange::Requester;
+use interchange::Interchange;
 
 use crate::{
     constants::*,
@@ -52,8 +53,6 @@ where
     // pub(crate) rpc: TransportEndpoint<'rpc>,
     seq: u8,
     state: State,
-    // TODO: remove, use interchange
-    message: MessageBuffer,
     interchange: Requester<ContactInterchange>,
     sent: usize,
     outbox: Option<RawPacket>,
@@ -83,7 +82,6 @@ where
             state: State::Idle,
             sent: 0,
             outbox: None,
-            message: MessageBuffer::new(),
             interchange: request_pipe,
 
             ext_packet: Default::default(),
@@ -187,6 +185,14 @@ where
         }
     }
 
+    #[inline(never)]
+    fn reset_interchange(&mut self) {
+        let message = MessageBuffer::new();
+        self.interchange.take_response();
+        self.interchange.request(&message).ok();
+        self.interchange.cancel().ok();
+    }
+
     fn handle_transfer(&mut self, command: XfrBlock) {
 
         // state: Idle, Receiving, Processing, Sending,
@@ -202,16 +208,20 @@ where
                 match command.chain() {
                     Chain::BeginsAndEnds => {
                         info!("begins and ends");
-                        self.message.clear();
-                        self.message.extend_from_slice(command.data()).unwrap();
+                        self.reset_interchange();
+                        let message: &mut MessageBuffer = unsafe { self.interchange.interchange.rq_mut() };
+                        message.clear();
+                        message.extend_from_slice(command.data()).unwrap();
                         self.call_app();
                         self.state = State::Processing;
                         // self.send_empty_datablock();
                     }
                     Chain::Begins => {
                         info!("begins");
-                        self.message.clear();
-                        self.message.extend_from_slice(command.data()).unwrap();
+                        self.reset_interchange();
+                        let message: &mut MessageBuffer = unsafe { self.interchange.interchange.rq_mut() };
+                        message.clear();
+                        message.extend_from_slice(command.data()).unwrap();
                         self.state = State::Receiving;
                         self.send_empty_datablock(Chain::ExpectingMore);
                     }
@@ -223,14 +233,16 @@ where
                 match command.chain() {
                     Chain::Continues => {
                         info!("continues");
-                        assert!(command.data().len() + self.message.len() <= MAX_MSG_LENGTH);
-                        self.message.extend_from_slice(command.data()).unwrap();
+                        let message: &mut MessageBuffer = unsafe { self.interchange.interchange.rq_mut() };
+                        assert!(command.data().len() + message.len() <= MAX_MSG_LENGTH);
+                        message.extend_from_slice(command.data()).unwrap();
                         self.send_empty_datablock(Chain::ExpectingMore);
                     }
                     Chain::Ends => {
                         info!("ends");
-                        assert!(command.data().len() + self.message.len() <= MAX_MSG_LENGTH);
-                        self.message.extend_from_slice(command.data()).unwrap();
+                        let message: &mut MessageBuffer = unsafe { self.interchange.interchange.rq_mut() };
+                        assert!(command.data().len() + message.len() <= MAX_MSG_LENGTH);
+                        message.extend_from_slice(command.data()).unwrap();
                         self.call_app();
                         self.state = State::Processing;
                     }
@@ -291,16 +303,10 @@ where
         }
     }
 
+    #[inline(never)]
     fn call_app(&mut self) {
-        info!("called piv app");
-        let command = match iso7816::command::Data::try_from_slice(&self.message) {
-            Ok(command) => command,
-            Err(_) => {
-                info!("could fit payload into Apdu buffer. Ignoring. {:?}", &self.message);
-                return;
-            }
-        };
-        self.interchange.request(command).expect("could not deposit command");
+        let message: MessageBuffer = unsafe { self.interchange.interchange.rq_mut() }.clone();
+        self.interchange.request(&message).expect("could not deposit command");
         self.started_processing = true;
         self.state = State::Processing;
     }
@@ -318,9 +324,7 @@ where
             // info!("processing, checking for response, interchange state {:?}",
             //           self.interchange.state()).ok();
 
-            if let Some(message) = self.interchange.take_response() {
-                self.message = message;
-
+            if interchange::State::Responded == self.interchange.state() {
                 // crate::piv::fake_piv(&mut self.message);
 
                 // we should have an open XfrBlock allowance
@@ -338,10 +342,11 @@ where
 
         if self.outbox.is_some() { panic!(); }
 
-        let chunk_size = core::cmp::min(PACKET_SIZE - 10, self.message.len() - self.sent);
-        let chunk = &self.message[self.sent..][..chunk_size];
+        let message: &mut MessageBuffer = unsafe { self.interchange.interchange.rp_mut() };
+        let chunk_size = core::cmp::min(PACKET_SIZE - 10, message.len() - self.sent);
+        let chunk = &message[self.sent..][..chunk_size];
         self.sent += chunk_size;
-        let more = self.sent < self.message.len();
+        let more = self.sent < message.len();
 
         let chain = match (self.state, more) {
             (State::ReadyToSend, true) => { self.state = State::Sending; Chain::Begins }
