@@ -1,10 +1,14 @@
+use heapless_bytes::ArrayLength;
+
 pub mod class;
 pub mod instruction;
 
-pub type Data = crate::Bytes<crate::MAX_COMMAND_DATA>;
+use crate::Bytes;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Command {
+pub struct Command <SIZE>
+where SIZE: ArrayLength<u8>
+{
     class: class::Class,
     instruction: instruction::Instruction,
 
@@ -13,13 +17,15 @@ pub struct Command {
 
     /// The main reason this is modeled as Bytes and not
     /// a fixed array is for serde purposes.
-    data: Data,
+    data: Bytes<SIZE>,
 
     le: usize,
     pub extended: bool,
 }
 
-impl Command {
+impl <SIZE> Command <SIZE>
+where SIZE: ArrayLength<u8>
+{
     pub fn try_from(apdu: &[u8]) -> Result<Self, FromSliceError> {
         use core::convert::TryInto;
         apdu.try_into()
@@ -33,11 +39,11 @@ impl Command {
         self.instruction
     }
 
-    pub fn data(&self) -> &Data {
+    pub fn data(&self) -> &Bytes<SIZE> {
         &self.data
     }
 
-    pub fn data_mut(&mut self) -> &mut Data {
+    pub fn data_mut(&mut self) -> &mut Bytes<SIZE>{
         &mut self.data
     }
 
@@ -48,7 +54,7 @@ impl Command {
     /// This can be use for APDU chaining to convert
     /// multiple APDU's into one.
     /// * Global Platform GPC_SPE_055 3.10
-    pub fn extend_from_command(&mut self, command: &Command) -> core::result::Result<(),()> {
+    pub fn extend_from_command(&mut self, command: &Command<impl ArrayLength<u8>>) -> core::result::Result<(),()> {
 
         // Always take the header from the last command;
         self.class = command.class();
@@ -77,7 +83,9 @@ impl From<class::InvalidClass> for FromSliceError {
     }
 }
 
-impl core::convert::TryFrom<&[u8]> for Command {
+impl<SIZE> core::convert::TryFrom<&[u8]> for Command<SIZE>
+where SIZE: ArrayLength<u8>
+{
     type Error = FromSliceError;
     fn try_from(apdu: &[u8]) -> core::result::Result<Self, Self::Error> {
         if apdu.len() < 4 {
@@ -99,7 +107,7 @@ impl core::convert::TryFrom<&[u8]> for Command {
             // maximum expected response length
             le: parsed.le,
             // payload
-            data: Data::try_from_slice(data_slice).unwrap(),
+            data: Bytes::try_from_slice(data_slice).unwrap(),
             extended: parsed.extended,
         })
     }
