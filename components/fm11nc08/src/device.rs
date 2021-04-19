@@ -408,7 +408,7 @@ where
 
         if main_irq & (Interrupt::RxDone as u8) != 0 {
             let count = self.read_reg(Register::FifoCount);
-            if count > 0 {
+            if count > 0 && count < 32 {
                 self.read_fifo(count);
                 self.offset += count as usize;
             }

@@ -125,7 +125,7 @@ const APP: () = {
                     perf_timer.start(60_000.ms());
                 }
             });
-            if time > 1_000_000 {
+            if time > 1_200_000 {
                 app::Delogger::flush();
             }
 
