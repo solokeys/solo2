@@ -486,6 +486,14 @@ where
                         info!("TX transmission timeout.");
                         break;
                     }
+
+                    // EVERY NOW AND THEN, the WaterLevel interrupt does not trigger.
+                    // So we double check.
+                    current_count = self.read_reg(Register::FifoCount);
+                    if current_count <= 7 {
+                        info!("curr count <= 7 and no INT");
+                        return Ok(())
+                    }
                     fifo_irq = self.read_reg(Register::FifoIrq);
                 }
             }
