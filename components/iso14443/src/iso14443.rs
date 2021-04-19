@@ -4,9 +4,8 @@ use heapless_bytes::Bytes;
 use crate::traits::{
     nfc,
 };
-use iso7816::command;
 use interchange::Requester;
-use apdu_dispatch::types::ContactlessInterchange;
+use apdu_dispatch::interchanges;
 
 pub enum SourceError {
     NoActivity,
@@ -23,7 +22,6 @@ pub enum Iso14443Status {
 
 // Max iso14443 frame is 256 bytes
 type Iso14443Frame = heapless_bytes::Bytes<heapless::consts::U256>;
-type Iso7816Data = iso7816::response::Data;
 
 #[derive(Clone, PartialEq)]
 enum Iso14443State {
@@ -100,16 +98,16 @@ pub struct Iso14443<DEV: nfc::Device> {
     // Used to see if wtx was accepted or not
     wtx_requested: bool,
 
-    buffer: Iso7816Data,
+    buffer: interchanges::Data,
 
-    interchange: Requester<ContactlessInterchange>,
+    interchange: Requester<interchanges::Contactless>,
 }
 
 impl<DEV> Iso14443<DEV>
 where
     DEV: nfc::Device
 {
-    pub fn new(device: DEV, interchange: Requester<ContactlessInterchange>) -> Self {
+    pub fn new(device: DEV, interchange: Requester<interchanges::Contactless>) -> Self {
         Self {
             device: device,
             state: Iso14443State::Receiving,
@@ -317,7 +315,9 @@ where
                 offset
             }
             _ => {
-                panic!("Can only send iblock in reply to I or R blocks.");
+                info!("Can only send iblock in reply to I or R blocks! Pretending it's an rblock..");
+                frame[0] = 0x02u8;
+                1
             }
         };
         // minus 2 to leave room for crc
@@ -364,7 +364,7 @@ where
                 return Err(SourceError::NoActivity)
             },
             _ => {
-                info!("nop");
+                // info!("nop");
                 return Err(SourceError::NoActivity)
             }
         };
@@ -379,11 +379,11 @@ where
         info!("{}", hex_str!(&self.buffer));
         // logging::dump_hex(packet, l as usize);
 
-        let command = command::Data::try_from_slice(&self.buffer);
+        let command = interchanges::Data::try_from_slice(&self.buffer);
         self.buffer.clear();
         if command.is_ok() {
             if self.interchange.request(
-                command.unwrap()
+                command.as_ref().unwrap()
             ).is_ok() {
                 Ok(())
             } else {
@@ -419,14 +419,13 @@ where
             // then we could "double-send", which isn't permitted in iso14443-4.
             let mut wtx_wait_attempts = 0;
             while self.wtx_requested {
-                info_now!("wait-for-wtx");
                 let _did_recv_apdu = self.check_for_apdu();
                 if !self.wtx_requested {
                     break;
                 }
                 wtx_wait_attempts += 1;
-                if wtx_wait_attempts > 10 {
-                    info_now!("no wtx reply, dumping the response.");
+                if wtx_wait_attempts > 50 {
+                    info!("no wtx reply, dumping the response.");
                     self.wtx_requested = false;
                     self.interchange.take_response();
                     return Iso14443Status::Idle;
@@ -477,7 +476,6 @@ where
                 Iso14443Status::ReceivedData(Duration::from_millis(32))
             }
             interchange::State::Requested | interchange::State::Processing => {
-                info!("send-wtx");
                 self.send_wtx();
                 self.wtx_requested = true;
                 Iso14443Status::ReceivedData(Duration::from_millis(32))
@@ -498,7 +496,7 @@ where
             return Err(SourceError::NoActivity);
         }
 
-        info!("<<");
+        info!("<{}< ",buffer.len());
         if buffer.len() > 0 { info!("{}", hex_str!(&buffer)); }
 
         Ok(())

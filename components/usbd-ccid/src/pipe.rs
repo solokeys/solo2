@@ -1,6 +1,6 @@
 use core::convert::TryFrom;
 
-use apdu_dispatch::types::ContactInterchange;
+use apdu_dispatch::interchanges;
 use interchange::Requester;
 use interchange::Interchange;
 
@@ -53,7 +53,7 @@ where
     // pub(crate) rpc: TransportEndpoint<'rpc>,
     seq: u8,
     state: State,
-    interchange: Requester<ContactInterchange>,
+    interchange: Requester<interchanges::Contact>,
     sent: usize,
     outbox: Option<RawPacket>,
 
@@ -71,7 +71,7 @@ where
 {
     pub(crate) fn new(
         write: EndpointIn<'static, Bus>,
-        request_pipe: Requester<ContactInterchange>,
+        request_pipe: Requester<interchanges::Contact>,
     ) -> Self {
 
         assert!(MAX_MSG_LENGTH >= PACKET_SIZE);

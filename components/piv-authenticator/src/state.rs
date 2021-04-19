@@ -241,7 +241,6 @@ pub struct Runtime {
     pub currently_selected_application: SelectableAid,
     pub app_security_status: AppSecurityStatus,
     pub command_cache: Option<CommandCache>,
-    pub chained_command: Option<iso7816::Command>,
 }
 
 pub trait Aid {

@@ -1,5 +1,6 @@
 use core::convert::TryFrom;
-use iso7816::{Command, Instruction, Status};
+use iso7816::{Instruction, Status};
+use apdu_dispatch::{Command, response, applet};
 use heapless_bytes::Bytes;
 use hid_dispatch::command::Command as FidoCommand;
 use ctap_types::{
@@ -13,7 +14,6 @@ use crate::cbor::{parse_cbor};
 
 use trussed::client;
 use fido_authenticator::{Authenticator, UserPresence};
-use apdu_dispatch::applet;
 use hid_dispatch::app as hid;
 
 pub struct Fido<UP, T>
@@ -37,40 +37,35 @@ where UP: UserPresence,
         Self { authenticator }
     }
 
-    fn response_from_object<T: serde::Serialize>(&mut self, object: Option<T>) -> applet::Result {
-        let mut buffer = Bytes::new();
-        buffer.resize_to_capacity();
-
+    fn response_from_object<T: serde::Serialize>(&mut self, object: Option<T>, reply: &mut response::Data) -> applet::Result {
+        reply.resize_to_capacity();
         if let Some(object) = object {
-            match cbor_serialize(&object, &mut buffer[1..]) {
+            match cbor_serialize(&object, &mut reply[1..]) {
                 Ok(ser) => {
                     let l = ser.len();
-                    buffer[0] = 0;
-                    buffer.resize_default(l + 1).unwrap();
-                    Ok(applet::Response::Respond(buffer))
+                    reply[0] = 0;
+                    reply.resize_default(l + 1).unwrap();
                 }
                 Err(_) => {
-                    buffer[0] = AuthenticatorError::Other as u8;
-                    buffer.resize_default(1).unwrap();
-                    Ok(applet::Response::Respond(buffer))
+                    reply[0] = AuthenticatorError::Other as u8;
+                    reply.resize_default(1).unwrap();
                 }
             }
         } else {
-            buffer[0] = 0;
-            buffer.resize_default(1).unwrap();
-            Ok(applet::Response::Respond(buffer))
+            reply[0] = 0;
+            reply.resize_default(1).unwrap();
         }
+        Ok(())
     }
 
-    fn call_authenticator(&mut self, request: &AuthenticatorRequest) -> applet::Result {
+    fn call_authenticator(&mut self, request: &AuthenticatorRequest, reply: &mut response::Data) -> applet::Result {
 
         let result = self.authenticator.call(request);
         match &result {
             Err(error) => {
                 info!("error {}", *error as u8);
-                Ok(applet::Response::Respond(Bytes::try_from_slice(
-                    & [*error as u8]
-                ).unwrap()))
+                reply.push(*error as u8).ok();
+                Ok(())
             }
 
             Ok(response) => {
@@ -84,35 +79,35 @@ where UP: UserPresence,
                         use ctap_types::authenticator::ctap2::Response;
                         match response {
                             Response::GetInfo(response) => {
-                                self.response_from_object(Some(response))
+                                self.response_from_object(Some(response), reply)
                             },
 
                             Response::MakeCredential(response) => {
-                                self.response_from_object(Some(response))
+                                self.response_from_object(Some(response), reply)
                             },
 
                             Response::ClientPin(response) => {
-                                self.response_from_object(Some(response))
+                                self.response_from_object(Some(response), reply)
                             },
 
                             Response::GetAssertion(response) => {
-                                self.response_from_object(Some(response))
+                                self.response_from_object(Some(response), reply)
                             },
 
                             Response::GetNextAssertion(response) => {
-                                self.response_from_object(Some(response))
+                                self.response_from_object(Some(response), reply)
                             },
 
                             Response::CredentialManagement(response) => {
-                                self.response_from_object(Some(response))
+                                self.response_from_object(Some(response), reply)
                             },
 
                             Response::Reset => {
-                                self.response_from_object::<()>(None)
+                                self.response_from_object::<()>(None, reply)
                             },
 
                             Response::Vendor => {
-                                self.response_from_object::<()>(None)
+                                self.response_from_object::<()>(None, reply)
                             },
                         }
                     }
@@ -122,10 +117,10 @@ where UP: UserPresence,
     }
 
     #[inline(never)]
-    fn call_authenticator_u2f_with_bytes(&mut self, request: &[u8]) -> applet::Result {
+    fn call_authenticator_u2f_with_bytes(&mut self, request: &mut response::Data) -> applet::Result {
         match &Command::try_from(request) {
             Ok(command) => {
-                self.call_authenticator_u2f(command)
+                self.call_authenticator_u2f(command, request)
             },
             _ => {
                 Err(Status::IncorrectDataParameter)
@@ -134,12 +129,14 @@ where UP: UserPresence,
     }
 
     #[inline(never)]
-    fn call_authenticator_u2f(&mut self, apdu: &Command) -> applet::Result {
+    fn call_authenticator_u2f(&mut self, apdu: &Command, reply: &mut response::Data) -> applet::Result {
         let u2f_command = U2fCommand::try_from(apdu)?;
         let result = self.authenticator.call_u2f(&u2f_command);
         match result {
             Ok(u2f_response) => {
-                Ok(applet::Response::Respond(u2f_response.serialize()))
+                let serialized_u2f_response: Bytes<heapless::consts::U1024> = u2f_response.serialize();
+                reply.extend_from_slice(&serialized_u2f_response).ok();
+                Ok(())
             }
             Err(err)=> Err(err)
         }
@@ -173,16 +170,15 @@ where UP: UserPresence,
 {
 
 
-    fn select(&mut self, _apdu: &Command) -> applet::Result {
+    fn select(&mut self, _apdu: &Command, reply: &mut response::Data) -> applet::Result {
         // U2F_V2
-        Ok(applet::Response::Respond(Bytes::try_from_slice(
-            & [0x55, 0x32, 0x46, 0x5f, 0x56, 0x32,]
-        ).unwrap()))
+        reply.extend_from_slice(& [0x55, 0x32, 0x46, 0x5f, 0x56, 0x32,]).unwrap();
+        Ok(())
     }
 
     fn deselect(&mut self) {}
 
-    fn call(&mut self, _type: applet::InterfaceType, apdu: &Command) -> applet::Result {
+    fn call(&mut self, _type: applet::InterfaceType, apdu: &Command, reply: &mut response::Data) -> applet::Result {
         let instruction = apdu.instruction();
 
         match instruction {
@@ -191,7 +187,7 @@ where UP: UserPresence,
                 match ins {
                     // U2F ins codes
                     0x00 | 0x01 | 0x02 => {
-                        self.call_authenticator_u2f(apdu)
+                        self.call_authenticator_u2f(apdu, reply)
                     }
                     _ => {
                         match FidoCommand::try_from(ins) {
@@ -199,23 +195,22 @@ where UP: UserPresence,
                                 match parse_cbor(apdu.data()) {
                                     Ok(request) => {
                                         info!("parsed cbor");
-                                        self.call_authenticator(&request)
+                                        self.call_authenticator(&request, reply)
                                     }
                                     Err(mapping_error) => {
                                         let authenticator_error: AuthenticatorError = mapping_error.into();
                                         info!("cbor mapping error: {}", authenticator_error as u8);
-                                        Ok(applet::Response::Respond(Bytes::try_from_slice(
-                                        & [authenticator_error as u8]
-                                        ).unwrap()))
+                                        reply.push(authenticator_error as u8).ok();
+                                        Ok(())
                                     }
                                 }
                             }
                             Ok(FidoCommand::Msg) => {
-                                self.call_authenticator_u2f(apdu)
+                                self.call_authenticator_u2f(apdu, reply)
                             }
                             Ok(FidoCommand::Deselect) => {
                                 self.deselect();
-                                Ok(applet::Response::Respond(Default::default()))
+                                Ok(())
                             }
                             _ => {
                                 info!("Unsupported ins for fido app {:02x}", ins);
@@ -263,20 +258,9 @@ where UP: UserPresence,
             hid::Command::Cbor => {
                 match parse_cbor(message) {
                     Ok(request) => {
-                        let response = self.call_authenticator(&request);
-                        match &response {
-                            Ok(applet::Response::Respond(buffer)) => {
-                                message.clear();
-                                message.extend_from_slice(buffer).ok();
-                                // info_now!("response: ").ok();
-                                // blocking::dump_hex(message, message.len()).ok();
-                                Ok(())
-                            }
-                            _ => {
-                                info!("Authenticator ignoring request!");
-                                Err(hid::Error::NoResponse)
-                            }
-                        }
+                        message.clear();
+                        self.call_authenticator(&request, message).ok();
+                        Ok(())
                     }
                     Err(mapping_error) => {
                         let authenticator_error: AuthenticatorError = mapping_error.into();
@@ -291,34 +275,20 @@ where UP: UserPresence,
             },
             // hid::Command::Msg is only other registered command.
             _ => {
-                let response = self.call_authenticator_u2f_with_bytes(message);
-                message.clear();
-                let (response, is_success) = match response {
-                    Ok(applet::Response::Respond(data)) => {
+                let result = self.call_authenticator_u2f_with_bytes(message);
+                match result {
+                    Ok(()) => {
                         info!("U2F response {} bytes", data.len());
-                        (data,true)
+                        // Need to add x9000 success code (normally the apdu-dispatch does this, but
+                        // since u2f uses apdus over hid, we must do it here.)
+                        message.extend_from_slice(&[0x90, 0x00]).ok();
                     },
                     Err(status) => {
-                        let _code: u16 = status.into();
-                        info!("U2F error. {}", _code);
-                        (iso7816::Response::Status(status).into_message(), false)
+                        let code: [u8; 2] = status.into();
+                        info!("U2F error. {}", hex_str!(&code));
+                        message.extend_from_slice(&code).ok();
                     },
-                    _ => {
-                        return Err(hid::Error::NoResponse);
-                    }
-                };
-                // let response = response.into_message();
-                message.extend_from_slice(&response).ok();
-
-                if is_success {
-                    // Need to add x9000 success code (normally the apdu-dispatch does this, but
-                    // since u2f uses apdus over hid, we must do it here.)
-                    message.extend_from_slice(&[0x90, 0x00]).ok();
-                    // blocking::dump_hex(&message, message.len());
-                } else {
-                    info_now!("{}", hex_str!(&message));
                 }
-
                 Ok(())
 
             },

@@ -1,9 +1,8 @@
 use core::convert::TryInto;
-use apdu_dispatch::heapless_bytes::Bytes;
 use hid_dispatch::app::{self as hid, App, Command as HidCommand, Message, Response};
 use hid_dispatch::command::VendorCommand;
-use apdu_dispatch::applet;
-use apdu_dispatch::iso7816::{Command, Status};
+use apdu_dispatch::{Command, response, applet};
+use apdu_dispatch::iso7816::Status;
 use trussed::{
     syscall,
     Client as TrussedClient,
@@ -115,13 +114,13 @@ impl<T> applet::Applet for Root<T>
 where T: TrussedClient
 {
 
-    fn select(&mut self, _apdu: &Command) -> applet::Result {
-        Ok(Default::default())
+    fn select(&mut self, _apdu: &Command, _reply: &mut response::Data) -> applet::Result {
+        Ok(())
     }
 
     fn deselect(&mut self) {}
 
-    fn call(&mut self, interface_type: applet::InterfaceType, apdu: &Command) -> applet::Result {
+    fn call(&mut self, interface_type: applet::InterfaceType, apdu: &Command, reply: &mut response::Data) -> applet::Result {
         let instruction: u8 = apdu.instruction().into();
 
         let command: VendorCommand = instruction.try_into().map_err(|_e| Status::InstructionNotSupportedOrInvalid)?;
@@ -139,33 +138,29 @@ where T: TrussedClient
                     syscall!(self.trussed.reboot(reboot::To::ApplicationUpdate));
                     loop { continue ; }
                 }
-                Err(Status::ConditionsOfUseNotSatisfied)
+                return Err(Status::ConditionsOfUseNotSatisfied);
             }
 
             RNG => {
                 // Random bytes
-                Ok(applet::Response::Respond(
-                    Bytes::try_from_slice(&syscall!(self.trussed.random_bytes(57)).bytes.as_slice()).unwrap()
-                ))
+                reply.extend_from_slice(&syscall!(self.trussed.random_bytes(57)).bytes.as_slice()).ok();
             }
             VERSION => {
                 // Get version
-                Ok(applet::Response::Respond(
-                    Bytes::try_from_slice(&self.version.to_be_bytes()[..]).unwrap()
-                ))
+                reply.extend_from_slice(&self.version.to_be_bytes()[..]).ok();
             }
 
             UUID => {
                 // Get UUID
-                Ok(applet::Response::Respond(
-                    Bytes::try_from_slice(&self.uuid).unwrap()
-                ))
+                reply.extend_from_slice(&self.uuid).ok();
             }
 
             _ => {
-                Err(Status::InstructionNotSupportedOrInvalid)
+                return Err(Status::InstructionNotSupportedOrInvalid);
             }
+        
         }
+        Ok(())
 
     }
 }
