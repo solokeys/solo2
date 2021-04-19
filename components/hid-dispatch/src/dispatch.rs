@@ -22,7 +22,7 @@ impl Dispatch {
     #[inline(never)]
     fn reply_with_request_buffer(&mut self){
         let (_command, message) = self.responder.take_request().unwrap();
-        self.responder.respond(Ok(message)).expect("responder failed");
+        self.responder.respond(&Ok(message)).expect("responder failed");
     }
 
     // Using helper here to take potentially large stack burden off of call chain to application.
@@ -30,7 +30,7 @@ impl Dispatch {
     fn reply_with_error(&mut self, error: Error){
         let (_command, _message) = self.responder.take_request().unwrap();
         self.responder.respond(
-            Err(error)
+            &Err(error)
         ).expect("cant respond");
     }
 
@@ -51,7 +51,7 @@ impl Dispatch {
         apps: &'a mut [&'a mut dyn App],
     ) -> bool {
         if State::Requested == self.responder.state() {
-            let tuple: &mut (Command, Message) = unsafe { self.responder.interchange.as_mut().unwrap().rq_mut() };
+            let tuple: &mut (Command, Message) = unsafe { self.responder.interchange.rq_mut() };
             let command = tuple.0;
             let message = &mut tuple.1;
             let _commandu8: u8 = command.into();
