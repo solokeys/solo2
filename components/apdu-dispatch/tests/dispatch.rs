@@ -1,18 +1,17 @@
 use apdu_dispatch::applet::{
     Applet,
     Aid,
-    Response as AppletResponse,
-    Result as AppletResult,
+    Result as AppletResult
 };
-use apdu_dispatch::types::{
-    ContactlessInterchange,
-    ContactInterchange,
+use apdu_dispatch::{
+    response,
+    command,
+    interchanges,
 };
 use apdu_dispatch::dispatch;
+use apdu_dispatch::{Command,Response};
 use iso7816::{
-    Command,
     Status,
-    command,
 };
 use interchange::Interchange;
 
@@ -50,42 +49,38 @@ impl Aid for TestApp1 {
 // This app echos to Ins code 0x10
 impl Applet for TestApp1 {
 
-    fn select(&mut self, _apdu: &Command) -> AppletResult {
+    fn select(&mut self, _apdu: &Command, _reply: &mut response::Data) -> AppletResult {
         Ok(Default::default())
     }
 
     fn deselect(&mut self) {
     }
 
-    fn call (&mut self, _interface_type: dispatch::InterfaceType, apdu: &Command) -> AppletResult {
+    fn call (&mut self, _interface_type: dispatch::InterfaceType, apdu: &Command, reply: &mut response::Data) -> AppletResult {
         println!("TestApp1::call");
         match apdu.instruction().into() {
             0x10 => {
-                let mut buf = Bytes::new();
                 // Just echo 5x 0's for the request apdu header
-                buf.push(0).unwrap();
-                buf.push(0).unwrap();
-                buf.push(0).unwrap();
-                buf.push(0).unwrap();
-                buf.push(0).unwrap();
-                buf.extend_from_slice(apdu.data()).unwrap();
-                Ok(AppletResponse::Respond(buf))
+                reply.push(0).unwrap();
+                reply.push(0).unwrap();
+                reply.push(0).unwrap();
+                reply.push(0).unwrap();
+                reply.push(0).unwrap();
+                reply.extend_from_slice(apdu.data()).unwrap();
+                Ok(())
             }
             // For measuring the stack burden of dispatch
             0x15 => {
                 let mut buf = Bytes::new();
-                let addr = (&buf as *const iso7816::response::Data ) as u32;
-                buf.extend_from_slice(&addr.to_be_bytes()).unwrap();
-                Ok(AppletResponse::Respond(buf))
+                let addr = (&buf as *const response::Data ) as u32;
+                reply.extend_from_slice(&addr.to_be_bytes()).unwrap();
+                Ok(())
             }
             _ => 
                 Err(Status::InstructionNotSupportedOrInvalid)
         }
     }
 
-    fn poll (&mut self) -> AppletResult {
-        Ok(AppletResponse::Defer)
-    }
 }
 
 pub struct TestApp2 {}
@@ -103,34 +98,30 @@ impl Aid for TestApp2 {
 // This app echos to Ins code 0x20
 impl Applet for TestApp2 {
 
-    fn select(&mut self, _apdu: &Command) -> AppletResult {
+    fn select(&mut self, _apdu: &Command, _reply: &mut response::Data) -> AppletResult {
         Ok(Default::default())
     }
 
     fn deselect(&mut self) {
     }
 
-    fn call (&mut self, _interface_type: dispatch::InterfaceType, apdu: &Command) -> AppletResult {
+    fn call (&mut self, _interface_type: dispatch::InterfaceType, apdu: &Command, reply: &mut response::Data) -> AppletResult {
         println!("TestApp2::call");
         match apdu.instruction().into() {
             0x20 => {
-                let mut buf = Bytes::new();
-                buf.push(0).unwrap();
-                buf.push(0).unwrap();
-                buf.push(0).unwrap();
-                buf.push(0).unwrap();
-                buf.push(0).unwrap();
-                buf.extend_from_slice(apdu.data()).unwrap();
-                Ok(AppletResponse::Respond(buf))
+                reply.push(0).unwrap();
+                reply.push(0).unwrap();
+                reply.push(0).unwrap();
+                reply.push(0).unwrap();
+                reply.push(0).unwrap();
+                reply.extend_from_slice(apdu.data()).unwrap();
+                Ok(())
             },
             _ =>
                 Err(Status::InstructionNotSupportedOrInvalid)
         }
     }
 
-    fn poll (&mut self) -> AppletResult {
-        panic!("Should not have idle polls for TestApp2!");
-    }
 }
 
 pub struct PanicApp {}
@@ -148,7 +139,7 @@ impl Aid for PanicApp{
 // This app should never get selected
 impl Applet for PanicApp {
 
-    fn select(&mut self, _apdu: &Command) -> AppletResult {
+    fn select(&mut self, _apdu: &Command, _reply: &mut response::Data) -> AppletResult {
         panic!("Dont call the panic app");
     }
 
@@ -156,13 +147,10 @@ impl Applet for PanicApp {
         panic!("Dont call the panic app");
     }
 
-    fn call (&mut self, _interface_type: dispatch::InterfaceType, _apdu: &Command) -> AppletResult {
+    fn call (&mut self, _interface_type: dispatch::InterfaceType, _apdu: &Command, _reply: &mut response::Data) -> AppletResult {
         panic!("Dont call the panic app");
     }
 
-    fn poll (&mut self) -> AppletResult {
-        panic!("Dont call the panic app");
-    }
 }
 
 fn run_apdus(
@@ -170,12 +158,12 @@ fn run_apdus(
 ){
     assert!(apdu_response_pairs.len() > 0);
     assert!((apdu_response_pairs.len() & 1) == 0);
-    unsafe { ContactInterchange::reset_claims() };
-    unsafe { ContactlessInterchange::reset_claims() };
-    let (mut contact_requester, contact_responder) = ContactInterchange::claim()
+    unsafe { interchanges::Contact::reset_claims() };
+    unsafe { interchanges::Contactless::reset_claims() };
+    let (mut contact_requester, contact_responder) = interchanges::Contact::claim()
         .expect("could not setup ccid ApduInterchange");
 
-    let (_contactless_requester, contactless_responder) = ContactlessInterchange::claim()
+    let (_contactless_requester, contactless_responder) = interchanges::Contactless::claim()
         .expect("could not setup iso14443 ApduInterchange");
 
     let mut apdu_dispatch = apdu_dispatch::dispatch::ApduDispatch::new(contact_responder, contactless_responder);
@@ -200,7 +188,7 @@ fn run_apdus(
         print!("<< "); 
         dump_hex(&raw_req);
 
-        contact_requester.request(command::Data::try_from_slice(&raw_req).unwrap())
+        contact_requester.request(&interchanges::Data::try_from_slice(&raw_req).unwrap())
             .expect("could not deposit command");
 
         apdu_dispatch.poll(&mut[&mut app0, &mut app1, &mut app2, &mut app3, &mut app4]);
@@ -792,20 +780,20 @@ fn chaining_with_unknown_class_range(){
 #[serial]
 fn check_stack_burden(){
 
-    unsafe { ContactInterchange::reset_claims() };
-    unsafe { ContactlessInterchange::reset_claims() };
+    unsafe { interchanges::Contact::reset_claims() };
+    unsafe { interchanges::Contactless::reset_claims() };
 
-    let (mut contact_requester, contact_responder) = ContactInterchange::claim()
+    let (mut contact_requester, contact_responder) = interchanges::Contact::claim()
         .expect("could not setup ccid ApduInterchange");
 
-    let (_contactless_requester, contactless_responder) = ContactlessInterchange::claim()
+    let (_contactless_requester, contactless_responder) = interchanges::Contactless::claim()
         .expect("could not setup iso14443 ApduInterchange");
 
     let mut apdu_dispatch = apdu_dispatch::dispatch::ApduDispatch::new(contact_responder, contactless_responder);
 
     let mut app1 = TestApp1{};
 
-    contact_requester.request(command::Data::try_from_slice(
+    contact_requester.request(&interchanges::Data::try_from_slice(
         &[0x00u8, 0xA4, 0x04, 0x00, 0x05, 0x0A, 0x01, 0x00, 0x00, 0x01],
     ).unwrap()).expect("could not deposit command");
 
@@ -816,7 +804,7 @@ fn check_stack_burden(){
     print!(">> "); 
     dump_hex(&response);
 
-    contact_requester.request(command::Data::try_from_slice(
+    contact_requester.request(&interchanges::Data::try_from_slice(
         &[0x00u8, 0x15, 0x00, 0x00],
     ).unwrap()).expect("could not deposit command");
 
@@ -829,10 +817,13 @@ fn check_stack_burden(){
 
     let payload: [u8; 4] = [response[0], response[1], response[2], response[3], ];
     let min_stack = u32::from_be_bytes(payload);
-    let max_stack = (&response as *const iso7816::response::Data) as u32;
+    let max_stack = (&response as *const interchanges::Data) as u32;
 
+    // Last checked:
+    // Burden: 43744 bytes with Large apdu for Command & Response, not returning Data.
     println!("Burden: {} bytes", max_stack - min_stack);
 
+    // Uncomment to see stack burden printed out
     // assert!(false);
 
 }
