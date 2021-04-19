@@ -77,7 +77,7 @@ impl delog::Flusher for Flusher {
     }
 }
 
-delog!(Delogger, 2048, Flusher);
+delog!(Delogger, 2*1024, Flusher);
 static FLUSHER: Flusher = Flusher {};
 
 fn validate_cfpa(pfr: &mut Pfr<hal::typestates::init_state::Enabled>) {
@@ -273,7 +273,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     validate_cfpa(&mut pfr);
 
 
-    let (contactless_requester, contactless_responder) = apdu_dispatch::types::ContactlessInterchange::claim()
+    let (contactless_requester, contactless_responder) = apdu_dispatch::interchanges::Contactless::claim()
         .expect("could not setup iso14443 ApduInterchange");
     let mut iso14443 = {
         let token = clocks.support_flexcomm_token().unwrap();
@@ -410,7 +410,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     let mut root_client_id = littlefs2::path::PathBuf::new();
     root_client_id.push(b"root\0".try_into().unwrap());
 
-    let (contact_requester, contact_responder) = apdu_dispatch::types::ContactInterchange::claim()
+    let (contact_requester, contact_responder) = apdu_dispatch::interchanges::Contact::claim()
         .expect("could not setup ccid ApduInterchange");
 
     let (hid_requester, hid_responder) = hid_dispatch::types::HidInterchange::claim()

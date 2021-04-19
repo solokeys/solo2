@@ -131,7 +131,8 @@ impl AuthenticateResponse {
 }
 
 impl Response {
-    pub fn serialize(&self) -> iso7816::response::Data {
+    pub fn serialize<SIZE>(&self) -> iso7816::response::Data<SIZE>
+    where SIZE: heapless_bytes::ArrayLength<u8> {
         let mut buf = iso7816::response::Data::new();
         match self {
             Response::Register(reg) => {
@@ -156,10 +157,10 @@ impl Response {
         }
     }
 }
-
-impl core::convert::TryFrom<&ApduCommand> for Command {
+impl<SIZE> core::convert::TryFrom<&ApduCommand<SIZE>> for Command
+where SIZE: heapless_bytes::ArrayLength<u8> {
     type Error = Error;
-    fn try_from(apdu: &ApduCommand) -> Result<Command> {
+    fn try_from(apdu: &ApduCommand<SIZE>) -> Result<Command> {
         let cla = apdu.class().into_inner();
         let ins = match apdu.instruction() {
             Instruction::Unknown(ins) => ins,

@@ -1,14 +1,11 @@
 // use cortex_m_semihosting::hprintln;
-use heapless_bytes::Bytes;
-
-use crate::constants::*;
 use core::time::Duration;
 
 // pub mod apdu;
 pub mod packet;
 pub mod tlv;
 
-pub type MessageBuffer = Bytes<MAX_MSG_LENGTH_TYPE>;
+pub type MessageBuffer = apdu_dispatch::interchanges::Data;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ClassRequest {

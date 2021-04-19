@@ -2,7 +2,7 @@ use core::convert::TryFrom;
 use core::time::Duration;
 
 use interchange::Requester;
-use apdu_dispatch::types::ContactInterchange;
+use apdu_dispatch::interchanges;
 
 use crate::{
     constants::*,
@@ -33,7 +33,7 @@ where
 {
     pub fn new(
         allocator: &'static UsbBusAllocator<Bus>,
-        request_pipe: Requester<ContactInterchange>,
+        request_pipe: Requester<interchanges::Contact>,
     ) -> Self {
         let read = allocator.bulk(PACKET_SIZE as _);
         let write = allocator.bulk(PACKET_SIZE as _);

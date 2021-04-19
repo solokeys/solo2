@@ -16,12 +16,9 @@ use core::convert::{TryFrom, TryInto};
 
 use heapless::consts;
 use iso7816::{
-    Command, Instruction, Status,
-    response::{
-        Result as ResponseResult,
-        Data as ResponseData,
-    },
+    Instruction, Status,
 };
+use apdu_dispatch::{Command, response};
 #[cfg(feature = "applet")]
 use apdu_dispatch::applet;
 use trussed::client;
@@ -57,7 +54,7 @@ where
         }
     }
 
-    pub fn respond(&mut self, command: &Command) -> ResponseResult {
+    pub fn respond(&mut self, command: &Command, reply: &mut response::Data) -> applet::Result {
 
         // TEMP
         // blocking::dbg!(self.state.persistent(&mut self.trussed).timestamp(&mut self.trussed));
@@ -67,36 +64,6 @@ where
         // - secure messaging not supported
         // - only channel zero supported
         // - ensure INS known to us
-
-        let last_or_only = command.class().chain().last_or_only();
-
-        // TODO: avoid owned copy?
-        let owned_command = match self.state.runtime.chained_command.as_mut() {
-            Some(command_so_far) => {
-                // TODO: make sure the prefix matches, e.g. '00 DB 3F FF'
-                command_so_far.data_mut().extend_from_slice(command.data()).unwrap();
-
-                if last_or_only {
-                    let total_command = command_so_far.clone();
-                    self.state.runtime.chained_command = None;
-                    total_command
-                } else {
-                    return Ok(Default::default());
-                }
-            }
-
-            None => {
-                if last_or_only {
-                    // Command
-                    command.clone()
-                } else {
-                    self.state.runtime.chained_command = Some(command.clone());
-                    return Ok(Default::default());
-                }
-            }
-        };
-
-        let command = &owned_command;
 
         let class = command.class();
 
@@ -117,18 +84,18 @@ where
 
         // info_now!("INS = {:?}" &command.instruction());
         match command.instruction() {
-            Instruction::GetData => self.get_data(command),
+            Instruction::GetData => self.get_data(command, reply),
             Instruction::PutData => self.put_data(command),
             Instruction::Verify => self.verify(command),
             Instruction::ChangeReferenceData => self.change_reference_data(command),
-            Instruction::GeneralAuthenticate => self.general_authenticate(command),
-            Instruction::GenerateAsymmetricKeyPair => self.generate_asymmetric_keypair(command),
+            Instruction::GeneralAuthenticate => self.general_authenticate(command, reply),
+            Instruction::GenerateAsymmetricKeyPair => self.generate_asymmetric_keypair(command, reply),
 
             Instruction::Unknown(ins) => {
 
                 // see if it's a Yubico thing
                 if let Ok(instruction) = YubicoPivExtension::try_from(ins) {
-                    self.yubico_piv_extension(command, instruction)
+                    self.yubico_piv_extension(command, instruction, reply)
                 } else {
                     Err(Status::FunctionNotSupported)
                 }
@@ -166,7 +133,7 @@ where
     // - 9000, 61XX for success
     // - 6982 security status
     // - 6A80, 6A86 for data, P1/P2 issue
-    fn general_authenticate(&mut self, command: &Command) -> ResponseResult {
+    fn general_authenticate(&mut self, command: &Command, reply: &mut response::Data) -> applet::Result {
 
         // For "SSH", we need implement A.4.2 in SP-800-73-4 Part 2, ECDSA signatures
         //
@@ -216,14 +183,14 @@ where
             // "request for witness"
             // hint that this is an attempt to SetManagementKey
             data = &data[2..];
-            return self.request_for_witness(command, data);
+            return self.request_for_witness(command, data, reply);
         }
 
         // step 2 of piv-go/ykAuthenticate
         // https://github.com/go-piv/piv-go/blob/d5ec95eb3bec9c20d60611fb77b7caeed7d886b6/piv/piv.go#L415-L420
         if data.starts_with(&[0x80, 0x08]) {
             data = &data[2..];
-            return self.request_for_challenge(command, data);
+            return self.request_for_challenge(command, data, reply);
         }
 
         // expect '82 00'
@@ -281,15 +248,11 @@ where
         }).unwrap();
         // blocking::dbg!(&der);
 
-        let response_data: ResponseData = der.to_bytes();
-        // blocking::dbg!(&response_data);
-        return Ok(response_data);
-
-        // blocking::dbg!("NOW WE SHOULD WORK");
-        // Err(Status::FunctionNotSupported)
+        reply.extend_from_slice(&der).ok();
+        Ok(())
     }
 
-    fn request_for_challenge(&mut self, command: &Command, remaining_data: &[u8]) -> ResponseResult {
+    fn request_for_challenge(&mut self, command: &Command, remaining_data: &[u8], reply: &mut response::Data) -> applet::Result {
         // - data is of the form
         //     00 87 03 9B 16 7C 14 80 08 99 6D 71 40 E7 05 DF 7F 81 08 6E EF 9C 02 00 69 73 E8
         // - remaining data contains <decrypted challenge> 81 08 <encrypted counter challenge>
@@ -340,12 +303,11 @@ where
             der.raw_tlv(0x82, &encrypted_challenge)
         }).unwrap();
 
-        let response_data: ResponseData = der.to_bytes();
-        // blocking::dbg!(&response_data);
-        return Ok(response_data);
+        reply.extend_from_slice(&der).ok();
+        Ok(())
     }
 
-    fn request_for_witness(&mut self, command: &Command, remaining_data: &[u8]) -> ResponseResult {
+    fn request_for_witness(&mut self, command: &Command, remaining_data: &[u8], reply: &mut response::Data) -> applet::Result {
         // invariants: parsed data was '7C L1 80 00' + remaining_data
 
         if command.p1 != 0x03 || command.p2 != 0x9b {
@@ -371,11 +333,13 @@ where
             der.raw_tlv(0x80, &encrypted_challenge)
         }).unwrap();
 
-        return Ok(der.to_bytes());
+        reply.extend_from_slice(&der).ok();
+
+        Ok(())
 
     }
 
-    fn change_reference_data(&mut self, command: &Command) -> ResponseResult {
+    fn change_reference_data(&mut self, command: &Command) -> applet::Result {
         // The way `piv-go` blocks PUK (which it needs to do because Yubikeys only
         // allow their Reset if PIN+PUK are blocked) is that it sends "change PUK"
         // with random (i.e. incorrect) PUK listed as both old and new PUK.
@@ -419,7 +383,7 @@ where
             self.state.persistent(&mut self.trussed).reset_consecutive_pin_mismatches(&mut self.trussed);
             self.state.persistent(&mut self.trussed).set_pin(&mut self.trussed, new_pin);
             self.state.runtime.app_security_status.pin_verified = true;
-            return Ok(Default::default());
+            return Ok(());
         }
 
         // PUK
@@ -455,14 +419,14 @@ where
             self.state.persistent(&mut self.trussed).reset_consecutive_puk_mismatches(&mut self.trussed);
             self.state.persistent(&mut self.trussed).set_puk(&mut self.trussed, new_puk);
             self.state.runtime.app_security_status.puk_verified = true;
-            return Ok(Default::default());
+            return Ok(());
         }
 
 
         Err(Status::KeyReferenceNotFound)
     }
 
-    fn verify(&mut self, command: &Command) -> ResponseResult {
+    fn verify(&mut self, command: &Command) -> applet::Result {
         // we only implement our own PIN, not global Pin, not OCC data, not pairing code
         if command.p2 != 0x80 {
             return Err(Status::KeyReferenceNotFound);
@@ -481,14 +445,14 @@ where
                 return Err(Status::IncorrectDataParameter);
             } else {
                 self.state.runtime.app_security_status.pin_verified = false;
-                return Ok(Default::default());
+                return Ok(());
             }
         }
 
         // 2) Get retries (or whether verification is even needed) by passing no data
         if p1 == 0x00 && command.data().len() == 0 {
             if self.state.runtime.app_security_status.pin_verified {
-                return Ok(Default::default());
+                return Ok(());
             } else {
                 let retries = self.state.persistent(&mut self.trussed).remaining_pin_retries();
                 return Err(Status::RemainingRetries(retries));
@@ -514,7 +478,7 @@ where
         if self.state.persistent(&mut self.trussed).verify_pin(&sent_pin) {
             self.state.persistent(&mut self.trussed).reset_consecutive_pin_mismatches(&mut self.trussed);
             self.state.runtime.app_security_status.pin_verified = true;
-            Ok(Default::default())
+            Ok(())
 
         } else {
             let remaining = self.state.persistent(&mut self.trussed).increment_consecutive_pin_mismatches(&mut self.trussed);
@@ -523,7 +487,7 @@ where
         }
     }
 
-    fn generate_asymmetric_keypair(&mut self, command: &Command) -> ResponseResult {
+    fn generate_asymmetric_keypair(&mut self, command: &Command, reply: &mut response::Data) -> applet::Result {
         if !self.state.runtime.app_security_status.management_verified {
             return Err(Status::SecurityStatusNotSatisfied);
         }
@@ -639,14 +603,14 @@ where
         // let l2 = 65;
         let l2 = 32;
         let l1 = l2 + 2;
-        let mut data = ResponseData::try_from_slice(&[0x7f, 0x49, l1, 0x86, l2]).unwrap();
-        // data.extend_from_slice(&[0x04]).unwrap();
-        data.extend_from_slice(&serialized_public_key).unwrap();
 
-        Ok(data)
+        reply.extend_from_slice(&[0x7f, 0x49, l1, 0x86, l2]).unwrap();
+        reply.extend_from_slice(&serialized_public_key).unwrap();
+
+        Ok(())
     }
 
-    fn put_data(&mut self, command: &Command) -> ResponseResult {
+    fn put_data(&mut self, command: &Command) -> applet::Result {
         info_now!("PutData");
         if command.p1 != 0x3f || command.p2 != 0xff {
             return Err(Status::IncorrectP1OrP2Parameter);
@@ -700,7 +664,7 @@ where
                 None,
             )).map_err(|_| Status::NotEnoughMemory)?;
 
-            return Ok(Default::default());
+            return Ok(());
         }
 
         if data_object == &[0x5f, 0xc1, 0x05] {
@@ -731,7 +695,7 @@ where
         Err(Status::IncorrectDataParameter)
     }
 
-    fn get_data(&mut self, command: &Command) -> ResponseResult {
+    fn get_data(&mut self, command: &Command, reply: &mut response::Data) -> applet::Result {
         if command.p1 != 0x3f || command.p2 != 0xff {
             return Err(Status::IncorrectP1OrP2Parameter);
         }
@@ -769,13 +733,13 @@ where
         match data {
             DataObjects::DiscoveryObject => {
                 // Err(Status::InstructionNotSupportedOrInvalid)
-                let data = ResponseData::try_from_slice(DISCOVERY_OBJECT).unwrap();
-                Ok(data)
+                let data = response::Data::try_from_slice(DISCOVERY_OBJECT).unwrap();
+                reply.extend_from_slice(&data).ok();
                 // todo!("discovery object"),
             }
 
             DataObjects::BiometricInformationTemplate => {
-                Err(Status::InstructionNotSupportedOrInvalid)
+                return Err(Status::InstructionNotSupportedOrInvalid)
                 // todo!("biometric information template"),
             }
 
@@ -797,7 +761,7 @@ where
                     Ok(())
                 }).unwrap();
 
-                Ok(der.to_bytes())
+                reply.extend_from_slice(&der).ok();
             }
 
             // '5FC1 05' (351B)
@@ -819,34 +783,35 @@ where
 
                 let mut der: Der<consts::U1024> = Default::default();
                 der.raw_tlv(0x53, &data).unwrap();
-                Ok(der.to_bytes())
+                reply.extend_from_slice(&der).ok();
             }
 
             // '5F FF01' (754B)
             YubicoObjects::AttestationCertificate => {
-                let data = ResponseData::try_from_slice(YUBICO_ATTESTATION_CERTIFICATE).unwrap();
-                Ok(data)
+                let data = response::Data::try_from_slice(YUBICO_ATTESTATION_CERTIFICATE).unwrap();
+                reply.extend_from_slice(&data).ok();
             }
 
             _ => return Err(Status::NotFound),
         }
+        Ok(())
     }
 
-    fn yubico_piv_extension(&mut self, command: &Command, instruction: YubicoPivExtension) -> ResponseResult {
+    fn yubico_piv_extension(&mut self, command: &Command, instruction: YubicoPivExtension, reply: &mut response::Data) -> applet::Result {
         info_now!("yubico extension: {:?}", &instruction);
         match instruction {
             YubicoPivExtension::GetSerial => {
                 // make up a 4-byte serial
-                let data = ResponseData::try_from_slice(
+                let data = response::Data::try_from_slice(
                     &[0x00, 0x52, 0xf7, 0x43]).unwrap();
-                Ok(data)
+                reply.extend_from_slice(&data).ok();
             }
 
             YubicoPivExtension::GetVersion => {
                 // make up a version, be >= 5.0.0
-                let data = ResponseData::try_from_slice(
+                let data = response::Data::try_from_slice(
                     &[0x06, 0x06, 0x06]).unwrap();
-                Ok(data)
+                reply.extend_from_slice(&data).ok();
             }
 
             YubicoPivExtension::Attest => {
@@ -857,11 +822,12 @@ where
                 let slot = command.p1;
 
                 if slot == 0x9a {
-                    let data = ResponseData::try_from_slice(YUBICO_ATTESTATION_CERTIFICATE_FOR_9A).unwrap();
-                    return Ok(data);
-                }
+                    let data = response::Data::try_from_slice(YUBICO_ATTESTATION_CERTIFICATE_FOR_9A).unwrap();
+                    reply.extend_from_slice(&data).ok();
+                } else {
 
-                Err(Status::FunctionNotSupported)
+                    return Err(Status::FunctionNotSupported)
+                }
             }
 
             YubicoPivExtension::Reset => {
@@ -887,7 +853,6 @@ where
                     trussed::types::PathBuf::from(b"authentication-key.x5c"),
                 )).ok();
 
-                Ok(Default::default())
             }
 
             YubicoPivExtension::SetManagementKey => {
@@ -918,11 +883,11 @@ where
                 let new_management_key: [u8; 24] = new_management_key.try_into().unwrap();
                 self.state.persistent(&mut self.trussed).set_management_key(&mut self.trussed, &new_management_key);
 
-                Ok(Default::default())
             }
 
-            _ => Err(Status::FunctionNotSupported),
+            _ => return Err(Status::FunctionNotSupported),
         }
+        Ok(())
     }
 
 }
@@ -946,7 +911,7 @@ impl<T> applet::Applet for Authenticator<T>
 where
     T: client::Client + client::Ed255 + client::Tdes
 {
-    fn select(&mut self, _apdu: &Command) -> applet::Result {
+    fn select(&mut self, _apdu: &Command, reply: &mut response::Data) -> applet::Result {
         let mut der: Der<consts::U256> = Default::default();
         der.nested(0x61, |der| {
             // Application identifier of application:
@@ -986,20 +951,15 @@ where
             // })?;
             })
         }).unwrap();
+        
+        reply.extend_from_slice(&der).ok();
 
-        return Ok(applet::Response::Respond(der.to_bytes()));
+        return Ok(());
     }
 
     fn deselect(&mut self) {}
 
-    fn call(&mut self, _type: applet::InterfaceType, apdu: &Command) -> applet::Result {
-        match self.respond(apdu) {
-            Ok(data) => {
-                Ok(applet::Response::Respond(data))
-            }
-            Err(status) => {
-                Err(status)
-            }
-        }
+    fn call(&mut self, _type: applet::InterfaceType, apdu: &Command, reply: &mut response::Data) -> applet::Result {
+        self.respond(apdu, reply)
     }
 }

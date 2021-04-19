@@ -1,7 +1,5 @@
-use iso7816::{Command, Instruction, Status};
-use heapless_bytes::Bytes;
-
-use apdu_dispatch::applet;
+use iso7816::{Instruction, Status};
+use apdu_dispatch::{Command, response, applet};
 
 pub struct NdefApplet<'a>{
     reader: &'a [u8]
@@ -47,13 +45,13 @@ impl<'a> applet::Aid for NdefApplet<'a> {
 
 impl<'a> applet::Applet for NdefApplet<'a> {
 
-    fn select(&mut self, _apdu: &Command) -> applet::Result {
-        Ok(Default::default())
+    fn select(&mut self, _apdu: &Command, _reply: &mut response::Data) -> applet::Result {
+        Ok(())
     }
 
     fn deselect(&mut self) {}
 
-    fn call(&mut self, _type: applet::InterfaceType, apdu: &Command) -> applet::Result {
+    fn call(&mut self, _type: applet::InterfaceType, apdu: &Command, reply: &mut response::Data) -> applet::Result {
         let instruction = apdu.instruction();
         let p1 = apdu.p1;
         let p2 = apdu.p2;
@@ -66,10 +64,10 @@ impl<'a> applet::Applet for NdefApplet<'a> {
 
                 if payload.starts_with(&[0xE1u8, 0x03]) {
                     self.reader = &Self::CAPABILITY_CONTAINER;
-                    Ok(Default::default())
+                    Ok(())
                 } else if payload.starts_with(&[0xE1u8, 0x04]) {
                     self.reader = &Self::NDEF;
-                    Ok(Default::default())
+                    Ok(())
                 } else {
                     Err(Status::NotFound)
                 }
@@ -86,10 +84,9 @@ impl<'a> applet::Applet for NdefApplet<'a> {
                             self.reader.len() - offset
                         }
                     };
-
-                Ok(applet::Response::Respond(Bytes::try_from_slice(
-                    & self.reader[offset .. offset + len_to_read]
-                ).unwrap()))
+                
+                reply.extend_from_slice(& self.reader[offset .. offset + len_to_read]).ok();
+                Ok(())
             }
             _ => {
                 Err(Status::ConditionsOfUseNotSatisfied)

@@ -127,3 +127,13 @@ impl Into<[u8; 2]> for Status {
     }
 }
 
+impl<S> Into<heapless_bytes::Bytes<S>> for Status
+where S: heapless_bytes::ArrayLength<u8>
+{
+    #[inline]
+    fn into(self) -> heapless_bytes::Bytes<S> {
+        let arr: [u8; 2] = self.into();
+        heapless_bytes::Bytes::try_from_slice(&arr).unwrap()
+    }
+}
+

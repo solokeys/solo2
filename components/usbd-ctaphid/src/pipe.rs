@@ -457,7 +457,7 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
 
             _ => {
                 self.interchange.request(
-                    (request.command, heapless_bytes::Bytes::try_from_slice(&self.buffer[..request.length as usize]).unwrap())
+                    &(request.command, heapless_bytes::Bytes::try_from_slice(&self.buffer[..request.length as usize]).unwrap())
                 ).unwrap();
                 self.state = State::WaitingOnAuthenticator(request);
             },
