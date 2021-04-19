@@ -50,6 +50,12 @@ jobs:
           crate: cargo-binutils
           version: latest
           use-tool-cache: true
+      - name: cargo install flip-link
+        uses: actions-rs/install@v0.1
+        with:
+          crate: flip-link
+          version: latest
+          use-tool-cache: true
       - name: Size
         run: cargo size --release --features ${{ matrix.board }}
 

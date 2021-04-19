@@ -1,21 +1,9 @@
-[net]
-git-fetch-with-cli = true
-
-[target.thumbv8m.main-none-eabi]
-# runner = "gdb-multiarch -q -x jlink.gdb"
+[target.'cfg(all(target_arch = "arm", target_os = "none"))']
 runner = "arm-none-eabi-gdb -q -x jlink.gdb"
-# runner = "arm-none-eabi-gdb -q -x pyocd.gdb"
 rustflags = [
+  "-C", "linker=flip-link",
   "-C", "link-arg=-Tlink.x",
 ]
-
-[target.thumbv8m.main-none-eabihf]
-runner = "gdb-multiarch -q -x jlink.gdb"
-rustflags = [
-  "-C", "link-arg=-Tlink.x",
-]
-# flip-link currently results in a broken program
-# "-C", "linker=flip-link"
 
 [build]
 target = "thumbv8m.main-none-eabi"
