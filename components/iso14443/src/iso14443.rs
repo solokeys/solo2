@@ -375,8 +375,8 @@ where
         // let packet = &self.packet;
         self.handle_block(&packet[.. packet_len as usize])?;
 
-        info!(">>");
-        info!("{}", hex_str!(&self.buffer));
+        debug!(">>");
+        debug!("{}", hex_str!(&self.buffer, sep:""));
         // logging::dump_hex(packet, l as usize);
 
         let command = interchanges::Data::try_from_slice(&self.buffer);
@@ -424,7 +424,7 @@ where
                     break;
                 }
                 wtx_wait_attempts += 1;
-                if wtx_wait_attempts > 50 {
+                if wtx_wait_attempts > 150 {
                     info!("no wtx reply, dumping the response.");
                     self.wtx_requested = false;
                     self.interchange.take_response();
@@ -493,11 +493,12 @@ where
     {
         let r = self.device.send( buffer );
         if !r.is_ok() {
+            info!("FM11 not okay!");
             return Err(SourceError::NoActivity);
         }
 
-        info!("<{}< ",buffer.len());
-        if buffer.len() > 0 { info!("{}", hex_str!(&buffer)); }
+        debug!("<{}< ",buffer.len());
+        if buffer.len() > 0 { debug!("{}", hex_str!(&buffer, sep:"")); }
 
         Ok(())
     }
