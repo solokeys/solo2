@@ -1,11 +1,11 @@
 #![allow(non_camel_case_types)]
 use crate::consts;
 
-pub type ATTESTED_CREDENTIAL_DATA_LENGTH = consts::U576;
+pub type ATTESTED_CREDENTIAL_DATA_LENGTH = consts::U612;
 // // not sure why i can't use `::to_usize()` here?
 // pub const ATTESTED_CREDENTIAL_DATA_LENGTH_BYTES: usize = 512;
 
-pub type AUTHENTICATOR_DATA_LENGTH = consts::U612;
+pub type AUTHENTICATOR_DATA_LENGTH = consts::U676;
 // pub const AUTHENTICATOR_DATA_LENGTH_BYTES: usize = 512;
 
 pub type ASN1_SIGNATURE_LENGTH = consts::U77;
