@@ -1,19 +1,11 @@
-use iso7816::{Command, response::Data, Status};
+use iso7816::Status;
+use crate::types::{Command, response};
 
-pub type Result = core::result::Result<Response, Status>;
 
 pub use crate::dispatch::InterfaceType;
 
-pub enum Response {
-    Respond(Data),
-    Defer,
-}
 
-impl Default for Response {
-    fn default() -> Self {
-        Response::Respond(Default::default())
-    }
-}
+pub type Result = core::result::Result<(), Status>;
 
 /// The Aid is used to determine whether or not the App will be selected.
 /// Only `aid()` and `right_truncated_length()` need to be implemented.
@@ -51,7 +43,7 @@ pub trait Applet : Aid {
     /// Given parsed APDU for select command.
     /// Write response data back to buf, and return length of payload.  Return APDU Error code on error.
     /// Alternatively, the app can defer the response until later by returning it in `poll()`.
-    fn select(&mut self, apdu: &Command) -> Result;
+    fn select(&mut self, apdu: &Command, reply: &mut response::Data) -> Result;
 
     /// Deselects the applet. This is the result of another applet getting selected.
     /// Applet should clear any sensitive state and reset security indicators.
@@ -59,11 +51,6 @@ pub trait Applet : Aid {
 
     /// Given parsed APDU for applet when selected.
     /// Write response data back to buf, and return length of payload.  Return APDU Error code on error.
-    fn call(&mut self, interface_type: InterfaceType, apdu: &Command) -> Result;
+    fn call(&mut self, interface_type: InterfaceType, apdu: &Command, reply: &mut response::Data) -> Result;
 
-    /// Called repeatedly for the selected applet.
-    /// Applet could choose to defer a response in `send_recv`, and send a reply later here.
-    fn poll(&mut self) -> Result {
-        Ok(Response::Defer)
-    }
 }
