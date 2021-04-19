@@ -80,7 +80,7 @@ where UP: UserPresence,
        + client::P256
 {
     pub fn get_creds_metadata(&mut self) -> Result<Response> {
-        info_now!("get metadata");
+        info!("get metadata");
         let mut response: ctap2::credential_management::Response =
             Default::default();
 
@@ -132,7 +132,7 @@ where UP: UserPresence,
     }
 
     pub fn first_relying_party(&mut self) -> Result<Response> {
-        info_now!("first rp");
+        info!("first rp");
 
         // rp (0x03): PublicKeyCredentialRpEntity
         // rpIDHash (0x04) : RP ID SHA-256 hash.
@@ -205,7 +205,7 @@ where UP: UserPresence,
     }
 
     pub fn next_relying_party(&mut self) -> Result<Response> {
-        info_now!("next rp");
+        info!("next rp");
 
         let (remaining, last_rp_id_hash) = match self.state.runtime.cache {
             Some(CommandCache::CredentialManagementEnumerateRps(
@@ -289,7 +289,7 @@ where UP: UserPresence,
     }
 
     pub fn first_credential(&mut self, rp_id_hash: &Bytes32) -> Result<Response> {
-        info_now!("first credential");
+        info!("first credential");
 
         self.state.runtime.cache = None;
 
@@ -323,7 +323,7 @@ where UP: UserPresence,
     }
 
     pub fn next_credential(&mut self) -> Result<Response> {
-        info_now!("next credential");
+        info!("next credential");
 
         let (remaining, rp_dir, prev_filename) = match self.state.runtime.cache {
             Some(CommandCache::CredentialManagementEnumerateCredentials(
@@ -447,7 +447,7 @@ where UP: UserPresence,
     )
         -> Result<Response>
     {
-        info_now!("delete credential");
+        info!("delete credential");
         let credential_id_hash = self.hash(&credential_descriptor.id[..]);
         let mut hex = [b'0'; 16];
         super::format_hex(&credential_id_hash[..8], &mut hex);
@@ -476,14 +476,14 @@ where UP: UserPresence,
         )).entry;
 
         if maybe_first_remaining_rk.is_none() {
-            info_now!("deleting parent {:?} as this was its last RK",
+            info!("deleting parent {:?} as this was its last RK",
                       &rp_path);
             syscall!(self.trussed.remove_dir(
                 Location::Internal,
                 rp_path,
             ));
         } else {
-            info_now!("not deleting deleting parent {:?} as there is {:?}",
+            info!("not deleting deleting parent {:?} as there is {:?}",
                       &rp_path,
                       &maybe_first_remaining_rk.unwrap().path(),
                       );
@@ -706,7 +706,7 @@ where UP: UserPresence,
 //     )).entry;
 
 //     if maybe_first_remaining_rk.is_none() {
-//         // info_now!("deleting parent {:?} as this was its last RK",
+//         // info!("deleting parent {:?} as this was its last RK",
 //         //           &rp_path);
 //         syscall!(self.trussed.remove_dir(
 //             Location::Internal,

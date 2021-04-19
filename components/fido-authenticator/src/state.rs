@@ -117,7 +117,6 @@ impl Identity {
         for i in 0 .. 16 {
             aaguid[i] = cert_reader[i]
         }
-
         Some(aaguid)
     }
 
@@ -232,7 +231,7 @@ impl PersistentState {
         )).map_err(|_| Error::Other);
 
         if result.is_err() {
-            info_now!("err loading: {:?}", result.err().unwrap());
+            info!("err loading: {:?}", result.err().unwrap());
             return Err(Error::Other);
         }
 
@@ -241,8 +240,8 @@ impl PersistentState {
         let result = trussed::cbor_deserialize(&data);
 
         if result.is_err() {
-            info_now!("err deser'ing: {:?}", result.err().unwrap());
-            info_now!("{}", hex_str!(&data));
+            info!("err deser'ing: {:?}", result.err().unwrap());
+            info!("{}", hex_str!(&data));
             return Err(Error::Other);
         }
 
@@ -435,7 +434,7 @@ impl RuntimeState {
     pub fn pop_credential_from_heap<T: client::FilesystemClient>(&mut self, trussed: &mut T) -> crate::Credential {
         let max_heap = self.credential_heap();
         let timestamp_hash = max_heap.pop().unwrap();
-        info_now!("{:?} @ {} {:?}", &timestamp_hash.path, timestamp_hash.timestamp, timestamp_hash.location);
+        info!("{:?} @ {} {:?}", &timestamp_hash.path, timestamp_hash.timestamp, timestamp_hash.location);
         let data = syscall!(trussed.read_file(
             timestamp_hash.location,
             timestamp_hash.path.clone(),
