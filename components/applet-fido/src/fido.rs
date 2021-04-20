@@ -1,7 +1,6 @@
 use core::convert::TryFrom;
 use iso7816::{Instruction, Status};
 use apdu_dispatch::{Command, response, applet};
-use heapless_bytes::Bytes;
 use hid_dispatch::command::Command as FidoCommand;
 use ctap_types::{
     authenticator::Error as AuthenticatorError,
@@ -134,8 +133,7 @@ where UP: UserPresence,
         let result = self.authenticator.call_u2f(&u2f_command);
         match result {
             Ok(u2f_response) => {
-                let serialized_u2f_response: Bytes<heapless::consts::U1024> = u2f_response.serialize();
-                reply.extend_from_slice(&serialized_u2f_response).ok();
+                u2f_response.serialize(reply).unwrap();
                 Ok(())
             }
             Err(err)=> Err(err)
