@@ -202,7 +202,7 @@ impl ApduDispatch
     fn parse_apdu<SIZE: heapless_bytes::ArrayLength<u8>>(message: &interchanges::Data)
     -> core::result::Result<iso7816::Command<SIZE>,iso7816::Status> {
 
-        debug!(">> {}", hex_str!(message.as_slice()));
+        debug!(">> {}", hex_str!(message.as_slice(), sep:""));
         match iso7816::Command::try_from(message) {
             Ok(command) => {
                 Ok(command)
@@ -281,7 +281,7 @@ impl ApduDispatch
             }
             RawApduBuffer::Response(res) => {
 
-                if self.was_request_chained {
+                if self.was_request_chained || res.len() > interchanges::SIZE {
 
                     // Send 256 bytes max at a time.
                     let boundary = core::cmp::min(256, res.len());
@@ -455,7 +455,7 @@ impl ApduDispatch
 
     #[inline(never)]
     fn respond(&mut self, message: &interchanges::Data){
-        debug!("<< {}", hex_str!(message.as_slice()));
+        debug!("<<< {}", hex_str!(message.as_slice(), sep:""));
         match self.current_interface {
             InterfaceType::Contactless =>
                 self.contactless.respond(&message).expect("cant respond"),
