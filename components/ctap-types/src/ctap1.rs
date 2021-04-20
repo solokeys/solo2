@@ -131,28 +131,24 @@ impl AuthenticateResponse {
 }
 
 impl Response {
-    pub fn serialize<SIZE>(&self) -> iso7816::response::Data<SIZE>
+    pub fn serialize<SIZE>(&self, buf: &mut iso7816::response::Data<SIZE>) -> core::result::Result<(),()>
     where SIZE: heapless_bytes::ArrayLength<u8> {
-        let mut buf = iso7816::response::Data::new();
         match self {
             Response::Register(reg) => {
-                buf.push(reg.header_byte).unwrap();
-                buf.extend_from_slice(&reg.public_key).unwrap();
-                buf.push(reg.key_handle.len() as u8).unwrap();
-                buf.extend_from_slice(&reg.key_handle).unwrap();
-                buf.extend_from_slice(&reg.attestation_certificate).unwrap();
-                buf.extend_from_slice(&reg.signature).unwrap();
-                buf
+                buf.push(reg.header_byte).ok();
+                buf.extend_from_slice(&reg.public_key).ok();
+                buf.push(reg.key_handle.len() as u8).ok();
+                buf.extend_from_slice(&reg.key_handle).ok();
+                buf.extend_from_slice(&reg.attestation_certificate).ok();
+                buf.extend_from_slice(&reg.signature)
             },
             Response::Authenticate(auth) => {
-                buf.push(auth.user_presence).unwrap();
-                buf.extend_from_slice(&auth.count.to_be_bytes()).unwrap();
-                buf.extend_from_slice(&auth.signature).unwrap();
-                buf
+                buf.push(auth.user_presence).ok();
+                buf.extend_from_slice(&auth.count.to_be_bytes()).ok();
+                buf.extend_from_slice(&auth.signature)
             },
             Response::Version(version) => {
-                buf.extend_from_slice(version).unwrap();
-                buf
+                buf.extend_from_slice(version)
             }
         }
     }
