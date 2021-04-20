@@ -14,36 +14,29 @@ pub type U7609 = <
     U7168 as core::ops::Add<heapless::consts::U441>
  >::Output;
 
-
-#[allow(non_camel_case_types)]
 type U3072 = <
     heapless::consts::U2048 as core::ops::Add<heapless::consts::U1024>
  >::Output;
 
-// The max size that APDU dispatch will buffer chained commands up to.
- #[allow(non_camel_case_types)]
-pub(crate) type LARGE_APDU_SIZE = U7609;
-
-// The max size that will be "transmitted" through the interchanges
- #[allow(non_camel_case_types)]
-pub(crate) type MEDIUM_APDU_SIZE = U3072;
-
 
 pub mod command {
     use super::*;
-    pub type Size = LARGE_APDU_SIZE;
+    pub type Size = U7609;
+    pub const SIZE: usize = 7609;
     pub type Data = iso7816::Bytes<Size>;
 }
 
 pub mod response {
     use super::*;
-    pub type Size = LARGE_APDU_SIZE;
+    pub type Size = U7609;
+    pub const SIZE: usize = 7609;
     pub type Data = iso7816::Bytes<Size>;
 }
 
 pub mod interchanges {
     use super::*;
-    pub type Size = MEDIUM_APDU_SIZE;
+    pub type Size = U3072;
+    pub const SIZE: usize = 3072;
     pub type Data = iso7816::Bytes<Size>;
 
     interchange::interchange! {
