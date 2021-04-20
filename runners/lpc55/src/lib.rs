@@ -77,7 +77,7 @@ impl delog::Flusher for Flusher {
     }
 }
 
-delog!(Delogger, 2*1024, Flusher);
+delog!(Delogger, 32*1024, 3*1024, Flusher);
 static FLUSHER: Flusher = Flusher {};
 
 fn validate_cfpa(pfr: &mut Pfr<hal::typestates::init_state::Enabled>) {
