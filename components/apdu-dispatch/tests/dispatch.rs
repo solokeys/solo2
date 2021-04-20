@@ -20,6 +20,22 @@ use heapless_bytes::Bytes;
 #[macro_use]
 extern crate serial_test;
 
+#[macro_use]
+extern crate delog;
+generate_macros!();
+
+#[derive(Debug)]
+pub struct StdoutFlusher {}
+impl delog::Flusher for StdoutFlusher {
+    fn flush(&self, logs: &str) {
+        print!("{}", logs);
+    }
+}
+
+delog!(Delogger, 25 * 1024, 25 * 1024, StdoutFlusher);
+
+static STDOUT_FLUSHER: StdoutFlusher = StdoutFlusher {};
+
 #[allow(dead_code)]
 enum TestInstruction {
     Echo = 0x10,
@@ -117,6 +133,17 @@ impl Applet for TestApp2 {
                 reply.extend_from_slice(apdu.data()).unwrap();
                 Ok(())
             },
+            0x30 => {
+                // Return 2KB bytes of byte-truncated fibonacci
+                reply.extend_from_slice(&[0,1,1]).unwrap();
+                for i in 3..2048 {
+                    let next = ((reply[i-1] as u32 + reply[i - 2] as u32) & 0xff) as u8;
+                    reply.push(
+                        next
+                    ).unwrap();
+                }
+                Ok(())
+            }
             _ =>
                 Err(Status::InstructionNotSupportedOrInvalid)
         }
@@ -158,6 +185,8 @@ fn run_apdus(
 ){
     assert!(apdu_response_pairs.len() > 0);
     assert!((apdu_response_pairs.len() & 1) == 0);
+
+    Delogger::init_default(delog::LevelFilter::Info, &STDOUT_FLUSHER).ok();
     unsafe { interchanges::Contact::reset_claims() };
     unsafe { interchanges::Contactless::reset_claims() };
     let (mut contact_requester, contact_responder) = interchanges::Contact::claim()
@@ -167,6 +196,7 @@ fn run_apdus(
         .expect("could not setup iso14443 ApduInterchange");
 
     let mut apdu_dispatch = apdu_dispatch::dispatch::ApduDispatch::new(contact_responder, contactless_responder);
+    Delogger::flush();
 
     let mut app0 = PanicApp{};
     let mut app1 = TestApp1{};
@@ -192,6 +222,7 @@ fn run_apdus(
             .expect("could not deposit command");
 
         apdu_dispatch.poll(&mut[&mut app0, &mut app1, &mut app2, &mut app3, &mut app4]);
+        Delogger::flush();
 
         let response = contact_requester.take_response().unwrap();
 
@@ -651,6 +682,120 @@ fn multiple_chained_apdu_1 (){
                 /* 2 */ 1,1,1,1,
                 0x90,0x00
             ],
+        ]
+    )
+}
+
+#[test]
+#[serial]
+fn test_chained_fibonacci_response(){
+
+    let mut expected = response::Data::new();
+    expected.extend_from_slice(&[0,1,1]).unwrap();
+    for i in 3..2048 {
+        let next = ((expected[i-1] as u32 + expected[i - 2] as u32) & 0xff) as u8;
+        expected.push(
+            next
+        ).unwrap();
+    }
+    // expected_reply.extend_from_slice(&[0x90, 0x00]).unwrap();
+    fn apdu_res_chunk(data: &response::Data, start: &mut usize, size: usize) -> response::Data {
+
+        let mut chunk = response::Data::new();
+        let end = *start + size;
+        chunk.extend_from_slice(&data[*start .. end]).unwrap();
+        if data[*start..].len() > 256 {
+            chunk.push(0x61).unwrap();
+
+            if data[end ..].len() > 255 {
+                chunk.push(0).unwrap();
+            } else {
+                chunk.push(data[end..].len() as u8).unwrap();
+            }
+        } else {
+            chunk.push(0x90).unwrap();
+            chunk.push(0x00).unwrap();
+        }
+        *start += size;
+        return chunk;
+    }
+
+    let mut start = 0;
+    let mut start2 = 0;
+
+    run_apdus(
+        &[
+            // Select 2
+            &[0x00u8, 0xA4, 0x04, 0x00, 0x05, 0x0A, 0x01, 0x00, 0x00, 0x02],
+            &[0x90, 0x00u8],
+
+            // Set chaining bit, command to get long fibonacci back
+            &[0x10u8, 0x30, 0x00, 0x00, 0xFF,
+                /*      1             8               16              24              32 */
+                /* 1 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 
+                /* 2 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 
+                /* 3 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 
+                /* 4 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 
+                /* 5 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 
+                /* 6 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 
+                /* 7 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 
+                /* 8 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+            ],
+            &[ 0x90,00 ],
+
+            // Send last command
+            &[0x00u8, 0x30, 0x00, 0x00, 0x20,
+                /*      1             8               16              24              32 */
+                /* 1 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 
+            ],
+            &apdu_res_chunk(&expected, &mut start, 256).as_slice(),
+
+            &[0x00u8, 0xC0, 0x00, 0x00],
+            &apdu_res_chunk(&expected, &mut start, 256).as_slice(),
+
+            &[0x00u8, 0xC0, 0x00, 0x00],
+            &apdu_res_chunk(&expected, &mut start, 256).as_slice(),
+
+            &[0x00u8, 0xC0, 0x00, 0x00],
+            &apdu_res_chunk(&expected, &mut start, 256).as_slice(),
+            &[0x00u8, 0xC0, 0x00, 0x00],
+
+            &apdu_res_chunk(&expected, &mut start, 256).as_slice(),
+            &[0x00u8, 0xC0, 0x00, 0x00],
+            &apdu_res_chunk(&expected, &mut start, 256).as_slice(),
+            &[0x00u8, 0xC0, 0x00, 0x00],
+            &apdu_res_chunk(&expected, &mut start, 256).as_slice(),
+            &[0x00u8, 0xC0, 0x00, 0x00],
+            &apdu_res_chunk(&expected, &mut start, 256).as_slice(),
+
+            // chaining bit, command to get long fibonacci back
+            &[0x10u8, 0x30, 0x00, 0x00, 0x5, 1, 2, 3, 4, 5],
+            &[ 0x90,00 ],
+
+            &[0x00u8, 0x30, 0x00, 0x00, 0x5, 1, 2, 3, 4, 5],
+            &apdu_res_chunk(&expected, &mut start2, 256).as_slice(),
+
+            &[0x00u8, 0xC0, 0x00, 0x00],
+            &apdu_res_chunk(&expected, &mut start2, 256).as_slice(),
+
+            &[0x00u8, 0xC0, 0x00, 0x00],
+            &apdu_res_chunk(&expected, &mut start2, 256).as_slice(),
+
+            &[0x00u8, 0xC0, 0x00, 0x00],
+            &apdu_res_chunk(&expected, &mut start2, 256).as_slice(),
+
+            &[0x00u8, 0xC0, 0x00, 0x00],
+            &apdu_res_chunk(&expected, &mut start2, 256).as_slice(),
+
+            &[0x00u8, 0xC0, 0x00, 0x00],
+            &apdu_res_chunk(&expected, &mut start2, 256).as_slice(),
+
+            &[0x00u8, 0xC0, 0x00, 0x00],
+            &apdu_res_chunk(&expected, &mut start2, 256).as_slice(),
+
+            &[0x00u8, 0xC0, 0x00, 0x00],
+            &apdu_res_chunk(&expected, &mut start2, 256).as_slice(),
+
         ]
     )
 }
