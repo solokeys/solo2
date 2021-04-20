@@ -493,7 +493,7 @@ where
         if !self.outbox.is_none() {
             // Previous transaction will fail, but we'll be ready for new transactions.
             self.state = State::Idle;
-            info_now!("overwriting last session..");
+            info!("overwriting last session..");
         }
         self.outbox = Some(packet);
 
