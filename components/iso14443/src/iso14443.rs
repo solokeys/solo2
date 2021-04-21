@@ -84,17 +84,17 @@ impl Block {
     }
 }
 
+/// Iso14443 device follows related rules for PICC in iso14443-4.
+/// Rules C - E and rules 9 - 13.
 pub struct Iso14443<DEV: nfc::Device> {
     device: DEV,
 
     state: Iso14443State,
 
-    // May need to retransmit ack/Rblock to PCD
-    last_iblock_recv: Option<Block>,
-    // Used to see if PCD needs to have a iblock retransmitted
-    last_rblock_recv: Option<Block>,
-    // Used to set the new block_num on transmitted blocks
-    last_block_num_recv: Option<bool>,
+    cid: Option<u8>,
+
+    // Current block number for PICC
+    block_num: bool,
     // Used to see if wtx was accepted or not
     wtx_requested: bool,
 
@@ -111,11 +111,10 @@ where
         Self {
             device: device,
             state: Iso14443State::Receiving,
+            cid: None,
 
             wtx_requested: false,
-            last_iblock_recv: None,
-            last_rblock_recv: None,
-            last_block_num_recv: None,
+            block_num: true,
 
             buffer: Bytes::new(),
 
@@ -123,33 +122,15 @@ where
         }
     }
 
-    fn ack(&mut self, block: Block) {
+    fn ack(&mut self) {
         let mut packet = [0u8; 3];
-        let length = match block {
-            Block::IBlock(block_num, _nad, cid, _chaining, _offset) => {
-                let header = 0xA0u8 | (block_num as u8);
-                packet[0] = header;
-                if let Some(cid) = cid {
-                    packet[0] |= 0x08;
-                    packet[1] = cid;
-                    2
-                } else {
-                    1
-                }
-            }
-            Block::RBlock(block_num, cid, _ack, offset) => {
-                let header = 0xA0u8 | (block_num as u8);
-                packet[0] = header;
-                if let Some(cid) = cid {
-                    packet[0] |= 0x08;
-                    packet[1] = cid;
-                }
-                offset
-            }
-            _ => {
-                panic!("Can only ack I or R blocks.");
-            }
-        };
+        let mut length = 1;
+        packet[0] = 0xA2u8 | (self.block_num as u8);
+        if let Some(cid) = self.cid {
+            packet[0] |= 0x08;
+            packet[1] = cid;
+            length += 1;
+        }
 
         self.device.send(
             & packet[0 .. length]
@@ -157,10 +138,11 @@ where
     }
 
     fn send_wtx(&mut self) {
-        match self.last_iblock_recv.as_ref() {
-            Some(Block::IBlock(_block_num, _nad, Some(cid), _chaining, _offset)) => {
+        // Rule 9. The PICC is allowed to send an S(WTX) block instead of an I-block or an R(ACK) block.
+        match self.cid {
+            Some(cid) => {
                 self.device.send(
-                    &[0xfa, *cid, 0x01]
+                    &[0xfa, cid, 0x01]
                 ).ok();
             }
             _ => {
@@ -176,7 +158,7 @@ where
     fn handle_block(&mut self, packet: &[u8]) -> Result<(), SourceError> {
         let block_header = Block::new(packet);
         match block_header {
-            Block::IBlock(block_num, _nad, _cid, chaining, offset) => {
+            Block::IBlock(_block_num, _nad, _cid, chaining, offset) => {
 
                 if self.state != Iso14443State::Receiving {
                     self.buffer.clear();
@@ -185,82 +167,93 @@ where
 
                 self.buffer.extend_from_slice(& packet[offset .. ]).ok();
 
-                self.last_iblock_recv = Some(block_header);
-                self.last_block_num_recv = Some(block_num);
+                // Rule D. When an I-block is received (independent of its block number),
+                // the PICC shall toggle its block number before sending a block.
+                self.block_num = !self.block_num;
 
                 if chaining {
-                    self.ack(block_header);
+                    self.ack();
                     Err(SourceError::NoActivity)
                 } else {
+                    // Rule 10. When an I-block not indicating chaining is received,
+                    // the block shall be acknowledged by an I-block.
                     self.wtx_requested = false;
                     Ok(())
                 }
 
             }
             Block::RBlock(block_num, _cid, ack, _offset) => {
-                if ack {
 
-                    let duplicate_rblock = Some(block_num) == self.last_block_num_recv;
-                    self.last_rblock_recv = Some(block_header);
-                    self.last_block_num_recv = Some(block_num);
+                // Rule 11. When an R(ACK) or an R(NAK) block is received,
+                // if its block number is equal to the PICC’s current block
+                // number, the last block shall be re-transmitted.
+                if block_num == self.block_num {
+                    match self.state.clone() {
+                        Iso14443State::Transmitting(last_frame_range, _remaining_data_range) => {
+                            info!("Retransmission requested..");
+                            self.send_frame(
+                                &Bytes::try_from_slice(
+                                    &self.buffer[last_frame_range]
+                                ).unwrap()
+                            ).ok();
+                        }
+                        _ => {
+                            info!("No recent transmissions! NAK");
+
+                        }
+                    }
+                    return Err(SourceError::NoActivity);
+                } else if !ack {
+                    // Rule 12. When an R(NAK) block is received,
+                    // if its block number is not equal to the PICC’s
+                    // current block number, an R(ACK) block shall be sent.
+                    info!("pong");
+                    self.ack();
+                    return Err(SourceError::NoActivity);
+                } else {
+
+                    // Rule 13. When an R(ACK) block is received, 
+                    // if its block number is not equal to the PICC’s current block number,
+                    // and the PICC is in chaining, chaining shall be continued.
 
                     match self.state.clone() {
-                        Iso14443State::Transmitting(last_frame_range, remaining_data_range) => {
-                            if duplicate_rblock {
-                                info!("Duplicate rblock, retransmitting");
-                                self.send_frame(
-                                    &Bytes::try_from_slice(
-                                        &self.buffer[last_frame_range]
-                                    ).unwrap()
-                                ).ok();
-                            } else {
+                        Iso14443State::Transmitting(_last_frame_range, remaining_data_range) => {
+                                // Rule E. When an R(ACK) block with a block number not equal
+                                // to the current PICC’s block number is received, the
+                                // PICC shall toggle its block number before sending a block.
+                                self.block_num = !self.block_num;
+
                                 if remaining_data_range.len() == 0 {
                                     info!("Error, recieved ack when this is no more data.");
-                                    self.ack(block_header);
+                                    self.ack();
                                     self.reset_state();
                                     return Err(SourceError::NoActivity);
                                 }
-                                if let Some(last_rblock_recv) = self.last_rblock_recv {
-                                    let msg = &self.buffer[remaining_data_range.clone()];
-                                    let (next_frame, data_used) = self.construct_iblock(
-                                        last_rblock_recv, msg
-                                    );
-                                    self.send_frame(&next_frame).ok();
-                                    if data_used != remaining_data_range.len() {
-                                        info!("Next frame");
-                                        self.state = Iso14443State::Transmitting(
-                                            remaining_data_range.start .. remaining_data_range.start + data_used,
-                                            remaining_data_range.start + data_used .. self.buffer.len(),
-                                        )
-                                    } else {
-                                        info!("Last frame sent!");
-                                        self.state = Iso14443State::Transmitting(
-                                            remaining_data_range.start .. remaining_data_range.start + data_used,
-                                            self.buffer.len() .. self.buffer.len()
-                                        )
-                                    }
-
+                                let msg = &self.buffer[remaining_data_range.clone()];
+                                let (next_frame, data_used) = self.construct_iblock(msg);
+                                self.send_frame(&next_frame).ok();
+                                if data_used != remaining_data_range.len() {
+                                    info!("Next frame");
+                                    self.state = Iso14443State::Transmitting(
+                                        remaining_data_range.start .. remaining_data_range.start + data_used,
+                                        remaining_data_range.start + data_used .. self.buffer.len(),
+                                    )
                                 } else {
-                                    info!("Session has been reset.");
-                                    self.state = Iso14443State::Receiving;
+                                    info!("Last frame sent!");
+                                    self.state = Iso14443State::Transmitting(
+                                        remaining_data_range.start .. remaining_data_range.start + data_used,
+                                        self.buffer.len() .. self.buffer.len()
+                                    )
                                 }
-                            }
+
                         }
                         _ => {
                             // (None, Iso14443State::Idle)
                             info!("Unexpected Rblock ack");
-                            self.ack(block_header);
+                            self.ack();
                         }
                     };
 
-                } else {
-                    if let Some(last_iblock_recv) = self.last_iblock_recv {
-                        self.ack(last_iblock_recv);
-                        info!("Ack last iblock");
-                    } else {
-                        self.ack(block_header);
-                        info!("Ack ping");
-                    }
                 }
                 Err(SourceError::NoActivity)
             }
@@ -288,38 +281,20 @@ where
         func(&mut self.device);
     }
 
-    fn construct_iblock(&self, last_recv_block: Block, data: &[u8]) -> (Iso14443Frame, usize) {
+    fn construct_iblock(&self, data: &[u8]) -> (Iso14443Frame, usize) {
         // iblock header
         let mut frame = Iso14443Frame::new();
         frame.push(0).ok();
+        let mut header_length = 1;
+        
+        frame[0] = 0x02u8 | (self.block_num as u8);
 
-        let header_length = match last_recv_block {
-            Block::IBlock(block_num, nad, cid, _chaining, offset) => {
-                frame[0] = 0x02u8 | (block_num as u8);
-                if let Some(cid) = cid {
-                    frame[0]|= 0x08;
-                    frame.push(cid).ok();
-                }
-                if let Some(nad) = nad {
-                    frame[0]|= 0x04;
-                    frame.push(nad).ok();
-                }
-                offset
-            }
-            Block::RBlock(block_num, cid, _ack, offset) => {
-                frame[0] = 0x02u8 | (block_num as u8);
-                if let Some(cid) = cid {
-                    frame[0]|= 0x08;
-                    frame.push(cid).ok();
-                }
-                offset
-            }
-            _ => {
-                info!("Can only send iblock in reply to I or R blocks! Pretending it's an rblock..");
-                frame[0] = 0x02u8;
-                1
-            }
-        };
+        if let Some(cid) = self.cid {
+            frame.push(cid).ok();
+            frame[0]|= 0x08;
+            header_length += 1;
+        }
+
         // minus 2 to leave room for crc
         let frame_size: usize = self.device.frame_size() - 2;
         let payload_len = core::cmp::min(frame_size - header_length, data.len());
@@ -337,9 +312,9 @@ where
     fn reset_state(&mut self) {
         self.buffer.clear();
         self.state = Iso14443State::Receiving;
-        self.last_iblock_recv = None;
-        self.last_rblock_recv = None;
-        self.last_block_num_recv = None;
+        self.cid = None;
+        // Rule C. The PICC block number shall be initialized to 1 at activation.
+        self.block_num = true;
         info!("state reset.");
     }
 
@@ -347,8 +322,6 @@ where
     fn check_for_apdu(&mut self) -> Result<(), SourceError> {
         let mut packet = MaybeUninit::<[u8; 256]>::uninit();
         let packet = unsafe { &mut *packet.as_mut_ptr() };
-        // let mut _packet = [0u8; 256];
-        // let packet = &mut _packet;
 
         let res = self.device.read(packet);
         let packet_len = match res {
@@ -392,17 +365,12 @@ where
                 Err(SourceError::NoActivity)
             }
         } else {
-            if let Some(last_iblock_recv) = self.last_iblock_recv {
-                let (frame, _) = self.construct_iblock(
-                    last_iblock_recv,
-                    // UnspecifiedCheckingError
-                    &[0x6F, 0x00]
-                );
+            let (frame, _) = self.construct_iblock(
+                // UnspecifiedCheckingError
+                &[0x6F, 0x00]
+            );
 
-                self.send_frame( &frame )?;
-            } else {
-                info!("Session dropped.  This shouldn't happen.");
-            }
+            self.send_frame( &frame )?;
             Err(SourceError::NoActivity)
         }
     }
@@ -434,9 +402,9 @@ where
 
 
             if let Some(msg) = self.interchange.take_response() {
-                if let Some(last_iblock_recv) = self.last_iblock_recv {
+                // if let Some(last_iblock_recv) = self.last_iblock_recv {
                     info!("send!");
-                    let (frame, data_used) = self.construct_iblock(last_iblock_recv, &msg);
+                    let (frame, data_used) = self.construct_iblock(&msg);
                     self.send_frame(
                         &frame
                     ).ok();
@@ -448,9 +416,9 @@ where
                             data_used .. self.buffer.len()
                         );
                     }
-                } else {
-                    info!("session was dropped! dropping response.");
-                }
+                // } else {
+                    // info!("session was dropped! dropping response.");
+                // }
             }
             Iso14443Status::Idle
         } else {
@@ -493,7 +461,7 @@ where
     {
         let r = self.device.send( buffer );
         if !r.is_ok() {
-            info!("FM11 not okay!");
+            // o!("FM11 not okay!");
             return Err(SourceError::NoActivity);
         }
 
