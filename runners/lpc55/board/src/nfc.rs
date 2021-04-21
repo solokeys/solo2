@@ -100,7 +100,9 @@ pub fn try_setup(
             tl: 0x05,
             // (x[7:4], FSDI[3:0]) . FSDI[2] == 32 byte frame, FSDI[8] == 256 byte frame, 7==128byte
             t0: 0x78,
-            ta: 0xf7,
+            // Support different data rates for both directions
+            // Support divisor 2 / 212kbps for tx and rx
+            ta: 0b10010001,
             // (FWI[b4], SFGI[b4]), (256 * 16 / fc) * 2 ^ value
             tb: 0x78,
             tc: 0x00,
