@@ -70,8 +70,8 @@ where
         &mut self.pipe
     }
 
-    pub fn check_timeout(&mut self, ms_since_last_check: u32) {
-        self.pipe.check_timeout(ms_since_last_check);
+    pub fn check_timeout(&mut self, milliseconds: u32) {
+        self.pipe.check_timeout(milliseconds);
     }
 
     /// Read response from application (if any) and start writing it to

@@ -25,5 +25,14 @@ impl UsbClasses {
     pub fn new(usbd: Usbd, ccid: CcidClass, ctaphid: CtapHidClass, serial: SerialClass) -> Self {
         Self{ usbd, ccid, ctaphid, serial }
     }
+    pub fn poll(&mut self) {
+        self.ctaphid.check_for_app_response();
+        self.ccid.check_for_app_response();
+        self.usbd.poll(&mut [
+            &mut self.ccid, 
+            &mut self.ctaphid, 
+            &mut self.serial,
+        ]);
+    }
 }
 

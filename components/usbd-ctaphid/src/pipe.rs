@@ -371,10 +371,9 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
         }
     }
 
-    pub fn check_timeout(&mut self, ms_since_last_check: u32) {
+    pub fn check_timeout(&mut self, milliseconds: u32) {
         // At any point the RP application could crash or something,
         // so its up to the device to timeout those transactions.
-        let milliseconds = ms_since_last_check + self.last_milliseconds;
         self.last_milliseconds = milliseconds;
         match self.state {
             State::Receiving((request, _message_state)) => {
@@ -382,7 +381,6 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
                 if (milliseconds > request.timestamp && (milliseconds - request.timestamp) > 600)
                 || (milliseconds < request.timestamp && milliseconds > 600)
                 {
-                    info!("Channel timeout.");
                     self.start_sending_error(request, AuthenticatorError::Timeout);
                 } else {
                 }

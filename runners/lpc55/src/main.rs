@@ -47,7 +47,7 @@ const APP: () = {
         hw_scheduler: app::types::HwScheduler,
     }
 
-    #[init(schedule = [update_ui, check_hid_timeouts])]
+    #[init(schedule = [update_ui])]
     fn init(c: init::Context) -> init::LateResources {
 
         let (
@@ -74,10 +74,6 @@ const APP: () = {
             hal::enable_cycle_counter();
             c.schedule.update_ui(Instant::now() + PERIOD.cycles()).unwrap();
 
-            let millis = usbd_ctaphid::constants::MAX_TIMEOUT_PERIOD.as_millis() as u32;
-            c.schedule.check_hid_timeouts(
-                Instant::now() + (CLOCK_FREQ/1_000 * millis).cycles()
-            ).unwrap();
         }
 
         init::LateResources {
@@ -101,7 +97,7 @@ const APP: () = {
         }
     }
 
-    #[idle(resources = [apdu_dispatch, hid_dispatch, ndef, piv, totp, fido, root, perf_timer])]
+    #[idle(resources = [apdu_dispatch, hid_dispatch, ndef, piv, totp, fido, root, perf_timer, usb_classes], schedule = [ccid_wait_extension])]
     fn idle(c: idle::Context) -> ! {
         let idle::Resources {
             apdu_dispatch,
@@ -112,8 +108,11 @@ const APP: () = {
             fido,
             root,
             mut perf_timer,
+            mut usb_classes,
         }
             = c.resources;
+        
+        let schedule = c.schedule;
 
         info_now!("inside IDLE");
         loop {
@@ -144,6 +143,25 @@ const APP: () = {
                 rtic::pend(USB_INTERRUPT);
             }
 
+            usb_classes.lock(|usb_classes_maybe|{
+                if usb_classes_maybe.is_some() {
+
+                    let usb_classes = usb_classes_maybe.as_mut().unwrap();
+                    
+                    usb_classes.ctaphid.check_timeout(time/1000);
+                    usb_classes.poll();
+
+                    match usb_classes.ccid.did_start_processing() {
+                        usbd_ccid::types::Status::ReceivedData(duration) => {
+                            schedule.ccid_wait_extension(
+                                Instant::now() + (CLOCK_FREQ/1_000_000 * (duration.as_micros() as u32)).cycles()
+                            ).ok();
+                        }
+                        _ => {}
+                    }
+                }
+            });
+
         }
     }
 
@@ -161,9 +179,7 @@ const APP: () = {
         let usb_classes = c.resources.usb_classes.as_mut().unwrap();
 
         //////////////
-        usb_classes.ctaphid.check_for_app_response();
-        usb_classes.ccid.check_for_app_response();
-        usb_classes.usbd.poll(&mut [&mut usb_classes.ccid, &mut usb_classes.ctaphid, &mut usb_classes.serial]);
+        usb_classes.poll();
 
         match usb_classes.ccid.did_start_processing() {
             usbd_ccid::types::Status::ReceivedData(duration) => {
@@ -199,19 +215,7 @@ const APP: () = {
             // usb.intstat.write(|w| unsafe{ w.bits( usb.intstat.read().bits() ) });
         }
 
-    }
 
-    /// Need to periodically trim stale sessions (if any) for ctaphid.
-    #[task(resources = [usb_classes], schedule = [check_hid_timeouts], priority = 6)]
-    fn check_hid_timeouts(c: check_hid_timeouts::Context) {
-        // check
-        let millis = usbd_ctaphid::constants::MAX_TIMEOUT_PERIOD.as_millis() as u32;
-        c.resources.usb_classes.as_mut().unwrap().ctaphid.check_timeout(millis);
-
-        // reschedule
-        c.schedule.check_hid_timeouts(
-            Instant::now() + (CLOCK_FREQ/1_000 * millis).cycles()
-        ).unwrap();
     }
 
     /// Whenever we start waiting for an application to reply to CCID, this must be scheduled.
