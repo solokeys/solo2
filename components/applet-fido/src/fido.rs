@@ -116,10 +116,11 @@ where UP: UserPresence,
     }
 
     #[inline(never)]
-    fn call_authenticator_u2f_with_bytes(&mut self, request: &mut response::Data) -> applet::Result {
-        match &Command::try_from(request) {
+    fn call_authenticator_u2f_with_bytes(&mut self, request_and_reply: &mut response::Data) -> applet::Result {
+        match &Command::try_from(request_and_reply) {
             Ok(command) => {
-                self.call_authenticator_u2f(command, request)
+                request_and_reply.clear();
+                self.call_authenticator_u2f(command, request_and_reply)
             },
             _ => {
                 Err(Status::IncorrectDataParameter)
