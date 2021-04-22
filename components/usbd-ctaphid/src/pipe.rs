@@ -374,15 +374,24 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
     pub fn check_timeout(&mut self, milliseconds: u32) {
         // At any point the RP application could crash or something,
         // so its up to the device to timeout those transactions.
+        let last = self.last_milliseconds;
         self.last_milliseconds = milliseconds;
-        match self.state {
+        match &mut self.state {
             State::Receiving((request, _message_state)) => {
+                if (milliseconds - last) > 200 {
+                    // If there's a lapse in `check_timeout(...)` getting called (e.g. due to logging),
+                    // this could lead to inaccurate timestamps on requests.  So we'll
+                    // just "forgive" requests temporarily if this happens.
+                    debug!("lapse in hid check.. {} {} {}", request.timestamp, milliseconds, last);
+                    request.timestamp = milliseconds;
+                }
                 // compare keeping in mind of possible overflow in timestamp.
-                if (milliseconds > request.timestamp && (milliseconds - request.timestamp) > 600)
-                || (milliseconds < request.timestamp && milliseconds > 600)
+                else if (milliseconds > request.timestamp && (milliseconds - request.timestamp) > 550)
+                || (milliseconds < request.timestamp && milliseconds > 550)
                 {
-                    self.start_sending_error(request, AuthenticatorError::Timeout);
-                } else {
+                    debug!("Channel timeout. {}, {}, {}", request.timestamp, milliseconds, last);
+                    let req = *request;
+                    self.start_sending_error(req, AuthenticatorError::Timeout);
                 }
             }
             _ => { }
