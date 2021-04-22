@@ -15,6 +15,7 @@ pub type COSE_KEY_LENGTH = consts::U256;
 // pub const COSE_KEY_LENGTH_BYTES: usize = 256;
 
 pub type MAX_CREDENTIAL_ID_LENGTH = consts::U512;
+pub const MAX_CREDENTIAL_ID_LENGTH_VALUE : usize = 512;
 pub type MAX_CREDENTIAL_COUNT_IN_LIST = consts::U10;
 pub const MAX_CREDENTIAL_COUNT_IN_LIST_VALUE:usize = 10;
 

@@ -149,10 +149,10 @@ impl Identity {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
-pub enum CommandCache {
-    CredentialManagementEnumerateRps(u32, Bytes32),
-    CredentialManagementEnumerateCredentials(u32, PathBuf, PathBuf),
-}
+pub struct CredentialManagementEnumerateRps(pub u32, pub Bytes32);
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+pub struct CredentialManagementEnumerateCredentials(pub u32, pub PathBuf, pub PathBuf);
 
 #[derive(Clone, Debug, /*uDebug,*/ Default, /*PartialEq,*/ serde::Deserialize, serde::Serialize)]
 pub struct ActiveGetAssertionData {
@@ -176,7 +176,8 @@ pub struct RuntimeState {
     credentials: Option<MaxCredentialHeap>,
     pub active_get_assertion: Option<ActiveGetAssertionData>,
     channel: Option<u32>,
-    pub cache: Option<CommandCache>,
+    pub cache_rp: Option<CredentialManagementEnumerateRps>,
+    pub cache_rk: Option<CredentialManagementEnumerateCredentials>,
 }
 
 // TODO: Plan towards future extensibility

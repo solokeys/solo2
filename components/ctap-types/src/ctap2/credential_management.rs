@@ -11,6 +11,27 @@ use crate::{
     }
 };
 
+ #[derive(Copy,Clone,Debug, Eq,PartialEq,Serialize_repr,Deserialize_repr)]
+// #[derive(Clone,Debug,Eq,PartialEq,Serialize, Deserialize)]
+// #[serde(tag = "credProtect")]
+#[repr(u8)]
+pub enum CredentialProtectionPolicy {
+    // #[serde(rename = "userVerificationOptional")]
+    Optional = 1,
+    // #[serde(rename = "userVerificationOptionalWithCredentialIDList")] // <-- len = 44
+    OptionalWithCredentialIdList = 2,
+    // #[serde(rename = "userVerificationRequired")]
+    Required = 3,
+}
+
+impl core::default::Default for CredentialProtectionPolicy {
+    fn default() -> Self {
+        CredentialProtectionPolicy::Optional
+    }
+}
+
+
+
 #[derive(Clone,Copy,Debug, Eq,PartialEq,Serialize_repr,Deserialize_repr)]
 #[repr(u8)]
 pub enum Subcommand  {
@@ -93,5 +114,5 @@ pub struct Response {
     pub total_credentials: Option<u32>,
     // 0x0A
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub cred_protect: Option<u8>,
+    pub cred_protect: Option<CredentialProtectionPolicy>,
 }
