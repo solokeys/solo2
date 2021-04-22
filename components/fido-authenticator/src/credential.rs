@@ -10,7 +10,7 @@ use trussed::{
 pub(crate) use ctap_types::{
     Bytes, Bytes32, consts, String, Vec,
     // authenticator::{ctap1, ctap2, Error, Request, Response},
-    ctap2::make_credential::CredentialProtectionPolicy,
+    ctap2::credential_management::CredentialProtectionPolicy,
     sizes::*,
     webauthn::PublicKeyCredentialDescriptor,
 };

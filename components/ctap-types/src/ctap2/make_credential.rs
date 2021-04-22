@@ -2,33 +2,14 @@ use crate::{Bytes, consts, String, Vec};
 
 use serde::{Deserialize, Serialize};
 use serde_indexed::{DeserializeIndexed, SerializeIndexed};
-use serde_repr::{Deserialize_repr, Serialize_repr};
 
 use super::{AuthenticatorOptions, PinAuth};
 use crate::sizes::*;
 use crate::webauthn::*;
+use crate::ctap2::credential_management::CredentialProtectionPolicy;
 
 // // Approach 1:
 // pub type AuthenticatorExtensions = heapless::LinearMap<String<consts::U11>, bool, consts::U2>;
-
- #[derive(Copy,Clone,Debug, Eq,PartialEq,Serialize_repr,Deserialize_repr)]
-// #[derive(Clone,Debug,Eq,PartialEq,Serialize, Deserialize)]
-// #[serde(tag = "credProtect")]
-#[repr(u8)]
-pub enum CredentialProtectionPolicy {
-    // #[serde(rename = "userVerificationOptional")]
-    Optional = 1,
-    // #[serde(rename = "userVerificationOptionalWithCredentialIDList")] // <-- len = 44
-    OptionalWithCredentialIdList = 2,
-    // #[serde(rename = "userVerificationRequired")]
-    Required = 3,
-}
-
-impl core::default::Default for CredentialProtectionPolicy {
-    fn default() -> Self {
-        CredentialProtectionPolicy::Optional
-    }
-}
 
 // impl core::convert::TryFrom<&String<consts::U44>> for CredentialProtectionPolicy {
 //     type Error = crate::authenticator::Error;

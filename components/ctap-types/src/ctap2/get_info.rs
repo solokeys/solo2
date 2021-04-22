@@ -36,18 +36,17 @@ pub struct Response {
     pub pin_protocols: Option<Vec<u8, consts::U1>>,
 
     // 0x07
-    // only in FIDO_2_1_PRE, see https://git.io/JeNxG
+    // FIDO_2_1
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_creds_in_list: Option<usize>,
 
     // 0x08
-    // only in FIDO_2_1_PRE, see https://git.io/JeNxG
+    // FIDO_2_1
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_cred_id_length: Option<usize>,
 
     // 0x09
-    // only in FIDO_2_1_PRE, see https://git.io/JeNxG
-    // can be: usb, nfc, ble, internal
+    // FIDO_2_1
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transports: Option<Vec<Bytes<consts::U8>, consts::U4>>,
 

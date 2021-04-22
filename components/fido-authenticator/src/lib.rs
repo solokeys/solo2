@@ -769,7 +769,10 @@ where UP: UserPresence,
 
                 // check pinAuth
                 let pin_token = self.state.runtime.pin_token(&mut self.trussed);
-                let mut data: Bytes<consts::U256> =
+                type BufSize = <
+                        heapless::consts::U256 as core::ops::Add<ctap_types::sizes::MAX_CREDENTIAL_ID_LENGTH>
+                    >::Output;
+                let mut data: Bytes<BufSize> =
                     Bytes::try_from_slice(&[sub_command as u8]).unwrap();
                 let len = 1 + match sub_command {
                     Subcommand::EnumerateCredentialsBegin |
@@ -801,7 +804,15 @@ where UP: UserPresence,
                 } else {
                     info!("failed pinauth!");
                     self.state.decrement_retries(&mut self.trussed)?;
-                    self.state.pin_blocked()
+                    let maybe_blocked = self.state.pin_blocked();
+                    if maybe_blocked.is_err() {
+                        info!("blocked");
+                        maybe_blocked
+                    } else {
+                        info!("pinAuthInvalid");
+                        Err(Error::PinAuthInvalid)
+                    }
+
                 }
             }
 
@@ -2089,6 +2100,7 @@ where UP: UserPresence,
             max_msg_size: Some(ctap_types::sizes::MESSAGE_SIZE),
             pin_protocols: Some(pin_protocols),
             max_creds_in_list: Some(ctap_types::sizes::MAX_CREDENTIAL_COUNT_IN_LIST_VALUE),
+            max_cred_id_length: Some(ctap_types::sizes::MAX_CREDENTIAL_ID_LENGTH_VALUE),
             ..ctap2::get_info::Response::default()
         }
     }
