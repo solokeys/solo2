@@ -13,7 +13,7 @@ pub type U7609 = <U7168 as core::ops::Add<heapless::consts::U441>>::Output;
 // pub type U7609 = heapless::consts::U4096;
 
 pub type Message = heapless_bytes::Bytes<U7609>;
-pub type AppResponse = core::result::Result<(), Error>;
+pub type AppResult = core::result::Result<(), Error>;
 pub type InterchangeResponse = core::result::Result<Message, Error>;
 
 pub use crate::command::Command;

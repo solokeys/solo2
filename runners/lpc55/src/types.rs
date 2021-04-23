@@ -83,21 +83,21 @@ pub type NfcCsPin = pins::Pio1_20;
 pub type NfcIrqPin = pins::Pio0_19;
 
 // pub use board::NfcChip;
-pub type Iso14443 = iso14443::Iso14443<board::nfc::NfcChip>;
+pub type Iso14443 = nfc_device::Iso14443<board::nfc::NfcChip>;
 
 pub type ExternalInterrupt = hal::Pint<hal::typestates::init_state::Enabled>;
 
 pub type ApduDispatch = apdu_dispatch::dispatch::ApduDispatch;
 
-pub type HidDispatch = hid_dispatch::dispatch::Dispatch;
+pub type CtaphidDispach = ctaphid_dispatch::dispatch::Dispatch;
 
 pub type Piv = piv_authenticator::Authenticator<TrussedClient>;
 
 pub type Totp = oath_authenticator::Authenticator<TrussedClient>;
 
-pub type FidoApplet<UP> = applet_fido::Fido<UP, TrussedClient>;
+pub type FidoApp<UP> = dispatch_fido::Fido<UP, TrussedClient>;
 
-pub type RootApp = applet_root::Root<TrussedClient>;
+pub type ManagementApp = management_app::App<TrussedClient>;
 
 pub type PerfTimer = timer::Timer<ctimer::Ctimer4<hal::typestates::init_state::Enabled>>;
 

@@ -12,7 +12,7 @@ delog = "0.1.0"
 heapless = "0.6"
 heapless-bytes = "0.2"
 hex-literal = "0.3"
-interchange = "0.1"
+interchange = "0.2.0"
 iso7816 = { path = "../iso7816" }
 serde = { version = "1", default-features = false }
 trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main" }
@@ -24,8 +24,7 @@ littlefs2 = "0.2.1"
 rand_core = { version = "0.5.1", features = ["getrandom"] }
 
 [features]
-default = []
-applet = ["apdu-dispatch"]
+default = ["apdu-dispatch"]
 
 log-all = []
 log-none = []

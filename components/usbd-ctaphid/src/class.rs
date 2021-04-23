@@ -8,7 +8,7 @@ use crate::{
     pipe::Pipe,
 };
 
-use hid_dispatch::types::HidInterchange;
+use ctaphid_dispatch::types::HidInterchange;
 
 use usb_device::{
     bus::{InterfaceNumber, UsbBus, UsbBusAllocator},

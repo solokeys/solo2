@@ -142,14 +142,14 @@ fn get_product_string(pfr: &mut Pfr<hal::typestates::init_state::Enabled>) -> &'
 pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: rtic::Peripherals) -> (
     // types::Authenticator,
     types::ApduDispatch,
-    types::HidDispatch,
+    types::CtaphidDispach,
     types::Trussed,
 
     types::Piv,
     types::Totp,
-    types::FidoApplet<fido_authenticator::NonSilentAuthenticator>,
-    applet_ndef::NdefApplet<'static>,
-    types::RootApp,
+    types::FidoApp<fido_authenticator::NonSilentAuthenticator>,
+    ndef_app::App<'static>,
+    types::ManagementApp,
 
     Option<types::UsbClasses>,
     Option<types::Iso14443>,
@@ -158,13 +158,13 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     Option<clock_controller::DynamicClockController>,
     types::HwScheduler,
 ) {
+    #[cfg(feature = "log-rtt")]
+    rtt_target::rtt_init_print!();
+
     Delogger::init_default(delog::LevelFilter::Debug, &FLUSHER).ok();
     info_now!("entering init_board");
 
     let hal = hal::Peripherals::from((device_peripherals, core_peripherals));
-
-    #[cfg(feature = "log-rtt")]
-    rtt_target::rtt_init_print!();
 
     let mut anactrl = hal.anactrl;
     let mut pmc = hal.pmc;
@@ -297,7 +297,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         );
 
         if let Ok(fm) = maybe_fm {
-            Some(iso14443::Iso14443::new(fm, contactless_requester))
+            Some(nfc_device::Iso14443::new(fm, contactless_requester))
         } else {
             if is_passive_mode {
                 info!("Shouldn't get passive signal when there's no chip!");
@@ -405,15 +405,15 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     let mut fido_client_id = littlefs2::path::PathBuf::new();
     fido_client_id.push(b"fido2\0".try_into().unwrap());
 
-    let (root_trussed_requester, root_trussed_responder) = trussed::pipe::TrussedInterchange::claim()
+    let (management_trussed_requester, management_trussed_responder) = trussed::pipe::TrussedInterchange::claim()
         .expect("could not setup FIDO TrussedInterchange");
-    let mut root_client_id = littlefs2::path::PathBuf::new();
-    root_client_id.push(b"root\0".try_into().unwrap());
+    let mut management_client_id = littlefs2::path::PathBuf::new();
+    management_client_id.push(b"management\0".try_into().unwrap());
 
     let (contact_requester, contact_responder) = apdu_dispatch::interchanges::Contact::claim()
         .expect("could not setup ccid ApduInterchange");
 
-    let (hid_requester, hid_responder) = hid_dispatch::types::HidInterchange::claim()
+    let (hid_requester, hid_responder) = ctaphid_dispatch::types::HidInterchange::claim()
         .expect("could not setup HidInterchange");
 
     let (piv_trussed_requester, piv_trussed_responder) = trussed::pipe::TrussedInterchange::claim()
@@ -527,28 +527,28 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     );
 
     let syscaller = types::Syscall::default();
-    let root_trussed = types::TrussedClient::new(root_trussed_requester, syscaller);
+    let management_trussed = types::TrussedClient::new(management_trussed_requester, syscaller);
 
     let syscaller = types::Syscall::default();
     let trussed_client = types::TrussedClient::new(fido_trussed_requester, syscaller);
 
     assert!(trussed.add_endpoint(fido_trussed_responder, fido_client_id).is_ok());
-    assert!(trussed.add_endpoint(root_trussed_responder, root_client_id).is_ok());
+    assert!(trussed.add_endpoint(management_trussed_responder, management_client_id).is_ok());
 
     let authnr = fido_authenticator::Authenticator::new(
         trussed_client,
         fido_authenticator::NonSilentAuthenticator {},
     );
 
-    let fido = applet_fido::Fido::new(authnr);
+    let fido = dispatch_fido::Fido::new(authnr);
 
     let piv = piv_authenticator::Authenticator::new(piv_trussed);
-    let ndef = applet_ndef::NdefApplet::new();
-    let root = types::RootApp::new(root_trussed, hal::uuid(), build_constants::CARGO_PKG_VERSION);
+    let ndef = ndef_app::App::new();
+    let management = types::ManagementApp::new(management_trussed, hal::uuid(), build_constants::CARGO_PKG_VERSION);
     let totp = oath_authenticator::Authenticator::new(totp_trussed);
 
     let apdu_dispatch = types::ApduDispatch::new(contact_responder, contactless_responder);
-    let hid_dispatch = types::HidDispatch::new(hid_responder);
+    let ctaphid_dispatch = types::CtaphidDispach::new(hid_responder);
 
     // rgb.turn_off();
     delay_timer.cancel().ok();
@@ -556,14 +556,14 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
     (
         apdu_dispatch,
-        hid_dispatch,
+        ctaphid_dispatch,
         trussed,
 
         piv,
         totp,
         fido,
         ndef,
-        root,
+        management,
 
         usb_classes,
         iso14443,

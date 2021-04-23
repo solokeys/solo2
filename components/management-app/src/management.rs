@@ -1,7 +1,8 @@
 use core::convert::TryInto;
-use hid_dispatch::app::{self as hid, App, Command as HidCommand, Message, Response};
-use hid_dispatch::command::VendorCommand;
-use apdu_dispatch::{Command, response, applet};
+use ctaphid_dispatch::app::{self as hid, Command as HidCommand, Message};
+use ctaphid_dispatch::command::VendorCommand;
+use apdu_dispatch::{Command, response, app as apdu};
+use apdu_dispatch::{command::Size as CommandSize, response::Size as ResponseSize};
 use apdu_dispatch::iso7816::Status;
 use trussed::{
     syscall,
@@ -15,7 +16,7 @@ const RNG: VendorCommand = VendorCommand::H60;
 const VERSION: VendorCommand = VendorCommand::H61;
 const UUID: VendorCommand = VendorCommand::H62;
 
-pub struct Root<T>
+pub struct App<T>
 where T: TrussedClient
 {
     got_wink: bool,
@@ -24,7 +25,7 @@ where T: TrussedClient
     version: u32,
 }
 
-impl<T> Root<T>
+impl<T> App<T>
 where T: TrussedClient
 {
     pub fn new(client: T, uuid: [u8; 16], version: u32) -> Self {
@@ -49,7 +50,7 @@ where T: TrussedClient
 
 }
 
-impl<T> App for Root<T>
+impl<T> hid::App for App<T>
 where T: TrussedClient
 {
     fn commands(&self) -> &'static [HidCommand] {
@@ -63,7 +64,7 @@ where T: TrussedClient
         ]
     }
 
-    fn call(&mut self, command: HidCommand, message: &mut Message) -> Response {
+    fn call(&mut self, command: HidCommand, _: &Message, response: &mut Message) -> hid::AppResult {
         match command {
             HidCommand::Vendor(REBOOT) => {
                 syscall!(self.trussed.reboot(reboot::To::Application));
@@ -79,18 +80,15 @@ where T: TrussedClient
             }
             HidCommand::Vendor(RNG) => {
                 // Fill the HID packet (57 bytes)
-                message.clear();
-                message.extend_from_slice(
+                response.extend_from_slice(
                     &syscall!(self.trussed.random_bytes(57)).bytes.as_slice()
                 ).ok();
             }
             HidCommand::Vendor(VERSION) => {
                 // GET VERSION
-                message.clear();
-                message.extend_from_slice(&self.version.to_be_bytes()).ok();
+                response.extend_from_slice(&self.version.to_be_bytes()).ok();
             }
             _ => {
-                message.clear();
                 self.got_wink = true;
             }
         }
@@ -98,10 +96,10 @@ where T: TrussedClient
     }
 }
 
-impl<T> applet::Aid for Root<T>
+impl<T> apdu::Aid for App<T>
 where T: TrussedClient
 {
-    // Solo root app
+    // Solo management app
     fn aid(&self) -> &'static [u8] {
         &[ 0xA0, 0x00, 0x00, 0x08, 0x47, 0x00, 0x00, 0x00, 0x01]
     }
@@ -110,17 +108,17 @@ where T: TrussedClient
     }
 }
 
-impl<T> applet::Applet for Root<T>
+impl<T> apdu::App<CommandSize, ResponseSize> for App<T>
 where T: TrussedClient
 {
 
-    fn select(&mut self, _apdu: &Command, _reply: &mut response::Data) -> applet::Result {
+    fn select(&mut self, _apdu: &Command, _reply: &mut response::Data) -> apdu::Result {
         Ok(())
     }
 
     fn deselect(&mut self) {}
 
-    fn call(&mut self, interface_type: applet::InterfaceType, apdu: &Command, reply: &mut response::Data) -> applet::Result {
+    fn call(&mut self, interface: apdu::Interface, apdu: &Command, reply: &mut response::Data) -> apdu::Result {
         let instruction: u8 = apdu.instruction().into();
 
         let command: VendorCommand = instruction.try_into().map_err(|_e| Status::InstructionNotSupportedOrInvalid)?;
@@ -132,7 +130,7 @@ where T: TrussedClient
             }
             UPDATE => {
                 // Boot to mcuboot (only when contact interface)
-                if interface_type == applet::InterfaceType::Contact && self.user_present()
+                if interface == apdu::Interface::Contact && self.user_present()
                 {
                     // Doesn't return.
                     syscall!(self.trussed.reboot(reboot::To::ApplicationUpdate));
@@ -158,7 +156,7 @@ where T: TrussedClient
             _ => {
                 return Err(Status::InstructionNotSupportedOrInvalid);
             }
-        
+
         }
         Ok(())
 

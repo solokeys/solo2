@@ -1,11 +1,11 @@
 use iso7816::{Instruction, Status};
-use apdu_dispatch::{Command, response, applet};
+use apdu_dispatch::{Command, response, app, command::Size as CommandSize, response::Size as ResponseSize};
 
-pub struct NdefApplet<'a>{
+pub struct App<'a>{
     reader: &'a [u8]
 }
 
-impl<'a> NdefApplet<'a> {
+impl<'a> App<'a> {
     pub const CAPABILITY_CONTAINER: [u8; 15] = [
         0x00, 0x0f, /* CCEN_HI, CCEN_LOW */
         0x20,       /* VERSION */
@@ -24,14 +24,14 @@ impl<'a> NdefApplet<'a> {
         0x6f, 0x6b, 0x65, 0x79, 0x73, 0x2e, 0x63, 0x6f, 0x6d, 0x2f
     ];
 
-    pub fn new() -> NdefApplet<'a> {
-        NdefApplet{
+    pub fn new() -> App<'a> {
+        App{
             reader: &Self::NDEF,
         }
     }
 }
 
-impl<'a> applet::Aid for NdefApplet<'a> {
+impl<'a> app::Aid for App<'a> {
     fn aid(&self) -> &'static [u8] {
         &[0xD2u8, 0x76, 0x00, 0x00,
             0x85, 0x01, 0x01, 0x00,
@@ -43,15 +43,15 @@ impl<'a> applet::Aid for NdefApplet<'a> {
     }
 }
 
-impl<'a> applet::Applet for NdefApplet<'a> {
+impl<'a> app::App<CommandSize, ResponseSize> for App<'a> {
 
-    fn select(&mut self, _apdu: &Command, _reply: &mut response::Data) -> applet::Result {
+    fn select(&mut self, _apdu: &Command, _reply: &mut response::Data) -> app::Result {
         Ok(())
     }
 
     fn deselect(&mut self) {}
 
-    fn call(&mut self, _type: applet::InterfaceType, apdu: &Command, reply: &mut response::Data) -> applet::Result {
+    fn call(&mut self, _type: app::Interface, apdu: &Command, reply: &mut response::Data) -> app::Result {
         let instruction = apdu.instruction();
         let p1 = apdu.p1;
         let p2 = apdu.p2;
@@ -84,7 +84,7 @@ impl<'a> applet::Applet for NdefApplet<'a> {
                             self.reader.len() - offset
                         }
                     };
-                
+
                 reply.extend_from_slice(& self.reader[offset .. offset + len_to_read]).ok();
                 Ok(())
             }

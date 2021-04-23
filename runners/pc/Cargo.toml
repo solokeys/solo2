@@ -11,7 +11,7 @@ heapless = "0.6"
 nb = "1"
 embedded-hal = { version = "0.2", features = ["unproven"] }
 generic-array = "0.14.3"
-interchange = "0.1.0"
+interchange = "0.2.0"
 trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main", features = ["clients-3"] }
 
 # components
@@ -23,7 +23,7 @@ usbd-ccid = { path = "../../components/usbd-ccid" }
 usbd-ctaphid = { path = "../../components/usbd-ctaphid" }
 iso14443 = {path = "./../../components/iso14443"}
 apdu-dispatch = {path = "./../../components/apdu-dispatch", features=["std"]}
-hid-dispatch = {path = "./../../components/hid-dispatch"}
+ctaphid-dispatch = {path = "./../../components/ctaphid-dispatch"}
 applet-ndef = {path = "./../../components/applet-ndef"}
 applet-root = {path = "./../../components/applet-root"}
 applet-fido = {path = "./../../components/applet-fido"}

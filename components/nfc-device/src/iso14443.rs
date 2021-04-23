@@ -212,7 +212,7 @@ where
                     return Err(SourceError::NoActivity);
                 } else {
 
-                    // Rule 13. When an R(ACK) block is received, 
+                    // Rule 13. When an R(ACK) block is received,
                     // if its block number is not equal to the PICC’s current block number,
                     // and the PICC is in chaining, chaining shall be continued.
 
@@ -286,7 +286,7 @@ where
         let mut frame = Iso14443Frame::new();
         frame.push(0).ok();
         let mut header_length = 1;
-        
+
         frame[0] = 0x02u8 | (self.block_num as u8);
 
         if let Some(cid) = self.cid {
@@ -402,6 +402,7 @@ where
 
 
             if let Some(msg) = self.interchange.take_response() {
+                let msg = msg.clone();
                 // if let Some(last_iblock_recv) = self.last_iblock_recv {
                     info!("send!");
                     let (frame, data_used) = self.construct_iblock(&msg);
@@ -443,7 +444,7 @@ where
                 info!("could-send-from-wtx!");
                 Iso14443Status::ReceivedData(Duration::from_millis(32))
             }
-            interchange::State::Requested | interchange::State::Processing => {
+            interchange::State::Requested | interchange::State::BuildingResponse => {
                 self.send_wtx();
                 self.wtx_requested = true;
                 Iso14443Status::ReceivedData(Duration::from_millis(32))

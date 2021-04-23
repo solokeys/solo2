@@ -1,5 +1,5 @@
 [package]
-name = "hid-dispatch"
+name = "ctaphid-dispatch"
 version = "0.0.1"
 authors = ["Conor Patrick <conor@solokeys.com>", "Nicolas Stalder <n@stalder.io>"]
 edition = "2018"
@@ -10,7 +10,7 @@ edition = "2018"
 delog = "0.1.0"
 heapless = "0.6"
 heapless-bytes = "0.2.0"
-interchange = "0.1.0"
+interchange = "0.2.0"
 
 [features]
 default = []

@@ -17,8 +17,8 @@ use core::convert::TryFrom;
 // pub type ContactInterchange = usbd_ccid::types::ApduInterchange;
 // pub type ContactlessInterchange = iso14443::types::ApduInterchange;
 
-use hid_dispatch::types::HidInterchange;
-use hid_dispatch::command::Command;
+use ctaphid_dispatch::types::HidInterchange;
+use ctaphid_dispatch::command::Command;
 
 use ctap_types::{
     authenticator::Error as AuthenticatorError,
@@ -74,7 +74,7 @@ impl Response {
     pub fn error_from_request(request: Request) -> Self {
         Self {
             channel: request.channel,
-            command: hid_dispatch::command::Command::Error,
+            command: ctaphid_dispatch::command::Command::Error,
             length: 1,
         }
     }
@@ -198,7 +198,7 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
             // Cancel if there's a request or processing
             match self.interchange.state() {
                 interchange::State::Requested |
-                interchange::State::Processing => {
+                interchange::State::BuildingResponse => {
                     self.interchange.cancel().expect("canceled");
                 }
                 _ => {}
@@ -478,16 +478,16 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
             if let Some(response) = self.interchange.take_response() {
                 match response {
 
-                    Err(hid_dispatch::app::Error::InvalidCommand) => {
+                    Err(ctaphid_dispatch::app::Error::InvalidCommand) => {
                         info!("Got waiting reply from authenticator??");
                         self.start_sending_error(request, AuthenticatorError::InvalidCommand);
 
                     }
-                    Err(hid_dispatch::app::Error::InvalidLength) => {
+                    Err(ctaphid_dispatch::app::Error::InvalidLength) => {
                         info!("Error, payload needed app command.");
                         self.start_sending_error(request, AuthenticatorError::InvalidLength);
                     }
-                    Err(hid_dispatch::app::Error::NoResponse) => {
+                    Err(ctaphid_dispatch::app::Error::NoResponse) => {
                         info!("Got waiting noresponse from authenticator??");
                     }
 

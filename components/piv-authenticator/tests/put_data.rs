@@ -1,7 +1,7 @@
 mod setup;
 
-// use apdu_dispatch::dispatch::InterfaceType::Contact;
-// use apdu_dispatch::applet::Applet as _;
+// use apdu_dispatch::dispatch::Interface::Contact;
+// use apdu_dispatch::app::App as _;
 // use hex_literal::hex;
 // use iso7816::Command;
 

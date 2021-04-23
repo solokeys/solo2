@@ -1,5 +1,5 @@
 [package]
-name = "iso14443"
+name = "nfc-device"
 version = "0.0.1"
 authors = ["Conor Patrick <conor@solokeys.com>"]
 edition = "2018"
@@ -12,7 +12,7 @@ nb = "1"
 
 apdu-dispatch = { path = "../apdu-dispatch" }
 iso7816 = {path = "../iso7816"}
-interchange = "0.1.0"
+interchange = "0.2.0"
 
 [features]
 default = []

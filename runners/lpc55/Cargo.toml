@@ -19,7 +19,7 @@ lpc55-rtic = "0.5.5"
 cortex-m-semihosting = {version = "0.3.5", optional = true }
 delog = "0.1.1"
 heapless = "0.6"
-interchange = "0.1.0"
+interchange = "0.2.0"
 nb = "1"
 rtt-target = { version = "0.3", optional = true, features = ["cortex-m"] }
 trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main", features = ["clients-4"] }
@@ -32,21 +32,21 @@ board = { path = "board" }
 
 # components
 apdu-dispatch = {path = "../../components/apdu-dispatch"}
-applet-fido = {path = "../../components/applet-fido"}
-applet-ndef = {path = "../../components/applet-ndef"}
-applet-root = {path = "../../components/applet-root"}
+dispatch-fido = {path = "../../components/dispatch-fido"}
+ndef-app = {path = "../../components/ndef-app"}
+management-app = {path = "../../components/management-app"}
 c-stubs = { path = "../../components/c-stubs" }
 ctap-types = { path = "../../components/ctap-types" }
 fido-authenticator = { path = "../../components/fido-authenticator" }
 fm11nc08 = {path = "../../components/fm11nc08"}
-hid-dispatch = {path = "../../components/hid-dispatch"}
-iso14443 = {path = "../../components/iso14443"}
-piv-authenticator = { path = "../../components/piv-authenticator", features = ["applet"] }
+ctaphid-dispatch = {path = "../../components/ctaphid-dispatch"}
+nfc-device = {path = "../../components/nfc-device"}
+piv-authenticator = { path = "../../components/piv-authenticator", features = ["apdu-dispatch"] }
 usbd-ccid = { path = "../../components/usbd-ccid" }
 usbd-ctaphid = { path = "../../components/usbd-ctaphid" }
 
 # TODO release oath-authenticator
-oath-authenticator = { path = "../../../oath-authenticator", features = ["applet"] }
+oath-authenticator = { path = "../../../oath-authenticator", features = ["apdu-dispatch"] }
 
 # panic
 panic-halt = "0.2.0"

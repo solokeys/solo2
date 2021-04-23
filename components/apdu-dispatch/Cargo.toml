@@ -13,7 +13,7 @@ heapless-bytes = "0.2.0"
 
 # Components
 iso7816 = { path = "../iso7816" }
-interchange = "0.1.0"
+interchange = "0.2.0"
 
 # Testing
 serial_test = { version = "*", optional = true }
