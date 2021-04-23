@@ -38,7 +38,7 @@ One way to run a GDB server is `JLinkGDBServer -strict -device LPC55S69 -if SWD 
 To enable logs, you can change the feature flags on each crate.  Then logs will be output via semihosting to your SWD debugger.
 ```
 # Enable logs on the root crate and a few of the local crate dependencies.
-cargo run --release --features board-lpcxpresso55,log-all,fido-authenticator/log-all,hid-dispatch/log-info,ctap-types/log-all
+cargo run --release --features board-lpcxpresso55,log-all,fido-authenticator/log-all,ctaphid-dispatch/log-info,ctap-types/log-all
 ```
 
 #### License

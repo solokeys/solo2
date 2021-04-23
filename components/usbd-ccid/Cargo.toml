@@ -11,7 +11,7 @@ apdu-dispatch = { path = "../apdu-dispatch" }
 delog = "0.1.0"
 heapless = "0.6"
 heapless-bytes = "0.2.0"
-interchange = "0.1.0"
+interchange = "0.2.0"
 iso7816 = { path = "../iso7816" }
 usb-device = { version = "0.2.3", features = ["control-buffer-256"] }
 

@@ -10,8 +10,8 @@ edition = "2018"
 cortex-m = "0.7"
 cortex-m-rt = "0.6.10"
 delog = "0.1.0"
-iso14443 = {path = "../iso14443"}
 nb = "1"
+nfc-device = {path = "../nfc-device"}
 
 [dependencies.lpc55-hal]
 git = "https://github.com/lpc55/lpc55-hal"

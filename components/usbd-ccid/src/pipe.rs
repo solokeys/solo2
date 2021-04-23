@@ -2,7 +2,6 @@ use core::convert::TryFrom;
 
 use apdu_dispatch::interchanges;
 use interchange::Requester;
-use interchange::Interchange;
 
 use crate::{
     constants::*,
@@ -189,6 +188,10 @@ where
     fn reset_interchange(&mut self) {
         let message = MessageBuffer::new();
         self.interchange.take_response();
+        // this may no longer be needed
+        // before the interchange change (adding the request_mut method),
+        // one necessary side-effect of this was to set the interchange's
+        // enum variant to Request.
         self.interchange.request(&message).ok();
         self.interchange.cancel().ok();
     }
@@ -209,7 +212,7 @@ where
                     Chain::BeginsAndEnds => {
                         info!("begins and ends");
                         self.reset_interchange();
-                        let message: &mut MessageBuffer = unsafe { self.interchange.interchange.rq_mut() };
+                        let message = self.interchange.request_mut().unwrap();
                         message.clear();
                         message.extend_from_slice(command.data()).unwrap();
                         self.call_app();
@@ -219,7 +222,7 @@ where
                     Chain::Begins => {
                         info!("begins");
                         self.reset_interchange();
-                        let message: &mut MessageBuffer = unsafe { self.interchange.interchange.rq_mut() };
+                        let message = self.interchange.request_mut().unwrap();
                         message.clear();
                         message.extend_from_slice(command.data()).unwrap();
                         self.state = State::Receiving;
@@ -233,14 +236,14 @@ where
                 match command.chain() {
                     Chain::Continues => {
                         info!("continues");
-                        let message: &mut MessageBuffer = unsafe { self.interchange.interchange.rq_mut() };
+                        let message = self.interchange.request_mut().unwrap();
                         assert!(command.data().len() + message.len() <= MAX_MSG_LENGTH);
                         message.extend_from_slice(command.data()).unwrap();
                         self.send_empty_datablock(Chain::ExpectingMore);
                     }
                     Chain::Ends => {
                         info!("ends");
-                        let message: &mut MessageBuffer = unsafe { self.interchange.interchange.rq_mut() };
+                        let message = self.interchange.request_mut().unwrap();
                         assert!(command.data().len() + message.len() <= MAX_MSG_LENGTH);
                         message.extend_from_slice(command.data()).unwrap();
                         self.call_app();
@@ -279,7 +282,7 @@ where
             packet[0] = 0x80;
             packet[6] = self.seq;
 
-            // CCID_Rev110 6.2-3: Time Extension is requested 
+            // CCID_Rev110 6.2-3: Time Extension is requested
             packet[7] = 2 << 6;
             // Perhaps 1 is an ok multiplier?
             packet[8] = 0x1;
@@ -305,8 +308,7 @@ where
 
     #[inline(never)]
     fn call_app(&mut self) {
-        let message: MessageBuffer = unsafe { self.interchange.interchange.rq_mut() }.clone();
-        self.interchange.request(&message).expect("could not deposit command");
+        self.interchange.send_request().expect("could not deposit command");
         self.started_processing = true;
         self.state = State::Processing;
     }
@@ -342,27 +344,28 @@ where
 
         if self.outbox.is_some() { panic!(); }
 
-        let message: &mut MessageBuffer = unsafe { self.interchange.interchange.rp_mut() };
-        let chunk_size = core::cmp::min(PACKET_SIZE - 10, message.len() - self.sent);
-        let chunk = &message[self.sent..][..chunk_size];
-        self.sent += chunk_size;
-        let more = self.sent < message.len();
+        if let Some(message) = self.interchange.response() {
+            let chunk_size = core::cmp::min(PACKET_SIZE - 10, message.len() - self.sent);
+            let chunk = &message[self.sent..][..chunk_size];
+            self.sent += chunk_size;
+            let more = self.sent < message.len();
 
-        let chain = match (self.state, more) {
-            (State::ReadyToSend, true) => { self.state = State::Sending; Chain::Begins }
-            (State::ReadyToSend, false) => { self.state = State::Idle; Chain::BeginsAndEnds }
-            (State::Sending, true) => Chain::Continues,
-            (State::Sending, false) => { self.state = State::Idle; Chain::Ends }
-            // logically impossible
-            _ => { return; }
-        };
+            let chain = match (self.state, more) {
+                (State::ReadyToSend, true) => { self.state = State::Sending; Chain::Begins }
+                (State::ReadyToSend, false) => { self.state = State::Idle; Chain::BeginsAndEnds }
+                (State::Sending, true) => Chain::Continues,
+                (State::Sending, false) => { self.state = State::Idle; Chain::Ends }
+                // logically impossible
+                _ => { return; }
+            };
 
-        let primed_packet = DataBlock::new(self.seq, chain, chunk);
-        // info!("priming {:?}", &primed_packet).ok();
-        self.outbox = Some(primed_packet.into());
+            let primed_packet = DataBlock::new(self.seq, chain, chunk);
+            // info!("priming {:?}", &primed_packet).ok();
+            self.outbox = Some(primed_packet.into());
 
-        // fast-lane response attempt
-        self.maybe_send_packet();
+            // fast-lane response attempt
+            self.maybe_send_packet();
+        }
     }
 
     fn send_empty_datablock(&mut self, chain: Chain) {
@@ -414,7 +417,7 @@ where
             self.seq,
             Chain::BeginsAndEnds,
 
-            // PivApplet just uses:
+            // PivApp just uses:
             // 3B 80 80 01 01
             //
             // 3B 88 80 01 80 57 53 6F 6C 6F 20 42 83

@@ -1,4 +1,4 @@
-use nb::{block};
+use nb::block;
 
 use lpc55_hal as hal;
 
@@ -26,7 +26,7 @@ use hal::{
         ctimer::Ctimer,
     }
 };
-use iso14443::traits::nfc;
+use nfc_device::traits::nfc;
 
 pub enum Mode {
     Write = 0b000,

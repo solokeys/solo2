@@ -6,24 +6,23 @@
 //! Additionally, the APDU dispatch could repeatedly call "poll" on the selected App.  If this was in place, the App
 //! could choose to reply at time of APDU, or can defer and reply later (during one of the poll calls).
 //!
-//! Apps need to implement the Applet trait to be managed.
+//! Apps need to implement the App trait to be managed.
 //!
 use core::convert::TryInto;
-use crate::applet::{Applet, Result as AppletResult};
+use crate::App;
 use crate::{Command, response, interchanges};
+use crate::command::Size as CommandSize;
+use crate::response::Size as ResponseSize;
 
 use iso7816::{
     Aid,
     Instruction,
+    Result,
     Status,
     command::FromSliceError,
 };
 
-#[derive(Copy, Clone, PartialEq)]
-pub enum InterfaceType{
-    Contact,
-    Contactless,
-}
+pub use iso7816::Interface;
 
 pub enum RequestType {
     Select(Aid),
@@ -74,7 +73,7 @@ pub struct ApduDispatch {
     current_aid: Option<Aid>,
     contact: Responder<interchanges::Contact>,
     contactless: Responder<interchanges::Contactless>,
-    current_interface: InterfaceType,
+    current_interface: Interface,
 
     buffer: ApduBuffer,
     was_request_chained: bool,
@@ -100,7 +99,7 @@ impl ApduDispatch
             current_aid: None,
             contact: contact,
             contactless: contactless,
-            current_interface: InterfaceType::Contact,
+            current_interface: Interface::Contact,
             was_request_chained: false,
             buffer: ApduBuffer {
                 raw: RawApduBuffer::None,
@@ -108,20 +107,20 @@ impl ApduDispatch
         }
     }
 
-    // It would be nice to store `current_applet` instead of constantly looking up by AID,
+    // It would be nice to store `current_app` instead of constantly looking up by AID,
     // but that won't work due to ownership rules
-    fn find_applet<'a, 'b>(
+    fn find_app<'a, 'b>(
         aid: Option<&Aid>,
-        applets: &'a mut [&'b mut dyn Applet]
-    ) -> Option<&'a mut &'b mut dyn Applet> {
+        apps: &'a mut [&'b mut dyn App<CommandSize, ResponseSize>]
+    ) -> Option<&'a mut &'b mut dyn App<CommandSize, ResponseSize>> {
 
         // match aid {
-        //     Some(aid) => applets.iter_mut().find(|applet| aid.starts_with(applet.rid())),
+        //     Some(aid) => apps.iter_mut().find(|app| aid.starts_with(app.rid())),
         //     None => None,
         // }
         aid.and_then(move |aid|
-            applets.iter_mut().find(|applet|
-                aid.starts_with(applet.aid())
+            apps.iter_mut().find(|app|
+                aid.starts_with(app.aid())
             )
         )
     }
@@ -145,7 +144,7 @@ impl ApduDispatch
 
 
     #[inline(never)]
-    fn buffer_chained_apdu_if_needed(&mut self, command: iso7816::Command<impl heapless_bytes::ArrayLength<u8>>, inferface: InterfaceType) -> RequestType {
+    fn buffer_chained_apdu_if_needed(&mut self, command: iso7816::Command<impl heapless_bytes::ArrayLength<u8>>, inferface: Interface) -> RequestType {
 
         self.current_interface = inferface;
         // iso 7816-4 5.1.1
@@ -181,11 +180,11 @@ impl ApduDispatch
         } else {
             match inferface {
                 // acknowledge
-                InterfaceType::Contact => {
+                Interface::Contact => {
                     self.contact.respond(&Status::Success.try_into().unwrap())
                         .expect("Could not respond");
                 }
-                InterfaceType::Contactless => {
+                Interface::Contactless => {
                     self.contactless.respond(&Status::Success.try_into().unwrap())
                         .expect("Could not respond");
                 }
@@ -200,7 +199,7 @@ impl ApduDispatch
     }
 
     fn parse_apdu<SIZE: heapless_bytes::ArrayLength<u8>>(message: &interchanges::Data)
-    -> core::result::Result<iso7816::Command<SIZE>,iso7816::Status> {
+    -> Result<iso7816::Command<SIZE>> {
 
         debug!(">> {}", hex_str!(message.as_slice(), sep:""));
         match iso7816::Command::try_from(message) {
@@ -227,9 +226,9 @@ impl ApduDispatch
 
             // Check to see if we have gotten a message, giving priority to contactless.
             let (message, interface) = if let Some(message) = self.contactless.take_request() {
-                (message, InterfaceType::Contactless)
+                (message, Interface::Contactless)
             } else if let Some(message) = self.contact.take_request() {
-                (message, InterfaceType::Contact)
+                (message, Interface::Contact)
             } else {
                 return RequestType::None;
             };
@@ -244,9 +243,9 @@ impl ApduDispatch
                     // If not a valid APDU, return error and don't pass to app.
                     info!("Invalid apdu");
                     match interface {
-                        InterfaceType::Contactless =>
+                        Interface::Contactless =>
                             self.contactless.respond(&response.into()).expect("cant respond"),
-                        InterfaceType::Contact =>
+                        Interface::Contact =>
                             self.contact.respond(&response.into()).expect("cant respond"),
                     }
                     RequestType::None
@@ -326,7 +325,7 @@ impl ApduDispatch
     }
 
     #[inline(never)]
-    fn handle_app_response(&mut self, response: &AppletResult, data: &response::Data) {
+    fn handle_app_response(&mut self, response: &Result<()>, data: &response::Data) {
         // put message into the response buffer
         match response {
             Ok(()) => {
@@ -336,14 +335,14 @@ impl ApduDispatch
             }
             Err(status) => {
                 // Just reply the error immediately.
-                info!("buffered applet error");
+                info!("buffered app error");
                 self.reply_error(*status);
             }
         }
     }
 
     #[inline(never)]
-    fn handle_app_select<'a>(&mut self, applets: &'a mut [&'a mut dyn Applet], aid: Aid) {
+    fn handle_app_select<'a>(&mut self, apps: &'a mut [&'a mut dyn App<CommandSize, ResponseSize>], aid: Aid) {
         // three cases:
         // - currently selected app has different AID -> deselect it, to give it
         //   the chance to clear sensitive state
@@ -357,20 +356,20 @@ impl ApduDispatch
         // if there is a selected app with a different AID, deselect it
         if let Some(current_aid) = self.current_aid.as_ref() {
             if *current_aid != *aid {
-                let applet = Self::find_applet(self.current_aid.as_ref(), applets).unwrap();
-                // for now all applets will be happy with this.
-                applet.deselect();
+                let app = Self::find_app(self.current_aid.as_ref(), apps).unwrap();
+                // for now all apps will be happy with this.
+                app.deselect();
                 self.current_aid = None;
             }
         }
 
         // select specified app in any case
-        if let Some(applet) = Self::find_applet(Some(&aid), applets) {
+        if let Some(app) = Self::find_app(Some(&aid), apps) {
             info!("Selected app");
             let mut response = response::Data::new();
             let result = match &self.buffer.raw {
                 RawApduBuffer::Request(apdu) => {
-                    applet.select(apdu, &mut response)
+                    app.select(apdu, &mut response)
                 }
                 _ => panic!("Unexpected buffer state."),
             };
@@ -390,14 +389,14 @@ impl ApduDispatch
 
 
     #[inline(never)]
-    fn handle_app_command<'a>(&mut self, applets: &'a mut [&'a mut dyn Applet]) {
+    fn handle_app_command<'a>(&mut self, apps: &'a mut [&'a mut dyn App<CommandSize, ResponseSize>]) {
         // if there is a selected app, send it the command
         let mut response = response::Data::new();
-        if let Some(applet) = Self::find_applet(self.current_aid.as_ref(), applets) {
+        if let Some(app) = Self::find_app(self.current_aid.as_ref(), apps) {
             let result = match &self.buffer.raw {
                 RawApduBuffer::Request(apdu) => {
                     // TODO this isn't very clear
-                    applet.call(self.current_interface, apdu, &mut response)
+                    app.call(self.current_interface, apdu, &mut response)
                 }
                 _ => panic!("Unexpected buffer state."),
             };
@@ -411,8 +410,8 @@ impl ApduDispatch
 
     pub fn poll<'a>(
         &mut self,
-        applets: &'a mut [&'a mut dyn Applet],
-    ) -> Option<InterfaceType> {
+        apps: &'a mut [&'a mut dyn App<CommandSize, ResponseSize>],
+    ) -> Option<Interface> {
 
         // Only take on one transaction at a time.
         let request_type = self.check_for_request();
@@ -425,7 +424,7 @@ impl ApduDispatch
             // SELECT case
             RequestType::Select(aid) => {
                 info!("Select");
-                self.handle_app_select(applets,aid);
+                self.handle_app_select(apps,aid);
             }
 
             RequestType::GetResponse => {
@@ -433,10 +432,10 @@ impl ApduDispatch
                 self.handle_reply();
             }
 
-            // command that is not a special command -- goes to applet.
+            // command that is not a special command -- goes to app.
             RequestType::NewCommand => {
                 info!("Command");
-                self.handle_app_command(applets);
+                self.handle_app_command(apps);
             }
 
             RequestType::None => {
@@ -445,9 +444,9 @@ impl ApduDispatch
 
         // slight priority to contactless.
         if self.contactless.state() == interchange::State::Responded {
-            Some(InterfaceType::Contactless)
+            Some(Interface::Contactless)
         } else if self.contact.state() == interchange::State::Responded {
-            Some(InterfaceType::Contact)
+            Some(Interface::Contact)
         } else {
             None
         }
@@ -457,9 +456,9 @@ impl ApduDispatch
     fn respond(&mut self, message: &interchanges::Data){
         debug!("<<< {}", hex_str!(message.as_slice(), sep:""));
         match self.current_interface {
-            InterfaceType::Contactless =>
+            Interface::Contactless =>
                 self.contactless.respond(&message).expect("cant respond"),
-            InterfaceType::Contact =>
+            Interface::Contact =>
                 self.contact.respond(&message).expect("cant respond"),
         }
     }

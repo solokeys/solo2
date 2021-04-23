@@ -1,5 +1,5 @@
 [package]
-name = "applet-fido"
+name = "dispatch-fido"
 version = "0.1.0"
 authors = ["Conor Patrick <conor@solokeys.com>"]
 edition = "2018"
@@ -15,8 +15,8 @@ serde = { version = "1", default-features = false }
 apdu-dispatch = {path = "../apdu-dispatch"}
 ctap-types = { path = "../ctap-types" }
 fido-authenticator = {path = "../fido-authenticator"}
-hid-dispatch = {path = "../hid-dispatch"}
-interchange = "0.1.0"
+ctaphid-dispatch = {path = "../ctaphid-dispatch"}
+interchange = "0.2.0"
 iso7816 = { path = "../iso7816" }
 trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main" }
 

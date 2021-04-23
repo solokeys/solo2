@@ -10,8 +10,8 @@ ctap-types = { path = "../ctap-types" }
 delog = "0.1.0"
 heapless = "0.6"
 heapless-bytes = "0.2.0"
-hid-dispatch = { path = "../hid-dispatch" }
-interchange = "0.1.0"
+ctaphid-dispatch = { path = "../ctaphid-dispatch" }
+interchange = "0.2.0"
 serde = { version = "1.0", default-features = false }
 usb-device = "0.2.3"
 

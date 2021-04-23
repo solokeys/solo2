@@ -1,7 +1,7 @@
-use apdu_dispatch::applet::{
-    Applet,
+use apdu_dispatch::app::{
+    App,
     Aid,
-    Result as AppletResult
+    Result as AppResult
 };
 use apdu_dispatch::{
     response,
@@ -63,16 +63,16 @@ impl Aid for TestApp1 {
 }
 
 // This app echos to Ins code 0x10
-impl Applet for TestApp1 {
+impl App for TestApp1 {
 
-    fn select(&mut self, _apdu: &Command, _reply: &mut response::Data) -> AppletResult {
+    fn select(&mut self, _apdu: &Command, _reply: &mut response::Data) -> AppResult {
         Ok(Default::default())
     }
 
     fn deselect(&mut self) {
     }
 
-    fn call (&mut self, _interface_type: dispatch::InterfaceType, apdu: &Command, reply: &mut response::Data) -> AppletResult {
+    fn call (&mut self, _: dispatch::Interface, apdu: &Command, reply: &mut response::Data) -> AppResult {
         println!("TestApp1::call");
         match apdu.instruction().into() {
             0x10 => {
@@ -112,16 +112,16 @@ impl Aid for TestApp2 {
 }
 
 // This app echos to Ins code 0x20
-impl Applet for TestApp2 {
+impl App for TestApp2 {
 
-    fn select(&mut self, _apdu: &Command, _reply: &mut response::Data) -> AppletResult {
+    fn select(&mut self, _apdu: &Command, _reply: &mut response::Data) -> AppResult {
         Ok(Default::default())
     }
 
     fn deselect(&mut self) {
     }
 
-    fn call (&mut self, _interface_type: dispatch::InterfaceType, apdu: &Command, reply: &mut response::Data) -> AppletResult {
+    fn call (&mut self, _: dispatch::Interface, apdu: &Command, reply: &mut response::Data) -> AppResult {
         println!("TestApp2::call");
         match apdu.instruction().into() {
             0x20 => {
@@ -164,9 +164,9 @@ impl Aid for PanicApp{
 }
 
 // This app should never get selected
-impl Applet for PanicApp {
+impl App for PanicApp {
 
-    fn select(&mut self, _apdu: &Command, _reply: &mut response::Data) -> AppletResult {
+    fn select(&mut self, _apdu: &Command, _reply: &mut response::Data) -> AppResult {
         panic!("Dont call the panic app");
     }
 
@@ -174,7 +174,7 @@ impl Applet for PanicApp {
         panic!("Dont call the panic app");
     }
 
-    fn call (&mut self, _interface_type: dispatch::InterfaceType, _apdu: &Command, _reply: &mut response::Data) -> AppletResult {
+    fn call (&mut self, _: dispatch::Interface, _apdu: &Command, _reply: &mut response::Data) -> AppResult {
         panic!("Dont call the panic app");
     }
 

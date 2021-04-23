@@ -1,4 +1,4 @@
-
+use heapless_bytes::Unsigned;
 
 
 #[allow(non_camel_case_types)]
@@ -22,21 +22,21 @@ type U3072 = <
 pub mod command {
     use super::*;
     pub type Size = U7609;
-    pub const SIZE: usize = 7609;
+    pub const SIZE: usize = Size::USIZE;
     pub type Data = iso7816::Bytes<Size>;
 }
 
 pub mod response {
     use super::*;
     pub type Size = U7609;
-    pub const SIZE: usize = 7609;
+    pub const SIZE: usize = Size::USIZE;
     pub type Data = iso7816::Bytes<Size>;
 }
 
 pub mod interchanges {
     use super::*;
     pub type Size = U3072;
-    pub const SIZE: usize = 3072;
+    pub const SIZE: usize = Size::USIZE;
     pub type Data = iso7816::Bytes<Size>;
 
     interchange::interchange! {
@@ -52,5 +52,4 @@ pub mod interchanges {
 // What apps can expect to send and recieve.
 pub type Command = iso7816::Command<command::Size>;
 pub type Response = iso7816::Response<response::Size>;
-
 

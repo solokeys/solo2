@@ -1,5 +1,5 @@
 
-pub use crate::types::{Message, AppResponse as Response,Error};
+pub use crate::types::{AppResult, Error, Message};
 pub use crate::command::Command;
 
 /// trait interface for a CTAPHID application.
@@ -12,5 +12,7 @@ pub trait App {
 
     /// Application is called here when one of it's register commands occurs.
     /// Application must put response in @message, or decide to return an error.
-    fn call(&mut self, command: Command, message: &mut Message) -> Response;
+    ///
+    /// The response is pre-cleared.
+    fn call(&mut self, command: Command, request: &Message, response: &mut Message) -> AppResult;
 }

@@ -1,7 +1,7 @@
 use core::convert::TryFrom;
 use iso7816::{Instruction, Status};
-use apdu_dispatch::{Command, response, applet};
-use hid_dispatch::command::Command as FidoCommand;
+use apdu_dispatch::{Command, response, app};
+use ctaphid_dispatch::command::Command as FidoCommand;
 use ctap_types::{
     authenticator::Error as AuthenticatorError,
     authenticator::Request as AuthenticatorRequest,
@@ -13,7 +13,7 @@ use crate::cbor::{parse_cbor};
 
 use trussed::client;
 use fido_authenticator::{Authenticator, UserPresence};
-use hid_dispatch::app as hid;
+use ctaphid_dispatch::app as hid;
 
 pub struct Fido<UP, T>
 where UP: UserPresence,
@@ -36,7 +36,7 @@ where UP: UserPresence,
         Self { authenticator }
     }
 
-    fn response_from_object<T: serde::Serialize>(&mut self, object: Option<T>, reply: &mut response::Data) -> applet::Result {
+    fn response_from_object<T: serde::Serialize>(&mut self, object: Option<T>, reply: &mut response::Data) -> app::Result {
         reply.resize_to_capacity();
         if let Some(object) = object {
             match cbor_serialize(&object, &mut reply[1..]) {
@@ -57,7 +57,7 @@ where UP: UserPresence,
         Ok(())
     }
 
-    fn call_authenticator(&mut self, request: &AuthenticatorRequest, reply: &mut response::Data) -> applet::Result {
+    fn call_authenticator(&mut self, request: &AuthenticatorRequest, reply: &mut response::Data) -> app::Result {
 
         let result = self.authenticator.call(request);
         match &result {
@@ -116,11 +116,10 @@ where UP: UserPresence,
     }
 
     #[inline(never)]
-    fn call_authenticator_u2f_with_bytes(&mut self, request_and_reply: &mut response::Data) -> applet::Result {
-        match &Command::try_from(request_and_reply) {
+    fn call_authenticator_u2f_with_bytes(&mut self, request: &response::Data, reply: &mut response::Data) -> app::Result {
+        match &Command::try_from(request) {
             Ok(command) => {
-                request_and_reply.clear();
-                self.call_authenticator_u2f(command, request_and_reply)
+                self.call_authenticator_u2f(command, reply)
             },
             _ => {
                 Err(Status::IncorrectDataParameter)
@@ -129,7 +128,7 @@ where UP: UserPresence,
     }
 
     #[inline(never)]
-    fn call_authenticator_u2f(&mut self, apdu: &Command, reply: &mut response::Data) -> applet::Result {
+    fn call_authenticator_u2f(&mut self, apdu: &Command, reply: &mut response::Data) -> app::Result {
         let u2f_command = U2fCommand::try_from(apdu)?;
         let result = self.authenticator.call_u2f(&u2f_command);
         match result {
@@ -145,7 +144,7 @@ where UP: UserPresence,
 
 }
 
-impl<UP, T> applet::Aid for Fido<UP, T>
+impl<UP, T> app::Aid for Fido<UP, T>
 where UP: UserPresence,
 {
     fn aid(&self) -> &'static [u8] {
@@ -156,7 +155,7 @@ where UP: UserPresence,
     }
 }
 
-impl<UP, T> applet::Applet for Fido<UP, T>
+impl<UP, T> app::App<apdu_dispatch::command::Size, apdu_dispatch::response::Size> for Fido<UP, T>
 where UP: UserPresence,
       T: client::Client
        + client::P256
@@ -169,7 +168,7 @@ where UP: UserPresence,
 {
 
 
-    fn select(&mut self, _apdu: &Command, reply: &mut response::Data) -> applet::Result {
+    fn select(&mut self, _apdu: &Command, reply: &mut response::Data) -> app::Result {
         // U2F_V2
         reply.extend_from_slice(& [0x55, 0x32, 0x46, 0x5f, 0x56, 0x32,]).unwrap();
         Ok(())
@@ -177,7 +176,7 @@ where UP: UserPresence,
 
     fn deselect(&mut self) {}
 
-    fn call(&mut self, _type: applet::InterfaceType, apdu: &Command, reply: &mut response::Data) -> applet::Result {
+    fn call(&mut self, _type: app::Interface, apdu: &Command, reply: &mut response::Data) -> app::Result {
         let instruction = apdu.instruction();
 
         match instruction {
@@ -246,26 +245,24 @@ where UP: UserPresence,
     }
 
     #[inline(never)]
-    fn call(&mut self, command: hid::Command, message: &mut hid::Message) -> hid::Response {
+    fn call(&mut self, command: hid::Command, request: &hid::Message, response: &mut hid::Message) -> hid::AppResult {
 
-        if message.len() < 1 {
+        if request.len() < 1 {
             return Err(hid::Error::InvalidLength);
         }
         // info_now!("request: ");
-        // blocking::dump_hex(message, message.len());
+        // blocking::dump_hex(request, request.len());
         match command {
             hid::Command::Cbor => {
-                match parse_cbor(message) {
+                match parse_cbor(request) {
                     Ok(request) => {
-                        message.clear();
-                        self.call_authenticator(&request, message).ok();
+                        self.call_authenticator(&request, response).ok();
                         Ok(())
                     }
                     Err(mapping_error) => {
                         let authenticator_error: AuthenticatorError = mapping_error.into();
                         info!("authenticator_error: {}", authenticator_error as u8);
-                        message.clear();
-                        message.extend_from_slice(&[
+                        response.extend_from_slice(&[
                             authenticator_error as u8
                         ]).ok();
                         Ok(())
@@ -274,18 +271,18 @@ where UP: UserPresence,
             },
             // hid::Command::Msg is only other registered command.
             _ => {
-                let result = self.call_authenticator_u2f_with_bytes(message);
+                let result = self.call_authenticator_u2f_with_bytes(request, response);
                 match result {
                     Ok(()) => {
                         info!("U2F response {} bytes", data.len());
                         // Need to add x9000 success code (normally the apdu-dispatch does this, but
                         // since u2f uses apdus over hid, we must do it here.)
-                        message.extend_from_slice(&[0x90, 0x00]).ok();
+                        response.extend_from_slice(&[0x90, 0x00]).ok();
                     },
                     Err(status) => {
                         let code: [u8; 2] = status.into();
                         info!("U2F error. {}", hex_str!(&code));
-                        message.extend_from_slice(&code).ok();
+                        response.extend_from_slice(&code).ok();
                     },
                 }
                 Ok(())

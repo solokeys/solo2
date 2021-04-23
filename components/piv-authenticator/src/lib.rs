@@ -19,14 +19,14 @@ use iso7816::{
     Instruction, Status,
 };
 use apdu_dispatch::{Command, response};
-#[cfg(feature = "applet")]
-use apdu_dispatch::applet;
 use trussed::client;
 use trussed::{syscall, try_syscall};
 
 use der::Der;
 
 use constants::*;
+
+pub type Result = iso7816::Result<()>;
 
 pub struct Authenticator<T>
 {
@@ -54,7 +54,7 @@ where
         }
     }
 
-    pub fn respond(&mut self, command: &Command, reply: &mut response::Data) -> applet::Result {
+    pub fn respond(&mut self, command: &Command, reply: &mut response::Data) -> Result {
 
         // TEMP
         // blocking::dbg!(self.state.persistent(&mut self.trussed).timestamp(&mut self.trussed));
@@ -133,7 +133,7 @@ where
     // - 9000, 61XX for success
     // - 6982 security status
     // - 6A80, 6A86 for data, P1/P2 issue
-    fn general_authenticate(&mut self, command: &Command, reply: &mut response::Data) -> applet::Result {
+    fn general_authenticate(&mut self, command: &Command, reply: &mut response::Data) -> Result {
 
         // For "SSH", we need implement A.4.2 in SP-800-73-4 Part 2, ECDSA signatures
         //
@@ -252,7 +252,7 @@ where
         Ok(())
     }
 
-    fn request_for_challenge(&mut self, command: &Command, remaining_data: &[u8], reply: &mut response::Data) -> applet::Result {
+    fn request_for_challenge(&mut self, command: &Command, remaining_data: &[u8], reply: &mut response::Data) -> Result {
         // - data is of the form
         //     00 87 03 9B 16 7C 14 80 08 99 6D 71 40 E7 05 DF 7F 81 08 6E EF 9C 02 00 69 73 E8
         // - remaining data contains <decrypted challenge> 81 08 <encrypted counter challenge>
@@ -307,7 +307,7 @@ where
         Ok(())
     }
 
-    fn request_for_witness(&mut self, command: &Command, remaining_data: &[u8], reply: &mut response::Data) -> applet::Result {
+    fn request_for_witness(&mut self, command: &Command, remaining_data: &[u8], reply: &mut response::Data) -> Result {
         // invariants: parsed data was '7C L1 80 00' + remaining_data
 
         if command.p1 != 0x03 || command.p2 != 0x9b {
@@ -339,7 +339,7 @@ where
 
     }
 
-    fn change_reference_data(&mut self, command: &Command) -> applet::Result {
+    fn change_reference_data(&mut self, command: &Command) -> Result {
         // The way `piv-go` blocks PUK (which it needs to do because Yubikeys only
         // allow their Reset if PIN+PUK are blocked) is that it sends "change PUK"
         // with random (i.e. incorrect) PUK listed as both old and new PUK.
@@ -426,7 +426,7 @@ where
         Err(Status::KeyReferenceNotFound)
     }
 
-    fn verify(&mut self, command: &Command) -> applet::Result {
+    fn verify(&mut self, command: &Command) -> Result {
         // we only implement our own PIN, not global Pin, not OCC data, not pairing code
         if command.p2 != 0x80 {
             return Err(Status::KeyReferenceNotFound);
@@ -487,7 +487,7 @@ where
         }
     }
 
-    fn generate_asymmetric_keypair(&mut self, command: &Command, reply: &mut response::Data) -> applet::Result {
+    fn generate_asymmetric_keypair(&mut self, command: &Command, reply: &mut response::Data) -> Result {
         if !self.state.runtime.app_security_status.management_verified {
             return Err(Status::SecurityStatusNotSatisfied);
         }
@@ -610,7 +610,7 @@ where
         Ok(())
     }
 
-    fn put_data(&mut self, command: &Command) -> applet::Result {
+    fn put_data(&mut self, command: &Command) -> Result {
         info_now!("PutData");
         if command.p1 != 0x3f || command.p2 != 0xff {
             return Err(Status::IncorrectP1OrP2Parameter);
@@ -695,7 +695,7 @@ where
         Err(Status::IncorrectDataParameter)
     }
 
-    fn get_data(&mut self, command: &Command, reply: &mut response::Data) -> applet::Result {
+    fn get_data(&mut self, command: &Command, reply: &mut response::Data) -> Result {
         if command.p1 != 0x3f || command.p2 != 0xff {
             return Err(Status::IncorrectP1OrP2Parameter);
         }
@@ -797,7 +797,7 @@ where
         Ok(())
     }
 
-    fn yubico_piv_extension(&mut self, command: &Command, instruction: YubicoPivExtension, reply: &mut response::Data) -> applet::Result {
+    fn yubico_piv_extension(&mut self, command: &Command, instruction: YubicoPivExtension, reply: &mut response::Data) -> Result {
         info_now!("yubico extension: {:?}", &instruction);
         match instruction {
             YubicoPivExtension::GetSerial => {
@@ -893,8 +893,8 @@ where
 }
 
 
-#[cfg(feature = "applet")]
-impl<T> applet::Aid for Authenticator<T> {
+#[cfg(feature = "apdu-dispatch")]
+impl<T> apdu_dispatch::app::Aid for Authenticator<T> {
 
     fn aid(&self) -> &'static [u8] {
         &constants::PIV_AID
@@ -906,12 +906,12 @@ impl<T> applet::Aid for Authenticator<T> {
 }
 
 
-#[cfg(feature = "applet")]
-impl<T> applet::Applet for Authenticator<T>
+#[cfg(feature = "apdu-dispatch")]
+impl<T> apdu_dispatch::app::App<apdu_dispatch::command::Size, apdu_dispatch::response::Size> for Authenticator<T>
 where
     T: client::Client + client::Ed255 + client::Tdes
 {
-    fn select(&mut self, _apdu: &Command, reply: &mut response::Data) -> applet::Result {
+    fn select(&mut self, _apdu: &Command, reply: &mut response::Data) -> Result {
         let mut der: Der<consts::U256> = Default::default();
         der.nested(0x61, |der| {
             // Application identifier of application:
@@ -951,7 +951,7 @@ where
             // })?;
             })
         }).unwrap();
-        
+
         reply.extend_from_slice(&der).ok();
 
         return Ok(());
@@ -959,7 +959,7 @@ where
 
     fn deselect(&mut self) {}
 
-    fn call(&mut self, _type: applet::InterfaceType, apdu: &Command, reply: &mut response::Data) -> applet::Result {
+    fn call(&mut self, _: iso7816::Interface, apdu: &Command, reply: &mut response::Data) -> Result {
         self.respond(apdu, reply)
     }
 }

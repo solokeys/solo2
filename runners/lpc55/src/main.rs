@@ -29,14 +29,14 @@ const APP: () = {
 
     struct Resources {
         apdu_dispatch: app::types::ApduDispatch,
-        hid_dispatch: app::types::HidDispatch,
+        ctaphid_dispatch: app::types::CtaphidDispach,
         trussed: app::types::Trussed,
 
         piv: app::types::Piv,
         totp: app::types::Totp,
-        fido: app::types::FidoApplet<fido_authenticator::NonSilentAuthenticator>,
-        ndef: applet_ndef::NdefApplet<'static>,
-        root: app::types::RootApp,
+        fido: app::types::FidoApp<fido_authenticator::NonSilentAuthenticator>,
+        ndef: ndef_app::App<'static>,
+        management: app::types::ManagementApp,
 
         usb_classes: Option<app::types::UsbClasses>,
         contactless: Option<app::types::Iso14443>,
@@ -52,14 +52,14 @@ const APP: () = {
 
         let (
             apdu_dispatch,
-            hid_dispatch,
+            ctaphid_dispatch,
             trussed,
 
             piv,
             totp,
             fido,
             ndef,
-            root,
+            management,
 
             usb_classes,
             contactless,
@@ -78,14 +78,14 @@ const APP: () = {
 
         init::LateResources {
             apdu_dispatch,
-            hid_dispatch,
+            ctaphid_dispatch,
             trussed,
 
             piv,
             totp,
             fido,
             ndef,
-            root,
+            management,
 
             usb_classes,
             contactless,
@@ -97,21 +97,21 @@ const APP: () = {
         }
     }
 
-    #[idle(resources = [apdu_dispatch, hid_dispatch, ndef, piv, totp, fido, root, perf_timer, usb_classes], schedule = [ccid_wait_extension])]
+    #[idle(resources = [apdu_dispatch, ctaphid_dispatch, ndef, piv, totp, fido, management, perf_timer, usb_classes], schedule = [ccid_wait_extension])]
     fn idle(c: idle::Context) -> ! {
         let idle::Resources {
             apdu_dispatch,
-            hid_dispatch,
+            ctaphid_dispatch,
             ndef,
             piv,
             totp,
             fido,
-            root,
+            management,
             mut perf_timer,
             mut usb_classes,
         }
             = c.resources;
-        
+
         let schedule = c.schedule;
 
         info_now!("inside IDLE");
@@ -128,18 +128,18 @@ const APP: () = {
                 app::Delogger::flush();
             }
 
-            match apdu_dispatch.poll(&mut [ndef, piv, totp, fido, root]) {
+            match apdu_dispatch.poll(&mut [ndef, piv, totp, fido, management]) {
 
-                Some(apdu_dispatch::dispatch::InterfaceType::Contact) => {
+                Some(apdu_dispatch::dispatch::Interface::Contact) => {
                     rtic::pend(USB_INTERRUPT);
                 }
-                Some(apdu_dispatch::dispatch::InterfaceType::Contactless) => {
+                Some(apdu_dispatch::dispatch::Interface::Contactless) => {
                     rtic::pend(NFC_INTERRUPT);
                 }
                 _ => {}
             }
 
-            if hid_dispatch.poll(&mut [fido, root]) {
+            if ctaphid_dispatch.poll(&mut [fido, management]) {
                 rtic::pend(USB_INTERRUPT);
             }
 
@@ -147,7 +147,7 @@ const APP: () = {
                 if usb_classes_maybe.is_some() {
 
                     let usb_classes = usb_classes_maybe.as_mut().unwrap();
-                    
+
                     usb_classes.ctaphid.check_timeout(time/1000);
                     usb_classes.poll();
 
@@ -210,7 +210,7 @@ const APP: () = {
                 }
             }
             // Serial sends a stray 0x70 ("p") to CDC-ACM "data" OUT endpoint (3)
-            // Need to fix that at the root, for now just clear that interrupt.
+            // Need to fix that at the management, for now just clear that interrupt.
             usb.intstat.write(|w| unsafe{ w.bits(64) });
             // usb.intstat.write(|w| unsafe{ w.bits( usb.intstat.read().bits() ) });
         }
@@ -294,8 +294,8 @@ const APP: () = {
             info!("<{}", _perf_timer.lap().0/100);
             let status = contactless.poll_wait_extensions();
             match status {
-                iso14443::Iso14443Status::Idle => {}
-                iso14443::Iso14443Status::ReceivedData(duration) => {
+                nfc_device::Iso14443Status::Idle => {}
+                nfc_device::Iso14443Status::ReceivedData(duration) => {
                     hw_scheduler.start(duration.subsec_millis().ms());
                 }
             }
@@ -321,8 +321,8 @@ const APP: () = {
         info!("[");
         let status = contactless.poll();
         match status {
-            iso14443::Iso14443Status::Idle => {}
-            iso14443::Iso14443Status::ReceivedData(duration) => {
+            nfc_device::Iso14443Status::Idle => {}
+            nfc_device::Iso14443Status::ReceivedData(duration) => {
                 hw_scheduler.cancel().ok();
                 hw_scheduler.start(duration.subsec_millis().ms());
             }
