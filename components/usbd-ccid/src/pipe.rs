@@ -1,7 +1,7 @@
 use core::convert::TryFrom;
 
 use apdu_dispatch::interchanges;
-use interchange::Requester;
+use interchange::{Interchange, Requester};
 
 use crate::{
     constants::*,
@@ -314,20 +314,11 @@ where
     }
 
     pub fn poll_app(&mut self) {
-        // static mut i: usize = 0;
-        // unsafe {
-        //     if i < 100 {
-        //         i += 1;
-        //     } else {
-        //         info!(".").ok();
-        //     }
-        // }
         if let State::Processing = self.state {
             // info!("processing, checking for response, interchange state {:?}",
             //           self.interchange.state()).ok();
 
             if interchange::State::Responded == self.interchange.state() {
-                // crate::piv::fake_piv(&mut self.message);
 
                 // we should have an open XfrBlock allowance
                 self.state = State::ReadyToSend;
@@ -344,7 +335,9 @@ where
 
         if self.outbox.is_some() { panic!(); }
 
-        if let Some(message) = self.interchange.response() {
+        // if let Some(message) = self.interchange.response() {
+            let message: &mut MessageBuffer = unsafe { self.interchange.interchange.rp_mut() };
+
             let chunk_size = core::cmp::min(PACKET_SIZE - 10, message.len() - self.sent);
             let chunk = &message[self.sent..][..chunk_size];
             self.sent += chunk_size;
@@ -365,7 +358,7 @@ where
 
             // fast-lane response attempt
             self.maybe_send_packet();
-        }
+        // }
     }
 
     fn send_empty_datablock(&mut self, chain: Chain) {
