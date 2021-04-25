@@ -4,8 +4,9 @@
 ; git-subrepo command. See https://github.com/git-commands/git-subrepo#readme
 ;
 [subrepo]
-	remote = none
+	remote = git@github.com:solokeys/apdu-dispatch.git
 	branch = master
-	commit = 
+	commit = c3d3798ef18e802f3d0325c6dc34731b4ba93964
 	method = merge
 	cmdver = 0.4.3
+	parent = 960ac310e504248a07407738a6bc699d51854940
