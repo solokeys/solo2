@@ -21,12 +21,12 @@ fido-authenticator = { path = "../../components/fido-authenticator" }
 piv-authenticator = { path = "../../components/piv-authenticator" }
 usbd-ccid = { path = "../../components/usbd-ccid" }
 usbd-ctaphid = { path = "../../components/usbd-ctaphid" }
-iso14443 = {path = "./../../components/iso14443"}
+nfc-device = {path = "./../../components/nfc-device"}
 apdu-dispatch = {path = "./../../components/apdu-dispatch", features=["std"]}
 ctaphid-dispatch = {path = "./../../components/ctaphid-dispatch"}
-applet-ndef = {path = "./../../components/applet-ndef"}
-applet-root = {path = "./../../components/applet-root"}
-applet-fido = {path = "./../../components/applet-fido"}
+ndef-app = {path = "./../../components/ndef-app"}
+management-app = {path = "./../../components/management-app"}
+dispatch-fido = {path = "./../../components/dispatch-fido"}
 
 # storage
 littlefs2 = "0.2.1"
