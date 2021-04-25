@@ -72,7 +72,6 @@ impl Dispatch {
     ) -> bool {
         let maybe_request = self.responder.take_request();
         if let Some((command, message)) = maybe_request {
-            let command = *command;
             info_now!("cmd: {}", u8::from(command));
 
             if let Some(app) = Self::find_app(command, apps) {
