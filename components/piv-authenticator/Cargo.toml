@@ -7,13 +7,13 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-apdu-dispatch = { path = "../apdu-dispatch", optional = true }
+apdu-dispatch = { git = "https://github.com/solokeys/apdu-dispatch", branch = "main", optional = true }
 delog = "0.1.0"
 heapless = "0.6"
 heapless-bytes = "0.2"
 hex-literal = "0.3"
 interchange = "0.2.0"
-iso7816 = { path = "../iso7816" }
+iso7816 = { git = "https://github.com/ycrypto/iso7816", branch = "main" }
 serde = { version = "1", default-features = false }
 trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main" }
 # trussed = { path = "../../../trussed" }

@@ -10,5 +10,5 @@ edition = "2018"
 heapless = "0.6"
 heapless-bytes = "0.2.0"
 
-apdu-dispatch = {path = "../apdu-dispatch"}
-iso7816 = { path = "../iso7816" }
+apdu-dispatch = { git = "https://github.com/solokeys/apdu-dispatch", branch = "main" }
+iso7816 = { git = "https://github.com/ycrypto/iso7816", branch = "main" }

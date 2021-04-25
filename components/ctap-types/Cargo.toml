@@ -14,7 +14,7 @@ delog = "0.1.0"
 heapless = { version = "0.6", default-features = false, features = ["serde"] }
 heapless-bytes = "0.2.0"
 interchange = "0.2.0"
-iso7816 = { path = "../iso7816" }
+iso7816 = { git = "https://github.com/ycrypto/iso7816", branch = "main" }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 serde-indexed = "0.1.0"
 serde_repr = "0.1"

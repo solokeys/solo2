@@ -31,7 +31,7 @@ usbd-serial = "0.1.0"
 board = { path = "board" }
 
 # components
-apdu-dispatch = {path = "../../components/apdu-dispatch"}
+apdu-dispatch = { git = "https://github.com/solokeys/apdu-dispatch", branch = "main" }
 dispatch-fido = {path = "../../components/dispatch-fido"}
 ndef-app = {path = "../../components/ndef-app"}
 management-app = {path = "../../components/management-app"}
@@ -46,7 +46,7 @@ usbd-ccid = { path = "../../components/usbd-ccid" }
 usbd-ctaphid = { path = "../../components/usbd-ctaphid" }
 
 # TODO release oath-authenticator
-oath-authenticator = { path = "../../../oath-authenticator", features = ["apdu-dispatch"] }
+oath-authenticator = { git = "https://github.com/trussed-dev/oath-authenticator", branch = "main", features = ["apdu-dispatch"] }
 
 # panic
 panic-halt = "0.2.0"
