@@ -9,22 +9,41 @@ SoloKeys Solo 2 monorepo.
 - **NOT FOR PUBLIC USE.**
 - **PULL REQUESTS / ISSUES ONLY AFTER INITIAL CONSULTATION WITH THE TEAM.**
 
+
+
+For **technical questions and discussions**: https://github.com/solokeys/solo2/discussions
+
+For **product / crowdfunding questions and discussions**: https://github.com/solokeys/kickstarter2021/discussions
+
+For general discussion:
+
+- visit our Keybase chat: https://keybase.io/team/solokeys.public
+- visit one of our Matrix rooms: https://matrix.to/#/+solokeys:matrix.org
+
+
+
+To repeat: Please **do not** open issues/PRs that are not technical issues / firmware bugs
+
+
+
 To make pcsclite on Linux work with the Bee, on Debian copy `Info.plist` to `/etc/libccid_Info.plist`.
 
 [docs-image]: https://img.shields.io/badge/docs-book-green?style=flat-square
 [docs-link]: https://solo-bee.netlify.com
 
-## Building
+## Getting Started
 
 ### Prerequisites
 
-On Ubuntu or Debian:
+- Install [Rust and Cargo](https://www.rust-lang.org/tools/install) for your system.
 
-```
-sudo apt-get install llvm clang
-```
+- Install dependencies such as clang, llvm, arm-none-eabi-gdb
 
-Install [Rust and Cargo](https://www.rust-lang.org/tools/install) for your system.
+- Get and prepare hardware
+- Run `make build-dev`.
+
+For more information: <https://hackmd.io/@solokeys/solo2-getting-started>.
+Please **do not** send PRs to expand on getting started generalities, just edit the linked HackMD directly.
 
 
 ### Boards
