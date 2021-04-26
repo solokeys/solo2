@@ -1,4 +1,4 @@
-import cbor
+# import cbor
 import fido2.attestation
 import fido2.ctap2
 import fido2.hid
@@ -9,14 +9,13 @@ pin = "1234"
 
 dev = fido2.ctap2.CTAP2(next(fido2.hid.CtapHidDevice.list_devices()))
 
-PP = fido2.ctap2.PinProtocolV1
-pp = PP(dev)
+client_pin = fido2.ctap2.ClientPin(dev)
 
 dev_info = dev.get_info()
 
 print(dev_info)
 if dev_info.options.get('clientPin', False):
-    pin_token = pp.get_pin_token(pin)
+    pin_token = client_pin.get_pin_token(pin)
     print(f"PIN set, token = {pin_token}")
     print("resetting device to clear PIN")
     dev.reset()
@@ -103,13 +102,13 @@ dev.make_credential(
 # PP = fido2.ctap2.PinProtocolV1
 # pp = PP(dev)
 try:
-    pp.set_pin(pin)
+    client_pin.set_pin(pin)
 except Exception as e:
     print("pin already set")
     pass
 
 try:
-    pp.set_pin(pin)
+    client_pin.set_pin(pin)
 except Exception as e:
     print("pin already set")
     pass
@@ -120,10 +119,9 @@ except Exception as e:
 
 
 # we reset, so need new pin token!!
-pin_token = pp.get_pin_token(pin)
-CM = fido2.ctap2.CredentialManagement
+pin_token = client_pin.get_pin_token(pin)
 
-cm = CM(dev, pp.VERSION, pin_token)
+cm = fido2.ctap2.CredentialManagement(dev, client_pin, pin_token)
 # rp0 = dev.credential_mgmt(CM.CMD.ENUMERATE_RPS_BEGIN)
 # print(rp0)
 
