@@ -1,0 +1,6 @@
+[book]
+authors = ["Nicolas Stalder"]
+language = "en"
+multilingual = false
+src = "src"
+title = "Solo 🐝"
