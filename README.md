@@ -37,7 +37,7 @@ To make pcsclite on Linux work with the Bee, on Debian copy `Info.plist` to `/et
 
 - Install [Rust and Cargo](https://www.rust-lang.org/tools/install) for your system.
 
-- Install dependencies such as clang, llvm, arm-none-eabi-gdb
+- Install dependencies such as clang, llvm, arm-none-eabi-gdb, flip-link
 
 - Get and prepare hardware
 - Run `make build-dev`.

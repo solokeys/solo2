@@ -1,7 +1,7 @@
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
 runner = "arm-none-eabi-gdb -q -x jlink.gdb"
 rustflags = [
-  # "-C", "linker=flip-link",
+  "-C", "linker=flip-link",
   "-C", "link-arg=-Tlink.x",
 ]
 
