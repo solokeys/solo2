@@ -41,8 +41,6 @@ jobs:
           target: thumbv8m.main-none-eabi
           override: true
           components: llvm-tools-preview
-      - name: Build
-        run: cargo build --release --features ${{ matrix.board }}
       # Use precompiled binutils
       - name: cargo install cargo-binutils
         uses: actions-rs/install@v0.1
@@ -56,8 +54,14 @@ jobs:
           crate: flip-link
           version: latest
           use-tool-cache: true
+      - name: Build
+        run: |
+          unset RUSTFLAGS
+          cargo build --release --features ${{ matrix.board }}
       - name: Size
-        run: cargo size --release --features ${{ matrix.board }}
+        run: |
+          unset RUSTFLAGS
+          cargo size --release --features ${{ matrix.board }}
 
   build-pc:
     runs-on: ${{ matrix.os }}
