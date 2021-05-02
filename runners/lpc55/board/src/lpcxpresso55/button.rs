@@ -17,7 +17,7 @@ use crate::traits::buttons::{
 use crate::hal::typestates::{
     init_state,
 };
-use crate::hal::time::*;
+use hal::time::DurationExtensions;
 pub type UserButtonPin = pins::Pio1_9;
 pub type WakeupButtonPin = pins::Pio1_18;
 pub type UserButton = hal::Pin<UserButtonPin, pin::state::Gpio<pin::gpio::direction::Input>>;
@@ -86,7 +86,7 @@ where CTIMER: ctimer::Ctimer<init_state::Enabled>
     fn get_status_debounced(&mut self) -> State {
         // first, remove jitter
         let mut new_state = self.state();
-        self.timer.start(1.ms());
+        self.timer.start(1_000.microseconds());
         nb::block!(self.timer.wait()).ok();
         let new_state2 = self.state();
 

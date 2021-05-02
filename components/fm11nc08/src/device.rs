@@ -1,31 +1,14 @@
 use nb::block;
 
-use lpc55_hal as hal;
+use embedded_time::duration::{Extensions, Microseconds};
+use embedded_hal as hal;
 
 use hal::{
-
-    traits::wg::{
-        spi::{
-            FullDuplex,
-        },
-        digital::v2::InputPin,
-        digital::v2::OutputPin,
-        timer::CountDown,
-    },
-    drivers::{
-        Timer,
-    },
+    spi::FullDuplex,
+    digital::v2::{InputPin, OutputPin},
+    timer::CountDown,
 };
 
-use hal::{
-    time::*,
-    typestates::{
-        init_state,
-    },
-    peripherals::{
-        ctimer::Ctimer,
-    }
-};
 use nfc_device::traits::nfc;
 
 pub enum Mode {
@@ -213,11 +196,11 @@ where
         for _ in 0 .. 2 { block!( self.spi.read(  )).ok().unwrap(); }
     }
 
-    fn end_write(&mut self, timer: &mut Timer<impl Ctimer<init_state::Enabled>>) -> Result<(),()> {
+    fn end_write(&mut self, timer: &mut impl CountDown<Time=Microseconds>) -> Result<(),()> {
         self.cs.set_high().ok();
 
         // Need to give ~10ms of unactivity for eeprom block to write
-        timer.start(10.ms()); block!(timer.wait()).ok();
+        timer.start(10_000.microseconds()); block!(timer.wait()).ok();
 
         let aux_irq = self.read_reg(Register::AuxIrq);
         if (aux_irq & (1 << 6)) != 0 {
@@ -234,7 +217,7 @@ where
     }
 
     /// Configure the eeprom in FM11 chip.  Should only need to do this once per device.
-    pub fn configure(&mut self, config: Configuration, timer: &mut Timer<impl Ctimer<init_state::Enabled>>)
+    pub fn configure(&mut self, config: Configuration, timer: &mut impl CountDown<Time = Microseconds>)
         -> Result<(),()> {
 
         // Clear all aux interrupts

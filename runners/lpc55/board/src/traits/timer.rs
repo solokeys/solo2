@@ -9,7 +9,7 @@ use hal::drivers::timer::Lap;
 use hal::typestates::init_state::Enabled;
 use hal::drivers::Timer as HalTimer;
 use hal::peripherals::ctimer;
-use hal::time::*;
+use hal::time::DurationExtensions;
 
 /// A timer based on a lpc55 hal Ctimer.
 ///
@@ -65,7 +65,7 @@ where CTIMER: ctimer::Ctimer<Enabled>
 {
     /// Starts the timer.  It will run for the input duration.
     fn start(&mut self, count: Duration){
-        self.timer.start((count.as_micros() as u32).us());
+        self.timer.start((count.as_micros() as u32).microseconds());
     }
 
     /// Read the current time elapsed since `start(...)` was last called.

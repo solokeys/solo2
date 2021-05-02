@@ -3,6 +3,7 @@ runner = "arm-none-eabi-gdb -q -x jlink.gdb"
 rustflags = [
   "-C", "linker=flip-link",
   "-C", "link-arg=-Tlink.x",
+  "-Dwarnings",
 ]
 
 [build]

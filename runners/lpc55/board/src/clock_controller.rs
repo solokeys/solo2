@@ -128,7 +128,7 @@ impl DynamicClockController {
         self.signal_button.set_low().ok();
 
         let requirements = hal::ClockRequirements::default()
-            .system_frequency(12.mhz());
+            .system_frequency(12.MHz());
 
         self.clocks = unsafe { requirements.reconfigure(self.clocks, &mut self.pmc, &mut self.syscon) };
         self.decrease_count += 1;
@@ -141,10 +141,10 @@ impl DynamicClockController {
         let requirements = if self.decrease_count > 2 {
             // opt for slower freq if there's too many dips in power
             hal::ClockRequirements::default()
-                .system_frequency(48.mhz())
+                .system_frequency(48.MHz())
         } else {
             hal::ClockRequirements::default()
-                .system_frequency(96.mhz())
+                .system_frequency(96.MHz())
         };
 
         self.clocks = unsafe { requirements.reconfigure(self.clocks, &mut self.pmc, &mut self.syscon) };

@@ -3,10 +3,8 @@ include!(concat!(env!("OUT_DIR"), "/build_constants.rs"));
 
 // panic handler, depending on debug/release build
 // BUT: need to run in release anyway, to have USB work
-// #[cfg(debug_assertions)]
-use panic_semihosting as _;
-// #[cfg(not(debug_assertions))]
-// use panic_halt as _;
+use panic_halt as _;
+// use panic_semihosting as _;
 
 #[macro_use]
 extern crate delog;
@@ -183,7 +181,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     // Start out with slow clock if in passive mode;
     let (mut clocks, adc) = if is_passive_mode {
         let clocks = hal::ClockRequirements::default()
-            .system_frequency(4.mhz())
+            .system_frequency(4.MHz())
             .configure(&mut anactrl, &mut pmc, &mut syscon)
             .expect("Clock configuration failed");
 
@@ -194,7 +192,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         (clocks, adc)
     } else {
         let clocks = hal::ClockRequirements::default()
-            .system_frequency(96.mhz())
+            .system_frequency(96.MHz())
             .configure(&mut anactrl, &mut pmc, &mut syscon)
             .expect("Clock configuration failed");
 
@@ -207,7 +205,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
     let mut delay_timer = Timer::new(hal.ctimer.0.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap()));
     let mut perf_timer = Timer::new(hal.ctimer.4.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap()));
-    perf_timer.start(60_000.ms());
+    perf_timer.start(60_000_000.microseconds());
 
     #[cfg(feature = "board-lpcxpresso55")]
     let mut rgb = board::RgbLed::new(
@@ -249,7 +247,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
         // Boot to bootrom if buttons are all held for 5s
         info!("button start {}",perf_timer.lap().0/1000);
-        delay_timer.start(5_000.ms());
+        delay_timer.start(5_000_000.microseconds());
         while three_buttons.is_pressed(board::traits::buttons::Button::A) &&
               three_buttons.is_pressed(board::traits::buttons::Button::B) &&
               three_buttons.is_pressed(board::traits::buttons::Button::Middle) {
@@ -259,7 +257,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
                 rgb.red(200);
                 rgb.green(0);
                 rgb.blue(0);
-                delay_timer.start(100.ms()); nb::block!(delay_timer.wait()).ok();
+                delay_timer.start(100_000.microseconds()); nb::block!(delay_timer.wait()).ok();
                 board::hal::boot_to_bootrom()
             }
         }
@@ -309,7 +307,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     if let Some(iso14443) = &mut iso14443 { iso14443.poll(); }
     if is_passive_mode {
         // Give a small delay to charge up capacitors
-        delay_timer.start(5.ms()); nb::block!(delay_timer.wait()).ok();
+        delay_timer.start(5_000.microseconds()); nb::block!(delay_timer.wait()).ok();
     }
     if let Some(iso14443) = &mut iso14443 { iso14443.poll(); }
 
@@ -335,7 +333,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     // temporarily increase clock for the storage mounting or else it takes a long time.
     if is_passive_mode {
         clocks = unsafe { hal::ClockRequirements::default()
-            .system_frequency(48.mhz())
+            .system_frequency(48.MHz())
             .reconfigure(clocks, &mut pmc, &mut syscon) };
     }
     info!("mount start {} ms",perf_timer.lap().0/1000);
@@ -373,7 +371,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     if result.is_err() || cfg!(feature = "format-filesystem") {
         rgb.blue(200);
         rgb.red(200);
-        delay_timer.start(300.ms()); nb::block!(delay_timer.wait()).ok();
+        delay_timer.start(300_000.microseconds()); nb::block!(delay_timer.wait()).ok();
         info!("Not yet formatted!  Formatting..");
         store.mount(
             unsafe { INTERNAL_FS_ALLOC.as_mut().unwrap() },
@@ -392,7 +390,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     // return to slow freq
     if is_passive_mode {
         clocks = unsafe { hal::ClockRequirements::default()
-            .system_frequency(12.mhz())
+            .system_frequency(12.MHz())
             .reconfigure(clocks, &mut pmc, &mut syscon) };
         // // Give some feedback to user that token is in field
         // rgb.red(30);

@@ -10,7 +10,7 @@ use app::hal;
 use hal::traits::wg::timer::Cancel;
 use hal::traits::wg::timer::CountDown;
 use hal::drivers::timer::Lap;
-use hal::time::*;
+use hal::time::DurationExtensions;
 
 use rtic::cyccnt::{Instant, U32Ext as _};
 
@@ -121,7 +121,7 @@ const APP: () = {
             perf_timer.lock(|perf_timer|{
                 time = perf_timer.lap().0;
                 if time == 60_000_000 {
-                    perf_timer.start(60_000.ms());
+                    perf_timer.start(60_000_000.microseconds());
                 }
             });
             if time > 1_200_000 {
@@ -296,7 +296,7 @@ const APP: () = {
             match status {
                 nfc_device::Iso14443Status::Idle => {}
                 nfc_device::Iso14443Status::ReceivedData(duration) => {
-                    hw_scheduler.start(duration.subsec_millis().ms());
+                    hw_scheduler.start(duration.subsec_micros().microseconds());
                 }
             }
             info!(" {}>", _perf_timer.lap().0/100);
@@ -324,13 +324,13 @@ const APP: () = {
             nfc_device::Iso14443Status::Idle => {}
             nfc_device::Iso14443Status::ReceivedData(duration) => {
                 hw_scheduler.cancel().ok();
-                hw_scheduler.start(duration.subsec_millis().ms());
+                hw_scheduler.start(duration.subsec_micros().microseconds());
             }
         }
         info!("{}-{}]", _starttime, perf_timer.lap().0/100);
 
         perf_timer.cancel().ok();
-        perf_timer.start(60_000.ms());
+        perf_timer.start(60_000_000.microseconds());
     }
 
     #[task(binds = ADC0, resources = [clock_ctrl], priority = 8)]
