@@ -15,7 +15,7 @@ name = "runner"
 path = "src/main.rs"
 
 [dependencies]
-lpc55-rtic = "0.5.5"
+lpc55-rtic = "0.5.7"
 cortex-m-semihosting = {version = "0.3.5", optional = true }
 delog = "0.1.1"
 heapless = "0.6"
@@ -50,7 +50,7 @@ oath-authenticator = { git = "https://github.com/trussed-dev/oath-authenticator"
 
 # panic
 panic-halt = "0.2.0"
-panic-semihosting = "0.5.6"
+# panic-semihosting = "0.5.6"
 
 # storage
 littlefs2 = "0.2.1"

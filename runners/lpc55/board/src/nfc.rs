@@ -7,7 +7,7 @@ use crate::hal::{
     },
     Enabled,
     peripherals::flexcomm::Spi0,
-    time::U32Ext as _,
+    time::RateExtensions,
     typestates::{
         pin::{
             self,
@@ -62,7 +62,11 @@ pub fn try_setup(
         polarity: hal::traits::wg::spi::Polarity::IdleLow,
         phase: hal::traits::wg::spi::Phase::CaptureOnSecondTransition,
     };
-    let spi = SpiMaster::new(spi, (sck, mosi, miso, hal::typestates::pin::flexcomm::NoCs), 2.mhz(), spi_mode);
+    let spi = SpiMaster::new(
+        spi,
+        (sck, mosi, miso, hal::typestates::pin::flexcomm::NoCs),
+        2_000_000u32.Hz(),
+        spi_mode);
 
     // Start unselected.
     let nfc_cs = NfcCsPin::take().unwrap().into_gpio_pin(iocon, gpio).into_output_high();

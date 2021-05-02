@@ -9,7 +9,7 @@ on:
 
 env:
   CARGO_INCREMENTAL: 0
-  RUSTFLAGS: "-Dwarnings"
+  # do not set RUSTFLAGES, would overrides .cargo/config (linker script, flip-link)
 
 jobs:
   build-lpc55:
@@ -19,7 +19,7 @@ jobs:
         board:
           - board-lpcxpresso55
           - board-solov2
-          - board-okdoe1
+          # - board-okdoe1
         rust:
           - stable
     defaults:
@@ -56,11 +56,9 @@ jobs:
           use-tool-cache: true
       - name: Build
         run: |
-          unset RUSTFLAGS
           cargo build --release --features ${{ matrix.board }}
       - name: Size
         run: |
-          unset RUSTFLAGS
           cargo size --release --features ${{ matrix.board }}
 
   build-pc:
