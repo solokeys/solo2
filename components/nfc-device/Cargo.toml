@@ -6,13 +6,14 @@ edition = "2018"
 
 [dependencies]
 delog = "0.1.0"
+embedded-time = "0.10.1"
 heapless = "0.6"
 heapless-bytes = "0.2.0"
 nb = "1"
 
 apdu-dispatch = { git = "https://github.com/solokeys/apdu-dispatch", branch = "main" }
 iso7816 = { git = "https://github.com/ycrypto/iso7816", branch = "main" }
-interchange = "0.2.0"
+interchange = "0.2.1"
 
 [features]
 default = []

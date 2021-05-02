@@ -1,6 +1,6 @@
 use core::convert::TryFrom;
-use core::time::Duration;
 
+use embedded_time::duration::Extensions;
 use interchange::Requester;
 use apdu_dispatch::interchanges;
 
@@ -57,7 +57,7 @@ where
     pub fn did_start_processing(&mut self) -> Status {
         if self.pipe.did_started_processing() {
             // We should send a wait extension later
-            Status::ReceivedData(Duration::from_millis(1000))
+            Status::ReceivedData(1_000.milliseconds())
         } else {
             Status::Idle
         }
@@ -66,7 +66,7 @@ where
     pub fn send_wait_extension (&mut self) -> Status {
         if self.pipe.send_wait_extension() {
             // We should send another wait extension later
-            Status::ReceivedData(Duration::from_millis(1000))
+            Status::ReceivedData(1_000.milliseconds())
         } else {
             Status::Idle
         }

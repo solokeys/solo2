@@ -74,7 +74,7 @@ format-filesystem = []
 
 board-lpcxpresso55 = ["board/board-lpcxpresso55"]
 board-okdoe1 = ["board/board-okdoe1", "board-lpcxpresso55", "usbfs-peripheral"]
-board-solov2 = ["board/board-solov2"]
+board-solo2 = ["board/board-solo2"]
 
 log-rtt = ["rtt-target"]
 log-semihosting = ["cortex-m-semihosting"]

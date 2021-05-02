@@ -4,15 +4,15 @@ This implements `trussed::Platform` for some LPC55S69 boards.
 
 The main ones are:
 - [LPCXpresso55S69][lpcxpresso], the official development board by NXP
-- [Solo V2][solov2], the new security key by SoloKeys
+- [Solo 2][solo2], the new security key by SoloKeys
 
-These can be selected via the features `board-lpcxpresso55` and `board-solov2`,
+These can be selected via the features `board-lpcxpresso55` and `board-solo2`,
 respectively.
 
 It is more convenient to develop on the LPC55S69-EVK as it has `PIO0_5`, the `ISP0` pin, exposed.
 This allows forcing boot-to-bootloader, so you can't realy brick yourself until you start playing
 with secure boot settings. Also of course, it has the debugger embedded, vs. having
-to somehow attach it to the Solo V2's Tag-Connect headers. However, there is no NFC
+to somehow attach it to the Solo 2's Tag-Connect headers. However, there is no NFC
 on the dev kit, two buttons instead of three, and the RGB led doesn't work properly.
 
 There is also some low-effort support for the (cheap!) [OKdo E1][okdoe1]. This board however
@@ -34,4 +34,4 @@ Flashing firmware is *much* slower.
 
 [lpcxpresso]: https://www.nxp.com/design/development-boards/lpcxpresso-boards/lpcxpresso55s69-development-board:LPC55S69-EVK
 [okdoe1]: https://www.okdo.com/p/okdo-e1-development-board/
-[solov2]: https://solokeys.com
+[solo2]: https://solo2.dev

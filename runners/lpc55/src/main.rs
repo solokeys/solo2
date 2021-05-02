@@ -6,11 +6,12 @@
 #![no_main]
 // #![deny(warnings)]
 
+use core::convert::TryFrom;
 use app::hal;
 use hal::traits::wg::timer::Cancel;
 use hal::traits::wg::timer::CountDown;
-use hal::drivers::timer::Lap;
-use hal::time::DurationExtensions;
+use hal::drivers::timer::Elapsed;
+use hal::time::{DurationExtensions, Microseconds};
 
 use rtic::cyccnt::{Instant, U32Ext as _};
 
@@ -119,7 +120,7 @@ const APP: () = {
 
             let mut time = 0;
             perf_timer.lock(|perf_timer|{
-                time = perf_timer.lap().0;
+                time = perf_timer.elapsed().0;
                 if time == 60_000_000 {
                     perf_timer.start(60_000_000.microseconds());
                 }
@@ -152,9 +153,9 @@ const APP: () = {
                     usb_classes.poll();
 
                     match usb_classes.ccid.did_start_processing() {
-                        usbd_ccid::types::Status::ReceivedData(duration) => {
+                        usbd_ccid::types::Status::ReceivedData(milliseconds) => {
                             schedule.ccid_wait_extension(
-                                Instant::now() + (CLOCK_FREQ/1_000_000 * (duration.as_micros() as u32)).cycles()
+                                Instant::now() + (CLOCK_FREQ/1_000_000 * 1000*milliseconds.0).cycles()
                             ).ok();
                         }
                         _ => {}
@@ -182,9 +183,9 @@ const APP: () = {
         usb_classes.poll();
 
         match usb_classes.ccid.did_start_processing() {
-            usbd_ccid::types::Status::ReceivedData(duration) => {
+            usbd_ccid::types::Status::ReceivedData(milliseconds) => {
                 c.schedule.ccid_wait_extension(
-                    Instant::now() + (CLOCK_FREQ/1_000_000 * (duration.as_micros() as u32)).cycles()
+                    Instant::now() + (CLOCK_FREQ/1_000_000 * 1000*milliseconds.0).cycles()
                 ).ok();
             }
             _ => {}
@@ -226,9 +227,9 @@ const APP: () = {
         debug!("CCID WAIT EXTENSION");
         let status = c.resources.usb_classes.as_mut().unwrap().ccid.send_wait_extension();
         match status {
-            usbd_ccid::types::Status::ReceivedData(duration) => {
+            usbd_ccid::types::Status::ReceivedData(milliseconds) => {
                 c.schedule.ccid_wait_extension(
-                    Instant::now() + (CLOCK_FREQ/1_000 * (duration.as_millis() as u32)).cycles()
+                    Instant::now() + (CLOCK_FREQ/1_000 * 1000*milliseconds.0).cycles()
                 ).ok();
             }
             _ => {}
@@ -291,15 +292,15 @@ const APP: () = {
             // clear the interrupt
             hw_scheduler.cancel().ok();
 
-            info!("<{}", _perf_timer.lap().0/100);
+            info!("<{}", _perf_timer.elapsed().0/100);
             let status = contactless.poll_wait_extensions();
             match status {
                 nfc_device::Iso14443Status::Idle => {}
-                nfc_device::Iso14443Status::ReceivedData(duration) => {
-                    hw_scheduler.start(duration.subsec_micros().microseconds());
+                nfc_device::Iso14443Status::ReceivedData(milliseconds) => {
+                    hw_scheduler.start(Microseconds::try_from(milliseconds).unwrap());
                 }
             }
-            info!(" {}>", _perf_timer.lap().0/100);
+            info!(" {}>", _perf_timer.elapsed().0/100);
         }
     }
 
@@ -316,18 +317,18 @@ const APP: () = {
             }
             = c.resources;
         let contactless = contactless.as_mut().unwrap();
-        let _starttime = perf_timer.lap().0/100;
+        let _starttime = perf_timer.elapsed().0/100;
 
         info!("[");
         let status = contactless.poll();
         match status {
             nfc_device::Iso14443Status::Idle => {}
-            nfc_device::Iso14443Status::ReceivedData(duration) => {
+            nfc_device::Iso14443Status::ReceivedData(milliseconds) => {
                 hw_scheduler.cancel().ok();
-                hw_scheduler.start(duration.subsec_micros().microseconds());
+                hw_scheduler.start(Microseconds::try_from(milliseconds).unwrap());
             }
         }
-        info!("{}-{}]", _starttime, perf_timer.lap().0/100);
+        info!("{}-{}]", _starttime, perf_timer.elapsed().0/100);
 
         perf_timer.cancel().ok();
         perf_timer.start(60_000_000.microseconds());

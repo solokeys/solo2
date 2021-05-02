@@ -1,5 +1,4 @@
-// use cortex_m_semihosting::hprintln;
-use core::time::Duration;
+use embedded_time::duration::Milliseconds;
 
 // pub mod apdu;
 pub mod packet;
@@ -16,7 +15,7 @@ pub enum ClassRequest {
 
 pub enum Status {
     Idle,
-    ReceivedData(Duration),
+    ReceivedData(Milliseconds),
 }
 
 impl core::convert::TryFrom<u8> for ClassRequest {
