@@ -5,7 +5,7 @@ authors = ["Nicolas Stalder <n@stalder.io>", "Conor Patrick <conor@solokeys.com>
 edition = "2018"
 
 [dependencies]
-chacha20 = { version = "0.6.0", features = ["rng"] }
+chacha20 = { version = "0.7", features = ["rng"] }
 delog = "0.1.0"
 heapless = "0.6"
 nb = "1"
