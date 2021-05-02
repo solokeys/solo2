@@ -1,11 +1,11 @@
 use core::mem::MaybeUninit;
-use core::time::Duration;
-use heapless_bytes::Bytes;
-use crate::traits::{
-    nfc,
-};
-use interchange::Requester;
+
 use apdu_dispatch::interchanges;
+use embedded_time::duration::Milliseconds;
+use heapless_bytes::Bytes;
+use interchange::Requester;
+
+use crate::traits::nfc;
 
 pub enum SourceError {
     NoActivity,
@@ -17,7 +17,7 @@ pub enum SourceError {
 /// It is up to the application how this is scheduled.
 pub enum Iso14443Status {
     Idle,
-    ReceivedData(Duration),
+    ReceivedData(Milliseconds),
 }
 
 // Max iso14443 frame is 256 bytes
@@ -425,7 +425,7 @@ where
         } else {
             let did_recv_apdu = self.check_for_apdu();
             if did_recv_apdu.is_ok() {
-                Iso14443Status::ReceivedData(Duration::from_millis(30))
+                Iso14443Status::ReceivedData(Milliseconds(30))
             } else {
                 Iso14443Status::Idle
             }
@@ -436,18 +436,18 @@ where
 
         if self.wtx_requested {
             info!("warning: still awaiting wtx response.");
-            return Iso14443Status::ReceivedData(Duration::from_millis(32));
+            return Iso14443Status::ReceivedData(Milliseconds(32))
         }
 
         match self.interchange.state() {
             interchange::State::Responded => {
                 info!("could-send-from-wtx!");
-                Iso14443Status::ReceivedData(Duration::from_millis(32))
+                Iso14443Status::ReceivedData(Milliseconds(32))
             }
             interchange::State::Requested | interchange::State::BuildingResponse => {
                 self.send_wtx();
                 self.wtx_requested = true;
-                Iso14443Status::ReceivedData(Duration::from_millis(32))
+                Iso14443Status::ReceivedData(Milliseconds(32))
             }
             _ => {
                 info!("wtx done");

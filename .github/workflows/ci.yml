@@ -18,7 +18,7 @@ jobs:
       matrix:
         board:
           - board-lpcxpresso55
-          - board-solov2
+          - board-solo2
           # - board-okdoe1
         rust:
           - stable

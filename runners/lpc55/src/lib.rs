@@ -30,7 +30,7 @@ use types::{
     Store,
 };
 
-use hal::drivers::timer::Lap;
+use hal::drivers::timer::Elapsed;
 use hal::traits::wg::timer::Cancel;
 use trussed::platform::UserInterface;
 
@@ -133,7 +133,7 @@ fn get_product_string(pfr: &mut Pfr<hal::typestates::init_state::Enabled>) -> &'
     }
 
     // Use a default string
-    "Custom Solo v2"
+    "Solo 2 (custom)"
 }
 
 // TODO: move board-specifics to BSPs
@@ -213,7 +213,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         &mut iocon,
     );
 
-    #[cfg(feature = "board-solov2")]
+    #[cfg(feature = "board-solo2")]
     let mut rgb = board::RgbLed::new(
         Pwm::new(hal.ctimer.3.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap())),
         &mut iocon,
@@ -229,7 +229,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
             &mut iocon,
         );
 
-        #[cfg(feature = "board-solov2")]
+        #[cfg(feature = "board-solo2")]
         let three_buttons =
         {
             let mut dma = hal::Dma::from(hal.dma).enabled(&mut syscon);
@@ -246,7 +246,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         };
 
         // Boot to bootrom if buttons are all held for 5s
-        info!("button start {}",perf_timer.lap().0/1000);
+        info!("button start {}",perf_timer.elapsed().0/1000);
         delay_timer.start(5_000_000.microseconds());
         while three_buttons.is_pressed(board::traits::buttons::Button::A) &&
               three_buttons.is_pressed(board::traits::buttons::Button::B) &&
@@ -263,7 +263,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
         }
         delay_timer.cancel().ok();
 
-        info!("button end {}",perf_timer.lap().0/1000);
+        info!("button end {}",perf_timer.elapsed().0/1000);
         (Some(three_buttons), None)
     };
 
@@ -336,7 +336,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
             .system_frequency(48.MHz())
             .reconfigure(clocks, &mut pmc, &mut syscon) };
     }
-    info!("mount start {} ms",perf_timer.lap().0/1000);
+    info!("mount start {} ms",perf_timer.elapsed().0/1000);
     static mut INTERNAL_STORAGE: Option<types::FlashStorage> = None;
     unsafe { INTERNAL_STORAGE = Some(filesystem); }
     static mut INTERNAL_FS_ALLOC: Option<Allocation<types::FlashStorage>> = None;
@@ -385,7 +385,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
             true,
         ).unwrap();
     }
-    info!("mount end {} ms",perf_timer.lap().0/1000);
+    info!("mount end {} ms",perf_timer.elapsed().0/1000);
 
     // return to slow freq
     if is_passive_mode {
@@ -420,7 +420,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     let (totp_trussed_requester, totp_trussed_responder) = trussed::pipe::TrussedInterchange::claim()
         .expect("could not setup TOTP TrussedInterchange");
 
-    info!("usb class start {} ms",perf_timer.lap().0/1000);
+    info!("usb class start {} ms",perf_timer.elapsed().0/1000);
     let usb_classes =
     {
         if !is_passive_mode {
@@ -450,7 +450,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
             // our USB classes (must be allocated in order that they're passed in `.poll(...)` later!)
             let ccid = Ccid::new(usb_bus, contact_requester);
-            let ctaphid = CtapHid::new(usb_bus, hid_requester, perf_timer.lap().0/1000)
+            let ctaphid = CtapHid::new(usb_bus, hid_requester, perf_timer.elapsed().0/1000)
                             .implements_ctap1()
                             .implements_ctap2()
                             .implements_wink();
@@ -550,7 +550,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
     // rgb.turn_off();
     delay_timer.cancel().ok();
-    info!("init took {} ms",perf_timer.lap().0/1000);
+    info!("init took {} ms",perf_timer.elapsed().0/1000);
 
     (
         apdu_dispatch,

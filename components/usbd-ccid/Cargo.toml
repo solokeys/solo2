@@ -9,6 +9,7 @@ edition = "2018"
 [dependencies]
 apdu-dispatch = { git = "https://github.com/solokeys/apdu-dispatch", branch = "main" }
 delog = "0.1.0"
+embedded-time = "0.10.1"
 heapless = "0.6"
 heapless-bytes = "0.2.0"
 interchange = "0.2.0"

@@ -25,7 +25,6 @@ use crate::hal::{
         }
     },
 };
-// use crate::types;
 
 pub type SignalPin = pins::Pio0_23;
 pub type SignalButton = Pin<SignalPin, state::Gpio<direction::Output>>;

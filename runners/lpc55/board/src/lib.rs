@@ -5,7 +5,7 @@ pub use lpc55_hal as hal;
 pub mod traits;
 
 // board support package
-#[cfg(not(any(feature = "board-lpcxpresso55", feature = "board-solov2")))]
+#[cfg(not(any(feature = "board-lpcxpresso55", feature = "board-solo2")))]
 compile_error!("Please select one of the board features.");
 
 #[cfg(feature = "board-lpcxpresso55")]
@@ -17,10 +17,10 @@ pub use lpcxpresso55 as specifics;
 extern crate delog;
 generate_macros!();
 
-#[cfg(feature = "board-solov2")]
-pub mod solov2;
-#[cfg(feature = "board-solov2")]
-pub use solov2 as specifics;
+#[cfg(feature = "board-solo2")]
+pub mod solo2;
+#[cfg(feature = "board-solo2")]
+pub use solo2 as specifics;
 
 pub use specifics::{
     button::ThreeButtons,

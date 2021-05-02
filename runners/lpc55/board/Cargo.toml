@@ -7,14 +7,14 @@ edition = "2018"
 [dependencies]
 delog = "0.1.0"
 fm11nc08 = {path = "../../../components/fm11nc08"}
-lpc55-hal = { version = "0.2.0", features = ["littlefs", "rtic-peripherals"] }
+lpc55-hal = { version = "0.2.1", features = ["littlefs", "rtic-peripherals"] }
 nb = "1"
 trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main" }
 
 [features]
 board-lpcxpresso55 = []
 board-okdoe1 = ["board-lpcxpresso55"]
-board-solov2 = []
+board-solo2 = []
 
 no-buttons = []
 no-clock-controller = []
