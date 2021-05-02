@@ -57,6 +57,7 @@ where
     outbox: Option<RawPacket>,
 
     ext_packet: ExtPacket,
+    #[allow(dead_code)]
     packet_len: usize,
     receiving_long: bool,
     long_packet_missing: usize,
