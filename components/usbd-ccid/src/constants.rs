@@ -26,6 +26,7 @@ pub enum TransferMode {
 }
 
 pub const FUNCTIONAL_INTERFACE: u8 = 0x21;
+pub const FUNCTIONAL_INTERFACE_STRING: &str = "CCID/ICCD Interface";
 
 // NB: all numbers are little-endian
 //
