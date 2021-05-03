@@ -22,6 +22,7 @@ where
     Bus: 'static + UsbBus,
 {
     interface_number: InterfaceNumber,
+    string_index: StringIndex,
     read: EndpointOut<'static, Bus>,
     // interrupt: EndpointIn<'static, Bus>,
     pipe: Pipe<Bus>,
@@ -45,7 +46,8 @@ where
         // let interrupt = allocator.interrupt(8 as _, 32);
         let pipe = Pipe::new(write, request_pipe);
         let interface_number = allocator.interface();
-        Self { interface_number, read, /* interrupt, */ pipe }
+        let string_index = allocator.string();
+        Self { interface_number, string_index, read, /* interrupt, */ pipe }
     }
 
     /// Read response from application (if any) and start writing it to
@@ -80,11 +82,13 @@ where
     fn get_configuration_descriptors(&self, writer: &mut DescriptorWriter)
         -> Result<()>
     {
-        writer.interface(
+        writer.interface_alt(
             self.interface_number,
+            0,
             CLASS_CCID,
             SUBCLASS_NONE,
             TransferMode::Bulk as u8,
+            Some(self.string_index),
         )?;
         writer.write(
             FUNCTIONAL_INTERFACE,
@@ -94,6 +98,11 @@ where
         writer.endpoint(&self.read).unwrap();
         // writer.endpoint(&self.interrupt).unwrap();
         Ok(())
+    }
+
+    fn get_string(&self, index: StringIndex, _lang_id: u16) -> Option<&str> {
+        (self.string_index == index)
+            .then(|| FUNCTIONAL_INTERFACE_STRING)
     }
 
     fn poll(&mut self) {
@@ -124,9 +133,8 @@ where
 
     fn control_in(&mut self, transfer: ControlIn<Bus>) {
         use usb_device::control::*;
-        let Request { request_type, recipient, index, request, .. }
-            = *transfer.request();
-        if index as u8 != u8::from(self.interface_number) {
+        let Request { request_type, recipient, index, request, .. } = *transfer.request();
+        if index != u8::from(self.interface_number) as u16 {
             return;
         }
 
@@ -136,18 +144,12 @@ where
                     match request {
                         // not strictly needed, as our bNumClockSupported = 0
                         ClassRequest::GetClockFrequencies => {
-                            transfer.accept(|data| {
-                                data.copy_from_slice(&CLOCK_FREQUENCY_KHZ);
-                                Ok(4)
-                            }).ok();
+                            transfer.accept_with(&CLOCK_FREQUENCY_KHZ).ok();
                         },
 
                         // not strictly needed, as our bNumDataRatesSupported = 0
                         ClassRequest::GetDataRates => {
-                            transfer.accept(|data| {
-                                data.copy_from_slice(&DATA_RATE_BPS);
-                                Ok(4)
-                            }).ok();
+                            transfer.accept_with_static(&DATA_RATE_BPS).ok();
                         },
                         _ => panic!("unexpected direction for {:?}", &request),
                     }
@@ -155,6 +157,7 @@ where
 
                 Err(()) => {
                     info_now!("unexpected request: {}", request);
+                    transfer.reject().ok();
                 }
             }
         }
