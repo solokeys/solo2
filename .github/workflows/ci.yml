@@ -30,7 +30,7 @@ jobs:
       - name: Install littlefs2-sys/micro-ecc-sys build dependencies
         shell: bash
         run: |
-          env && pwd && sudo apt-get update -y -qq && sudo apt-get install -y -qq llvm libc6-dev-i386 libclang-dev
+          env && pwd && sudo apt-get update -y -qq && sudo apt-get install -y -qq llvm libc6-dev-i386 libclang-dev clang
       - uses: fiam/arm-none-eabi-gcc@v1
         with:
           release: "9-2020-q2"
@@ -80,7 +80,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         shell: bash
         run: |
-          sudo apt update -y -qq && sudo apt install -y -qq llvm libclang-dev
+          sudo apt update -y -qq && sudo apt install -y -qq llvm libclang-dev build-essential
 
       # this is already installed
       # - name: Install macOS build dependencies
