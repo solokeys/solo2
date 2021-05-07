@@ -60,6 +60,16 @@ jobs:
       - name: Size
         run: |
           cargo size --release --features ${{ matrix.board }}
+      - name: Artifacts
+        run: |
+          cargo objcopy --release --features ${{ matrix.board }} -- -O binary firmware-${{ matrix.board }}.bin
+          sudo cp *.bin /
+      - name: Upload
+        uses: actions/upload-artifact@v2
+        continue-on-error: true
+        with:
+          name: Binaries
+          path: ./runners/lpc55/*.bin
 
   build-pc:
     runs-on: ${{ matrix.os }}
