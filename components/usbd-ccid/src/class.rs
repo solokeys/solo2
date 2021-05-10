@@ -1,8 +1,8 @@
 use core::convert::TryFrom;
 
 use embedded_time::duration::Extensions;
-use interchange::Requester;
-use apdu_dispatch::interchanges;
+use heapless_bytes::Bytes;
+use interchange::{Interchange, Requester};
 
 use crate::{
     constants::*,
@@ -17,24 +17,28 @@ use crate::{
 use usb_device::class_prelude::*;
 type Result<T> = core::result::Result<T, UsbError>;
 
-pub struct Ccid<Bus>
+pub struct Ccid<Bus, I, N>
 where
     Bus: 'static + UsbBus,
+    I: 'static + Interchange<REQUEST = Bytes<N>, RESPONSE = Bytes<N>>,
+    N: heapless::ArrayLength<u8>,
 {
     interface_number: InterfaceNumber,
     string_index: StringIndex,
     read: EndpointOut<'static, Bus>,
     // interrupt: EndpointIn<'static, Bus>,
-    pipe: Pipe<Bus>,
+    pipe: Pipe<Bus, I, N>,
 }
 
-impl<Bus> Ccid<Bus>
+impl<Bus, I, N> Ccid<Bus, I, N>
 where
     Bus: 'static + UsbBus,
+    I: 'static + Interchange<REQUEST = Bytes<N>, RESPONSE = Bytes<N>>,
+    N: heapless::ArrayLength<u8>,
 {
     pub fn new(
         allocator: &'static UsbBusAllocator<Bus>,
-        request_pipe: Requester<interchanges::Contact>,
+        request_pipe: Requester<I>,
     ) -> Self {
         let read = allocator.bulk(PACKET_SIZE as _);
         let write = allocator.bulk(PACKET_SIZE as _);
@@ -75,9 +79,11 @@ where
     }
 }
 
-impl<Bus> UsbClass<Bus> for Ccid<Bus>
+impl<Bus, I, N> UsbClass<Bus> for Ccid<Bus, I, N>
 where
     Bus: 'static + UsbBus,
+    I: 'static + Interchange<REQUEST = Bytes<N>, RESPONSE = Bytes<N>>,
+    N: heapless::ArrayLength<u8>,
 {
     fn get_configuration_descriptors(&self, writer: &mut DescriptorWriter)
         -> Result<()>

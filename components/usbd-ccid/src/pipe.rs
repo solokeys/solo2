@@ -1,24 +1,21 @@
 use core::convert::TryFrom;
 
-use apdu_dispatch::interchanges;
+use heapless_bytes::Bytes;
 use interchange::{Interchange, Requester};
 
 use crate::{
     constants::*,
-    types::{
-        MessageBuffer,
-        packet::{
-            Chain,
-            Command as PacketCommand,
-            DataBlock,
-            Error as PacketError,
-            ExtPacket,
-            RawPacket,
-            XfrBlock,
+    types::packet::{
+        Chain,
+        Command as PacketCommand,
+        DataBlock,
+        Error as PacketError,
+        ExtPacket,
+        RawPacket,
+        XfrBlock,
 
-            ChainedPacket as _,
-            PacketWithData as _,
-        },
+        ChainedPacket as _,
+        PacketWithData as _,
     },
 };
 
@@ -44,15 +41,17 @@ enum Error {
     CommandNotSupported = 0x00,
 }
 
-pub struct Pipe<Bus>
+pub struct Pipe<Bus, I, N>
 where
-    Bus: UsbBus + 'static,
+    Bus: 'static + UsbBus,
+    I: 'static + Interchange<REQUEST = Bytes<N>, RESPONSE = Bytes<N>>,
+    N: heapless::ArrayLength<u8>,
 {
     pub(crate) write: EndpointIn<'static, Bus>,
     // pub(crate) rpc: TransportEndpoint<'rpc>,
     seq: u8,
     state: State,
-    interchange: Requester<interchanges::Contact>,
+    interchange: Requester<I>,
     sent: usize,
     outbox: Option<RawPacket>,
 
@@ -65,13 +64,15 @@ where
     pub(crate) started_processing: bool,
 }
 
-impl<Bus> Pipe<Bus>
+impl<Bus, I, N> Pipe<Bus, I, N>
 where
     Bus: 'static + UsbBus,
+    I: 'static + Interchange<REQUEST = Bytes<N>, RESPONSE = Bytes<N>>,
+    N: heapless::ArrayLength<u8>,
 {
     pub(crate) fn new(
         write: EndpointIn<'static, Bus>,
-        request_pipe: Requester<interchanges::Contact>,
+        request_pipe: Requester<I>,
     ) -> Self {
 
         assert!(MAX_MSG_LENGTH >= PACKET_SIZE);
@@ -101,9 +102,11 @@ where
 }
 
 
-impl<Bus> Pipe<Bus>
+impl<Bus, I, N> Pipe<Bus, I, N>
 where
-    Bus: 'static + UsbBus
+    Bus: 'static + UsbBus,
+    I: 'static + Interchange<REQUEST = Bytes<N>, RESPONSE = Bytes<N>>,
+    N: heapless::ArrayLength<u8>,
 {
     pub fn handle_packet(&mut self, packet: RawPacket) {
         use crate::types::packet::RawPacketExt;
@@ -187,7 +190,7 @@ where
 
     #[inline(never)]
     fn reset_interchange(&mut self) {
-        let message = MessageBuffer::new();
+        let message = Bytes::new();
         self.interchange.take_response();
         // this may no longer be needed
         // before the interchange change (adding the request_mut method),
@@ -337,7 +340,7 @@ where
         if self.outbox.is_some() { panic!(); }
 
         // if let Some(message) = self.interchange.response() {
-            let message: &mut MessageBuffer = unsafe { self.interchange.interchange.rp_mut() };
+            let message: &mut Bytes<N> = unsafe { self.interchange.interchange.rp_mut() };
 
             let chunk_size = core::cmp::min(PACKET_SIZE - 10, message.len() - self.sent);
             let chunk = &message[self.sent..][..chunk_size];
