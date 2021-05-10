@@ -104,13 +104,7 @@ fn get_serial_number() -> &'static str {
     use core::fmt::Write;
     unsafe {
         let uuid = crate::hal::uuid();
-        SERIAL_NUMBER.write_fmt(format_args!("{}-{}-{}-{}-{}",
-            hexstr!(&uuid[..4]),
-            hexstr!(&uuid[4..6]),
-            hexstr!(&uuid[6..8]),
-            hexstr!(&uuid[8..10]),
-            hexstr!(&uuid[10..]),
-        )).unwrap();
+        SERIAL_NUMBER.write_fmt(format_args!("{}", hexstr!(&uuid))).unwrap();
         &SERIAL_NUMBER
     }
 }
@@ -137,7 +131,10 @@ fn get_product_string(pfr: &mut Pfr<hal::typestates::init_state::Enabled>) -> &'
 }
 
 // TODO: move board-specifics to BSPs
-pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: rtic::Peripherals) -> (
+pub fn init_board(
+    device_peripherals: hal::raw::Peripherals,
+    core_peripherals: rtic::Peripherals,
+) -> (
     // types::Authenticator,
     types::ApduDispatch,
     types::CtaphidDispach,
@@ -338,7 +335,7 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
     }
     info!("mount start {} ms",perf_timer.elapsed().0/1000);
     static mut INTERNAL_STORAGE: Option<types::FlashStorage> = None;
-    unsafe { INTERNAL_STORAGE = Some(filesystem); }
+    unsafe { INTERNAL_STORAGE.replace(filesystem); }
     static mut INTERNAL_FS_ALLOC: Option<Allocation<types::FlashStorage>> = None;
     unsafe { INTERNAL_FS_ALLOC = Some(Filesystem::allocate()); }
 
@@ -445,21 +442,22 @@ pub fn init_board(device_peripherals: hal::raw::Peripherals, core_peripherals: r
 
             // ugh, what's the nice way?
             static mut USB_BUS: Option<usb_device::bus::UsbBusAllocator<UsbBus<EnabledUsbPeripheral>>> = None;
-            unsafe { USB_BUS = Some(hal::drivers::UsbBus::new(usbd, usb0_vbus_pin)); }
+            unsafe { USB_BUS.replace(hal::drivers::UsbBus::new(usbd, usb0_vbus_pin)); }
             let usb_bus = unsafe { USB_BUS.as_ref().unwrap() };
 
             // our USB classes (must be allocated in order that they're passed in `.poll(...)` later!)
             let ccid = Ccid::new(usb_bus, contact_requester);
             let ctaphid = CtapHid::new(usb_bus, hid_requester, perf_timer.elapsed().0/1000)
-                            .implements_ctap1()
-                            .implements_ctap2()
-                            .implements_wink();
+                .implements_ctap1()
+                .implements_ctap2()
+                .implements_wink();
 
             let serial = usbd_serial::SerialPort::new(usb_bus);
 
             // Only 16 bits, so take the upper bits of our semver
-            let device_release = ((build_constants::CARGO_PKG_VERSION_MAJOR as u16) << 8) |
-                                (build_constants::CARGO_PKG_VERSION_MINOR as u16);
+            let device_release =
+                ((build_constants::CARGO_PKG_VERSION_MAJOR as u16) << 8) |
+                (build_constants::CARGO_PKG_VERSION_MINOR as u16);
 
             // our composite USB device
             let product_string = get_product_string(&mut pfr);

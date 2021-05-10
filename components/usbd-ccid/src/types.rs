@@ -4,7 +4,7 @@ use embedded_time::duration::Milliseconds;
 pub mod packet;
 pub mod tlv;
 
-pub type MessageBuffer = apdu_dispatch::interchanges::Data;
+// pub type MessageBuffer = apdu_dispatch::interchanges::Data;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ClassRequest {

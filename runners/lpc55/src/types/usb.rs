@@ -6,7 +6,11 @@ pub type EnabledUsbPeripheral = hal::peripherals::usbhs::EnabledUsbhsDevice;
 #[cfg(feature = "usbfs-peripheral")]
 pub type EnabledUsbPeripheral = hal::peripherals::usbfs::EnabledUsbfsDevice;
 
-pub type CcidClass = usbd_ccid::Ccid<UsbBus<EnabledUsbPeripheral>>;
+pub type CcidClass = usbd_ccid::Ccid<
+    UsbBus<EnabledUsbPeripheral>,
+    apdu_dispatch::interchanges::Contact,
+    apdu_dispatch::interchanges::Size,
+>;
 pub type CtapHidClass = usbd_ctaphid::CtapHid<'static, UsbBus<EnabledUsbPeripheral>>;
 // pub type KeyboardClass = usbd_hid::hid_class::HIDClass<'static, UsbBus<EnabledUsbPeripheral>>;
 pub type SerialClass = usbd_serial::SerialPort<'static, UsbBus<EnabledUsbPeripheral>>;
@@ -29,8 +33,8 @@ impl UsbClasses {
         self.ctaphid.check_for_app_response();
         self.ccid.check_for_app_response();
         self.usbd.poll(&mut [
-            &mut self.ccid, 
-            &mut self.ctaphid, 
+            &mut self.ccid,
+            &mut self.ctaphid,
             &mut self.serial,
         ]);
     }
