@@ -1,30 +1,26 @@
-## 🐝
+# Nitrokey solo2 fork
 
-[![Documentation][docs-image]][docs-link]
-
-SoloKeys Solo 2 monorepo.
+Nitrokey fork of the SoloKeys Solo 2 monorepo.
 
 **WARNING WARNING WARNING**
 - **EARLY PRERELEASE.**
 - **NOT FOR PUBLIC USE.**
 - **PULL REQUESTS / ISSUES ONLY AFTER INITIAL CONSULTATION WITH THE TEAM.**
 
+----
 
+This repository is temporarily used to keep track of Nitrokey modifications to
+the solo2 monorepo until it is split up into separate components.  The `main`
+branch is tracking the upstream `main` branch.  The Nitrokey modifications are
+located on the `nitrokey-main` branch which is regularily rebased onto `main`
+to keep up with the upstream changes.
 
-For **technical questions and discussions**: https://github.com/solokeys/solo2/discussions
+To keep the commit history simple until the repository is split up, only merge
+pull requests using the *Rebase and merge* or *Squash and merge* strategies.
+Please group changes into logically atomic commits to make it easier to rebase
+them.
 
-For **product / crowdfunding questions and discussions**: https://github.com/solokeys/kickstarter2021/discussions
-
-For general discussion:
-
-- visit our Keybase chat: https://keybase.io/team/solokeys.public
-- visit one of our Matrix rooms: https://matrix.to/#/+solokeys:matrix.org
-
-
-
-To repeat: Please **do not** open issues/PRs that are not technical issues / firmware bugs
-
-
+----
 
 To make pcsclite on Linux work with the Bee, on Debian copy `Info.plist` to `/etc/libccid_Info.plist`.
 
