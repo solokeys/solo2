@@ -10,11 +10,11 @@ use trussed::{
     client, syscall, try_syscall,
     Client as TrussedClient,
     types::{
+        KeyId,
         KeySerialization,
         Mechanism,
         MediumData,
         Message,
-        ObjectHandle,
         SignatureSerialization,
         Location,
     },
@@ -661,7 +661,7 @@ where UP: UserPresence,
         })
     }
 
-    fn decrypt_pin_hash_and_maybe_escalate(&mut self, shared_secret: ObjectHandle, pin_hash_enc: &Bytes<consts::U64>)
+    fn decrypt_pin_hash_and_maybe_escalate(&mut self, shared_secret: KeyId, pin_hash_enc: &Bytes<consts::U64>)
         -> Result<()>
     {
         let pin_hash = syscall!(self.trussed.decrypt_aes256cbc(
@@ -695,7 +695,7 @@ where UP: UserPresence,
         Ok(())
     }
 
-    fn decrypt_pin_check_length(&mut self, shared_secret: ObjectHandle, pin_enc: &[u8]) -> Result<Message> {
+    fn decrypt_pin_check_length(&mut self, shared_secret: KeyId, pin_enc: &[u8]) -> Result<Message> {
         // pin is expected to be filled with null bytes to length at least 64
         if pin_enc.len() < 64 {
             // correct error?
@@ -732,7 +732,7 @@ where UP: UserPresence,
         }
     }
 
-    fn verify_pin_auth(&mut self, shared_secret: ObjectHandle, data: &[u8], pin_auth: &Bytes<consts::U16>)
+    fn verify_pin_auth(&mut self, shared_secret: KeyId, data: &[u8], pin_auth: &Bytes<consts::U16>)
         -> Result<()>
     {
         let expected_pin_auth = syscall!(self.trussed.sign_hmacsha256(shared_secret, data)).signature;
@@ -1321,11 +1321,11 @@ where UP: UserPresence,
     }
 
     #[inline(never)]
-    fn process_assertion_extensions(&mut self, 
-        get_assertion_state: &state::ActiveGetAssertionData, 
-        extensions: &ctap2::get_assertion::ExtensionsInput, 
+    fn process_assertion_extensions(&mut self,
+        get_assertion_state: &state::ActiveGetAssertionData,
+        extensions: &ctap2::get_assertion::ExtensionsInput,
         _credential: &Credential,
-        credential_key_handle: ObjectHandle,
+        credential_key: KeyId,
     ) -> Result<Option<ctap2::get_assertion::ExtensionsOutput>> {
         if let Some(hmac_secret) = &extensions.hmac_secret {
 
@@ -1334,10 +1334,10 @@ where UP: UserPresence,
             // i.e. credRandom = HMAC(private_key, uv)
             let cred_random = syscall!(self.trussed.derive_key(
                 Mechanism::HmacSha256,
-                credential_key_handle,
+                credential_key,
                 Some(Bytes::try_from_slice(&[get_assertion_state.uv_performed as u8]).unwrap()),
                 trussed::types::StorageAttributes::new().set_persistence(Location::Volatile)
-            )).key;    
+            )).key;
 
             // Verify the auth tag, which uses the same process as the pinAuth
             let kek = self.state.runtime.generate_shared_secret(&mut self.trussed, &hmac_secret.key_agreement)?;
@@ -1384,7 +1384,7 @@ where UP: UserPresence,
         } else {
             Ok(None)
         }
-       
+
     }
 
 
@@ -1736,7 +1736,7 @@ where UP: UserPresence,
         // let mut cred_protect_requested = CredentialProtectionPolicy::Optional;
         let mut cred_protect_requested = None;
         if let Some(extensions) = &parameters.extensions {
-            
+
             hmac_secret_requested = extensions.hmac_secret;
 
             if let Some(policy) = &extensions.cred_protect {
@@ -1757,8 +1757,8 @@ where UP: UserPresence,
             false => Location::Volatile,
         };
 
-        let private_key: ObjectHandle;
-        let public_key: ObjectHandle;
+        let private_key: KeyId;
+        let public_key: KeyId;
         let cose_public_key;
         match algorithm {
             SupportedAlgorithm::P256 => {
@@ -2105,7 +2105,7 @@ where UP: UserPresence,
         }
     }
 
-//     fn get_or_create_counter_handle(trussed_client: &mut TrussedClient) -> Result<ObjectHandle> {
+//     fn get_or_create_counter_handle(trussed_client: &mut TrussedClient) -> Result<CounterId> {
 
 //         // there should be either 0 or 1 counters with this name. if not, it's a logic error.
 //         let attributes = Attributes {
@@ -2145,7 +2145,7 @@ where UP: UserPresence,
 //         }
 //     }
 
-//     fn get_or_create_counter_handle(trussed_client: &mut TrussedClient) -> Result<ObjectHandle> {
+//     fn get_or_create_counter_handle(trussed_client: &mut TrussedClient) -> Result<CounterId> {
 //         todo!("not implemented yet, follow counter code");
 //     }
 
