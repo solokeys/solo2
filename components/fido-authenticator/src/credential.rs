@@ -2,9 +2,7 @@ use core::convert::{TryFrom, TryInto};
 
 use trussed::{
     client, syscall, try_syscall,
-    types::{
-        ObjectHandle,
-    },
+    types::KeyId,
 };
 
 pub(crate) use ctap_types::{
@@ -65,7 +63,7 @@ impl TryFrom<CredentialId> for EncryptedSerializedCredential {
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub enum Key {
-    ResidentKey(ObjectHandle),
+    ResidentKey(KeyId),
     // THIS USED TO BE 92 NOW IT'S 96 or 97 or so... waddup?
     WrappedKey(Bytes<consts::U128>),
 }
@@ -87,14 +85,14 @@ pub struct CredentialData {
     // TODO(implement enums in cbor-deser): for all others, is a wrapped key
     // --> use above Key enum
     // #[serde(skip_serializing_if = "Option::is_none")]
-    // key_id: Option<ObjectHandle>,
+    // key_id: Option<KeyId>,
     pub key: Key,
 
     // extensions
     pub hmac_secret: Option<bool>,
     pub cred_protect: Option<CredentialProtectionPolicy>,
 
-    // TODO: add `sig_counter: Option<ObjectHandle>`,
+    // TODO: add `sig_counter: Option<CounterId>`,
     // and grant RKs a per-credential sig-counter.
 }
 
@@ -170,7 +168,7 @@ impl Credential {
     pub fn id_using_hash<'a, T: client::Chacha8Poly1305>(
         &self,
         crypto: &mut T,
-        key_encryption_key: ObjectHandle,
+        key_encryption_key: KeyId,
         rp_id_hash: &Bytes32,
     )
         -> Result<CredentialId>
@@ -191,7 +189,7 @@ impl Credential {
     pub fn id<'a, T: client::Chacha8Poly1305 + client::Sha256>(
         &self,
         trussed: &mut T,
-        key_encryption_key: ObjectHandle,
+        key_encryption_key: KeyId,
     )
         -> Result<CredentialId>
     {

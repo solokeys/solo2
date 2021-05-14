@@ -5,8 +5,7 @@ use trussed::{
     Client as TrussedClient,
     types::{
         self,
-        ObjectHandle as Key,
-        UniqueId,
+        KeyId,
         Location,
         Mechanism,
     },
@@ -78,7 +77,7 @@ impl State {
 pub struct Identity {
     // can this be [u8; 16] or need Bytes for serialization?
     // aaguid: Option<Bytes<consts::U16>>,
-    attestation_key: Option<Key>,
+    attestation_key: Option<KeyId>,
 }
 
 pub type Aaguid = [u8; 16];
@@ -120,17 +119,15 @@ impl Identity {
         Some(aaguid)
     }
 
-    pub fn attestation<T: TrussedClient>(&mut self, trussed: &mut T) -> (Option<(Key, Certificate)>, Aaguid)
+    pub fn attestation<T: TrussedClient>(&mut self, trussed: &mut T) -> (Option<(KeyId, Certificate)>, Aaguid)
     {
-        let key = Key {
-            object_id: UniqueId::from(0)
-        };
+        let key = crate::constants::ATTESTATION_KEY_ID;
         let attestation_key_exists = syscall!(trussed.exists(Mechanism::P256, key)).exists;
         if attestation_key_exists {
 
             // Will panic if certificate does not exist.
             let cert = syscall!(trussed.read_certificate(
-                trussed::types::Id::from(crate::constants::ATTESTATION_CERT_ID),
+                crate::constants::ATTESTATION_CERT_ID
             )).der;
 
             let mut aaguid = self.yank_aaguid(&cert.as_slice());
@@ -166,10 +163,10 @@ pub struct ActiveGetAssertionData {
 
 #[derive(Clone, Debug, /*uDebug,*/ Default, /*PartialEq,*/ serde::Deserialize, serde::Serialize)]
 pub struct RuntimeState {
-    key_agreement_key: Option<Key>,
-    pin_token: Option<Key>,
+    key_agreement_key: Option<KeyId>,
+    pin_token: Option<KeyId>,
     // TODO: why is this field not used?
-    shared_secret: Option<Key>,
+    shared_secret: Option<KeyId>,
     consecutive_pin_mismatches: u8,
 
     // both of these are a cache for previous Get{Next,}Assertion call
@@ -203,13 +200,13 @@ pub struct PersistentState {
     // We could alternatively make all methods take a TrussedClient as parameter
     initialised: bool,
 
-    key_encryption_key: Option<Key>,
-    key_wrapping_key: Option<Key>,
+    key_encryption_key: Option<KeyId>,
+    key_wrapping_key: Option<KeyId>,
     consecutive_pin_mismatches: u8,
     pin_hash: Option<[u8; 16]>,
     // Ideally, we'd dogfood a "Monotonic Counter" from trussed.
     // TODO: Add per-key counters for resident keys.
-    // counter: Option<Key>,
+    // counter: Option<CounterId>,
     timestamp: u32,
 }
 
@@ -300,7 +297,7 @@ impl PersistentState {
         Ok(now)
     }
 
-    pub fn key_encryption_key<T: client::Client + client::Chacha8Poly1305>(&mut self, trussed: &mut T) -> Result<Key>
+    pub fn key_encryption_key<T: client::Client + client::Chacha8Poly1305>(&mut self, trussed: &mut T) -> Result<KeyId>
     {
         match self.key_encryption_key {
             Some(key) => Ok(key),
@@ -308,7 +305,7 @@ impl PersistentState {
         }
     }
 
-    pub fn rotate_key_encryption_key<T: client::Client + client::Chacha8Poly1305>(&mut self, trussed: &mut T) -> Result<Key> {
+    pub fn rotate_key_encryption_key<T: client::Client + client::Chacha8Poly1305>(&mut self, trussed: &mut T) -> Result<KeyId> {
         if let Some(key) = self.key_encryption_key { syscall!(trussed.delete(key)); }
         let key = syscall!(trussed.generate_chacha8poly1305_key(Location::Internal)).key;
         self.key_encryption_key = Some(key);
@@ -316,7 +313,7 @@ impl PersistentState {
         Ok(key)
     }
 
-    pub fn key_wrapping_key<T: client::Client + client::Chacha8Poly1305>(&mut self, trussed: &mut T) -> Result<Key>
+    pub fn key_wrapping_key<T: client::Client + client::Chacha8Poly1305>(&mut self, trussed: &mut T) -> Result<KeyId>
     {
         match self.key_wrapping_key {
             Some(key) => Ok(key),
@@ -324,7 +321,7 @@ impl PersistentState {
         }
     }
 
-    pub fn rotate_key_wrapping_key<T: client::Client + client::Chacha8Poly1305>(&mut self, trussed: &mut T) -> Result<Key> {
+    pub fn rotate_key_wrapping_key<T: client::Client + client::Chacha8Poly1305>(&mut self, trussed: &mut T) -> Result<KeyId> {
         self.load_if_not_initialised(trussed);
         if let Some(key) = self.key_wrapping_key { syscall!(trussed.delete(key)); }
         let key = syscall!(trussed.generate_chacha8poly1305_key(Location::Internal)).key;
@@ -450,14 +447,14 @@ impl RuntimeState {
         crate::Credential::deserialize(&data).unwrap()
     }
 
-    pub fn key_agreement_key<T: client::P256>(&mut self, trussed: &mut T) -> Key {
+    pub fn key_agreement_key<T: client::P256>(&mut self, trussed: &mut T) -> KeyId {
         match self.key_agreement_key {
             Some(key) => key,
             None => self.rotate_key_agreement_key(trussed),
         }
     }
 
-    pub fn rotate_key_agreement_key<T: client::P256>(&mut self, trussed: &mut T) -> Key {
+    pub fn rotate_key_agreement_key<T: client::P256>(&mut self, trussed: &mut T) -> KeyId {
         // TODO: need to rotate pin token?
         if let Some(key) = self.key_agreement_key {
             syscall!(trussed.delete(key));
@@ -472,14 +469,14 @@ impl RuntimeState {
         key
     }
 
-    pub fn pin_token(&mut self, trussed: &mut impl client::HmacSha256) -> Key {
+    pub fn pin_token(&mut self, trussed: &mut impl client::HmacSha256) -> KeyId {
         match self.pin_token {
             Some(token) => token,
             None => self.rotate_pin_token(trussed),
         }
     }
 
-    pub fn rotate_pin_token<T: client::HmacSha256>(&mut self, trussed: &mut T) -> Key {
+    pub fn rotate_pin_token<T: client::HmacSha256>(&mut self, trussed: &mut T) -> KeyId {
         // TODO: need to rotate key agreement key?
         if let Some(token) = self.pin_token { syscall!(trussed.delete(token)); }
         let token = syscall!(trussed.generate_secret_key(16, Location::Volatile)).key;
@@ -499,7 +496,7 @@ impl RuntimeState {
         self.active_get_assertion = None;
     }
 
-    pub fn generate_shared_secret<T: client::P256>(&mut self, trussed: &mut T, platform_key_agreement_key: &CoseEcdhEsHkdf256PublicKey) -> Result<Key> {
+    pub fn generate_shared_secret<T: client::P256>(&mut self, trussed: &mut T, platform_key_agreement_key: &CoseEcdhEsHkdf256PublicKey) -> Result<KeyId> {
         let private_key = self.key_agreement_key(trussed);
 
         let serialized_pkak = cbor_serialize_message(platform_key_agreement_key).map_err(|_| Error::InvalidParameter)?;

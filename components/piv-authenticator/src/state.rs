@@ -3,7 +3,7 @@ use trussed::{
     block,
     Client as TrussedClient,
     syscall,
-    types::{ObjectHandle, PathBuf, Location},
+    types::{KeyId, PathBuf, Location},
 };
 
 use crate::constants::*;
@@ -11,9 +11,9 @@ use crate::constants::*;
 pub type Result<T> = core::result::Result<T, ()>;
 
 pub enum Key {
-    Ed255(ObjectHandle),
-    P256(ObjectHandle),
-    X255(ObjectHandle),
+    Ed255(KeyId),
+    P256(KeyId),
+    X255(KeyId),
 }
 pub enum PinPolicy {
     Never,
@@ -27,7 +27,7 @@ pub enum TouchPolicy {
 }
 
 pub struct Slot {
-    pub key: Option<ObjectHandle>,
+    pub key: Option<KeyId>,
     pub pin_policy: PinPolicy,
     // touch_policy: TouchPolicy,
 }
@@ -118,20 +118,20 @@ impl SlotName {
 pub struct Keys {
     // 9a "PIV Authentication Key" (YK: PIV Authentication)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub authentication_key: Option<ObjectHandle>,
+    pub authentication_key: Option<KeyId>,
     // 9b "PIV Card Application Administration Key" (YK: PIV Management)
-    pub management_key: ObjectHandle,
+    pub management_key: KeyId,
     // 9c "Digital Signature Key" (YK: Digital Signature)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub signature_key: Option<ObjectHandle>,
+    pub signature_key: Option<KeyId>,
     // 9d "Key Management Key" (YK: Key Management)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub encryption_key: Option<ObjectHandle>,
+    pub encryption_key: Option<KeyId>,
     // 9e "Card Authentication Key" (YK: Card Authentication)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub pinless_authentication_key: Option<ObjectHandle>,
+    pub pinless_authentication_key: Option<KeyId>,
     // 0x82..=0x95 (130-149)
-    pub retired_keys: [Option<ObjectHandle>; 20],
+    pub retired_keys: [Option<KeyId>; 20],
 }
 
 
