@@ -140,11 +140,7 @@ pub fn init_board(
     types::CtaphidDispach,
     types::Trussed,
 
-    types::Piv,
-    types::Totp,
-    types::FidoApp<fido_authenticator::NonSilentAuthenticator>,
-    ndef_app::App<'static>,
-    types::ManagementApp,
+    types::Apps,
 
     Option<types::UsbClasses>,
     Option<types::Iso14443>,
@@ -400,10 +396,10 @@ pub fn init_board(
     let mut fido_client_id = littlefs2::path::PathBuf::new();
     fido_client_id.push(b"fido2\0".try_into().unwrap());
 
-    let (management_trussed_requester, management_trussed_responder) = trussed::pipe::TrussedInterchange::claim()
+    let (mgmt_trussed_requester, mgmt_trussed_responder) = trussed::pipe::TrussedInterchange::claim()
         .expect("could not setup FIDO TrussedInterchange");
-    let mut management_client_id = littlefs2::path::PathBuf::new();
-    management_client_id.push(b"management\0".try_into().unwrap());
+    let mut mgmt_client_id = littlefs2::path::PathBuf::new();
+    mgmt_client_id.push(b"mgmt\0".try_into().unwrap());
 
     let (contact_requester, contact_responder) = apdu_dispatch::interchanges::Contact::claim()
         .expect("could not setup ccid ApduInterchange");
@@ -414,7 +410,7 @@ pub fn init_board(
     let (piv_trussed_requester, piv_trussed_responder) = trussed::pipe::TrussedInterchange::claim()
         .expect("could not setup PIV TrussedInterchange");
 
-    let (totp_trussed_requester, totp_trussed_responder) = trussed::pipe::TrussedInterchange::claim()
+    let (oath_trussed_requester, oath_trussed_responder) = trussed::pipe::TrussedInterchange::claim()
         .expect("could not setup TOTP TrussedInterchange");
 
     info!("usb class start {} ms",perf_timer.elapsed().0/1000);
@@ -506,9 +502,9 @@ pub fn init_board(
     piv_client_id.push(b"piv\0".try_into().unwrap());
     assert!(trussed.add_endpoint(piv_trussed_responder, piv_client_id).is_ok());
 
-    let mut totp_client_id = littlefs2::path::PathBuf::new();
-    totp_client_id.push(b"totp\0".try_into().unwrap());
-    assert!(trussed.add_endpoint(totp_trussed_responder, totp_client_id).is_ok());
+    let mut oath_client_id = littlefs2::path::PathBuf::new();
+    oath_client_id.push(b"oath\0".try_into().unwrap());
+    assert!(trussed.add_endpoint(oath_trussed_responder, oath_client_id).is_ok());
 
     let syscaller = types::Syscall::default();
     let piv_trussed = types::TrussedClient::new(
@@ -517,19 +513,19 @@ pub fn init_board(
     );
 
     let syscaller = types::Syscall::default();
-    let totp_trussed = types::TrussedClient::new(
-        totp_trussed_requester,
+    let oath_trussed = types::TrussedClient::new(
+        oath_trussed_requester,
         syscaller,
     );
 
     let syscaller = types::Syscall::default();
-    let management_trussed = types::TrussedClient::new(management_trussed_requester, syscaller);
+    let mgmt_trussed = types::TrussedClient::new(mgmt_trussed_requester, syscaller);
 
     let syscaller = types::Syscall::default();
     let trussed_client = types::TrussedClient::new(fido_trussed_requester, syscaller);
 
     assert!(trussed.add_endpoint(fido_trussed_responder, fido_client_id).is_ok());
-    assert!(trussed.add_endpoint(management_trussed_responder, management_client_id).is_ok());
+    assert!(trussed.add_endpoint(mgmt_trussed_responder, mgmt_client_id).is_ok());
 
     let authnr = fido_authenticator::Authenticator::new(
         trussed_client,
@@ -540,8 +536,8 @@ pub fn init_board(
 
     let piv = piv_authenticator::Authenticator::new(piv_trussed);
     let ndef = ndef_app::App::new();
-    let management = types::ManagementApp::new(management_trussed, hal::uuid(), build_constants::CARGO_PKG_VERSION);
-    let totp = oath_authenticator::Authenticator::new(totp_trussed);
+    let mgmt = types::ManagementApp::new(mgmt_trussed, hal::uuid(), build_constants::CARGO_PKG_VERSION);
+    let oath = oath_authenticator::Authenticator::new(oath_trussed);
 
     let apdu_dispatch = types::ApduDispatch::new(contact_responder, contactless_responder);
     let ctaphid_dispatch = types::CtaphidDispach::new(hid_responder);
@@ -550,16 +546,20 @@ pub fn init_board(
     delay_timer.cancel().ok();
     info!("init took {} ms",perf_timer.elapsed().0/1000);
 
+    let apps = types::Apps {
+        mgmt,
+        fido,
+        oath,
+        ndef,
+        piv,
+    };
+
     (
         apdu_dispatch,
         ctaphid_dispatch,
         trussed,
 
-        piv,
-        totp,
-        fido,
-        ndef,
-        management,
+        apps,
 
         usb_classes,
         iso14443,
