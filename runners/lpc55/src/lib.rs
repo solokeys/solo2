@@ -487,7 +487,17 @@ pub fn init_board(
     delay_timer.cancel().ok();
     info!("init took {} ms",perf_timer.elapsed().0/1000);
 
-    let apps = types::Apps::new(&mut trussed);
+    let apps = types::Apps::new(
+        &mut trussed,
+        #[cfg(feature = "provisioner-app")]
+        {
+            types::ProvisionerNonPortable {
+                store,
+                stolen_filesystem: unsafe { INTERNAL_STORAGE.as_mut().unwrap() },
+                nfc_powered: is_passive_mode,
+            }
+        }
+    );
 
     (
         apdu_dispatch,
