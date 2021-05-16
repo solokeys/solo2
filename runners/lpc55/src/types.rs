@@ -1,6 +1,9 @@
 include!(concat!(env!("OUT_DIR"), "/build_constants.rs"));
+use core::convert::TryInto;
+
 use crate::hal;
 use hal::drivers::{pins, timer};
+use interchange::Interchange;
 use littlefs2::const_ram_storage;
 use trussed::types::{LfsResult, LfsStorage};
 use trussed::{platform, store};
@@ -103,6 +106,63 @@ pub type PerfTimer = timer::Timer<ctimer::Ctimer4<hal::typestates::init_state::E
 pub type DynamicClockController = board::clock_controller::DynamicClockController;
 pub type HwScheduler = timer::Timer<ctimer::Ctimer0<hal::typestates::init_state::Enabled>>;
 
+pub trait TrussedApp: Sized {
+    const CLIENT_ID: &'static [u8];
+
+    fn with_client(trussed: TrussedClient) -> Self;
+
+    fn with(trussed: &mut trussed::Service<crate::Board>) -> Self {
+        let (trussed_requester, trussed_responder) = trussed::pipe::TrussedInterchange::claim()
+            .expect("could not setup TrussedInterchange");
+
+        let mut client_id = littlefs2::path::PathBuf::new();
+        client_id.push(Self::CLIENT_ID.try_into().unwrap());
+        assert!(trussed.add_endpoint(trussed_responder, client_id).is_ok());
+
+        let syscaller = Syscall::default();
+        let trussed_client = TrussedClient::new(
+            trussed_requester,
+            syscaller,
+        );
+
+        let app = Self::with_client(trussed_client);
+        app
+    }
+}
+
+impl TrussedApp for OathApp {
+    const CLIENT_ID: &'static [u8] = b"oath\0";
+    fn with_client(trussed: TrussedClient) -> Self {
+        Self::new(trussed)
+    }
+}
+
+impl TrussedApp for PivApp {
+    const CLIENT_ID: &'static [u8] = b"piv\0";
+    fn with_client(trussed: TrussedClient) -> Self {
+        Self::new(trussed)
+    }
+}
+
+impl TrussedApp for ManagementApp {
+    const CLIENT_ID: &'static [u8] = b"mgmt\0";
+    fn with_client(trussed: TrussedClient) -> Self {
+        Self::new(trussed, hal::uuid(), build_constants::CARGO_PKG_VERSION)
+    }
+}
+
+impl TrussedApp for FidoApp {
+    const CLIENT_ID: &'static [u8] = b"fido\0";
+    fn with_client(trussed: TrussedClient) -> Self {
+        let authnr = fido_authenticator::Authenticator::new(
+            trussed,
+            fido_authenticator::NonSilentAuthenticator {},
+        );
+
+        Self::new(authnr)
+    }
+}
+
 pub struct Apps {
     pub mgmt: ManagementApp,
     pub fido: FidoApp,
@@ -112,6 +172,24 @@ pub struct Apps {
 }
 
 impl Apps {
+    pub fn new(
+        trussed: &mut trussed::Service<crate::Board>,
+    ) -> Self {
+        let mgmt = ManagementApp::with(trussed);
+        let fido = FidoApp::with(trussed);
+        let oath = OathApp::with(trussed);
+        let piv = PivApp::with(trussed);
+        let ndef = NdefApp::new();
+
+        Self {
+            mgmt,
+            fido,
+            oath,
+            ndef,
+            piv,
+        }
+    }
+
     pub fn apdu_dispatch<F, T>(&mut self, f: F) -> T
     where
         F: FnOnce(&mut [&mut dyn
