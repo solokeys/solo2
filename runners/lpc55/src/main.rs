@@ -33,11 +33,7 @@ const APP: () = {
         ctaphid_dispatch: app::types::CtaphidDispach,
         trussed: app::types::Trussed,
 
-        piv: app::types::Piv,
-        totp: app::types::Totp,
-        fido: app::types::FidoApp<fido_authenticator::NonSilentAuthenticator>,
-        ndef: ndef_app::App<'static>,
-        management: app::types::ManagementApp,
+        apps: app::types::Apps,
 
         usb_classes: Option<app::types::UsbClasses>,
         contactless: Option<app::types::Iso14443>,
@@ -56,11 +52,7 @@ const APP: () = {
             ctaphid_dispatch,
             trussed,
 
-            piv,
-            totp,
-            fido,
-            ndef,
-            management,
+            apps,
 
             usb_classes,
             contactless,
@@ -82,11 +74,7 @@ const APP: () = {
             ctaphid_dispatch,
             trussed,
 
-            piv,
-            totp,
-            fido,
-            ndef,
-            management,
+            apps,
 
             usb_classes,
             contactless,
@@ -98,16 +86,12 @@ const APP: () = {
         }
     }
 
-    #[idle(resources = [apdu_dispatch, ctaphid_dispatch, ndef, piv, totp, fido, management, perf_timer, usb_classes], schedule = [ccid_wait_extension])]
+    #[idle(resources = [apdu_dispatch, ctaphid_dispatch, apps, perf_timer, usb_classes], schedule = [ccid_wait_extension])]
     fn idle(c: idle::Context) -> ! {
         let idle::Resources {
             apdu_dispatch,
             ctaphid_dispatch,
-            ndef,
-            piv,
-            totp,
-            fido,
-            management,
+            apps,
             mut perf_timer,
             mut usb_classes,
         }
@@ -129,7 +113,7 @@ const APP: () = {
                 app::Delogger::flush();
             }
 
-            match apdu_dispatch.poll(&mut [ndef, piv, totp, fido, management]) {
+            match apps.apdu_dispatch(|apps| apdu_dispatch.poll(apps)) {
 
                 Some(apdu_dispatch::dispatch::Interface::Contact) => {
                     rtic::pend(USB_INTERRUPT);
@@ -140,7 +124,7 @@ const APP: () = {
                 _ => {}
             }
 
-            if ctaphid_dispatch.poll(&mut [fido, management]) {
+            if apps.ctaphid_dispatch(|apps| ctaphid_dispatch.poll(apps)) {
                 rtic::pend(USB_INTERRUPT);
             }
 

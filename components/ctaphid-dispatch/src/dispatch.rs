@@ -68,7 +68,7 @@ impl Dispatch {
     #[inline(never)]
     pub fn poll<'a>(
         &mut self,
-        apps: &'a mut [&'a mut dyn App],
+        apps: &mut [&'a mut dyn App],
     ) -> bool {
         let maybe_request = self.responder.take_request();
         if let Some((command, message)) = maybe_request {

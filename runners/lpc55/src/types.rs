@@ -88,22 +88,52 @@ pub type Iso14443 = nfc_device::Iso14443<board::nfc::NfcChip>;
 pub type ExternalInterrupt = hal::Pint<hal::typestates::init_state::Enabled>;
 
 pub type ApduDispatch = apdu_dispatch::dispatch::ApduDispatch;
-
 pub type CtaphidDispach = ctaphid_dispatch::dispatch::Dispatch;
 
-pub type Piv = piv_authenticator::Authenticator<TrussedClient>;
-
-pub type Totp = oath_authenticator::Authenticator<TrussedClient>;
-
-pub type FidoApp<UP> = dispatch_fido::Fido<UP, TrussedClient>;
-
+pub type PivApp = piv_authenticator::Authenticator<TrussedClient>;
+pub type OathApp = oath_authenticator::Authenticator<TrussedClient>;
+pub type FidoApp = dispatch_fido::Fido<fido_authenticator::NonSilentAuthenticator, TrussedClient>;
 pub type ManagementApp = management_app::App<TrussedClient>;
+pub type NdefApp = ndef_app::App<'static>;
+
+use apdu_dispatch::{App as ApduApp, command::Size as CommandSize, response::Size as ResponseSize};
+use ctaphid_dispatch::app::{App as CtaphidApp};
 
 pub type PerfTimer = timer::Timer<ctimer::Ctimer4<hal::typestates::init_state::Enabled>>;
-
 pub type DynamicClockController = board::clock_controller::DynamicClockController;
-
-// pub type SignalPin = pins::Pio0_23;
-// pub type SignalButton = Pin<SignalPin, state::Gpio<direction::Output>>;
-
 pub type HwScheduler = timer::Timer<ctimer::Ctimer0<hal::typestates::init_state::Enabled>>;
+
+pub struct Apps {
+    pub mgmt: ManagementApp,
+    pub fido: FidoApp,
+    pub oath: OathApp,
+    pub ndef: NdefApp,
+    pub piv: PivApp,
+}
+
+impl Apps {
+    pub fn apdu_dispatch<F, T>(&mut self, f: F) -> T
+    where
+        F: FnOnce(&mut [&mut dyn
+                ApduApp<CommandSize, ResponseSize>
+            ]) -> T
+    {
+        f(&mut [
+            &mut self.ndef,
+            &mut self.piv,
+            &mut self.oath,
+            &mut self.fido,
+            &mut self.mgmt,
+        ])
+    }
+
+    pub fn ctaphid_dispatch<F, T>(&mut self, f: F) -> T
+    where
+        F: FnOnce(&mut [&mut dyn CtaphidApp ]) -> T
+    {
+        f(&mut [
+            &mut self.fido,
+            &mut self.mgmt,
+        ])
+    }
+}
