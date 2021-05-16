@@ -98,6 +98,8 @@ pub type OathApp = oath_authenticator::Authenticator<TrussedClient>;
 pub type FidoApp = dispatch_fido::Fido<fido_authenticator::NonSilentAuthenticator, TrussedClient>;
 pub type ManagementApp = management_app::App<TrussedClient>;
 pub type NdefApp = ndef_app::App<'static>;
+#[cfg(feature = "provisioner-app")]
+pub type ProvisionerApp = provisioner_app::Provisioner<Store, FlashStorage, TrussedClient>;
 
 use apdu_dispatch::{App as ApduApp, command::Size as CommandSize, response::Size as ResponseSize};
 use ctaphid_dispatch::app::{App as CtaphidApp};
@@ -107,11 +109,16 @@ pub type DynamicClockController = board::clock_controller::DynamicClockControlle
 pub type HwScheduler = timer::Timer<ctimer::Ctimer0<hal::typestates::init_state::Enabled>>;
 
 pub trait TrussedApp: Sized {
+
+    /// non-portable resources needed by this Trussed app
+    type NonPortable;
+
+    /// the desired client ID
     const CLIENT_ID: &'static [u8];
 
-    fn with_client(trussed: TrussedClient) -> Self;
+    fn with_client(trussed: TrussedClient, non_portable: Self::NonPortable) -> Self;
 
-    fn with(trussed: &mut trussed::Service<crate::Board>) -> Self {
+    fn with(trussed: &mut trussed::Service<crate::Board>, non_portable: Self::NonPortable) -> Self {
         let (trussed_requester, trussed_responder) = trussed::pipe::TrussedInterchange::claim()
             .expect("could not setup TrussedInterchange");
 
@@ -125,35 +132,44 @@ pub trait TrussedApp: Sized {
             syscaller,
         );
 
-        let app = Self::with_client(trussed_client);
+        let app = Self::with_client(trussed_client, non_portable);
         app
     }
 }
 
 impl TrussedApp for OathApp {
     const CLIENT_ID: &'static [u8] = b"oath\0";
-    fn with_client(trussed: TrussedClient) -> Self {
+
+    type NonPortable = ();
+    fn with_client(trussed: TrussedClient, _: ()) -> Self {
         Self::new(trussed)
     }
 }
 
 impl TrussedApp for PivApp {
     const CLIENT_ID: &'static [u8] = b"piv\0";
-    fn with_client(trussed: TrussedClient) -> Self {
+
+    type NonPortable = ();
+    fn with_client(trussed: TrussedClient, _: ()) -> Self {
         Self::new(trussed)
     }
 }
 
 impl TrussedApp for ManagementApp {
     const CLIENT_ID: &'static [u8] = b"mgmt\0";
-    fn with_client(trussed: TrussedClient) -> Self {
+
+    // TODO: declare uuid + version
+    type NonPortable = ();
+    fn with_client(trussed: TrussedClient, _: ()) -> Self {
         Self::new(trussed, hal::uuid(), build_constants::CARGO_PKG_VERSION)
     }
 }
 
 impl TrussedApp for FidoApp {
     const CLIENT_ID: &'static [u8] = b"fido\0";
-    fn with_client(trussed: TrussedClient) -> Self {
+
+    type NonPortable = ();
+    fn with_client(trussed: TrussedClient, _: ()) -> Self {
         let authnr = fido_authenticator::Authenticator::new(
             trussed,
             fido_authenticator::NonSilentAuthenticator {},
@@ -163,23 +179,46 @@ impl TrussedApp for FidoApp {
     }
 }
 
+pub struct ProvisionerNonPortable {
+    pub store: Store,
+    pub stolen_filesystem: &'static mut FlashStorage,
+    pub nfc_powered: bool,
+}
+
+#[cfg(feature = "provisioner-app")]
+impl TrussedApp for ProvisionerApp {
+    const CLIENT_ID: &'static [u8] = b"pro\0";
+
+    type NonPortable = ProvisionerNonPortable;
+    fn with_client(trussed: TrussedClient, ProvisionerNonPortable { store, stolen_filesystem, nfc_powered }: Self::NonPortable) -> Self {
+        Self::new(trussed, store, stolen_filesystem, nfc_powered)
+    }
+
+}
+
 pub struct Apps {
     pub mgmt: ManagementApp,
     pub fido: FidoApp,
     pub oath: OathApp,
     pub ndef: NdefApp,
     pub piv: PivApp,
+    #[cfg(feature = "provisioner-app")]
+    pub provisioner: ProvisionerApp,
 }
 
 impl Apps {
     pub fn new(
         trussed: &mut trussed::Service<crate::Board>,
+        #[cfg(feature = "provisioner-app")]
+        provisioner: ProvisionerNonPortable
     ) -> Self {
-        let mgmt = ManagementApp::with(trussed);
-        let fido = FidoApp::with(trussed);
-        let oath = OathApp::with(trussed);
-        let piv = PivApp::with(trussed);
+        let mgmt = ManagementApp::with(trussed, ());
+        let fido = FidoApp::with(trussed, ());
+        let oath = OathApp::with(trussed, ());
+        let piv = PivApp::with(trussed, ());
         let ndef = NdefApp::new();
+        #[cfg(feature = "provisioner-app")]
+        let provisioner = ProvisionerApp::with(trussed, provisioner);
 
         Self {
             mgmt,
@@ -187,6 +226,8 @@ impl Apps {
             oath,
             ndef,
             piv,
+            #[cfg(feature = "provisioner-app")]
+            provisioner,
         }
     }
 
@@ -202,6 +243,8 @@ impl Apps {
             &mut self.oath,
             &mut self.fido,
             &mut self.mgmt,
+            #[cfg(feature = "provisioner-app")]
+            &mut self.provisioner,
         ])
     }
 

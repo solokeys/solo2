@@ -22,6 +22,7 @@ heapless = "0.6"
 interchange = "0.2.0"
 nb = "1"
 rtt-target = { version = "0.3", optional = true, features = ["cortex-m"] }
+# trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main", features = ["clients-5"] }
 trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main", features = ["clients-4"] }
 usb-device = "0.2.3"
 # usbd-hid = { version = "0.4.5", optional = true }
@@ -35,6 +36,8 @@ apdu-dispatch = { git = "https://github.com/solokeys/apdu-dispatch", branch = "m
 dispatch-fido = {path = "../../components/dispatch-fido"}
 ndef-app = {path = "../../components/ndef-app"}
 management-app = {path = "../../components/management-app"}
+# NB: when using this app, need to raise trussed/clients-5
+provisioner-app = { path = "../../components/provisioner-app", optional = true }
 c-stubs = { path = "../../components/c-stubs" }
 ctap-types = { path = "../../components/ctap-types" }
 fido-authenticator = { path = "../../components/fido-authenticator" }
