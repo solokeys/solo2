@@ -93,10 +93,15 @@ pub type ExternalInterrupt = hal::Pint<hal::typestates::init_state::Enabled>;
 pub type ApduDispatch = apdu_dispatch::dispatch::ApduDispatch;
 pub type CtaphidDispach = ctaphid_dispatch::dispatch::Dispatch;
 
+#[cfg(feature = "piv-authenticator")]
 pub type PivApp = piv_authenticator::Authenticator<TrussedClient>;
+#[cfg(feature = "oath-authenticator")]
 pub type OathApp = oath_authenticator::Authenticator<TrussedClient>;
+#[cfg(feature = "fido-authenticator")]
 pub type FidoApp = dispatch_fido::Fido<fido_authenticator::NonSilentAuthenticator, TrussedClient>;
+#[cfg(feature = "management-app")]
 pub type ManagementApp = management_app::App<TrussedClient>;
+#[cfg(feature = "ndef-app")]
 pub type NdefApp = ndef_app::App<'static>;
 #[cfg(feature = "provisioner-app")]
 pub type ProvisionerApp = provisioner_app::Provisioner<Store, FlashStorage, TrussedClient>;
@@ -137,6 +142,7 @@ pub trait TrussedApp: Sized {
     }
 }
 
+#[cfg(feature = "oath-authenticator")]
 impl TrussedApp for OathApp {
     const CLIENT_ID: &'static [u8] = b"oath\0";
 
@@ -146,6 +152,7 @@ impl TrussedApp for OathApp {
     }
 }
 
+#[cfg(feature = "piv-authenticator")]
 impl TrussedApp for PivApp {
     const CLIENT_ID: &'static [u8] = b"piv\0";
 
@@ -155,6 +162,7 @@ impl TrussedApp for PivApp {
     }
 }
 
+#[cfg(feature = "management-app")]
 impl TrussedApp for ManagementApp {
     const CLIENT_ID: &'static [u8] = b"mgmt\0";
 
@@ -165,6 +173,7 @@ impl TrussedApp for ManagementApp {
     }
 }
 
+#[cfg(feature = "fido-authenticator")]
 impl TrussedApp for FidoApp {
     const CLIENT_ID: &'static [u8] = b"fido\0";
 
@@ -197,10 +206,15 @@ impl TrussedApp for ProvisionerApp {
 }
 
 pub struct Apps {
+    #[cfg(feature = "management-app")]
     pub mgmt: ManagementApp,
+    #[cfg(feature = "fido-authenticator")]
     pub fido: FidoApp,
+    #[cfg(feature = "oath-authenticator")]
     pub oath: OathApp,
+    #[cfg(feature = "ndef-app")]
     pub ndef: NdefApp,
+    #[cfg(feature = "piv-authenticator")]
     pub piv: PivApp,
     #[cfg(feature = "provisioner-app")]
     pub provisioner: ProvisionerApp,
@@ -212,19 +226,29 @@ impl Apps {
         #[cfg(feature = "provisioner-app")]
         provisioner: ProvisionerNonPortable
     ) -> Self {
+        #[cfg(feature = "management-app")]
         let mgmt = ManagementApp::with(trussed, ());
+        #[cfg(feature = "fido-authenticator")]
         let fido = FidoApp::with(trussed, ());
+        #[cfg(feature = "oath-authenticator")]
         let oath = OathApp::with(trussed, ());
+        #[cfg(feature = "piv-authenticator")]
         let piv = PivApp::with(trussed, ());
+        #[cfg(feature = "ndef-app")]
         let ndef = NdefApp::new();
         #[cfg(feature = "provisioner-app")]
         let provisioner = ProvisionerApp::with(trussed, provisioner);
 
         Self {
+            #[cfg(feature = "management-app")]
             mgmt,
+            #[cfg(feature = "fido-authenticator")]
             fido,
+            #[cfg(feature = "oath-authenticator")]
             oath,
+            #[cfg(feature = "ndef-app")]
             ndef,
+            #[cfg(feature = "piv-authenticator")]
             piv,
             #[cfg(feature = "provisioner-app")]
             provisioner,
@@ -238,10 +262,15 @@ impl Apps {
             ]) -> T
     {
         f(&mut [
+            #[cfg(feature = "ndef-app")]
             &mut self.ndef,
+            #[cfg(feature = "piv-authenticator")]
             &mut self.piv,
+            #[cfg(feature = "oath-authenticator")]
             &mut self.oath,
+            #[cfg(feature = "fido-authenticator")]
             &mut self.fido,
+            #[cfg(feature = "management-app")]
             &mut self.mgmt,
             #[cfg(feature = "provisioner-app")]
             &mut self.provisioner,
@@ -253,7 +282,9 @@ impl Apps {
         F: FnOnce(&mut [&mut dyn CtaphidApp ]) -> T
     {
         f(&mut [
+            #[cfg(feature = "fido-authenticator")]
             &mut self.fido,
+            #[cfg(feature = "management-app")]
             &mut self.mgmt,
         ])
     }
