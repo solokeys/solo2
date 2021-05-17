@@ -1,10 +1,15 @@
-FEATURES := board-lpcxpresso55,develop
+BOARD := board-lpcxpresso55
+DEVELOP := --features $(BOARD),develop
+PROVISIONER := --features $(BOARD),develop-provisioner
 
 build-dev:
-	cargo build --release --features $(FEATURES)
+	cargo build --release $(DEVELOP)
 
 run-dev:
-	cargo run --release --features $(FEATURES)
+	cargo run --release $(DEVELOP)
+
+run-pro:
+	cargo run --release $(PROVISIONER)
 
 bacon:
 	bacon

@@ -22,8 +22,7 @@ heapless = "0.6"
 interchange = "0.2.0"
 nb = "1"
 rtt-target = { version = "0.3", optional = true, features = ["cortex-m"] }
-# trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main", features = ["clients-5"] }
-trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main", features = ["clients-4"] }
+trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main" }
 usb-device = "0.2.3"
 # usbd-hid = { version = "0.4.5", optional = true }
 usbd-serial = "0.1.0"
@@ -34,22 +33,22 @@ board = { path = "board" }
 # components
 apdu-dispatch = { git = "https://github.com/solokeys/apdu-dispatch", branch = "main" }
 dispatch-fido = {path = "../../components/dispatch-fido"}
-ndef-app = {path = "../../components/ndef-app"}
-management-app = {path = "../../components/management-app"}
+ndef-app = { path = "../../components/ndef-app", optional = true }
+management-app = { path = "../../components/management-app", optional = true }
 # NB: when using this app, need to raise trussed/clients-5
 provisioner-app = { path = "../../components/provisioner-app", optional = true }
 c-stubs = { path = "../../components/c-stubs" }
 ctap-types = { path = "../../components/ctap-types" }
-fido-authenticator = { path = "../../components/fido-authenticator" }
+fido-authenticator = { path = "../../components/fido-authenticator", optional = true }
 fm11nc08 = {path = "../../components/fm11nc08"}
 ctaphid-dispatch = {path = "../../components/ctaphid-dispatch"}
 nfc-device = {path = "../../components/nfc-device"}
-piv-authenticator = { path = "../../components/piv-authenticator", features = ["apdu-dispatch"] }
+piv-authenticator = { path = "../../components/piv-authenticator", features = ["apdu-dispatch"], optional = true }
 usbd-ccid = { path = "../../components/usbd-ccid" }
 usbd-ctaphid = { path = "../../components/usbd-ctaphid" }
 
 # TODO release oath-authenticator
-oath-authenticator = { git = "https://github.com/trussed-dev/oath-authenticator", branch = "main", features = ["apdu-dispatch"] }
+oath-authenticator = { git = "https://github.com/trussed-dev/oath-authenticator", branch = "main", features = ["apdu-dispatch"], optional = true }
 
 # panic
 panic-halt = "0.2.0"
@@ -59,9 +58,10 @@ panic-halt = "0.2.0"
 littlefs2 = "0.2.1"
 
 [features]
-default = []
+default = ["fido-authenticator", "management-app", "ndef-app", "oath-authenticator", "piv-authenticator"]
 
-develop = ["no-encrypted-storage", "no-buttons", "no-reset-time-window"]
+develop = ["no-encrypted-storage", "no-buttons", "no-reset-time-window", "trussed/clients-4"]
+develop-provisioner = ["no-encrypted-storage", "no-buttons", "no-reset-time-window", "provisioner-app", "trussed/clients-5"]
 
 # Do not use encryption for the filesystem
 no-encrypted-storage = []
