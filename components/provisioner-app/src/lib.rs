@@ -56,6 +56,9 @@ pub enum Instructions {
     SaveP256AttestationCertificate = 0xba,
     SaveEd255AttestationCertificate = 0xb9,
     SaveX255AttestationCertificate = 0xb6,
+
+    SaveT1IntermediatePublicKey = 0xb5,
+
     #[cfg(feature = "test-attestation")]
     TestAttestation = 0xb8,
 }
@@ -78,6 +81,9 @@ impl TryFrom<u8> for Instructions {
             0xba => SaveP256AttestationCertificate,
             0xb9 => SaveEd255AttestationCertificate,
             0xb6 => SaveX255AttestationCertificate,
+
+            0xb5 => SaveT1IntermediatePublicKey,
+
             #[cfg(feature = "test-attestation")]
             0xb8 => TestAttestation,
             _ => return Err(()),
@@ -94,6 +100,8 @@ enum TestAttestationP1 {
     Ed255Cert= 3,
 }
 
+
+const FILENAME_T1_PUBLIC: &'static [u8] = b"/attn/pub/00";
 
 const FILENAME_P256_SECRET: &'static [u8] = b"/attn/sec/01";
 const FILENAME_ED255_SECRET: &'static [u8] = b"/attn/sec/02";
@@ -348,6 +356,29 @@ where S: Store,
                                     command.data()
                                 ).map_err(|_| Status::NotEnoughMemory)?;
                                 Ok(())
+                            }
+                        },
+
+                        SaveT1IntermediatePublicKey => {
+                            info!("saving T1 INTERMEDIATE PUBLIC KEY, {} bytes", command.data().len());
+                            let public_key = &command.data();
+                            if public_key.len() != 32 {
+                                Err(Status::IncorrectDataParameter)
+                            } else {
+                                let serialized_key = Key {
+                                    flags: Default::default(),
+                                    kind: KeyKind::Ed255,
+                                    material: Bytes::try_from_slice(&public_key).unwrap(),
+                                };
+
+                                let serialized_key = serialized_key.serialize();
+
+                                store::store(
+                                    self.store,
+                                    trussed::types::Location::Internal,
+                                    &PathBuf::from(FILENAME_T1_PUBLIC),
+                                    &serialized_key,
+                                ).map_err(|_| Status::NotEnoughMemory)
                             }
                         },
 
