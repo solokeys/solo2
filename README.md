@@ -20,6 +20,10 @@ pull requests using the *Rebase and merge* or *Squash and merge* strategies.
 Please group changes into logically atomic commits to make it easier to rebase
 them.
 
+For more information on compiling, flashing and debugging the firmware for the
+Nitrokey 3 protoypes, see the [Nitrokey 3 Quickstart
+Guide](./nk3-quickstart.md).
+
 ----
 
 To make pcsclite on Linux work with the Bee, on Debian copy `Info.plist` to `/etc/libccid_Info.plist`.
