@@ -216,6 +216,13 @@ pub fn init_board(
         &mut iocon,
     );
 
+    #[cfg(feature = "board-nk3xn")]
+    let mut rgb = board::RgbLed::new(
+        Pwm::new(hal.ctimer.3.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap())),
+        &mut iocon,
+    );
+
+
     let (three_buttons,adc) = if is_passive_mode {
         (None, Some(adc))
     } else {
@@ -241,6 +248,13 @@ pub fn init_board(
                 &mut iocon,
             )
         };
+
+        #[cfg(feature = "board-nk3xn")]
+        let three_buttons = board::ThreeButtons::new(
+            Timer::new(hal.ctimer.1.enabled(&mut syscon, clocks.support_1mhz_fro_token().unwrap())),
+            &mut gpio,
+            &mut iocon,
+        );
 
         // Boot to bootrom if buttons are all held for 5s
         info!("button start {}",perf_timer.elapsed().0/1000);

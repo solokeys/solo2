@@ -15,6 +15,8 @@ trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main" }
 board-lpcxpresso55 = []
 board-okdoe1 = ["board-lpcxpresso55"]
 board-solo2 = []
+board-nk3xn = []
+board-nk3am = ["board-solo2"]
 
 no-buttons = []
 no-clock-controller = []
