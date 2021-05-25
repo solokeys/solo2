@@ -5,9 +5,11 @@ This implements `trussed::Platform` for some LPC55S69 boards.
 The main ones are:
 - [LPCXpresso55S69][lpcxpresso], the official development board by NXP
 - [Solo 2][solo2], the new security key by SoloKeys
+- NK3XN, the new [Nitrokey 3A NFC][nk3an] and [Nitrokey 3C NFC][nk3cn] devices
+- NK3AM, the new [Nitrokey 3A Mini][nk3am] device
 
-These can be selected via the features `board-lpcxpresso55` and `board-solo2`,
-respectively.
+These can be selected via the features `board-lpcxpresso55`, `board-solo2`,
+`board-nk3xn` and `board-nk3am`, respectively.
 
 It is more convenient to develop on the LPC55S69-EVK as it has `PIO0_5`, the `ISP0` pin, exposed.
 This allows forcing boot-to-bootloader, so you can't realy brick yourself until you start playing
@@ -35,3 +37,6 @@ Flashing firmware is *much* slower.
 [lpcxpresso]: https://www.nxp.com/design/development-boards/lpcxpresso-boards/lpcxpresso55s69-development-board:LPC55S69-EVK
 [okdoe1]: https://www.okdo.com/p/okdo-e1-development-board/
 [solo2]: https://solo2.dev
+[nk3an]: https://shop.nitrokey.com/shop/product/nk3an-nitrokey-3a-nfc-147
+[nk3cn]: https://shop.nitrokey.com/shop/product/nk3cn-nitrokey-3c-nfc-148
+[nk3am]: https://shop.nitrokey.com/shop/product/nk3am-nitrokey-3a-mini-149

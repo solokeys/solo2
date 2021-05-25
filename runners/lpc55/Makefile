@@ -1,23 +1,35 @@
-BOARD := lpcxpresso55
-DEVELOP := --features board-$(BOARD),develop
-PROVISIONER := --features board-$(BOARD),develop-provisioner
+BOARD ?= nk3xn
 
-# builds firmware bundle with development features,
-# i.e., no encrypted storage, etc.
-build-dev:
-	cargo build --release $(DEVELOP)
-	cargo objcopy --release $(DEVELOP) -- -O binary app.bin
+FEATURES := board-${BOARD}
 
-# builds firmware bundle as before, *including* provisioner app
-build-pro:
-	cargo build --release $(PROVISIONER)
-	cargo objcopy --release $(PROVISIONER) -- -O binary provisioner.bin
+ifeq "${DEVELOP}" "1"
+FEATURES := ${FEATURES},develop
+endif
 
-run-dev:
-	cargo run --release $(DEVELOP)
+ifeq "${PROVISIONER}" "1"
+FEATURES := ${FEATURES},develop-provisioner
+endif
 
-run-pro:
-	cargo run --release $(PROVISIONER)
+.PHONY: build
+build:
+	cargo build --release --features $(FEATURES)
+
+.PHONY: run
+run:
+	cargo run --release --features $(FEATURES)
+
+.PHONY: objcopy
+objcopy:
+	cargo objcopy --release --features $(FEATURES) -- -O binary "firmware-${BOARD}.bin"
+
+.PHONY: flash
+flash: objcopy
+	mboot erase --mass
+	mboot write "firmware-${BOARD}.bin"
+
+.PHONY: size
+size:
+	cargo size --release --features $(FEATURES)
 
 bacon:
 	bacon

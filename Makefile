@@ -1,13 +1,13 @@
 RUNNER := runners/lpc55
 
-build-dev:
-	make -C $(RUNNER) build-dev
+build:
+	make -C $(RUNNER) build
 
 bacon:
 	make -C $(RUNNER) bacon
 
-run-dev:
-	make -C $(RUNNER) run-dev
+run:
+	make -C $(RUNNER) run
 
 jlink:
 	scripts/bump-jlink

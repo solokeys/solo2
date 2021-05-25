@@ -3,3 +3,4 @@ Cargo.lock
 *.bin
 *.elf
 lpc55s69.pack
+*.bin

@@ -300,7 +300,7 @@ impl Initializer {
         _dma: hal::Dma<Unknown>,
         delay_timer: ctimer::Ctimer0,
         ctimer1: ctimer::Ctimer1,
-        ctimer2: ctimer::Ctimer2,
+        _ctimer2: ctimer::Ctimer2,
         _ctimer3: ctimer::Ctimer3,
         perf_timer: ctimer::Ctimer4,
         pfr: Pfr<Unknown>,
@@ -334,11 +334,17 @@ impl Initializer {
 
         #[cfg(feature = "board-lpcxpresso55")]
         let mut rgb = board::RgbLed::new(
-            Pwm::new(ctimer2.enabled(syscon, clocks.support_1mhz_fro_token().unwrap())),
+            Pwm::new(_ctimer2.enabled(syscon, clocks.support_1mhz_fro_token().unwrap())),
             iocon,
         );
 
         #[cfg(feature = "board-solo2")]
+        let mut rgb = board::RgbLed::new(
+            Pwm::new(_ctimer3.enabled(syscon, clocks.support_1mhz_fro_token().unwrap())),
+            iocon,
+        );
+
+        #[cfg(feature = "board-nk3xn")]
         let mut rgb = board::RgbLed::new(
             Pwm::new(_ctimer3.enabled(syscon, clocks.support_1mhz_fro_token().unwrap())),
             iocon,
@@ -360,13 +366,20 @@ impl Initializer {
                 board::ThreeButtons::new (
                     adc.take().unwrap(),
                     ctimer1.enabled(syscon, clocks.support_1mhz_fro_token().unwrap()),
-                    ctimer2.enabled(syscon, clocks.support_1mhz_fro_token().unwrap()),
+                    _ctimer2.enabled(syscon, clocks.support_1mhz_fro_token().unwrap()),
                     &mut dma,
                     clocks.support_touch_token().unwrap(),
                     gpio,
                     iocon,
                 )
             };
+
+            #[cfg(feature = "board-nk3xn")]
+            let new_three_buttons = board::ThreeButtons::new(
+                Timer::new(ctimer1.enabled(syscon, clocks.support_1mhz_fro_token().unwrap())),
+                gpio,
+                iocon,
+            );
 
             three_buttons = Some(new_three_buttons);
         }
