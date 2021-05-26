@@ -6,5 +6,6 @@ RUN cargo install flip-link
 RUN rustup target add thumbv8m.main-none-eabi
 RUN cargo install cargo-binutils
 RUN rustup component add llvm-tools-preview
-RUN git clone https://github.com/Nitrokey/solo2.git && cd solo2 && git checkout nitrokey-main
+#RUN git clone https://github.com/Nitrokey/solo2.git && cd solo2 && git checkout nitrokey-main
+#COPY Cargo.lock solo2/runners/lpc55
 # run docker build -f ./Dockerfile -t solo2 .
