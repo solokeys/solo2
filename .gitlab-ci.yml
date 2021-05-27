@@ -60,9 +60,7 @@ build-nk3xn:
   script:
     - make build-docker-toolchain
     - make docker-build BOARD=nk3xn
-  artifacts:
-    paths:
-      - runners/lpc55/*.hex
+
 
 build-nk3am:
   rules:
@@ -75,9 +73,6 @@ build-nk3am:
   script:
     - make build-docker-toolchain
     - make docker-build BOARD=nk3am
-  artifacts:
-    paths:
-      - runners/lpc55/*.hex
 
 objcopy-nk3am:
   rules:
@@ -92,7 +87,7 @@ objcopy-nk3am:
     - make docker-objcopy BOARD=nk3am
   artifacts:
     paths:
-      - runners/lpc55/*.hex
+      - ./runners/lpc55/firmware-*.bin
 
 objcopy-nk3xn:
   image: solo2:latest
@@ -108,9 +103,7 @@ objcopy-nk3xn:
     - sleep 3h
   artifacts:
     paths:
-      - runners/lpc55/*.hex
-
-
+      - ./runners/lpc55/firmware-*.bin
 
 upload-nightly:
   stage: deploy
@@ -126,7 +119,7 @@ upload-nightly:
     - export SCRIPTS_DIR=$(mktemp -d)
     - git clone -q --depth 1 $SCRIPTS_REPO $SCRIPTS_DIR
   script:
-    - cp runners/lpc55/*.hex artifacts
+    - cp ./runners/lpc55/firmware-*.bin artifacts
     - chmod +x $SCRIPTS_DIR/ci-scripts/nightly_upload.sh
     - $SCRIPTS_DIR/ci-scripts/nightly_upload.sh
 
@@ -144,6 +137,6 @@ deploy-release:
     - export SCRIPTS_DIR=$(mktemp -d)
     - git clone -q --depth 1 $SCRIPTS_REPO $SCRIPTS_DIR
   script:
-    - cp runners/lpc55/*.hex artifacts
+    - cp ./runners/lpc55/firmware-*.bin artifacts
     - chmod +x $SCRIPTS_DIR/ci-scripts/release.sh
     - $SCRIPTS_DIR/ci-scripts/release.sh
