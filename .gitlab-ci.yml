@@ -104,7 +104,6 @@ objcopy-nk3xn:
     - docker
   stage: build
   script:
-    - make build-docker-toolchain
     - make objcopy BOARD=nk3xn
   artifacts:
     paths:
