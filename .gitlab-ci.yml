@@ -26,7 +26,6 @@ pull:
     - $SCRIPTS_DIR/ci-scripts/pull.sh nitrokey solo2
 
 build-objcopy-nk3am:
-  image: nk-storage-firmware-build:latest
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push"'
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
@@ -40,6 +39,24 @@ build-objcopy-nk3am:
   artifacts:
     paths:
       - runners/lpc55/*.hex
+
+build-objcopy-nk3xn:
+  image: solo2:latest
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+  tags:
+    - docker
+  stage: build
+  script:
+    - make build-docker-toolchain
+    - make docker-objcopy BOARD=nk3xn
+  artifacts:
+    paths:
+      - runners/lpc55/*.hex
+
+
 
 upload-nightly:
   stage: deploy
