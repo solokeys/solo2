@@ -100,7 +100,6 @@ objcopy-nk3xn:
   stage: build
   script:
     - make objcopy BOARD=nk3xn
-    - sleep 3h
   artifacts:
     paths:
       - ./runners/lpc55/firmware-*.bin
