@@ -25,7 +25,61 @@ pull:
     - chmod +x  $SCRIPTS_DIR/ci-scripts/pull.sh
     - $SCRIPTS_DIR/ci-scripts/pull.sh nitrokey solo2
 
-build-objcopy-nk3am:
+size-nk3xn:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+  tags:
+    - lxc
+  stage: build
+  script:
+    - make build-docker-toolchain
+    - make docker-size BOARD=nk3xn
+
+size-nk3am:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+  tags:
+    - lxc
+  stage: build
+  script:
+    - make build-docker-toolchain
+    - make docker-size BOARD=nk3am
+
+build-nk3xn:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+  tags:
+    - lxc
+  stage: build
+  script:
+    - make build-docker-toolchain
+    - make docker-build BOARD=nk3xn
+  artifacts:
+    paths:
+      - runners/lpc55/*.hex
+
+build-nk3am:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+  tags:
+    - lxc
+  stage: build
+  script:
+    - make build-docker-toolchain
+    - make docker-build BOARD=nk3am
+  artifacts:
+    paths:
+      - runners/lpc55/*.hex
+
+objcopy-nk3am:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push"'
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
@@ -40,7 +94,7 @@ build-objcopy-nk3am:
     paths:
       - runners/lpc55/*.hex
 
-build-objcopy-nk3xn:
+objcopy-nk3xn:
   image: solo2:latest
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push"'
@@ -51,7 +105,7 @@ build-objcopy-nk3xn:
   stage: build
   script:
     - make build-docker-toolchain
-    - make docker-objcopy BOARD=nk3xn
+    - make objcopy BOARD=nk3xn
   artifacts:
     paths:
       - runners/lpc55/*.hex
