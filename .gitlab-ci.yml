@@ -35,7 +35,7 @@ size-nk3xn:
     - docker
   stage: build
   script:
-    - make size BOARD=nk3xn
+    - make -C $(RUNNER) size BOARD=nk3xn
 
 size-nk3am:
   image: nitrokey3:latest
@@ -47,7 +47,7 @@ size-nk3am:
     - docker
   stage: build
   script:
-    - make size BOARD=nk3am
+    - make -C $(RUNNER) size BOARD=nk3am
 
 build-nk3xn:
   image: nitrokey3:latest
@@ -59,7 +59,7 @@ build-nk3xn:
     - docker
   stage: build
   script:
-    - make build BOARD=nk3xn
+    - make -C $(RUNNER) build BOARD=nk3xn
 
 
 build-nk3am:
@@ -72,7 +72,7 @@ build-nk3am:
     - docker
   stage: build
   script:
-    - make build BOARD=nk3am
+    - make -C $(RUNNER) build BOARD=nk3am
 
 objcopy-nk3am:
   image: nitrokey3:latest
@@ -84,7 +84,7 @@ objcopy-nk3am:
     - docker
   stage: build
   script:
-    - make objcopy BOARD=nk3am
+    - make -C $(RUNNER) objcopy BOARD=nk3am
   artifacts:
     paths:
       - ./runners/lpc55/firmware-*.bin
@@ -99,7 +99,7 @@ objcopy-nk3xn:
     - docker
   stage: build
   script:
-    - make objcopy BOARD=nk3xn
+    - make -C $(RUNNER) objcopy BOARD=nk3xn
   artifacts:
     paths:
       - ./runners/lpc55/firmware-*.bin

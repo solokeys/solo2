@@ -1,0 +1,13 @@
+RUNNER := runners/lpc55
+
+build-docker-toolchain:
+	docker build . -t nitrokey3
+
+docker-build:
+	docker run -i --rm -v $(PWD):/app nitrokey3 make -C $(RUNNER) build BOARD=$(BOARD)
+
+docker-objcopy:
+	docker run -i --rm -v $(PWD):/app nitrokey3 make -C $(RUNNER) objcopy BOARD=$(BOARD)
+
+docker-size:
+	docker run -i --rm -v $(PWD):/app nitrokey3 make -C $(RUNNER) size BOARD=$(BOARD)
