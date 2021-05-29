@@ -1,8 +1,6 @@
 stages:
   - pull-github
-  - size
   - build
-  - objcopy
   - deploy
 
 variables:
@@ -35,7 +33,7 @@ size-nk3xn:
     - if: '$CI_PIPELINE_SOURCE == "web"'
   tags:
     - docker
-  stage: size
+  stage: build
   script:
     - make -C runners/lpc55 size BOARD=nk3xn
 
@@ -47,7 +45,7 @@ size-nk3am:
     - if: '$CI_PIPELINE_SOURCE == "web"'
   tags:
     - docker
-  stage: size
+  stage: build
   script:
     - make -C runners/lpc55 size BOARD=nk3am
 
@@ -84,7 +82,7 @@ objcopy-nk3am:
     - if: '$CI_PIPELINE_SOURCE == "web"'
   tags:
     - docker
-  stage: objcopy
+  stage: build
   script:
     - make -C runners/lpc55 objcopy BOARD=nk3am
   artifacts:
@@ -99,7 +97,7 @@ objcopy-nk3xn:
     - if: '$CI_PIPELINE_SOURCE == "web"'
   tags:
     - docker
-  stage: objcopy
+  stage: build
   script:
     - make -C runners/lpc55 objcopy BOARD=nk3xn
   artifacts:
