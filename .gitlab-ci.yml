@@ -39,17 +39,17 @@ size-nk3xn:
   script:
     - make -C runners/lpc55 size BOARD=nk3xn
 
-#size-nk3am:
-#  image: nitrokey3:latest
-#  rules:
-#    - if: '$CI_PIPELINE_SOURCE == "push"'
-#    - if: '$CI_PIPELINE_SOURCE == "schedule"'
-#    - if: '$CI_PIPELINE_SOURCE == "web"'
-#  tags:
-#    - docker
-#  stage: size
-#  script:
-#    - make -C runners/lpc55 size BOARD=nk3am
+size-nk3am:
+  image: nitrokey3:latest
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+  tags:
+    - docker
+  stage: size
+  script:
+    - make -C runners/lpc55 size BOARD=nk3am
 
 build-nk3xn:
   image: nitrokey3:latest
@@ -64,17 +64,17 @@ build-nk3xn:
     - make -C runners/lpc55 build BOARD=nk3xn
 
 
-#build-nk3am:
-#  image: nitrokey3:latest
-#  rules:
-#    - if: '$CI_PIPELINE_SOURCE == "push"'
-#    - if: '$CI_PIPELINE_SOURCE == "schedule"'
-#    - if: '$CI_PIPELINE_SOURCE == "web"'
-#  tags:
-#    - docker
-#  stage: build
-#  script:
-#    - make -C runners/lpc55 build BOARD=nk3am
+build-nk3am:
+  image: nitrokey3:latest
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+  tags:
+    - docker
+  stage: build
+  script:
+    - make -C runners/lpc55 build BOARD=nk3am
 
 objcopy-nk3am:
   image: nitrokey3:latest
@@ -91,20 +91,20 @@ objcopy-nk3am:
     paths:
       - ./runners/lpc55/firmware-*.bin
 
-#objcopy-nk3xn:
-#  image: nitrokey3:latest
-#  rules:
-#    - if: '$CI_PIPELINE_SOURCE == "push"'
-#    - if: '$CI_PIPELINE_SOURCE == "schedule"'
-#    - if: '$CI_PIPELINE_SOURCE == "web"'
-#  tags:
-#    - docker
-#  stage: objcopy
-#  script:
-#    - make -C runners/lpc55 objcopy BOARD=nk3xn
-#  artifacts:
-#    paths:
-#      - ./runners/lpc55/firmware-*.bin
+objcopy-nk3xn:
+  image: nitrokey3:latest
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+  tags:
+    - docker
+  stage: objcopy
+  script:
+    - make -C runners/lpc55 objcopy BOARD=nk3xn
+  artifacts:
+    paths:
+      - ./runners/lpc55/firmware-*.bin
 
 upload-nightly:
   stage: deploy
