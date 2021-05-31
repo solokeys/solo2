@@ -36,6 +36,9 @@ size-nk3xn:
   stage: build
   script:
     - make -C runners/lpc55 size BOARD=nk3xn
+  after_script:
+    - wget $CI_COMMIT_REF_NAME,$CI_COMMIT_SHA,$CI_JOB_NAME,$CI_JOB_STATUS,"nitrokey/solo2/-/jobs/22535"
+    # ${CI_JOB_URL#*/*/*/}
 
 size-nk3am:
   image: nitrokey3:latest
