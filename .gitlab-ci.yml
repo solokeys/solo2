@@ -37,7 +37,7 @@ size-nk3xn:
   script:
     - make -C runners/lpc55 size BOARD=nk3xn
   after_script:
-    - wget 127.0.0.1:8080/checkmark/$CI_COMMIT_REF_NAME,$CI_COMMIT_SHA,$CI_JOB_NAME,$CI_JOB_STATUS,"nitrokey/solo2/-/jobs/22535"
+    - wget 127.0.0.1:8089/checkmark/$CI_COMMIT_REF_NAME,$CI_COMMIT_SHA,$CI_JOB_NAME,$CI_JOB_STATUS,"nitrokey/solo2/-/jobs/22535"
     # ${CI_JOB_URL#*/*/*/}
 
 size-nk3am:
