@@ -40,7 +40,6 @@ size-nk3xn:
     - echo ${CI_JOB_URL#*/*/*/}
     - echo ip addr
     - wget 188.40.174.112:8089/checkmark/$CI_COMMIT_REF_NAME/$CI_COMMIT_SHA/$CI_JOB_NAME/$CI_JOB_STATUS/${CI_JOB_URL#*/*/*/}
-  #  - "nitrokey/solo2/-/jobs/22535"
 
 size-nk3am:
   image: nitrokey3:latest
@@ -53,6 +52,8 @@ size-nk3am:
   stage: build
   script:
     - make -C runners/lpc55 size BOARD=nk3am
+  after_script:
+    - wget 188.40.174.112:8089/checkmark/$CI_COMMIT_REF_NAME/$CI_COMMIT_SHA/$CI_JOB_NAME/$CI_JOB_STATUS/${CI_JOB_URL#*/*/*/}
 
 build-nk3xn:
   image: nitrokey3:latest
@@ -65,6 +66,8 @@ build-nk3xn:
   stage: build
   script:
     - make -C runners/lpc55 build BOARD=nk3xn
+  after_script:
+    - wget 188.40.174.112:8089/checkmark/$CI_COMMIT_REF_NAME/$CI_COMMIT_SHA/$CI_JOB_NAME/$CI_JOB_STATUS/${CI_JOB_URL#*/*/*/}
 
 
 build-nk3am:
@@ -90,6 +93,8 @@ objcopy-nk3am:
   stage: build
   script:
     - make -C runners/lpc55 objcopy BOARD=nk3am
+  after_script:
+    - wget 188.40.174.112:8089/checkmark/$CI_COMMIT_REF_NAME/$CI_COMMIT_SHA/$CI_JOB_NAME/$CI_JOB_STATUS/${CI_JOB_URL#*/*/*/}
   artifacts:
     paths:
       - ./runners/lpc55/firmware-*.bin
@@ -105,6 +110,8 @@ objcopy-nk3xn:
   stage: build
   script:
     - make -C runners/lpc55 objcopy BOARD=nk3xn
+  after_script:
+    - wget 188.40.174.112:8089/checkmark/$CI_COMMIT_REF_NAME/$CI_COMMIT_SHA/$CI_JOB_NAME/$CI_JOB_STATUS/${CI_JOB_URL#*/*/*/}
   artifacts:
     paths:
       - ./runners/lpc55/firmware-*.bin
