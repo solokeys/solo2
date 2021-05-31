@@ -12,7 +12,7 @@ variables:
   GIT_SUBMODULE_STRATEGY: recursive #This seems to have no effect also set in webinterfac
   SCRIPTS_REPO: git@git.dotplex.com:nitrokey/gitlab-ci.git
   REPO_USER: nitrokey
-  REPO_NAME: pynitrokey
+  REPO_NAME: solo2
 
 size-nk3xn:
   image: nitrokey3:latest
