@@ -93,14 +93,14 @@ pub type ExternalInterrupt = hal::Pint<hal::typestates::init_state::Enabled>;
 pub type ApduDispatch = apdu_dispatch::dispatch::ApduDispatch;
 pub type CtaphidDispach = ctaphid_dispatch::dispatch::Dispatch;
 
+#[cfg(feature = "admin-app")]
+pub type AdminApp = admin_app::App<TrussedClient>;
 #[cfg(feature = "piv-authenticator")]
 pub type PivApp = piv_authenticator::Authenticator<TrussedClient>;
 #[cfg(feature = "oath-authenticator")]
 pub type OathApp = oath_authenticator::Authenticator<TrussedClient>;
 #[cfg(feature = "fido-authenticator")]
 pub type FidoApp = dispatch_fido::Fido<fido_authenticator::NonSilentAuthenticator, TrussedClient>;
-#[cfg(feature = "management-app")]
-pub type ManagementApp = management_app::App<TrussedClient>;
 #[cfg(feature = "ndef-app")]
 pub type NdefApp = ndef_app::App<'static>;
 #[cfg(feature = "provisioner-app")]
@@ -162,9 +162,9 @@ impl TrussedApp for PivApp {
     }
 }
 
-#[cfg(feature = "management-app")]
-impl TrussedApp for ManagementApp {
-    const CLIENT_ID: &'static [u8] = b"mgmt\0";
+#[cfg(feature = "admin-app")]
+impl TrussedApp for AdminApp {
+    const CLIENT_ID: &'static [u8] = b"admin\0";
 
     // TODO: declare uuid + version
     type NonPortable = ();
@@ -206,8 +206,8 @@ impl TrussedApp for ProvisionerApp {
 }
 
 pub struct Apps {
-    #[cfg(feature = "management-app")]
-    pub mgmt: ManagementApp,
+    #[cfg(feature = "admin-app")]
+    pub admin: AdminApp,
     #[cfg(feature = "fido-authenticator")]
     pub fido: FidoApp,
     #[cfg(feature = "oath-authenticator")]
@@ -226,8 +226,8 @@ impl Apps {
         #[cfg(feature = "provisioner-app")]
         provisioner: ProvisionerNonPortable
     ) -> Self {
-        #[cfg(feature = "management-app")]
-        let mgmt = ManagementApp::with(trussed, ());
+        #[cfg(feature = "admin-app")]
+        let admin = AdminApp::with(trussed, ());
         #[cfg(feature = "fido-authenticator")]
         let fido = FidoApp::with(trussed, ());
         #[cfg(feature = "oath-authenticator")]
@@ -240,8 +240,8 @@ impl Apps {
         let provisioner = ProvisionerApp::with(trussed, provisioner);
 
         Self {
-            #[cfg(feature = "management-app")]
-            mgmt,
+            #[cfg(feature = "admin-app")]
+            admin,
             #[cfg(feature = "fido-authenticator")]
             fido,
             #[cfg(feature = "oath-authenticator")]
@@ -270,8 +270,8 @@ impl Apps {
             &mut self.oath,
             #[cfg(feature = "fido-authenticator")]
             &mut self.fido,
-            #[cfg(feature = "management-app")]
-            &mut self.mgmt,
+            #[cfg(feature = "admin-app")]
+            &mut self.admin,
             #[cfg(feature = "provisioner-app")]
             &mut self.provisioner,
         ])
@@ -284,8 +284,8 @@ impl Apps {
         f(&mut [
             #[cfg(feature = "fido-authenticator")]
             &mut self.fido,
-            #[cfg(feature = "management-app")]
-            &mut self.mgmt,
+            #[cfg(feature = "admin-app")]
+            &mut self.admin,
         ])
     }
 }

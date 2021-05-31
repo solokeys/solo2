@@ -25,7 +25,7 @@ nfc-device = {path = "./../../components/nfc-device"}
 apdu-dispatch = { git = "https://github.com/solokeys/apdu-dispatch", branch = "main", features = ["std"] }
 ctaphid-dispatch = {path = "./../../components/ctaphid-dispatch"}
 ndef-app = {path = "./../../components/ndef-app"}
-management-app = {path = "./../../components/management-app"}
+admin-app = {path = "./../../components/admin-app"}
 dispatch-fido = {path = "./../../components/dispatch-fido"}
 
 # storage

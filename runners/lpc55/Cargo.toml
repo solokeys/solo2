@@ -34,7 +34,7 @@ board = { path = "board" }
 apdu-dispatch = { git = "https://github.com/solokeys/apdu-dispatch", branch = "main" }
 dispatch-fido = {path = "../../components/dispatch-fido"}
 ndef-app = { path = "../../components/ndef-app", optional = true }
-management-app = { path = "../../components/management-app", optional = true }
+admin-app = { path = "../../components/admin-app", optional = true }
 # NB: when using this app, need to raise trussed/clients-5
 provisioner-app = { path = "../../components/provisioner-app", optional = true }
 c-stubs = { path = "../../components/c-stubs" }
@@ -58,7 +58,7 @@ panic-halt = "0.2.0"
 littlefs2 = "0.2.1"
 
 [features]
-default = ["fido-authenticator", "management-app", "ndef-app", "oath-authenticator", "piv-authenticator"]
+default = ["admin-app", "fido-authenticator", "ndef-app", "oath-authenticator", "piv-authenticator"]
 
 develop = ["no-encrypted-storage", "no-buttons", "no-reset-time-window", "trussed/clients-4"]
 develop-provisioner = ["no-encrypted-storage", "no-buttons", "no-reset-time-window", "provisioner-app", "trussed/clients-5"]
