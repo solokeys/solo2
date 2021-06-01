@@ -52,7 +52,7 @@ pub fn try_setup(
     // fm: &mut NfcChip,
     timer: &mut Timer<impl hal::peripherals::ctimer::Ctimer<hal::typestates::init_state::Enabled>>,
     always_reconfig: bool,
-    ) -> Result<NfcChip, ()> {
+    ) -> Option<NfcChip> {
 
 
     let sck = NfcSckPin::take().unwrap().into_spi0_sck_pin(iocon);
@@ -85,7 +85,7 @@ pub fn try_setup(
     if current_regu_config == 0xff {
         // No nfc chip connected
         info!("No NFC chip connected");
-        return Err(());
+        return None;
     }
 
     let reconfig = always_reconfig || (current_regu_config != REGU_CONFIG) || (is_select_int_masked);
@@ -115,7 +115,7 @@ pub fn try_setup(
         }, timer);
         if r.is_err() {
             info!("Eeprom failed.  No NFC chip connected?");
-            return Err(());
+            return None;
         }
     } else {
         info!("EEPROM already initialized.");
@@ -143,6 +143,6 @@ pub fn try_setup(
     // let regu_powered = (0b11 << 4) | (0b10 << 2) | (0b11 << 0);
     // fm.write_reg(Register::ReguCfg, regu_powered);
 
-    Ok(fm)
+    Some(fm)
 }
 

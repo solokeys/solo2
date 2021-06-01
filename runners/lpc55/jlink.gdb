@@ -3,9 +3,6 @@
 set history save on
 set confirm off
 
-# find commit-hash using `rustc -Vv`
-set substitute-path /rustc/8d69840ab92ea7f4d323420088dd8c9775f180cd /home/nicolas/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust
-
 target extended-remote :2331
 load
 monitor reset
