@@ -2,7 +2,7 @@ include!(concat!(env!("OUT_DIR"), "/build_constants.rs"));
 use core::convert::TryInto;
 
 use crate::hal;
-use hal::drivers::{pins, timer};
+use hal::drivers::timer;
 use interchange::Interchange;
 use littlefs2::const_ram_storage;
 use trussed::types::{LfsResult, LfsStorage};
@@ -79,19 +79,12 @@ impl trussed::client::Syscall for Syscall {
 pub type Trussed = trussed::Service<Board>;
 pub type TrussedClient = trussed::ClientImplementation<Syscall>;
 
-pub type NfcSckPin = pins::Pio0_28;
-pub type NfcMosiPin = pins::Pio0_24;
-pub type NfcMisoPin = pins::Pio0_25;
-pub type NfcCsPin = pins::Pio1_20;
-pub type NfcIrqPin = pins::Pio0_19;
-
-// pub use board::NfcChip;
 pub type Iso14443 = nfc_device::Iso14443<board::nfc::NfcChip>;
 
 pub type ExternalInterrupt = hal::Pint<hal::typestates::init_state::Enabled>;
 
 pub type ApduDispatch = apdu_dispatch::dispatch::ApduDispatch;
-pub type CtaphidDispach = ctaphid_dispatch::dispatch::Dispatch;
+pub type CtaphidDispatch = ctaphid_dispatch::dispatch::Dispatch;
 
 #[cfg(feature = "admin-app")]
 pub type AdminApp = admin_app::App<TrussedClient>;

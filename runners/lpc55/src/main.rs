@@ -7,7 +7,7 @@
 // #![deny(warnings)]
 
 use core::convert::TryFrom;
-use app::hal;
+use runner::hal;
 use hal::traits::wg::timer::Cancel;
 use hal::traits::wg::timer::CountDown;
 use hal::drivers::timer::Elapsed;
@@ -25,23 +25,23 @@ const NFC_INTERRUPT: board::hal::raw::Interrupt = board::hal::raw::Interrupt::PI
 extern crate delog;
 generate_macros!();
 
-#[rtic::app(device = app::hal::raw, peripherals = true, monotonic = rtic::cyccnt::CYCCNT)]
+#[rtic::app(device = runner::hal::raw, peripherals = true, monotonic = rtic::cyccnt::CYCCNT)]
 const APP: () = {
 
     struct Resources {
-        apdu_dispatch: app::types::ApduDispatch,
-        ctaphid_dispatch: app::types::CtaphidDispach,
-        trussed: app::types::Trussed,
+        apdu_dispatch: runner::types::ApduDispatch,
+        ctaphid_dispatch: runner::types::CtaphidDispatch,
+        trussed: runner::types::Trussed,
 
-        apps: app::types::Apps,
+        apps: runner::types::Apps,
 
-        usb_classes: Option<app::types::UsbClasses>,
-        contactless: Option<app::types::Iso14443>,
+        usb_classes: Option<runner::types::UsbClasses>,
+        contactless: Option<runner::types::Iso14443>,
 
-        perf_timer: app::types::PerfTimer,
+        perf_timer: runner::types::PerfTimer,
 
-        clock_ctrl: Option<app::types::DynamicClockController>,
-        hw_scheduler: app::types::HwScheduler,
+        clock_ctrl: Option<runner::types::DynamicClockController>,
+        hw_scheduler: runner::types::HwScheduler,
     }
 
     #[init(schedule = [update_ui])]
@@ -60,7 +60,7 @@ const APP: () = {
             perf_timer,
             clock_ctrl,
             hw_scheduler,
-        ) = app::init_board(c.device, c.core);
+        ) = runner::init_board(c.device, c.core);
 
         // don't toggle LED in passive mode
         if usb_classes.is_some() {
@@ -110,7 +110,7 @@ const APP: () = {
                 }
             });
             if time > 1_200_000 {
-                app::Delogger::flush();
+                runner::Delogger::flush();
             }
 
             match apps.apdu_dispatch(|apps| apdu_dispatch.poll(apps)) {
