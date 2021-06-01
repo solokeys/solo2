@@ -139,16 +139,9 @@ RGB: RgbLed,
         self.rtc.uptime()
     }
 
-    fn reboot(&mut self, to: reboot::To) -> ! {
-        // crate::logger::info_now!("reboot {:?}", to).ok();
-        match to {
-            reboot::To::Application => {
-                crate::hal::raw::SCB::sys_reset()
-            }
-            reboot::To::ApplicationUpdate => {
-                crate::hal::boot_to_bootrom()
-            }
-        }
+    // delete this function after trussed is updated
+    fn reboot(&mut self, _to: reboot::To) -> ! {
+        panic!("this should no longer be called.");
     }
 
 }

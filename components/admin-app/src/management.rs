@@ -7,7 +7,6 @@ use apdu_dispatch::iso7816::Status;
 use trussed::{
     syscall,
     Client as TrussedClient,
-    types::reboot,
 };
 
 const UPDATE: VendorCommand = VendorCommand::H51;
@@ -16,20 +15,28 @@ const RNG: VendorCommand = VendorCommand::H60;
 const VERSION: VendorCommand = VendorCommand::H61;
 const UUID: VendorCommand = VendorCommand::H62;
 
-pub struct App<T>
-where T: TrussedClient
+pub trait BootInterface {
+    fn reboot() -> !;
+    fn reboot_to_application_update() -> !;
+}
+
+pub struct App<T, BI>
+where T: TrussedClient,
+      BI: BootInterface,
 {
     got_wink: bool,
     trussed: T,
     uuid: [u8; 16],
     version: u32,
+    _boot_interface: Option<BI>,
 }
 
-impl<T> App<T>
-where T: TrussedClient
+impl<T, BI> App<T, BI>
+where T: TrussedClient,
+      BI: BootInterface,
 {
     pub fn new(client: T, uuid: [u8; 16], version: u32) -> Self {
-        Self {got_wink: false, trussed: client, uuid, version}
+        Self {got_wink: false, trussed: client, uuid, version, _boot_interface: None}
     }
 
     /// Indicate if a wink was recieved
@@ -50,8 +57,9 @@ where T: TrussedClient
 
 }
 
-impl<T> hid::App for App<T>
-where T: TrussedClient
+impl<T,BI> hid::App for App<T,BI>
+where T: TrussedClient,
+      BI: BootInterface
 {
     fn commands(&self) -> &'static [HidCommand] {
         &[
@@ -67,13 +75,11 @@ where T: TrussedClient
     fn call(&mut self, command: HidCommand, _: &Message, response: &mut Message) -> hid::AppResult {
         match command {
             HidCommand::Vendor(REBOOT) => {
-                syscall!(self.trussed.reboot(reboot::To::Application));
-                loop { continue ; }
+                BI::reboot();
             }
             HidCommand::Vendor(UPDATE) => {
                 if self.user_present() {
-                    syscall!(self.trussed.reboot(reboot::To::ApplicationUpdate));
-                    loop { continue ; }
+                    BI::reboot_to_application_update();
                 } else {
                     return Err(hid::Error::InvalidLength);
                 }
@@ -96,8 +102,9 @@ where T: TrussedClient
     }
 }
 
-impl<T> apdu::Aid for App<T>
-where T: TrussedClient
+impl<T,BI> apdu::Aid for App<T,BI>
+where T: TrussedClient,
+      BI: BootInterface
 {
     // Solo management app
     fn aid(&self) -> &'static [u8] {
@@ -108,8 +115,9 @@ where T: TrussedClient
     }
 }
 
-impl<T> apdu::App<CommandSize, ResponseSize> for App<T>
-where T: TrussedClient
+impl<T,BI> apdu::App<CommandSize, ResponseSize> for App<T,BI>
+where T: TrussedClient,
+      BI: BootInterface
 {
 
     fn select(&mut self, _apdu: &Command, _reply: &mut response::Data) -> apdu::Result {
@@ -125,16 +133,13 @@ where T: TrussedClient
 
         match command {
             REBOOT => {
-                syscall!(self.trussed.reboot(reboot::To::Application));
-                loop { continue ; }
+                BI::reboot();
             }
             UPDATE => {
                 // Boot to mcuboot (only when contact interface)
                 if interface == apdu::Interface::Contact && self.user_present()
                 {
-                    // Doesn't return.
-                    syscall!(self.trussed.reboot(reboot::To::ApplicationUpdate));
-                    loop { continue ; }
+                    BI::reboot_to_application_update();
                 }
                 return Err(Status::ConditionsOfUseNotSatisfied);
             }
