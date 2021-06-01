@@ -15,7 +15,7 @@ variables:
   REPO_NAME: solo2
 
 size-nk3xn:
-  image: registry.git.dotplex.com/nitrokey/solo2/nitrokey3:latest
+  image: nitrokey3:latest
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push"'
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
