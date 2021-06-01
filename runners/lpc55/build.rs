@@ -120,15 +120,19 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     add_build_variable!(&mut f, "CARGO_PKG_HASH_SHORT", hash_short);
 
     // Add integer version of the version number
-    let version_bytes: [u8; 4] = [
-        0u8,
-        str::parse(env!("CARGO_PKG_VERSION_MAJOR")).unwrap(),
-        str::parse(env!("CARGO_PKG_VERSION_MINOR")).unwrap(),
-        str::parse(env!("CARGO_PKG_VERSION_PATCH")).unwrap(),
-    ];
-    let version:u32 = u32::from_be_bytes(version_bytes);
+    let major: u32 = str::parse(env!("CARGO_PKG_VERSION_MAJOR")).unwrap();
+    let minor: u32 = str::parse(env!("CARGO_PKG_VERSION_MINOR")).unwrap();
+    let patch: u32 = str::parse(env!("CARGO_PKG_VERSION_PATCH")).unwrap();
 
-    add_build_variable!(&mut f, "CARGO_PKG_VERSION", version, u32);
+    if major >= 1024 || minor > 9999 || patch >= 64 {
+        panic!("config.firmware.product can at most be 1023.9999.63 for versions in customer data");
+    }
+
+    let version_to_check: u32 =
+        (major << 22) |
+        (minor << 6) | patch;
+
+    add_build_variable!(&mut f, "CARGO_PKG_VERSION", version_to_check, u32);
 
     add_build_variable!(&mut f, "CONFIG_FILESYSTEM_BOUNDARY", config.parameters.filesystem_boundary, usize);
 
