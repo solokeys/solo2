@@ -18,6 +18,7 @@ const UUID: VendorCommand = VendorCommand::H62;
 pub trait BootInterface {
     fn reboot() -> !;
     fn reboot_to_application_update() -> !;
+    fn reboot_to_application_update_persistent() -> !;
 }
 
 pub struct App<T, BI>
@@ -72,14 +73,18 @@ where T: TrussedClient,
         ]
     }
 
-    fn call(&mut self, command: HidCommand, _: &Message, response: &mut Message) -> hid::AppResult {
+    fn call(&mut self, command: HidCommand, input_data: &Message, response: &mut Message) -> hid::AppResult {
         match command {
             HidCommand::Vendor(REBOOT) => {
                 BI::reboot();
             }
             HidCommand::Vendor(UPDATE) => {
                 if self.user_present() {
-                    BI::reboot_to_application_update();
+                    if input_data.len() > 0 && input_data[0] == 0x01 {
+                        BI::reboot_to_application_update_persistent();
+                    } else {
+                        BI::reboot_to_application_update();
+                    }
                 } else {
                     return Err(hid::Error::InvalidLength);
                 }
@@ -139,7 +144,11 @@ where T: TrussedClient,
                 // Boot to mcuboot (only when contact interface)
                 if interface == apdu::Interface::Contact && self.user_present()
                 {
-                    BI::reboot_to_application_update();
+                    if apdu.p1 == 0x01 {
+                        BI::reboot_to_application_update_persistent();
+                    } else {
+                        BI::reboot_to_application_update();
+                    }
                 }
                 return Err(Status::ConditionsOfUseNotSatisfied);
             }
