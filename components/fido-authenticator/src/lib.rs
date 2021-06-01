@@ -108,15 +108,15 @@ impl core::convert::TryFrom<i32> for SupportedAlgorithm {
 /// and return upon button press.
 /// TODO: Do we need a timeout?
 pub trait UserPresence: Copy {
-    fn user_present<T: TrussedClient>(self, trussed: &mut T, timeout_milliseconds: u32) -> bool;
+    fn user_present<T: TrussedClient>(self, trussed: &mut T, timeout_milliseconds: u32) -> Result<()>;
 }
 
 #[derive(Copy, Clone)]
 pub struct SilentAuthenticator {}
 
 impl UserPresence for SilentAuthenticator {
-    fn user_present<T: TrussedClient>(self, _: &mut T, _:u32) -> bool {
-        true
+    fn user_present<T: TrussedClient>(self, _: &mut T, _:u32) -> Result<()> {
+        Ok(())
     }
 }
 
@@ -124,9 +124,12 @@ impl UserPresence for SilentAuthenticator {
 pub struct NonSilentAuthenticator {}
 
 impl UserPresence for NonSilentAuthenticator {
-    fn user_present<T: TrussedClient>(self, trussed: &mut T, timeout_milliseconds: u32) -> bool {
+    fn user_present<T: TrussedClient>(self, trussed: &mut T, timeout_milliseconds: u32) -> Result<()> {
         let result = syscall!(trussed.confirm_user_present(timeout_milliseconds)).result;
-        result.is_ok()
+        result.map_err(|err| match err {
+            trussed::types::consent::Error::TimedOut => Error::KeepaliveCancel,
+            _ => Error::OperationDenied,
+        })
     }
 }
 
@@ -171,9 +174,9 @@ where UP: UserPresence,
         match request {
             U2fCommand::Register(reg) => {
 
-                if !self.up.user_present(&mut self.trussed, constants::U2F_UP_TIMEOUT) {
-                    return Err(U2fError::ConditionsOfUseNotSatisfied);
-                }
+                self.up.user_present(&mut self.trussed, constants::U2F_UP_TIMEOUT)
+                    .map_err(|_| U2fError::ConditionsOfUseNotSatisfied)?;
+
                 // Generate a new P256 key pair.
                 let private_key = syscall!(self.trussed.generate_p256_private_key(Location::Volatile)).key;
                 let public_key = syscall!(self.trussed.derive_p256_public_key(private_key, Location::Volatile)).key;
@@ -291,9 +294,8 @@ where UP: UserPresence,
                         };
                     },
                     ctap1::ControlByte::EnforceUserPresenceAndSign => {
-                        if !self.up.user_present(&mut self.trussed, constants::U2F_UP_TIMEOUT) {
-                            return Err(U2fError::ConditionsOfUseNotSatisfied);
-                        }
+                        self.up.user_present(&mut self.trussed, constants::U2F_UP_TIMEOUT)
+                            .map_err(|_| U2fError::ConditionsOfUseNotSatisfied)?;
                         0x01
                     },
                     ctap1::ControlByte::DontEnforceUserPresenceAndSign => 0x00,
@@ -408,7 +410,7 @@ where UP: UserPresence,
 
                         // 0x7
                         ctap2::Request::Reset => {
-                            debug!("GA request");
+                            debug!("Reset request");
                             let response = self.reset();
                             match response {
                                 Ok(()) => Ok(Response::Ctap2(ctap2::Response::Reset)),
@@ -836,9 +838,7 @@ where UP: UserPresence,
         // wants to enforce PIN and needs to figure out which authnrs support PIN
         if let Some(pin_auth) = pin_auth.as_ref() {
             if pin_auth.len() == 0 {
-                if !self.up.user_present(&mut self.trussed, constants::FIDO2_UP_TIMEOUT) {
-                    return Err(Error::OperationDenied);
-                }
+                self.up.user_present(&mut self.trussed, constants::FIDO2_UP_TIMEOUT)?;
                 if !self.state.persistent.pin_is_set() {
                     return Err(Error::PinNotSet);
                 } else {
@@ -1290,12 +1290,11 @@ where UP: UserPresence,
 
         // 7. collect user presence
         let up_performed = if do_up {
-            if self.up.user_present(&mut self.trussed, constants::FIDO2_UP_TIMEOUT) {
-                true
-            } else {
-                return Err(Error::OperationDenied);
-            }
+            info!("asking for up");
+            self.up.user_present(&mut self.trussed, constants::FIDO2_UP_TIMEOUT)?;
+            true
         } else {
+            info!("not asking for up");
             false
         };
 
@@ -1526,9 +1525,7 @@ where UP: UserPresence,
         // 2. check for user presence
         // denied -> OperationDenied
         // timeout -> UserActionTimeout
-        if !self.up.user_present(&mut self.trussed, constants::U2F_UP_TIMEOUT) {
-            return Err(Error::OperationDenied);
-        }
+        self.up.user_present(&mut self.trussed, constants::FIDO2_UP_TIMEOUT)?;
 
         // Delete resident keys
         syscall!(self.trussed.delete_all(Location::Internal));
@@ -1683,11 +1680,8 @@ where UP: UserPresence,
                     // If UV is not performed, than CredProtectRequired credentials should not be visibile.
                     if !(excluded_cred.cred_protect == Some(CredentialProtectionPolicy::Required) && !uv_performed) {
                         info!("Excluded!");
-                        if self.up.user_present(&mut self.trussed, constants::FIDO2_UP_TIMEOUT) {
-                            return Err(Error::CredentialExcluded);
-                        } else {
-                            return Err(Error::OperationDenied);
-                        }
+                        self.up.user_present(&mut self.trussed, constants::FIDO2_UP_TIMEOUT)?;
+                        return Err(Error::CredentialExcluded);
                     }
                 }
             }
@@ -1747,9 +1741,7 @@ where UP: UserPresence,
         // debug!("hmac-secret = {:?}, credProtect = {:?}", hmac_secret_requested, cred_protect_requested);
 
         // 10. get UP, if denied error OperationDenied
-        if !self.up.user_present(&mut self.trussed, constants::FIDO2_UP_TIMEOUT) {
-            return Err(Error::OperationDenied);
-        }
+        self.up.user_present(&mut self.trussed, constants::FIDO2_UP_TIMEOUT)?;
 
         // 11. generate credential keypair
         let location = match rk_requested {

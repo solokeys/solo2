@@ -179,19 +179,18 @@ const APP: () = {
         let after = Instant::now();
         let length = (after - before).as_cycles();
         if length > 10_000 {
-            debug!("poll took {:?} cycles", length);
+            // debug!("poll took {:?} cycles", length);
         }
         let inten = usb.inten.read().bits();
         let intstat = usb.intstat.read().bits();
         let mask = inten & intstat;
         if mask != 0 {
-            debug!("uncleared interrupts: {:?}", mask);
             for i in 0..5 {
                 if mask & (1 << 2*i) != 0 {
-                    debug!("EP{}OUT", i);
+                    // debug!("EP{}OUT", i);
                 }
                 if mask & (1 << (2*i + 1)) != 0 {
-                    debug!("EP{}IN", i);
+                    // debug!("EP{}IN", i);
                 }
             }
             // Serial sends a stray 0x70 ("p") to CDC-ACM "data" OUT endpoint (3)
