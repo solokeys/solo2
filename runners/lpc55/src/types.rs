@@ -90,6 +90,15 @@ pub struct Lpc55RebootInterface {}
 impl admin_app::BootInterface for Lpc55RebootInterface {
     fn reboot() -> ! {  hal::raw::SCB::sys_reset()  }
     fn reboot_to_application_update() -> ! {  hal::boot_to_bootrom()  }
+    fn reboot_to_application_update_persistent() -> ! {
+        // Erasing the first flash page & rebooting will keep processer in bootrom persistently.
+        use hal::traits::flash::WriteErase;
+        let flash = unsafe { hal::peripherals::flash::Flash::steal() }.enabled(
+            &mut unsafe {hal::peripherals::syscon::Syscon::steal()}
+        );
+        hal::drivers::flash::FlashGordon::new(flash).erase_page(0).ok();
+        hal::raw::SCB::sys_reset()
+    }
 }
 
 #[cfg(feature = "admin-app")]
