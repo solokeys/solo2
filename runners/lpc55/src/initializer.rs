@@ -141,6 +141,7 @@ impl Initializer {
         anactrl: hal::Anactrl,
     ) -> Self {
         let is_nfc_passive = false;
+        info_now!("making initializer");
         Self {
             is_nfc_passive,
 
@@ -291,8 +292,9 @@ impl Initializer {
 
     }
 
+    #[inline(never)]
     pub fn initialize_basic(&mut self,
-        mut clock_stage: stages::Clock,
+        clock_stage: &mut stages::Clock,
         adc: hal::Adc<Unknown>,
         _dma: hal::Dma<Unknown>,
         delay_timer: ctimer::Ctimer0,
@@ -382,8 +384,6 @@ impl Initializer {
         Self::validate_cfpa(&mut pfr, self.config.secure_firmware_version, self.config.require_prince);
 
         stages::Basic {
-            clock_stage,
-
             delay_timer,
             perf_timer,
             pfr,
@@ -394,8 +394,10 @@ impl Initializer {
         }
     }
 
+    #[inline(never)]
     pub fn initialize_nfc(&mut self,
-        mut basic_stage: stages::Basic,
+        clock_stage: &mut stages::Clock,
+        basic_stage: &mut stages::Basic,
         flexcomm0: hal::peripherals::flexcomm::Flexcomm0<Unknown>,
         mux: hal::peripherals::inputmux::InputMux<Unknown>,
         pint: hal::peripherals::pint::Pint<Unknown>,
@@ -403,10 +405,10 @@ impl Initializer {
 
         let nfc_chip = if self.config.nfc_enabled {
             self.try_enable_fm11nc08(
-                &basic_stage.clock_stage.clocks,
-                &mut basic_stage.clock_stage.iocon,
-                &mut basic_stage.clock_stage.gpio,
-                basic_stage.clock_stage.nfc_irq.take().unwrap(),
+                &clock_stage.clocks,
+                &mut clock_stage.iocon,
+                &mut clock_stage.gpio,
+                clock_stage.nfc_irq.take().unwrap(),
                 &mut basic_stage.delay_timer,
                 flexcomm0,
                 mux,
@@ -437,16 +439,17 @@ impl Initializer {
         if let Some(iso14443) = &mut iso14443 { iso14443.poll(); }
 
         stages::Nfc {
-            basic_stage,
             iso14443,
             contactless_responder: Some(contactless_responder),
         }
 
     }
 
+    #[inline(never)]
     pub fn initialize_usb(
         &mut self,
-        mut nfc_stage: stages::Nfc,
+        clock_stage: &mut stages::Clock,
+        basic_stage: &mut stages::Basic,
         _usbhs: hal::peripherals::usbhs::Usbhs<Unknown>,
         _usbfs: hal::peripherals::usbfs::Usbfs<Unknown>,
     ) -> stages::Usb {
@@ -460,12 +463,12 @@ impl Initializer {
         let (ctaphid_requester, ctaphid_responder) = ctaphid_dispatch::types::HidInterchange::claim()
             .expect("could not setup HidInterchange");
 
-        info!("usb class start {} ms", nfc_stage.perf_timer.elapsed().0/1000);
+        info!("usb class start {} ms", basic_stage.perf_timer.elapsed().0/1000);
 
         let mut usb_classes: Option<types::UsbClasses> = None;
 
         if !self.is_nfc_passive {
-            let iocon = &mut nfc_stage.iocon;
+            let iocon = &mut clock_stage.iocon;
 
             let usb_config = self.config.usb_config.take().unwrap();
 
@@ -477,8 +480,8 @@ impl Initializer {
                 anactrl,
                 pmc,
                 syscon,
-                &mut nfc_stage.basic_stage.delay_timer,
-                nfc_stage.basic_stage.clock_stage.clocks.support_usbhs_token().unwrap(),
+                &mut basic_stage.delay_timer,
+                clock_stage.clocks.support_usbhs_token().unwrap(),
             );
             #[cfg(feature = "usbfs-peripheral")]
             let usbd = _usbfs.enabled_as_device(
@@ -498,7 +501,7 @@ impl Initializer {
 
             // our USB classes (must be allocated in order that they're passed in `.poll(...)` later!)
             let ccid = usbd_ccid::Ccid::new(usb_bus, contact_requester);
-            let current_time = nfc_stage.perf_timer.elapsed().0/1000;
+            let current_time = basic_stage.perf_timer.elapsed().0/1000;
             let ctaphid = usbd_ctaphid::CtapHid::new(usb_bus, ctaphid_requester, current_time)
                 .implements_ctap1()
                 .implements_ctap2()
@@ -514,7 +517,7 @@ impl Initializer {
             // our composite USB device
             let product_string = match usb_config.product_name {
                 UsbProductName::Custom(name) => name,
-                UsbProductName::UsePfr => get_product_string(&mut nfc_stage.pfr),
+                UsbProductName::UsePfr => get_product_string(&mut basic_stage.pfr),
             };
             let serial_number = get_serial_number();
 
@@ -531,29 +534,29 @@ impl Initializer {
 
         }
 
+        // Cancel any possible outstanding use in delay timing
+        basic_stage.delay_timer.cancel().ok();
+
         stages::Usb { 
-            nfc_stage,
             usb_classes,
             contact_responder: Some(contact_responder),
             ctaphid_responder: Some(ctaphid_responder),
         }
     }
 
-    pub fn initialize_interfaces(&mut self, mut usb_stage: stages::Usb) -> stages::Interfaces {
+    #[inline(never)]
+    pub fn initialize_interfaces(&mut self, nfc_stage: &mut stages::Nfc, usb_stage: &mut stages::Usb) -> stages::Interfaces {
 
+        info_now!("making interfaces");
         let apdu_dispatch = types::ApduDispatch::new(
             usb_stage.contact_responder.take().unwrap(),
-            usb_stage.contactless_responder.take().unwrap(),
+            nfc_stage.contactless_responder.take().unwrap(),
         );
         let ctaphid_dispatch = types::CtaphidDispatch::new(
             usb_stage.ctaphid_responder.take().unwrap()
         );
 
-        // Cancel any possible outstanding use in delay timing
-        usb_stage.delay_timer.cancel().ok();
-
         stages::Interfaces {
-            usb_stage,
             apdu_dispatch,
             ctaphid_dispatch,
         }
@@ -561,11 +564,11 @@ impl Initializer {
 
     pub fn initialize_flash(
         &mut self,
-        interfaces_stage: stages::Interfaces,
         rng: hal::peripherals::rng::Rng<Unknown>,
         prince: hal::peripherals::prince::Prince<Unknown>,
         flash: hal::peripherals::flash::Flash<Unknown>,
     ) -> stages::Flash {
+        info_now!("making flash");
         let syscon = &mut self.syscon;
 
         #[allow(unused_mut)]
@@ -577,19 +580,25 @@ impl Initializer {
         let flash_gordon = Some(FlashGordon::new(flash.enabled(syscon)));
 
         stages::Flash {
-            interfaces_stage,
             flash_gordon,
             prince: Some(prince),
             rng: Some(rng),
         }
     }
 
-    pub fn initialize_filesystem(&mut self, mut flash_stage: stages::Flash) -> stages::Filesystem {
+    #[inline(never)]
+    pub fn initialize_filesystem(&mut self,
+        clock_stage: &mut stages::Clock,
+        basic_stage: &mut stages::Basic,
+        nfc_stage: &mut stages::Nfc,
+        flash_stage: &mut stages::Flash,
+    ) -> stages::Filesystem {
         use littlefs2::fs::{Allocation, Filesystem};
         use types::{ExternalStorage, VolatileStorage};
 
         let syscon = &mut self.syscon;
         let pmc = &mut self.pmc;
+        info_now!("making fs");
 
         #[allow(unused_mut)]
         let mut flash_gordon = flash_stage.flash_gordon.take().unwrap();
@@ -613,15 +622,22 @@ impl Initializer {
 
         // temporarily increase clock for the storage mounting or else it takes a long time.
         if self.is_nfc_passive {
-            flash_stage.clocks = unsafe { hal::ClockRequirements::default()
+            clock_stage.clocks = unsafe { hal::ClockRequirements::default()
                 .system_frequency(48.MHz())
-                .reconfigure(flash_stage.clocks, pmc, syscon) };
+                .reconfigure(clock_stage.clocks, pmc, syscon) };
         }
-        info!("mount start {} ms", flash_stage.perf_timer.elapsed().0/1000);
+        info_now!("mount start {} ms", basic_stage.perf_timer.elapsed().0/1000);
         static mut INTERNAL_STORAGE: Option<types::FlashStorage> = None;
         unsafe { INTERNAL_STORAGE.replace(filesystem); }
         static mut INTERNAL_FS_ALLOC: Option<Allocation<types::FlashStorage>> = None;
+        unsafe {
+            info_now!("internal fs alloc {:?}", INTERNAL_FS_ALLOC.is_some());
+        }
         unsafe { INTERNAL_FS_ALLOC = Some(Filesystem::allocate()); }
+        unsafe {
+            info_now!("internal fs alloc {:?}", INTERNAL_FS_ALLOC.is_some());
+        }
+
 
         static mut EXTERNAL_STORAGE: ExternalStorage = ExternalStorage::new();
         static mut EXTERNAL_FS_ALLOC: Option<Allocation<ExternalStorage>> = None;
@@ -633,7 +649,15 @@ impl Initializer {
 
         let store = types::Store::claim().unwrap();
 
-        if let Some(iso14443) = &mut flash_stage.iso14443 { iso14443.poll(); }
+        if let Some(iso14443) = &mut nfc_stage.iso14443 { iso14443.poll(); }
+
+        unsafe {
+
+            INTERNAL_FS_ALLOC.as_mut().unwrap();
+            INTERNAL_STORAGE.as_mut().unwrap();
+            EXTERNAL_FS_ALLOC.as_mut().unwrap();
+            VOLATILE_FS_ALLOC.as_mut().unwrap();
+        }
 
         let result = store.mount(
             unsafe { INTERNAL_FS_ALLOC.as_mut().unwrap() },
@@ -649,12 +673,12 @@ impl Initializer {
 
 
         if result.is_err() || cfg!(feature = "format-filesystem") {
-            let rgb = flash_stage.rgb.as_mut().unwrap();
+            let rgb = basic_stage.rgb.as_mut().unwrap();
             rgb.blue(200);
             rgb.red(200);
 
-            flash_stage.delay_timer.start(300_000.microseconds());
-            nb::block!(flash_stage.delay_timer.wait()).ok();
+            basic_stage.delay_timer.start(300_000.microseconds());
+            nb::block!(basic_stage.delay_timer.wait()).ok();
 
             info!("Not yet formatted!  Formatting..");
             store.mount(
@@ -669,19 +693,21 @@ impl Initializer {
                 true,
             ).unwrap();
         }
-        info!("mount end {} ms",flash_stage.perf_timer.elapsed().0/1000);
+        info!("mount end {} ms",basic_stage.perf_timer.elapsed().0/1000);
 
         // return to slow freq
         if self.is_nfc_passive {
-            flash_stage.clocks = unsafe { hal::ClockRequirements::default()
+            clock_stage.clocks = unsafe { hal::ClockRequirements::default()
                 .system_frequency(12.MHz())
-                .reconfigure(flash_stage.clocks, pmc, syscon) };
+                .reconfigure(clock_stage.clocks, pmc, syscon) };
         }
 
-        if let Some(iso14443) = &mut flash_stage.iso14443 { iso14443.poll(); }
+        if let Some(iso14443) = &mut nfc_stage.iso14443 { iso14443.poll(); }
+
+        // Cancel any possible outstanding use in delay timer
+        basic_stage.delay_timer.cancel().ok();
 
         stages::Filesystem {
-            flash_stage,
             store,
             internal_storage_fs: unsafe { &mut INTERNAL_STORAGE },
         }
@@ -691,12 +717,15 @@ impl Initializer {
 
     pub fn initialize_trussed(
         &mut self,
-        mut filesystem_stage: stages::Filesystem,
+        clock_stage: &mut stages::Clock,
+        basic_stage: &mut stages::Basic,
+        flash_stage: &mut stages::Flash,
+        filesystem_stage: &mut stages::Filesystem,
         rtc: hal::peripherals::rtc::Rtc<Unknown>,
-    ) -> stages::Trussed {
+    ) -> types::Trussed {
         let syscon = &mut self.syscon;
         let pmc = &mut self.pmc;
-        let clocks = filesystem_stage.clocks;
+        let clocks = clock_stage.clocks;
 
         let mut rtc = rtc.enabled(syscon, clocks.enable_32k_fro(pmc));
         rtc.reset();
@@ -704,25 +733,23 @@ impl Initializer {
         let rgb = if self.is_nfc_passive {
             None
         } else {
-            filesystem_stage.rgb.take()
+            basic_stage.rgb.take()
         };
 
-        let three_buttons = filesystem_stage.three_buttons.take();
+        let three_buttons = basic_stage.three_buttons.take();
 
         let mut solobee_interface = board::trussed::UserInterface::new(rtc, three_buttons, rgb);
         solobee_interface.set_status(trussed::platform::ui::Status::Idle);
 
-        let rng = filesystem_stage.rng.take().unwrap();
+        let rng = flash_stage.rng.take().unwrap();
         let store = filesystem_stage.store;
         let board = types::Board::new(rng, store, solobee_interface);
         let trussed = trussed::service::Service::new(board);
 
-        stages::Trussed {
-            filesystem_stage,
-            trussed,
-        }
+        trussed
     }
 
+    #[inline(never)]
     pub fn initialize_all(&mut self,
         iocon: hal::Iocon<Unknown>,
         gpio: hal::Gpio<Unknown>,
@@ -748,10 +775,11 @@ impl Initializer {
         flash: hal::peripherals::flash::Flash<Unknown>,
 
         rtc: hal::peripherals::rtc::Rtc<Unknown>,
-    ) -> stages::Trussed {
-        let clock_stage = self.initialize_clocks(iocon, gpio,);
-        let basic_stage = self.initialize_basic(
-            clock_stage,
+    ) -> stages::All {
+
+        let mut clock_stage = self.initialize_clocks(iocon, gpio,);
+        let mut basic_stage = self.initialize_basic(
+            &mut clock_stage,
             adc,
             dma,
             delay_timer,
@@ -761,36 +789,66 @@ impl Initializer {
             perf_timer,
             pfr,
         );
-        let nfc_stage = self.initialize_nfc(basic_stage, flexcomm0, mux, pint);
+        let mut nfc_stage = self.initialize_nfc(
+            &mut clock_stage,
+            &mut basic_stage,
+            flexcomm0,
+            mux,
+            pint
+        );
 
-        let usb_stage = self.initialize_usb(nfc_stage, usbhs, usbfs);
-        let interfaces_stage = self.initialize_interfaces(usb_stage);
-        let flash_stage = self.initialize_flash(
-            interfaces_stage,
+        let mut usb_stage = self.initialize_usb(
+            &mut clock_stage,
+            &mut basic_stage,
+            usbhs,
+            usbfs
+        );
+        let interfaces_stage = self.initialize_interfaces(&mut nfc_stage, &mut usb_stage);
+        let mut flash_stage = self.initialize_flash(
             rng,
             prince,
             flash,
         );
-        let filesystem_stage = self.initialize_filesystem(flash_stage);
+        let mut filesystem_stage = self.initialize_filesystem(
+            &mut clock_stage,
+            &mut basic_stage,
+            &mut nfc_stage,
+            &mut flash_stage,
+        );
 
-        let trussed_stage = self.initialize_trussed(filesystem_stage, rtc);
+        let trussed = self.initialize_trussed(
+            &mut clock_stage,
+            &mut basic_stage,
+            &mut flash_stage,
+            &mut filesystem_stage,
+            rtc,
+        );
 
-        trussed_stage
+        stages::All {
+            trussed: trussed,
+            filesystem: filesystem_stage,
+            usb: usb_stage,
+            interfaces: interfaces_stage,
+            nfc: nfc_stage,
+            basic: basic_stage,
+            clock: clock_stage,
+        }
+
     }
 
     /// Consumes the initializer -- must be done last.
-    pub fn get_dynamic_clock_control(self, basic_stage: &mut stages::Basic) 
+    pub fn get_dynamic_clock_control(self, clock_stage: &mut stages::Clock, basic_stage: &mut stages::Basic) 
     -> Option<clock_controller::DynamicClockController> {
         if self.is_nfc_passive {
 
             let adc = basic_stage.adc.take();
-            let clocks = basic_stage.clocks;
+            let clocks = clock_stage.clocks;
 
             let pmc = self.pmc;
             let syscon = self.syscon;
 
-            let gpio = &mut basic_stage.clock_stage.gpio;
-            let iocon = &mut basic_stage.clock_stage.iocon;
+            let gpio = &mut clock_stage.gpio;
+            let iocon = &mut clock_stage.iocon;
 
             let mut new_clock_controller = clock_controller::DynamicClockController::new(adc.unwrap(),
                 clocks, pmc, syscon, gpio, iocon);
@@ -803,7 +861,7 @@ impl Initializer {
     }
 
     /// See if LPC55 will be in NFC passive operation.  Requires first initialization stage have been done.
-    pub fn is_in_passive_operation(&self, _clock_stage: &stages::Basic) 
+    pub fn is_in_passive_operation(&self, _clock_stage: &stages::Clock) 
     -> bool {
         return self.is_nfc_passive;
     }

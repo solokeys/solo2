@@ -88,8 +88,9 @@ pub fn init_board(
     };
 
     let mut initializer = initializer::Initializer::new(config, hal.syscon, hal.pmc, hal.anactrl);
+    info_now!("got initializer");
 
-    let mut final_stage = initializer.initialize_all(
+    let mut everything = initializer.initialize_all(
         hal.iocon,
         hal.gpio,
         hal.adc,
@@ -113,19 +114,19 @@ pub fn init_board(
         hal.rtc,
     );
 
-    let _is_passive_mode = initializer.is_in_passive_operation(&final_stage);
-    let clock_controller = initializer.get_dynamic_clock_control(&mut final_stage);
+    let _is_passive_mode = initializer.is_in_passive_operation(&everything.clock);
+    let clock_controller = initializer.get_dynamic_clock_control(&mut everything.clock, &mut everything.basic);
 
     // rgb.turn_off();
-    info!("init took {} ms", final_stage.perf_timer.elapsed().0/1000);
+    info!("init took {} ms", everything.basic.perf_timer.elapsed().0/1000);
 
     #[cfg(feature = "provisioner-app")]
-    let store = final_stage.store.clone();
+    let store = everything.store.clone();
     #[cfg(feature = "provisioner-app")]
-    let internal_fs = final_stage.filesystem_stage.internal_storage_fs;
+    let internal_fs = everything.filesystem.internal_storage_fs;
 
     let apps = types::Apps::new(
-        &mut final_stage.trussed,
+        &mut everything.trussed,
         #[cfg(feature = "provisioner-app")]
         {
             types::ProvisionerNonPortable {
@@ -137,18 +138,18 @@ pub fn init_board(
     );
 
     (
-        final_stage.filesystem_stage.flash_stage.interfaces_stage.apdu_dispatch,
-        final_stage.filesystem_stage.flash_stage.interfaces_stage.ctaphid_dispatch,
-        final_stage.trussed,
+        everything.interfaces.apdu_dispatch,
+        everything.interfaces.ctaphid_dispatch,
+        everything.trussed,
 
         apps,
 
-        final_stage.filesystem_stage.flash_stage.interfaces_stage.usb_stage.usb_classes,
-        final_stage.filesystem_stage.flash_stage.interfaces_stage.usb_stage.nfc_stage.iso14443,
+        everything.usb.usb_classes,
+        everything.nfc.iso14443,
 
-        final_stage.filesystem_stage.flash_stage.interfaces_stage.usb_stage.nfc_stage.basic_stage.perf_timer,
+        everything.basic.perf_timer,
         clock_controller,
 
-        final_stage.filesystem_stage.flash_stage.interfaces_stage.usb_stage.nfc_stage.basic_stage.delay_timer,
+        everything.basic.delay_timer,
     )
 }
