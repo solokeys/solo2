@@ -29,6 +29,21 @@ fn sin(x: f32) -> f32
     res
 }
 
+// Assuming there will only be one way to 
+// get user presence, this should be fine.
+// Used for Ctaphid.keepalive message status.
+static mut WAITING: bool = false;
+pub struct UserPresenceStatus {}
+impl UserPresenceStatus {
+    pub(crate) fn set_waiting(waiting: bool) {
+        unsafe { WAITING = waiting };
+    }
+    pub fn waiting() -> bool {
+        unsafe{ WAITING }
+    }
+}
+
+
 pub struct UserInterface<BUTTONS, RGB>
 where
 BUTTONS: Press + Edge,
@@ -62,10 +77,13 @@ RGB: RgbLed,
     fn check_user_presence(&mut self) -> consent::Level {
         match &mut self.buttons {
             Some(buttons) => {
+
                 // important to read state before checking for edge,
                 // since reading an edge could clear the state.
                 let state = buttons.state();
+                UserPresenceStatus::set_waiting(true);
                 let press_result = buttons.wait_for_any_new_press();
+                UserPresenceStatus::set_waiting(false);
                 if press_result.is_ok() {
                     if state.a && state.b {
                         consent::Level::Strong

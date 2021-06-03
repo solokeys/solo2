@@ -274,7 +274,7 @@ where UP: UserPresence,
                 let result = self.call_authenticator_u2f_with_bytes(request, response);
                 match result {
                     Ok(()) => {
-                        info!("U2F response {} bytes", data.len());
+                        info!("U2F response {} bytes", response.len());
                         // Need to add x9000 success code (normally the apdu-dispatch does this, but
                         // since u2f uses apdus over hid, we must do it here.)
                         response.extend_from_slice(&[0x90, 0x00]).ok();

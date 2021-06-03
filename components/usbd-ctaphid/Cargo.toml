@@ -7,6 +7,7 @@ edition = "2018"
 
 [dependencies]
 ctap-types = { path = "../ctap-types" }
+embedded-time = "0.10.1"
 delog = "0.1.0"
 heapless = "0.6"
 heapless-bytes = "0.2.0"

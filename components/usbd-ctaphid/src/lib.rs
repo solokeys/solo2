@@ -20,4 +20,5 @@ pub mod constants;
 pub mod class;
 pub use class::CtapHid;
 pub mod pipe;
+pub mod types;
 
