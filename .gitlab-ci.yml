@@ -1,4 +1,4 @@
-include: 'https://www.nitrokey.com/files/ci/external-ci/common_jobs.yml'
+include: 'https://raw.githubusercontent.com/Nitrokey/common-ci-jobs/master/common_jobs.yml'
 
 stages:
   - pull-github
