@@ -121,7 +121,7 @@ pub fn init_board(
     info!("init took {} ms", everything.basic.perf_timer.elapsed().0/1000);
 
     #[cfg(feature = "provisioner-app")]
-    let store = everything.store.clone();
+    let store = everything.filesystem.store.clone();
     #[cfg(feature = "provisioner-app")]
     let internal_fs = everything.filesystem.internal_storage_fs;
 

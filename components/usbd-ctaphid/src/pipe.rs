@@ -43,6 +43,7 @@ use crate::{
         // 64
         PACKET_SIZE,
     },
+    types::KeepaliveStatus,
 };
 
 /// The actual payload of given length is dealt with separately
@@ -130,9 +131,9 @@ pub struct Pipe<'alloc, Bus: UsbBus> {
 
     read_endpoint: EndpointOut<'alloc, Bus>,
     write_endpoint: EndpointIn<'alloc, Bus>,
-    pub state: State,
+    state: State,
 
-    pub interchange: Requester<HidInterchange>,
+    interchange: Requester<HidInterchange>,
 
     // shared between requests and responses, due to size
     buffer: [u8; MESSAGE_SIZE],
@@ -142,9 +143,13 @@ pub struct Pipe<'alloc, Bus: UsbBus> {
     last_channel: u32,
 
     // Indicator of implemented commands in INIT response.
-    pub implements: u8,
+    pub(crate) implements: u8,
 
-    pub last_milliseconds: u32
+    // timestamp that gets used for timing out CID's
+    pub(crate) last_milliseconds: u32,
+
+    // a "read once" indicator if now we're waiting on the application processing
+    started_processing: bool,
 }
 
 impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
@@ -170,6 +175,7 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
             // Default to nothing implemented.
             implements: 0x80,
             last_milliseconds: initial_milliseconds,
+            started_processing: false,
         }
     }
 
@@ -463,11 +469,59 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
             },
 
             _ => {
-                self.interchange.request(
+                if self.interchange.state() == interchange::State::Responded {
+                    info!("dumping stale response");
+                    self.interchange.take_response();
+                }
+                match self.interchange.request(
                     &(request.command, heapless_bytes::Bytes::try_from_slice(&self.buffer[..request.length as usize]).unwrap())
-                ).unwrap();
-                self.state = State::WaitingOnAuthenticator(request);
+                ) {
+                    Ok(_) => {
+                        self.state = State::WaitingOnAuthenticator(request);
+                        self.started_processing = true;
+                    },
+                    Err(_) => {
+                        // busy
+                        info_now!("STATE: {:?}", self.interchange.state());
+                        info!("can't handle more than one authenticator request at a time.");
+                        self.send_error_now(request, AuthenticatorError::ChannelBusy);
+                    }
+                }
             },
+        }
+    }
+
+    pub fn did_start_processing(&mut self) -> bool{
+        if self.started_processing {
+            self.started_processing = false;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn send_keepalive(&mut self, is_waiting_for_user_presence: bool) -> bool {
+        if let State::WaitingOnAuthenticator(request) = &self.state {
+            info!("keepalive");
+
+            let mut packet = [0u8; PACKET_SIZE];
+
+            packet[..4].copy_from_slice(&request.channel.to_be_bytes());
+            packet[4] = 0x80 | 0x3B;
+            packet[5..7].copy_from_slice(&1u16.to_be_bytes());
+
+            if is_waiting_for_user_presence {
+                packet[7] = KeepaliveStatus::UpNeeded as u8;
+            } else {
+                packet[7] = KeepaliveStatus::Processing as u8;
+            }
+
+            self.write_endpoint.write(&packet).ok();
+
+            true
+        } else {
+            info!("keepalive done");
+            false
         }
     }
 

@@ -86,7 +86,7 @@ const APP: () = {
         }
     }
 
-    #[idle(resources = [apdu_dispatch, ctaphid_dispatch, apps, perf_timer, usb_classes], schedule = [ccid_wait_extension])]
+    #[idle(resources = [apdu_dispatch, ctaphid_dispatch, apps, perf_timer, usb_classes], schedule = [ccid_wait_extension, ctaphid_keepalive])]
     fn idle(c: idle::Context) -> ! {
         let idle::Resources {
             apdu_dispatch,
@@ -139,7 +139,16 @@ const APP: () = {
                     match usb_classes.ccid.did_start_processing() {
                         usbd_ccid::types::Status::ReceivedData(milliseconds) => {
                             schedule.ccid_wait_extension(
-                                Instant::now() + (CLOCK_FREQ/1_000_000 * 1000*milliseconds.0).cycles()
+                                Instant::now() + (CLOCK_FREQ/1_000 * milliseconds.0).cycles()
+                            ).ok();
+                        }
+                        _ => {}
+                    }
+
+                    match usb_classes.ctaphid.did_start_processing() {
+                        usbd_ctaphid::types::Status::ReceivedData(milliseconds) => {
+                            schedule.ctaphid_keepalive(
+                                Instant::now() + (CLOCK_FREQ/1_000 * milliseconds.0).cycles()
                             ).ok();
                         }
                         _ => {}
@@ -157,7 +166,7 @@ const APP: () = {
     }
 
     /// Manages all traffic on the USB bus.
-    #[task(binds = USB1, resources = [usb_classes], schedule = [ccid_wait_extension], priority=6)]
+    #[task(binds = USB1, resources = [usb_classes], schedule = [ccid_wait_extension, ctaphid_keepalive], priority=6)]
     fn usb(c: usb::Context) {
         let usb = unsafe { hal::raw::Peripherals::steal().USB1 } ;
         let before = Instant::now();
@@ -169,7 +178,15 @@ const APP: () = {
         match usb_classes.ccid.did_start_processing() {
             usbd_ccid::types::Status::ReceivedData(milliseconds) => {
                 c.schedule.ccid_wait_extension(
-                    Instant::now() + (CLOCK_FREQ/1_000_000 * 1000*milliseconds.0).cycles()
+                    Instant::now() + (CLOCK_FREQ/1_000 * milliseconds.0).cycles()
+                ).ok();
+            }
+            _ => {}
+        }
+        match usb_classes.ctaphid.did_start_processing() {
+            usbd_ctaphid::types::Status::ReceivedData(milliseconds) => {
+                c.schedule.ctaphid_keepalive(
+                    Instant::now() + (CLOCK_FREQ/1_000 * milliseconds.0).cycles()
                 ).ok();
             }
             _ => {}
@@ -212,7 +229,24 @@ const APP: () = {
         match status {
             usbd_ccid::types::Status::ReceivedData(milliseconds) => {
                 c.schedule.ccid_wait_extension(
-                    Instant::now() + (CLOCK_FREQ/1_000 * 1000*milliseconds.0).cycles()
+                    Instant::now() + (CLOCK_FREQ/1_000 * milliseconds.0).cycles()
+                ).ok();
+            }
+            _ => {}
+        }
+    }
+
+    /// Same as with CCID, but sending ctaphid keepalive statuses.
+    #[task(resources = [usb_classes], schedule = [ctaphid_keepalive], priority = 6)]
+    fn ctaphid_keepalive(c: ctaphid_keepalive::Context) {
+        debug!("keepalive");
+        let status = c.resources.usb_classes.as_mut().unwrap().ctaphid.send_keepalive(
+            board::trussed::UserPresenceStatus::waiting()
+        );
+        match status {
+            usbd_ctaphid::types::Status::ReceivedData(milliseconds) => {
+                c.schedule.ctaphid_keepalive(
+                    Instant::now() + (CLOCK_FREQ/1_000 * milliseconds.0).cycles()
                 ).ok();
             }
             _ => {}

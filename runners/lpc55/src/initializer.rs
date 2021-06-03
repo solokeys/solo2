@@ -292,7 +292,6 @@ impl Initializer {
 
     }
 
-    #[inline(never)]
     pub fn initialize_basic(&mut self,
         clock_stage: &mut stages::Clock,
         adc: hal::Adc<Unknown>,
@@ -394,7 +393,6 @@ impl Initializer {
         }
     }
 
-    #[inline(never)]
     pub fn initialize_nfc(&mut self,
         clock_stage: &mut stages::Clock,
         basic_stage: &mut stages::Basic,
@@ -445,7 +443,6 @@ impl Initializer {
 
     }
 
-    #[inline(never)]
     pub fn initialize_usb(
         &mut self,
         clock_stage: &mut stages::Clock,
@@ -544,7 +541,6 @@ impl Initializer {
         }
     }
 
-    #[inline(never)]
     pub fn initialize_interfaces(&mut self, nfc_stage: &mut stages::Nfc, usb_stage: &mut stages::Usb) -> stages::Interfaces {
 
         info_now!("making interfaces");
@@ -586,7 +582,6 @@ impl Initializer {
         }
     }
 
-    #[inline(never)]
     pub fn initialize_filesystem(&mut self,
         clock_stage: &mut stages::Clock,
         basic_stage: &mut stages::Basic,
@@ -630,13 +625,7 @@ impl Initializer {
         static mut INTERNAL_STORAGE: Option<types::FlashStorage> = None;
         unsafe { INTERNAL_STORAGE.replace(filesystem); }
         static mut INTERNAL_FS_ALLOC: Option<Allocation<types::FlashStorage>> = None;
-        unsafe {
-            info_now!("internal fs alloc {:?}", INTERNAL_FS_ALLOC.is_some());
-        }
         unsafe { INTERNAL_FS_ALLOC = Some(Filesystem::allocate()); }
-        unsafe {
-            info_now!("internal fs alloc {:?}", INTERNAL_FS_ALLOC.is_some());
-        }
 
 
         static mut EXTERNAL_STORAGE: ExternalStorage = ExternalStorage::new();
@@ -712,8 +701,6 @@ impl Initializer {
             internal_storage_fs: unsafe { &mut INTERNAL_STORAGE },
         }
     }
-
-
 
     pub fn initialize_trussed(
         &mut self,
