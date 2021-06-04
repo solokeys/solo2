@@ -67,7 +67,10 @@ pub fn init_board(
     rtt_target::rtt_init_print!();
 
     Delogger::init_default(delog::LevelFilter::Debug, &FLUSHER).ok();
-    info_now!("entering init_board");
+    info_now!("entering init_board {}.{}.{}", 
+        build_constants::CARGO_PKG_VERSION_MAJOR, 
+        build_constants::CARGO_PKG_VERSION_MINOR, 
+        build_constants::CARGO_PKG_VERSION_PATCH);
     let hal = hal::Peripherals::from((device_peripherals, core_peripherals));
     
     #[cfg(not(feature = "no-encrypted-storage"))]
