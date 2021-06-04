@@ -122,9 +122,9 @@ pub type ProvisionerApp = provisioner_app::Provisioner<Store, FlashStorage, Trus
 use apdu_dispatch::{App as ApduApp, command::Size as CommandSize, response::Size as ResponseSize};
 use ctaphid_dispatch::app::{App as CtaphidApp};
 
-pub type PerfTimer = timer::Timer<ctimer::Ctimer4<hal::typestates::init_state::Enabled>>;
 pub type DynamicClockController = board::clock_controller::DynamicClockController;
-pub type HwScheduler = timer::Timer<ctimer::Ctimer0<hal::typestates::init_state::Enabled>>;
+pub type NfcWaitExtender = timer::Timer<ctimer::Ctimer0<hal::typestates::init_state::Enabled>>;
+pub type PerformanceTimer = timer::Timer<ctimer::Ctimer4<hal::typestates::init_state::Enabled>>;
 
 pub trait TrussedApp: Sized {
 
