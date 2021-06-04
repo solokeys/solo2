@@ -86,12 +86,17 @@ pub type ExternalInterrupt = hal::Pint<hal::typestates::init_state::Enabled>;
 pub type ApduDispatch = apdu_dispatch::dispatch::ApduDispatch;
 pub type CtaphidDispatch = ctaphid_dispatch::dispatch::Dispatch;
 
-pub struct Lpc55RebootInterface {}
-impl admin_app::BootInterface for Lpc55RebootInterface {
-    fn reboot() -> ! {  hal::raw::SCB::sys_reset()  }
-    fn reboot_to_application_update() -> ! {  hal::boot_to_bootrom()  }
-    fn reboot_to_application_update_persistent() -> ! {
-        // Erasing the first flash page & rebooting will keep processer in bootrom persistently.
+pub struct Lpc55Reboot {}
+impl admin_app::Reboot for Lpc55Reboot {
+    fn reboot() -> ! {
+        hal::raw::SCB::sys_reset()
+    }
+    fn reboot_to_firmware_update() -> ! {
+        hal::boot_to_bootrom()
+    }
+    fn reboot_to_firmware_update_destructive() -> ! {
+        // Erasing the first flash page & rebooting will keep processor in bootrom persistently.
+        // This is however destructive, as a valid firmware will need to be flashed.
         use hal::traits::flash::WriteErase;
         let flash = unsafe { hal::peripherals::flash::Flash::steal() }.enabled(
             &mut unsafe {hal::peripherals::syscon::Syscon::steal()}
@@ -102,7 +107,7 @@ impl admin_app::BootInterface for Lpc55RebootInterface {
 }
 
 #[cfg(feature = "admin-app")]
-pub type AdminApp = admin_app::App<TrussedClient, Lpc55RebootInterface>;
+pub type AdminApp = admin_app::App<TrussedClient, Lpc55Reboot>;
 #[cfg(feature = "piv-authenticator")]
 pub type PivApp = piv_authenticator::Authenticator<TrussedClient>;
 #[cfg(feature = "oath-authenticator")]
