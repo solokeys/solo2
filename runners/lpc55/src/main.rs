@@ -29,19 +29,51 @@ generate_macros!();
 const APP: () = {
 
     struct Resources {
+        /// Dispatches APDUs from contact+contactless interface to apps.
         apdu_dispatch: runner::types::ApduDispatch,
+
+        /// Dispatches CTAPHID messages to apps.
         ctaphid_dispatch: runner::types::CtaphidDispatch,
+
+        /// The Trussed service, used by all applications.
         trussed: runner::types::Trussed,
 
+        /// All the applications that the device serves.
         apps: runner::types::Apps,
 
+        /// The USB driver classes
         usb_classes: Option<runner::types::UsbClasses>,
+        /// The NFC driver
         contactless: Option<runner::types::Iso14443>,
 
-        perf_timer: runner::types::PerfTimer,
+        /// This timer is used while developing NFC, to time how long things took,
+        /// and to make sure logs are not flushed in the middle of NFC transactions.
+        ///
+        /// It could and should be behind some kind of `debug-nfc-timer` feature flag.
+        perf_timer: runner::types::PerformanceTimer,
 
+        /// When using passive power (i.e. NFC), we switch between 12MHz
+        /// and 48Mhz, trying to optimize speed while keeping power high enough.
+        ///
+        /// In principle, we could just run at 12MHz constantly, and then
+        /// there would be no need for a system-speed independent wait extender.
         clock_ctrl: Option<runner::types::DynamicClockController>,
-        hw_scheduler: runner::types::HwScheduler,
+
+        /// Applications must respond to NFC requests within a certain time frame (~40ms)
+        /// or send a "wait extension" to the NFC reader. This timer is responsible
+        /// for scheduling these.
+        ///
+        /// In the current version of RTIC, the built-in scheduling cannot be used, as it
+        /// is expressed in terms of cycles, and our dynamic clock control potentially changes
+        /// timing. It seems like RTIC v6 will allow using such a timer directly.
+        ///
+        /// Alternatively, we could send wait extensions as if always running at 12MHz,
+        /// which would cause more context switching and NFC exchangs though.
+        ///
+        /// NB: CCID + CTAPHID also have a sort of "wait extension" implemented, however
+        /// since the system runs at constant speed when powered over USB, there is no
+        /// need for such an independent timer.
+        wait_extender: runner::types::NfcWaitExtender,
     }
 
     #[init(schedule = [update_ui])]
@@ -59,7 +91,7 @@ const APP: () = {
 
             perf_timer,
             clock_ctrl,
-            hw_scheduler,
+            wait_extender,
         ) = runner::init_board(c.device, c.core);
 
         // don't toggle LED in passive mode
@@ -82,7 +114,7 @@ const APP: () = {
             perf_timer,
 
             clock_ctrl,
-            hw_scheduler,
+            wait_extender,
         }
     }
 
@@ -296,25 +328,25 @@ const APP: () = {
 
 
 
-    #[task(binds = CTIMER0, resources = [contactless, perf_timer, hw_scheduler], priority = 7)]
+    #[task(binds = CTIMER0, resources = [contactless, perf_timer, wait_extender], priority = 7)]
     fn nfc_wait_extension(c: nfc_wait_extension::Context) {
         let nfc_wait_extension::Resources {
             contactless,
             perf_timer: _perf_timer,
-            hw_scheduler,
+            wait_extender,
         }
             = c.resources;
         if let Some(contactless) = contactless.as_mut() {
 
             // clear the interrupt
-            hw_scheduler.cancel().ok();
+            wait_extender.cancel().ok();
 
             info!("<{}", _perf_timer.elapsed().0/100);
             let status = contactless.poll_wait_extensions();
             match status {
                 nfc_device::Iso14443Status::Idle => {}
                 nfc_device::Iso14443Status::ReceivedData(milliseconds) => {
-                    hw_scheduler.start(Microseconds::try_from(milliseconds).unwrap());
+                    wait_extender.start(Microseconds::try_from(milliseconds).unwrap());
                 }
             }
             info!(" {}>", _perf_timer.elapsed().0/100);
@@ -322,7 +354,7 @@ const APP: () = {
     }
 
     #[task(binds = PIN_INT0, resources = [
-            contactless, perf_timer, hw_scheduler,
+            contactless, perf_timer, wait_extender,
         ], priority = 7,
     )]
     fn nfc_irq(c: nfc_irq::Context) {
@@ -330,7 +362,7 @@ const APP: () = {
         let nfc_irq::Resources {
             contactless,
             perf_timer,
-            hw_scheduler,
+            wait_extender,
             }
             = c.resources;
         let contactless = contactless.as_mut().unwrap();
@@ -341,8 +373,8 @@ const APP: () = {
         match status {
             nfc_device::Iso14443Status::Idle => {}
             nfc_device::Iso14443Status::ReceivedData(milliseconds) => {
-                hw_scheduler.cancel().ok();
-                hw_scheduler.start(Microseconds::try_from(milliseconds).unwrap());
+                wait_extender.cancel().ok();
+                wait_extender.start(Microseconds::try_from(milliseconds).unwrap());
             }
         }
         info!("{}-{}]", _starttime, perf_timer.elapsed().0/100);

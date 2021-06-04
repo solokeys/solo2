@@ -59,20 +59,20 @@ pub fn init_board(
     Option<types::UsbClasses>,
     Option<types::Iso14443>,
 
-    types::PerfTimer,
+    types::PerformanceTimer,
     Option<clock_controller::DynamicClockController>,
-    types::HwScheduler,
+    types::NfcWaitExtender,
 ) {
     #[cfg(feature = "log-rtt")]
     rtt_target::rtt_init_print!();
 
     Delogger::init_default(delog::LevelFilter::Debug, &FLUSHER).ok();
-    info_now!("entering init_board {}.{}.{}", 
-        build_constants::CARGO_PKG_VERSION_MAJOR, 
-        build_constants::CARGO_PKG_VERSION_MINOR, 
+    info_now!("entering init_board {}.{}.{}",
+        build_constants::CARGO_PKG_VERSION_MAJOR,
+        build_constants::CARGO_PKG_VERSION_MINOR,
         build_constants::CARGO_PKG_VERSION_PATCH);
     let hal = hal::Peripherals::from((device_peripherals, core_peripherals));
-    
+
     #[cfg(not(feature = "no-encrypted-storage"))]
     let require_prince = true;
     #[cfg(feature = "no-encrypted-storage")]

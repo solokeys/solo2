@@ -5,25 +5,11 @@ use crate::hal::{
     Enabled,
     Gpio,
     Iocon,
-    peripherals::adc::{
-        self,
-        ChannelType,
-    },
+    peripherals::adc::{self, ChannelType},
     Syscon,
     Pmc,
-    drivers::{
-        clocks::Clocks,
-        pins::{self, Pin},
-        // ,SpiMaster, timer};
-    },
-    typestates::{
-        pin::{
-            state,
-            gpio::{
-                direction,
-            }
-        }
-    },
+    drivers::{clocks::Clocks, pins::{self, Pin}},
+    typestates::pin::{state, gpio:: direction},
 };
 
 pub type SignalPin = pins::Pio0_23;
