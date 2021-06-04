@@ -24,6 +24,7 @@ use littlefs2::path::{PathBuf};
 use trussed::store::{self, Store};
 use trussed::{
     syscall,
+    client,
     Client as TrussedClient,
     key::{Kind as KeyKind, Key, Flags},
 };
@@ -98,6 +99,8 @@ enum TestAttestationP1 {
     P256Cert = 1,
     Ed255Sign= 2,
     Ed255Cert= 3,
+    X255Agree = 4,
+    X255Cert = 5,
 }
 
 
@@ -121,7 +124,7 @@ enum SelectedBuffer {
 pub struct Provisioner<S, FS, T>
 where S: Store,
       FS: 'static + LfsStorage,
-      T: TrussedClient,
+      T: TrussedClient + client::X255 + client::HmacSha256,
 {
     trussed: T,
 
@@ -138,7 +141,7 @@ where S: Store,
 impl<S, FS, T> Provisioner<S, FS, T>
 where S: Store,
       FS: 'static + LfsStorage,
-      T: TrussedClient,
+      T: TrussedClient + client::X255 + client::HmacSha256,
 {
     pub fn new(
         trussed: T,
@@ -271,7 +274,7 @@ where S: Store,
 
                         GenerateX255Key => {
 
-                            info!("GenerateX255Key");
+                            info_now!("GenerateX255Key");
                             let mut seed = [0u8; 32];
                             seed.copy_from_slice(
                                 &syscall!(self.trussed.random_bytes(32)).bytes.as_slice()
@@ -389,8 +392,14 @@ where S: Store,
                             use trussed::{
                                 types::Mechanism,
                                 types::SignatureSerialization,
-                                types::ObjectHandle
+                                types::KeyId,
+                                types::Message,
+                                types::StorageAttributes,
+                                types::Location,
+                                types::KeySerialization,
+
                             };
+                            use trussed::config::MAX_SIGNATURE_LENGTH;
 
 
                             let p1 = command.p1;
@@ -403,7 +412,7 @@ where S: Store,
                                 _x if p1 == TestAttestationP1::P256Sign as u8 => {
                                     let sig: Bytes<MAX_SIGNATURE_LENGTH> = syscall!(self.trussed.sign(
                                         Mechanism::P256,
-                                        ObjectHandle{object_id: 1.into()},
+                                        KeyId::from_special(1),
                                         &challenge,
                                         SignatureSerialization::Asn1Der
                                     )).signature;
@@ -415,16 +424,18 @@ where S: Store,
                                     Ok(())
                                 }
                                 _x if p1 == TestAttestationP1::P256Cert as u8 => {
-                                    store::read(self.store,
+                                    let cert: Message = store::read(self.store,
                                         trussed::types::Location::Internal,
                                         &PathBuf::from(FILENAME_P256_CERT),
-                                    ).map_err(|_| Status::NotFound)
+                                    ).map_err(|_| Status::NotFound)?;
+                                    reply.extend_from_slice(&cert).unwrap();
+                                    Ok(())
                                 }
                                 _x if p1 == TestAttestationP1::Ed255Sign as u8 => {
 
                                     let sig: Bytes<MAX_SIGNATURE_LENGTH> = syscall!(self.trussed.sign(
                                         Mechanism::Ed255,
-                                        ObjectHandle{object_id: 2.into()},
+                                        KeyId::from_special(2),
                                         &challenge,
                                         SignatureSerialization::Asn1Der
                                     )).signature;
@@ -436,10 +447,57 @@ where S: Store,
                                     Ok(())
                                 }
                                 _x if p1 == TestAttestationP1::Ed255Cert as u8 => {
-                                    store::read(self.store,
+                                    let cert:Message = store::read(self.store,
                                         trussed::types::Location::Internal,
                                         &PathBuf::from(FILENAME_ED255_CERT),
-                                    ).map_err(|_| Status::NotFound)
+                                    ).map_err(|_| Status::NotFound)?;
+                                    reply.extend_from_slice(&cert).unwrap();
+                                    Ok(())
+                                }
+                                _x if p1 == TestAttestationP1::X255Agree as u8 => {
+
+                                    syscall!(self.trussed.debug_dump_store());
+
+                                    let mut platform_pk_bytes = [0u8; 32];
+                                    for i in 0 .. 32 {
+                                        platform_pk_bytes[i] = command.data()[i]
+                                    }
+
+                                    info_now!("1");
+
+                                    let platform_kak = syscall!(self.trussed.deserialize_key(
+                                        Mechanism::X255,
+                                        // platform sends it's pk as 32 bytes
+                                        &platform_pk_bytes,
+                                        KeySerialization::Raw,
+                                        StorageAttributes::new().set_persistence(Location::Volatile)
+                                    )).key;
+                                    info_now!("3");
+
+                                    let shared_secret = syscall!(self.trussed.agree_x255(
+                                        KeyId::from_special(3),
+                                        platform_kak,
+                                        Location::Volatile
+                                    )).shared_secret;
+                                    info_now!("4");
+
+                                    let sig = syscall!(self.trussed.sign_hmacsha256(
+                                        shared_secret,
+                                        &challenge,
+                                    )).signature;
+
+                                    info_now!("5");
+                                    reply.extend_from_slice(&challenge).unwrap();
+                                    reply.extend_from_slice(&sig).unwrap();
+                                    Ok(())
+                                }
+                                _x if p1 == TestAttestationP1::X255Cert as u8 => {
+                                    let cert: Message = store::read(self.store,
+                                        trussed::types::Location::Internal,
+                                        &PathBuf::from(FILENAME_X255_CERT),
+                                    ).map_err(|_| Status::NotFound)?;
+                                    reply.extend_from_slice(&cert).unwrap();
+                                    Ok(())
                                 }
                                 _ => Err(Status::FunctionNotSupported)
 
@@ -493,7 +551,7 @@ where S: Store,
 impl<S, FS, T> apdu_dispatch::app::Aid for Provisioner<S, FS, T>
 where S: Store,
       FS: 'static + LfsStorage,
-      T: TrussedClient
+      T: TrussedClient + client::X255 + client::HmacSha256,
 {
 
     fn aid(&self) -> &'static [u8] {
@@ -509,7 +567,7 @@ where S: Store,
 impl<S, FS, T> apdu_dispatch::app::App<command::Size, response::Size> for Provisioner<S, FS, T>
 where S: Store,
       FS: 'static + LfsStorage,
-      T: TrussedClient,
+      T: TrussedClient + client::X255 + client::HmacSha256,
 {
     fn select(&mut self, _apdu: &Command, reply: &mut response::Data) -> apdu_dispatch::app::Result {
         self.buffer_file_contents.clear();
