@@ -6,5 +6,5 @@
 //! It directly implements the APDU and CTAPHID dispatch App interfaces.
 #![no_std]
 
-pub mod management;
-pub use management::*;
+mod admin;
+pub use admin::{App, Reboot};

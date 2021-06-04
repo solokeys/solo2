@@ -1,4 +1,4 @@
-use core::convert::TryInto;
+use core::{convert::TryInto, marker::PhantomData};
 use ctaphid_dispatch::app::{self as hid, Command as HidCommand, Message};
 use ctaphid_dispatch::command::VendorCommand;
 use apdu_dispatch::{Command, response, app as apdu};
@@ -15,29 +15,42 @@ const RNG: VendorCommand = VendorCommand::H60;
 const VERSION: VendorCommand = VendorCommand::H61;
 const UUID: VendorCommand = VendorCommand::H62;
 
-pub trait BootInterface {
+pub trait Reboot {
+    /// Reboots the device.
     fn reboot() -> !;
-    fn reboot_to_application_update() -> !;
-    fn reboot_to_application_update_persistent() -> !;
+
+    /// Reboots the device.
+    ///
+    /// Presuming the device has a separate mode of operation that
+    /// allows updating its firmware (for instance, a bootloader),
+    /// reboots the device into this mode.
+    fn reboot_to_firmware_update() -> !;
+
+    /// Reboots the device.
+    ///
+    /// Presuming the device has a separate destructive but more
+    /// reliable way of rebooting into the firmware mode of operation,
+    /// does so.
+    fn reboot_to_firmware_update_destructive() -> !;
 }
 
-pub struct App<T, BI>
+pub struct App<T, R>
 where T: TrussedClient,
-      BI: BootInterface,
+      R: Reboot,
 {
     got_wink: bool,
     trussed: T,
     uuid: [u8; 16],
     version: u32,
-    _boot_interface: Option<BI>,
+    boot_interface: PhantomData<R>,
 }
 
-impl<T, BI> App<T, BI>
+impl<T, R> App<T, R>
 where T: TrussedClient,
-      BI: BootInterface,
+      R: Reboot,
 {
     pub fn new(client: T, uuid: [u8; 16], version: u32) -> Self {
-        Self {got_wink: false, trussed: client, uuid, version, _boot_interface: None}
+        Self { got_wink: false, trussed: client, uuid, version, boot_interface: PhantomData }
     }
 
     /// Indicate if a wink was recieved
@@ -58,9 +71,9 @@ where T: TrussedClient,
 
 }
 
-impl<T,BI> hid::App for App<T,BI>
+impl<T, R> hid::App for App<T, R>
 where T: TrussedClient,
-      BI: BootInterface
+      R: Reboot
 {
     fn commands(&self) -> &'static [HidCommand] {
         &[
@@ -76,14 +89,14 @@ where T: TrussedClient,
     fn call(&mut self, command: HidCommand, input_data: &Message, response: &mut Message) -> hid::AppResult {
         match command {
             HidCommand::Vendor(REBOOT) => {
-                BI::reboot();
+                R::reboot();
             }
             HidCommand::Vendor(UPDATE) => {
                 if self.user_present() {
                     if input_data.len() > 0 && input_data[0] == 0x01 {
-                        BI::reboot_to_application_update_persistent();
+                        R::reboot_to_firmware_update_destructive();
                     } else {
-                        BI::reboot_to_application_update();
+                        R::reboot_to_firmware_update();
                     }
                 } else {
                     return Err(hid::Error::InvalidLength);
@@ -107,9 +120,9 @@ where T: TrussedClient,
     }
 }
 
-impl<T,BI> apdu::Aid for App<T,BI>
+impl<T, R> apdu::Aid for App<T, R>
 where T: TrussedClient,
-      BI: BootInterface
+      R: Reboot
 {
     // Solo management app
     fn aid(&self) -> &'static [u8] {
@@ -120,9 +133,9 @@ where T: TrussedClient,
     }
 }
 
-impl<T,BI> apdu::App<CommandSize, ResponseSize> for App<T,BI>
+impl<T, R> apdu::App<CommandSize, ResponseSize> for App<T, R>
 where T: TrussedClient,
-      BI: BootInterface
+      R: Reboot
 {
 
     fn select(&mut self, _apdu: &Command, _reply: &mut response::Data) -> apdu::Result {
@@ -138,16 +151,16 @@ where T: TrussedClient,
 
         match command {
             REBOOT => {
-                BI::reboot();
+                R::reboot();
             }
             UPDATE => {
                 // Boot to mcuboot (only when contact interface)
                 if interface == apdu::Interface::Contact && self.user_present()
                 {
                     if apdu.p1 == 0x01 {
-                        BI::reboot_to_application_update_persistent();
+                        R::reboot_to_firmware_update_destructive();
                     } else {
-                        BI::reboot_to_application_update();
+                        R::reboot_to_firmware_update();
                     }
                 }
                 return Err(Status::ConditionsOfUseNotSatisfied);
