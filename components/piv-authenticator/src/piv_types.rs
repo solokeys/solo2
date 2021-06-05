@@ -71,10 +71,12 @@ impl Encodable for CryptographicAlgorithmTemplate<'_> {
     }
 
     fn encode(&self, encoder: &mut flexiber::Encoder<'_>) -> flexiber::Result<()> {
-        let cryptographic_algorithm_identifier_tag = flexiber::Tag::application(0);
+        // '80'
+        let cryptographic_algorithm_identifier_tag = flexiber::Tag::context(0);
         for alg in self.algorithms.iter() {
             encoder.encode(&flexiber::TaggedSlice::from(cryptographic_algorithm_identifier_tag, &[*alg as _])?)?;
         }
+        // '06'
         let object_identifier_tag = flexiber::Tag::universal(6);
         encoder.encode(&flexiber::TaggedSlice::from(object_identifier_tag, &[0x00])?)
     }
@@ -223,15 +225,21 @@ pub struct CardHolderUniqueIdentifier<'l> {
 
     #[tlv(simple = "0x34")]
     // 16B type 1,2,4 UUID
-    guid: &'l [u8],
+    guid: [u8; 16],
 
     /// YYYYMMDD
     #[tlv(simple = "0x35")]
     expiration_date: [u8; 8],
 
-    #[tlv(simple = "0x36")]
-    // 16B, like guid
-    cardholder_uuid: Option<&'l [u8]>,
+    // Having this with "None" serialized as '36 00', which throws e.g. pivy-tool off.
+    // This is in fact incorrect:
+    // -> should be '36 10 <...>' with a 16-byte valid UUID of version 1, 4 or 5
+    //
+    // Need to fix in `flexiber`.
+    //
+    // #[tlv(simple = "0x36")]
+    // // 16B, like guid
+    // cardholder_uuid: Option<&'l [u8]>,
 
     #[tlv(simple = "0x3E")]
     issuer_asymmetric_signature: &'l [u8],
@@ -249,12 +257,20 @@ impl Default for CardHolderUniqueIdentifier<'static> {
         Self {
             // 9999 = non-federal
             fasc_n: &[0x99, 0x99],
-            guid: crate::constants::GUID,
+            guid: hex!("00000000000040008000000000000000"),
             expiration_date: *b"99991231",
-            cardholder_uuid: None,
+            // cardholder_uuid: None,
             // at least pivy only checks for non-empty entry
             issuer_asymmetric_signature: b" ",
             error_detection_code: [0u8; 0],
         }
+    }
+}
+
+impl CardHolderUniqueIdentifier<'_> {
+    pub fn with_guid(self, guid: [u8; 16]) -> Self {
+        let mut modified_self = self;
+        modified_self.guid = guid;
+        modified_self
     }
 }

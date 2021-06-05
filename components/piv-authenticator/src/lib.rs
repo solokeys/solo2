@@ -10,6 +10,7 @@ extern crate hex_literal;
 pub mod commands;
 pub use commands::Command;
 pub mod constants;
+pub mod container;
 pub mod state;
 pub mod derp;
 pub mod piv_types;
@@ -60,6 +61,7 @@ where
 
     pub fn select(&mut self, _apdu: &IsoCommand, reply: &mut response::Data) -> Result {
         use piv_types::Algorithms::*;
+        info_now!("selecting PIV maybe");
 
         let application_property_template = piv_types::ApplicationPropertyTemplate::default()
             .with_application_label(APPLICATION_LABEL)
@@ -73,10 +75,12 @@ where
         application_property_template
             .encode_to_heapless_vec(reply)
             .unwrap();
+        info_now!("returning: {}", hex_str!(reply));
         Ok(())
     }
 
     pub fn respond(&mut self, command: &IsoCommand, reply: &mut response::Data) -> Result {
+        info_now!("PIV responding to {:?}", command);
         let last_or_only = command.class().chain().last_or_only();
 
         // TODO: avoid owned copy?
@@ -107,10 +111,12 @@ where
 
         // parse Iso7816Command as PivCommand
         let command: Command = (&entire_command).try_into()?;
+        info_now!("parsed: {:?}", &command);
 
         match command {
             Command::Verify(verify) => self.verify(verify),
             Command::ChangeReference(change_reference) => self.change_reference(change_reference),
+            Command::GetData(container) => self.get_data(container, reply),
             _ => todo!(),
         }
     }
@@ -863,90 +869,74 @@ where
         Err(Status::IncorrectDataParameter)
     }
 
-    fn get_data(&mut self, command: &IsoCommand, reply: &mut response::Data) -> Result {
-        if command.p1 != 0x3f || command.p2 != 0xff {
-            return Err(Status::IncorrectP1OrP2Parameter);
-        }
 
-        // TODO: adapt `derp` and use a proper DER parser
+        // match container {
+        //     containers::Container::CardHolderUniqueIdentifier =>
+        //         piv_types::CardHolderUniqueIdentifier::default()
+        //         .encode
+        //     _ => todo!(),
+        // }
+        // todo!();
 
-        let data = command.data();
-
-        if data.len() < 3 {
-            return Err(Status::IncorrectDataParameter);
-        }
-
-        let tag = data[0];
-        if tag != 0x5c {
-            return Err(Status::IncorrectDataParameter);
-        }
-
-        let len = data[1] as usize;
-        let data = &data[2..];
-        if data.len() != len {
-            return Err(Status::IncorrectDataParameter);
-        }
-
-        if data.len() == 0 || data.len() > 3 {
-            return Err(Status::IncorrectDataParameter);
-        }
-
-        // lookup what is asked for
-        info_now!("looking up {:?}", data);
+    fn get_data(&mut self, container: container::Container, reply: &mut response::Data) -> Result {
 
         // TODO: check security status, else return Status::SecurityStatusNotSatisfied
 
         // Table 3, Part 1, SP 800-73-4
         // https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-73-4.pdf#page=30
-        match data {
-            DataObjects::DiscoveryObject => {
+        use crate::container::Container;
+        match container {
+            Container::DiscoveryObject => {
                 // Err(Status::InstructionNotSupportedOrInvalid)
                 let data = response::Data::try_from_slice(DISCOVERY_OBJECT).unwrap();
                 reply.extend_from_slice(&data).ok();
                 // todo!("discovery object"),
             }
 
-            DataObjects::BiometricInformationTemplate => {
+            Container::BiometricInformationTemplatesGroupTemplate => {
                 return Err(Status::InstructionNotSupportedOrInvalid)
                 // todo!("biometric information template"),
             }
 
             // '5FC1 02' (351B)
-            DataObjects::CardHolderUniqueIdentifier => {
+            Container::CardHolderUniqueIdentifier => {
+                let guid = self.state.persistent(&mut self.trussed).guid();
                 piv_types::CardHolderUniqueIdentifier::default()
+                    .with_guid(guid)
                     .encode_to_heapless_vec(reply)
                     .unwrap();
+                info_now!("returning CHUID {}", hex_str!(reply));
             }
 
-            // '5FC1 05' (351B)
-            DataObjects::X509CertificateForPivAuthentication => {
-                // return Err(Status::NotFound);
+            // // '5FC1 05' (351B)
+            // Container::X509CertificateForPivAuthentication => {
+            //     // return Err(Status::NotFound);
 
-                // info_now!("loading 9a cert");
-                // it seems like fetching this certificate is the way Filo's agent decides
-                // whether the key is "already setup":
-                // https://github.com/FiloSottile/yubikey-agent/blob/8781bc0082db5d35712a2244e3ab3086f415dd59/setup.go#L69-L70
-                let data = try_syscall!(self.trussed.read_file(
-                    trussed::types::Location::Internal,
-                    trussed::types::PathBuf::from(b"authentication-key.x5c"),
-                )).map_err(|_| {
-                    // info_now!("error loading: {:?}", &e);
-                    Status::NotFound
-                } )?.data;
+            //     // info_now!("loading 9a cert");
+            //     // it seems like fetching this certificate is the way Filo's agent decides
+            //     // whether the key is "already setup":
+            //     // https://github.com/FiloSottile/yubikey-agent/blob/8781bc0082db5d35712a2244e3ab3086f415dd59/setup.go#L69-L70
+            //     let data = try_syscall!(self.trussed.read_file(
+            //         trussed::types::Location::Internal,
+            //         trussed::types::PathBuf::from(b"authentication-key.x5c"),
+            //     )).map_err(|_| {
+            //         // info_now!("error loading: {:?}", &e);
+            //         Status::NotFound
+            //     } )?.data;
 
-                // todo: cleanup
-                let tag = flexiber::Tag::application(0x13); // 0x53
-                flexiber::TaggedSlice::from(tag, &data)
-                    .unwrap()
-                    .encode_to_heapless_vec(reply)
-                    .unwrap();
-            }
+            //     // todo: cleanup
+            //     let tag = flexiber::Tag::application(0x13); // 0x53
+            //     flexiber::TaggedSlice::from(tag, &data)
+            //         .unwrap()
+            //         .encode_to_heapless_vec(reply)
+            //         .unwrap();
+            // }
 
-            // '5F FF01' (754B)
-            YubicoObjects::AttestationCertificate => {
-                let data = response::Data::try_from_slice(YUBICO_ATTESTATION_CERTIFICATE).unwrap();
-                reply.extend_from_slice(&data).ok();
-            }
+            // // '5F FF01' (754B)
+            // YubicoObjects::AttestationCertificate => {
+            //     let data = response::Data::try_from_slice(YUBICO_ATTESTATION_CERTIFICATE).unwrap();
+            //     reply.extend_from_slice(&data).ok();
+            // }
 
             _ => return Err(Status::NotFound),
         }

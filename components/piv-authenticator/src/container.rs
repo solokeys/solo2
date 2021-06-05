@@ -2,12 +2,17 @@ use core::convert::TryFrom;
 use flexiber::{Decodable, Encodable};
 
 pub struct Tag<'a>(&'a [u8]);
+impl<'a> Tag<'a> {
+    pub fn new(slice: &'a [u8]) -> Self {
+        Self(slice)
+    }
+}
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RetiredIndex(u8);
 
 // #[repr(u8)]
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum KeyReference {
     GlobalPin,
     ApplicationPin,
@@ -51,6 +56,7 @@ impl From<KeyReference> for u8 {
 
 /// The 36 data objects defined by PIV (SP 800-37-4, Part 1).
 ///
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Container {
     CardCapabilityContainer,
     CardHolderUniqueIdentifier,

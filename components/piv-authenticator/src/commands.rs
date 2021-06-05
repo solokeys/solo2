@@ -9,16 +9,16 @@ use core::convert::{TryFrom, TryInto};
 use iso7816::{Instruction, Status};
 use apdu_dispatch::{Command as IsoCommand, command::Data};
 
-pub use crate::{Pin, Puk};
+pub use crate::{container as containers, piv_types, Pin, Puk};
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Command<'l> {
     /// Select the application
     ///
     /// Resets security indicators if we are implicitly deselected.
     Select(Select<'l>),
     /// Get a data object / container.
-    GetData(GetData),
+    GetData(containers::Container),
     /// Check PIN
     ///
     /// This verifies that the sent PIN (global or PIV) is correct.
@@ -49,7 +49,7 @@ impl<'l> Command<'l> {
 }
 
 /// TODO: change into enum
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Select<'l> {
     pub aid: &'l [u8],
 }
@@ -67,18 +67,27 @@ impl<'l> TryFrom<&'l Data> for Select<'l> {
 }
 
 
-#[derive(Clone, Copy, Eq, PartialEq)]
-pub enum GetData {
-}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct GetData(containers::Container);
 
 impl TryFrom<&Data> for GetData {
     type Error = Status;
     fn try_from(data: &Data) -> Result<Self, Self::Error> {
-        todo!();
+        let mut decoder = flexiber::Decoder::new(data);
+        let tagged_slice: flexiber::TaggedSlice = decoder.decode().map_err(|_| Status::IncorrectDataParameter)?;
+        if tagged_slice.tag() != flexiber::Tag::application(0x1C) {
+            return Err(Status::IncorrectDataParameter);
+        }
+        let container: containers::Container = containers::Tag::new(tagged_slice.as_bytes())
+            .try_into()
+            .map_err(|_| Status::IncorrectDataParameter)?;
+
+        info_now!("request to GetData for container {:?}", container);
+        Ok(Self(container))
     }
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub enum VerifyKeyReference {
     GlobalPin = 0x00,
@@ -108,7 +117,7 @@ impl TryFrom<u8> for VerifyKeyReference {
     }
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct VerifyLogout(bool);
 
 impl TryFrom<u8> for VerifyLogout {
@@ -122,21 +131,21 @@ impl TryFrom<u8> for VerifyLogout {
     }
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct VerifyArguments<'l> {
     pub key_reference: VerifyKeyReference,
     pub logout: VerifyLogout,
     pub data: &'l Data
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum VerifyLogin {
     PivPin(Pin),
     GlobalPin([u8; 8]),
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Verify {
     Login(VerifyLogin),
     Logout(VerifyKeyReference),
@@ -160,7 +169,7 @@ impl TryFrom<VerifyArguments<'_>> for Verify {
     }
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub enum ChangeReferenceKeyReference {
     GlobalPin = 0x00,
@@ -180,13 +189,13 @@ impl TryFrom<u8> for ChangeReferenceKeyReference {
     }
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ChangeReferenceArguments<'l> {
     pub key_reference: ChangeReferenceKeyReference,
     pub data: &'l Data
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ChangeReference {
     ChangePin { old_pin: Pin, new_pin: Pin },
     ChangePuk { old_puk: Puk, new_puk: Puk },
@@ -217,7 +226,7 @@ impl TryFrom<ChangeReferenceArguments<'_>> for ChangeReference {
     }
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ResetPinRetries {
     pub padded_pin: [u8; 8],
     pub puk: [u8;  8],
@@ -236,7 +245,7 @@ impl TryFrom<&Data> for ResetPinRetries {
     }
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub enum AuthenticateKeyReference {
     SecureMessaging = 0x04,
@@ -302,7 +311,7 @@ impl TryFrom<u8> for AuthenticateKeyReference {
     }
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct AuthenticateArguments<'l> {
     /// To allow the authenticator to have additional algorithms beyond NIST SP 800-78-4,
     /// this is passed through as-is.
@@ -311,7 +320,7 @@ pub struct AuthenticateArguments<'l> {
     pub data: &'l Data
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Authenticate {
 }
 
@@ -322,7 +331,7 @@ impl TryFrom<AuthenticateArguments<'_>> for Authenticate {
     }
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PutData {
 }
 
@@ -333,7 +342,7 @@ impl TryFrom<&Data> for PutData {
     }
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub enum GenerateAsymmetricKeyReference {
     SecureMessaging = 0x04,
@@ -357,13 +366,13 @@ impl TryFrom<u8> for GenerateAsymmetricKeyReference {
     }
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct GenerateAsymmetricArguments<'l> {
     pub key_reference: GenerateAsymmetricKeyReference,
     pub data: &'l Data
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum GenerateAsymmetric {
 }
 
@@ -403,7 +412,7 @@ impl<'l> TryFrom<&'l IsoCommand> for Command<'l> {
             }
 
             (0x00, Instruction::GetData, 0x3F, 0xFF) => {
-                Self::GetData(GetData::try_from(data)?)
+                Self::GetData(GetData::try_from(data)?.0)
             }
 
             (0x00, Instruction::Verify, p1, p2) => {
