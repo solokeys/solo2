@@ -12,13 +12,13 @@ nb = "1"
 embedded-hal = { version = "0.2", features = ["unproven"] }
 generic-array = "0.14.3"
 interchange = "0.2.0"
+piv-authenticator = { git = "https://github.com/solokeys/piv-authenticator", branch = "main" }
 trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main", features = ["clients-3"] }
 
 # components
 c-stubs = { path = "../../components/c-stubs" }
 ctap-types = { path = "../../components/ctap-types" }
 fido-authenticator = { path = "../../components/fido-authenticator" }
-piv-authenticator = { path = "../../components/piv-authenticator" }
 usbd-ccid = { path = "../../components/usbd-ccid" }
 usbd-ctaphid = { path = "../../components/usbd-ctaphid" }
 nfc-device = {path = "./../../components/nfc-device"}
