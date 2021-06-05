@@ -21,6 +21,7 @@ delog = "0.1.1"
 heapless = "0.6"
 interchange = "0.2.0"
 nb = "1"
+piv-authenticator = { git = "https://github.com/solokeys/piv-authenticator", branch = "main", features = ["apdu-dispatch"], optional = true }
 rtt-target = { version = "0.3", optional = true, features = ["cortex-m"] }
 trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main" }
 usb-device = "0.2.3"
@@ -43,7 +44,6 @@ fido-authenticator = { path = "../../components/fido-authenticator", optional = 
 fm11nc08 = {path = "../../components/fm11nc08"}
 ctaphid-dispatch = {path = "../../components/ctaphid-dispatch"}
 nfc-device = {path = "../../components/nfc-device"}
-piv-authenticator = { path = "../../components/piv-authenticator", features = ["apdu-dispatch"], optional = true }
 usbd-ccid = { path = "../../components/usbd-ccid" }
 usbd-ctaphid = { path = "../../components/usbd-ctaphid" }
 
