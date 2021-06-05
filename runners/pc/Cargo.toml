@@ -10,6 +10,7 @@ delog = "0.1.0"
 heapless = "0.6"
 nb = "1"
 embedded-hal = { version = "0.2", features = ["unproven"] }
+fido-authenticator = { git = "https://github.com/solokeys/fido-authenticator", branch = "main" }
 generic-array = "0.14.3"
 interchange = "0.2.0"
 piv-authenticator = { git = "https://github.com/solokeys/piv-authenticator", branch = "main" }
@@ -18,7 +19,6 @@ trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main", fea
 # components
 c-stubs = { path = "../../components/c-stubs" }
 ctap-types = { path = "../../components/ctap-types" }
-fido-authenticator = { path = "../../components/fido-authenticator" }
 usbd-ccid = { path = "../../components/usbd-ccid" }
 usbd-ctaphid = { path = "../../components/usbd-ctaphid" }
 nfc-device = {path = "./../../components/nfc-device"}

@@ -10,15 +10,16 @@ edition = "2018"
 delog = "0.1.0"
 heapless = "0.6"
 heapless-bytes = "0.2.0"
+interchange = "0.2.0"
 serde = { version = "1", default-features = false }
 
 apdu-dispatch = { git = "https://github.com/solokeys/apdu-dispatch", branch = "main" }
-ctap-types = { path = "../ctap-types" }
-fido-authenticator = {path = "../fido-authenticator"}
-ctaphid-dispatch = {path = "../ctaphid-dispatch"}
-interchange = "0.2.0"
+fido-authenticator = { git = "https://github.com/solokeys/fido-authenticator", branch = "main" }
 iso7816 = { git = "https://github.com/ycrypto/iso7816", branch = "main" }
 trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main" }
+
+ctap-types = { path = "../ctap-types" }
+ctaphid-dispatch = {path = "../ctaphid-dispatch"}
 
 [features]
 default = []

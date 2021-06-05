@@ -21,18 +21,21 @@ delog = "0.1.1"
 heapless = "0.6"
 interchange = "0.2.0"
 nb = "1"
-piv-authenticator = { git = "https://github.com/solokeys/piv-authenticator", branch = "main", features = ["apdu-dispatch"], optional = true }
 rtt-target = { version = "0.3", optional = true, features = ["cortex-m"] }
-trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main" }
 usb-device = "0.2.3"
 # usbd-hid = { version = "0.4.5", optional = true }
 usbd-serial = "0.1.0"
+
+apdu-dispatch = { git = "https://github.com/solokeys/apdu-dispatch", branch = "main" }
+fido-authenticator = { git = "https://github.com/solokeys/fido-authenticator", branch = "main", optional = true }
+oath-authenticator = { git = "https://github.com/trussed-dev/oath-authenticator", branch = "main", features = ["apdu-dispatch"], optional = true }
+piv-authenticator = { git = "https://github.com/solokeys/piv-authenticator", branch = "main", features = ["apdu-dispatch"], optional = true }
+trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main" }
 
 # board
 board = { path = "board" }
 
 # components
-apdu-dispatch = { git = "https://github.com/solokeys/apdu-dispatch", branch = "main" }
 dispatch-fido = {path = "../../components/dispatch-fido"}
 ndef-app = { path = "../../components/ndef-app", optional = true }
 admin-app = { path = "../../components/admin-app", optional = true }
@@ -40,15 +43,12 @@ admin-app = { path = "../../components/admin-app", optional = true }
 provisioner-app = { path = "../../components/provisioner-app", optional = true }
 c-stubs = { path = "../../components/c-stubs" }
 ctap-types = { path = "../../components/ctap-types" }
-fido-authenticator = { path = "../../components/fido-authenticator", optional = true }
 fm11nc08 = {path = "../../components/fm11nc08"}
 ctaphid-dispatch = {path = "../../components/ctaphid-dispatch"}
 nfc-device = {path = "../../components/nfc-device"}
 usbd-ccid = { path = "../../components/usbd-ccid" }
 usbd-ctaphid = { path = "../../components/usbd-ctaphid" }
 
-# TODO release oath-authenticator
-oath-authenticator = { git = "https://github.com/trussed-dev/oath-authenticator", branch = "main", features = ["apdu-dispatch"], optional = true }
 
 # panic
 panic-halt = "0.2.0"
