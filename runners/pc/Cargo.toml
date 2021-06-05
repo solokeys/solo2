@@ -7,18 +7,19 @@ edition = "2018"
 [dependencies]
 chacha20 = { version = "0.7", features = ["rng"] }
 delog = "0.1.0"
-heapless = "0.6"
-nb = "1"
 embedded-hal = { version = "0.2", features = ["unproven"] }
-fido-authenticator = { git = "https://github.com/solokeys/fido-authenticator", branch = "main" }
 generic-array = "0.14.3"
+heapless = "0.6"
 interchange = "0.2.0"
+nb = "1"
+
+ctap-types = { git = "https://github.com/solokeys/ctap-types", branch = "main" }
+fido-authenticator = { git = "https://github.com/solokeys/fido-authenticator", branch = "main" }
 piv-authenticator = { git = "https://github.com/solokeys/piv-authenticator", branch = "main" }
 trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main", features = ["clients-3"] }
 
 # components
 c-stubs = { path = "../../components/c-stubs" }
-ctap-types = { path = "../../components/ctap-types" }
 usbd-ccid = { path = "../../components/usbd-ccid" }
 usbd-ctaphid = { path = "../../components/usbd-ctaphid" }
 nfc-device = {path = "./../../components/nfc-device"}

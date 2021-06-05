@@ -27,6 +27,7 @@ usb-device = "0.2.3"
 usbd-serial = "0.1.0"
 
 apdu-dispatch = { git = "https://github.com/solokeys/apdu-dispatch", branch = "main" }
+ctap-types = { git = "https://github.com/solokeys/ctap-types", branch = "main" }
 fido-authenticator = { git = "https://github.com/solokeys/fido-authenticator", branch = "main", optional = true }
 oath-authenticator = { git = "https://github.com/trussed-dev/oath-authenticator", branch = "main", features = ["apdu-dispatch"], optional = true }
 piv-authenticator = { git = "https://github.com/solokeys/piv-authenticator", branch = "main", features = ["apdu-dispatch"], optional = true }
@@ -42,7 +43,6 @@ admin-app = { path = "../../components/admin-app", optional = true }
 # NB: when using this app, need to raise trussed/clients-5
 provisioner-app = { path = "../../components/provisioner-app", optional = true }
 c-stubs = { path = "../../components/c-stubs" }
-ctap-types = { path = "../../components/ctap-types" }
 fm11nc08 = {path = "../../components/fm11nc08"}
 ctaphid-dispatch = {path = "../../components/ctaphid-dispatch"}
 nfc-device = {path = "../../components/nfc-device"}
