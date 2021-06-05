@@ -109,7 +109,7 @@ impl admin_app::Reboot for Lpc55Reboot {
 #[cfg(feature = "admin-app")]
 pub type AdminApp = admin_app::App<TrussedClient, Lpc55Reboot>;
 #[cfg(feature = "piv-authenticator")]
-pub type PivApp = piv_authenticator::Authenticator<TrussedClient>;
+pub type PivApp = piv_authenticator::Authenticator<apdu_dispatch::command::Size, TrussedClient>;
 #[cfg(feature = "oath-authenticator")]
 pub type OathApp = oath_authenticator::Authenticator<TrussedClient>;
 #[cfg(feature = "fido-authenticator")]
