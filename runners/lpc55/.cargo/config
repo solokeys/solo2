@@ -4,7 +4,7 @@ rustflags = [
   "-C", "linker=flip-link",
   "-C", "link-arg=-Tlink.x",
   "-C", "llvm-args=--enable-machine-outliner=never",
-  "-Dwarnings",
+  # "-Dwarnings",
 ]
 
 [build]

@@ -22,8 +22,8 @@ pub const PIV_AID: &[u8] = &hex!("A000000308 00001000 0100");
 
 pub const DERIVED_PIV_AID: [u8; 11] = hex!("A000000308 00002000 0100");
 
-pub const APPLICATION_LABEL: &[u8] = b"SoloKeys PIV v1.0.0-alpha1";
-pub const APPLICATION_URL: &[u8] = b"https://piv.codes/SoloKeys/PIV/1.0.0-alpha1";
+pub const APPLICATION_LABEL: &[u8] = b"SoloKeys PIV";
+pub const APPLICATION_URL: &[u8] = b"https://github.com/solokeys/piv-authenticator";
 // pub const APPLICATION_URL: &[u8] = b"https://piv.is/SoloKeys/PIV/1.0.0-alpha1";
 
 

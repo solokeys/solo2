@@ -1,9 +1,9 @@
-use core::convert::TryFrom;
+use core::convert::{TryFrom, TryInto};
 
 use trussed::{
     block,
     Client as TrussedClient,
-    syscall,
+    syscall, try_syscall,
     types::{KeyId, PathBuf, Location},
 };
 
@@ -217,6 +217,8 @@ pub struct PersistentState {
     // pin_hash: Option<[u8; 16]>,
     // Ideally, we'd dogfood a "Monotonic Counter" from `trussed`.
     timestamp: u32,
+    // must be a valid RFC 4122 UUID 1, 2 or 4
+    guid: [u8; 16],
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -348,6 +350,10 @@ where
     const DEFAULT_PIN: &'static [u8] = b"123456\xff\xff";
     const DEFAULT_PUK: &'static [u8] = b"12345678";
 
+    pub fn guid(&self) -> [u8; 16] {
+        self.state.guid
+    }
+
     pub fn remaining_pin_retries(&self) -> u8 {
         if self.state.consecutive_pin_mismatches >= Self::PIN_RETRIES_DEFAULT {
             0
@@ -449,10 +455,20 @@ where
     }
 
     pub fn initialize(trussed: &'t mut T) -> Self {
+        info_now!("initializing PIV state");
         let management_key = syscall!(trussed.unsafe_inject_shared_key(
             YUBICO_DEFAULT_MANAGEMENT_KEY,
             trussed::types::Location::Internal,
         )).key;
+
+        let mut guid: [u8; 16] = syscall!(trussed.random_bytes(16))
+            .bytes
+            .as_ref()
+            .try_into()
+            .unwrap();
+
+        guid[6] = (guid[6] & 0xf) | 0x40;
+        guid[8] = (guid[8] & 0x3f) | 0x80;
 
         let keys = Keys {
             authentication_key: None,
@@ -463,7 +479,7 @@ where
             retired_keys: Default::default(),
         };
 
-        Self {
+        let mut state = Self {
             trussed,
             state: PersistentState {
                 keys,
@@ -472,8 +488,11 @@ where
                 pin: Pin::try_from(Self::DEFAULT_PIN).unwrap(),
                 puk: Puk::try_from(Self::DEFAULT_PUK).unwrap(),
                 timestamp: 0,
+                guid,
             }
-        }
+        };
+        state.save();
+        state
     }
 
     pub fn load(trussed: &'t mut T) -> Result<Self> {
@@ -482,13 +501,13 @@ where
                 PathBuf::from(Self::FILENAME),
             ).unwrap()
         ).map_err(|e| {
-            // hprintln!("loading error: {:?}", &e).ok();
+            info!("loading error: {:?}", &e);
             drop(e)
         })?.data;
 
         let previous_state: PersistentState = trussed::cbor_deserialize(&data).map_err(|e| {
-            // hprintln!("cbor deser error: {:?}", e);
-            // hprintln!("data: {:X?}", &data).ok();
+            info!("cbor deser error: {:?}", e);
+            info!("data: {:X?}", &data);
             drop(e)
         })?;
         // horrible deser bug to forget Ok here :)
@@ -497,15 +516,11 @@ where
 
     pub fn load_or_initialize(trussed: &'t mut T) -> Self {
         // todo: can't seem to combine load + initialize without code repetition
-        let data = block!(trussed.read_file(
-                Location::Internal,
-                PathBuf::from(Self::FILENAME),
-            ).unwrap()
-        );
+        let data = try_syscall!(trussed.read_file(Location::Internal, PathBuf::from(Self::FILENAME)));
         if let Ok(data) = data {
             let previous_state = trussed::cbor_deserialize(&data.data).map_err(|e| {
-                // hprintln!("cbor deser error: {:?}", e);
-                // hprintln!("data: {:X?}", &data).ok();
+                info!("cbor deser error: {:?}", e);
+                info!("data: {:X?}", &data);
                 drop(e)
             });
             if let Ok(state) = previous_state {
