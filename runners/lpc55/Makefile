@@ -6,7 +6,7 @@ PROVISIONER := --features board-$(BOARD),develop-provisioner
 # i.e., no encrypted storage, etc.
 build-dev:
 	cargo build --release $(DEVELOP)
-	cargo objcopy --release $(PROVISIONER) -- -O binary app.bin
+	cargo objcopy --release $(DEVELOP) -- -O binary app.bin
 
 # builds firmware bundle as before, *including* provisioner app
 build-pro:
