@@ -681,6 +681,7 @@ impl Initializer {
                 // to trash existing data, set to true
                 true,
             ).unwrap();
+            rgb.turn_off();
         }
         info!("mount end {} ms",basic_stage.perf_timer.elapsed().0/1000);
 
