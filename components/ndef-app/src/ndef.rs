@@ -1,5 +1,5 @@
 use iso7816::{Instruction, Status};
-use apdu_dispatch::{Command, response, app, command::Size as CommandSize, response::Size as ResponseSize};
+use apdu_dispatch::{Command, response, app, command::SIZE as CommandSize, response::SIZE as ResponseSize};
 
 pub struct App<'a>{
     reader: &'a [u8]
@@ -31,13 +31,9 @@ impl<'a> App<'a> {
     }
 }
 
-impl<'a> app::Aid for App<'a> {
-    fn aid(&self) -> &'static [u8] {
-        &[0xD2u8, 0x76, 0x00, 0x00, 0x85, 0x01, 0x01,]
-    }
-
-    fn right_truncated_length(&self) -> usize {
-        8
+impl<'a> iso7816::App for App<'a> {
+    fn aid(&self) -> iso7816::Aid {
+        iso7816::Aid::new(&[0xD2u8, 0x76, 0x00, 0x00, 0x85, 0x01, 0x01])
     }
 }
 

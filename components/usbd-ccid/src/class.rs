@@ -1,7 +1,7 @@
 use core::convert::TryFrom;
 
 use embedded_time::duration::Extensions;
-use heapless_bytes::Bytes;
+use heapless::Vec;
 use interchange::{Interchange, Requester};
 
 use crate::{
@@ -17,11 +17,10 @@ use crate::{
 use usb_device::class_prelude::*;
 type Result<T> = core::result::Result<T, UsbError>;
 
-pub struct Ccid<Bus, I, N>
+pub struct Ccid<Bus, I, const N: usize>
 where
     Bus: 'static + UsbBus,
-    I: 'static + Interchange<REQUEST = Bytes<N>, RESPONSE = Bytes<N>>,
-    N: heapless::ArrayLength<u8>,
+    I: 'static + Interchange<REQUEST = Vec<u8, N>, RESPONSE = Vec<u8, N>>,
 {
     interface_number: InterfaceNumber,
     string_index: StringIndex,
@@ -30,11 +29,10 @@ where
     pipe: Pipe<Bus, I, N>,
 }
 
-impl<Bus, I, N> Ccid<Bus, I, N>
+impl<Bus, I, const N: usize> Ccid<Bus, I, N>
 where
     Bus: 'static + UsbBus,
-    I: 'static + Interchange<REQUEST = Bytes<N>, RESPONSE = Bytes<N>>,
-    N: heapless::ArrayLength<u8>,
+    I: 'static + Interchange<REQUEST = Vec<u8, N>, RESPONSE = Vec<u8, N>>,
 {
     /// Class constructor.
     ///
@@ -85,11 +83,10 @@ where
     }
 }
 
-impl<Bus, I, N> UsbClass<Bus> for Ccid<Bus, I, N>
+impl<Bus, I, const N: usize> UsbClass<Bus> for Ccid<Bus, I, N>
 where
     Bus: 'static + UsbBus,
-    I: 'static + Interchange<REQUEST = Bytes<N>, RESPONSE = Bytes<N>>,
-    N: heapless::ArrayLength<u8>,
+    I: 'static + Interchange<REQUEST = Vec<u8, N>, RESPONSE = Vec<u8, N>>,
 {
     fn get_configuration_descriptors(&self, writer: &mut DescriptorWriter)
         -> Result<()>
@@ -132,8 +129,18 @@ where
     fn endpoint_out(&mut self, addr: EndpointAddress) {
         if addr != self.read.address() { return; }
 
-        let maybe_packet = RawPacket::try_from(
-            |packet| self.read.read(packet));
+        // let maybe_packet = RawPacket::try_from(
+        //     |packet| self.read.read(packet));
+
+        let maybe_packet = {
+            let mut packet = RawPacket::new();
+            packet.resize_default(packet.capacity()).unwrap();
+            let result = self.read.read(&mut packet);
+            result.map(|count| {
+                packet.resize_default(count).unwrap();
+                packet
+            })
+        };
 
         // should we return an error message
         // if the raw packet is invalid?

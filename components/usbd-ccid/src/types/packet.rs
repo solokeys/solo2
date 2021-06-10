@@ -3,8 +3,8 @@ use core::convert::TryInto;
 use crate::constants::*;
 
 
-pub type RawPacket = heapless_bytes::Bytes<PACKET_SIZE_TYPE>;
-pub type ExtPacket = heapless_bytes::Bytes<MAX_MSG_LENGTH_TYPE>;
+pub type RawPacket = heapless::Vec<u8, PACKET_SIZE>;
+pub type ExtPacket = heapless::Vec<u8, MAX_MSG_LENGTH>;
 
 pub trait RawPacketExt {
     fn packet_len(&self) -> usize;
@@ -94,7 +94,7 @@ impl core::fmt::Debug for DataBlock<'_> {
         ;
 
             let l = core::cmp::min(self.data.len(), 16);
-        let escaped_bytes: heapless::Vec<u8, heapless::consts::U64> =
+        let escaped_bytes: heapless::Vec<u8, 64> =
             self.data.iter().take(l)
                 .flat_map(|byte| core::ascii::escape_default(*byte))
                 .collect();
@@ -342,7 +342,7 @@ impl core::fmt::Debug for Command {
         match self {
             Command::XfrBlock(block) => {
                 let l = core::cmp::min(self.len(), 8);
-                let escaped_bytes: heapless::Vec<u8, heapless::consts::U64> =
+                let escaped_bytes: heapless::Vec<u8, 64> =
                     block.data().iter().take(l)
                         .flat_map(|byte| core::ascii::escape_default(*byte))
                         .collect();

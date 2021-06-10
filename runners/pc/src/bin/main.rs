@@ -1,8 +1,6 @@
 use std::{fs::File, io::Write};
 pub use embedded_hal::blocking::rng;
-use littlefs2::{
-    const_ram_storage,
-};
+use littlefs2::{const_ram_storage, consts};
 use littlefs2::fs::{Allocation, Filesystem};
 use trussed::types::{LfsResult, LfsStorage};
 
@@ -12,7 +10,6 @@ use trussed::platform::{
     consent,
 };
 use trussed::{platform, store};
-use ctap_types::consts;
 
 pub use generic_array::{
     GenericArray,
@@ -73,10 +70,6 @@ impl littlefs2::driver::Storage for FileFlash {
 
     type CACHE_SIZE = littlefs_params::CACHE_SIZE;
     type LOOKAHEADWORDS_SIZE = littlefs_params::LOOKAHEADWORDS_SIZE;
-    type FILENAME_MAX_PLUS_ONE = littlefs_params::FILENAME_MAX_PLUS_ONE;
-    type PATH_MAX_PLUS_ONE = littlefs_params::PATH_MAX_PLUS_ONE;
-    const FILEBYTES_MAX: usize = littlefs_params::FILEBYTES_MAX;
-    type ATTRBYTES_MAX = littlefs_params::ATTRBYTES_MAX;
 
 
     fn read(&self, off: usize, buf: &mut [u8]) -> LfsResult<usize> {

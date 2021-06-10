@@ -1,6 +1,5 @@
 use core::convert::TryFrom;
-
-use heapless_bytes::Bytes;
+use heapless::Vec;
 use interchange::{Interchange, Requester};
 
 use crate::{
@@ -41,11 +40,10 @@ enum Error {
     CommandNotSupported = 0x00,
 }
 
-pub struct Pipe<Bus, I, N>
+pub struct Pipe<Bus, I, const N: usize>
 where
     Bus: 'static + UsbBus,
-    I: 'static + Interchange<REQUEST = Bytes<N>, RESPONSE = Bytes<N>>,
-    N: heapless::ArrayLength<u8>,
+    I: 'static + Interchange<REQUEST = Vec<u8, N>, RESPONSE = Vec<u8, N>>,
 {
     pub(crate) write: EndpointIn<'static, Bus>,
     // pub(crate) rpc: TransportEndpoint<'rpc>,
@@ -62,14 +60,13 @@ where
     long_packet_missing: usize,
     in_chain: usize,
     pub(crate) started_processing: bool,
-    atr: Bytes<heapless::consts::U32>,
+    atr: Vec<u8, 32>,
 }
 
-impl<Bus, I, N> Pipe<Bus, I, N>
+impl<Bus, I, const N: usize> Pipe<Bus, I, N>
 where
     Bus: 'static + UsbBus,
-    I: 'static + Interchange<REQUEST = Bytes<N>, RESPONSE = Bytes<N>>,
-    N: heapless::ArrayLength<u8>,
+    I: 'static + Interchange<REQUEST = Vec<u8, N>, RESPONSE = Vec<u8, N>>,
 {
     pub(crate) fn new(
         write: EndpointIn<'static, Bus>,
@@ -100,10 +97,10 @@ where
         }
     }
 
-    fn construct_atr(card_issuers_data: Option<&[u8]>, signal_t_equals_0: bool) -> Bytes<heapless::consts::U32> {
+    fn construct_atr(card_issuers_data: Option<&[u8]>, signal_t_equals_0: bool) -> Vec<u8, 32> {
         assert!(card_issuers_data.map_or(true, |data| data.len() <= 13));
         let k = card_issuers_data.map_or(0u8, |data| 2 + data.len() as u8);
-        let mut atr = Bytes::new();
+        let mut atr = Vec::new();
         // TS: direct convention
         atr.push(0x3B).ok();
         // T0: encode length of historical bytes
@@ -140,11 +137,10 @@ where
 }
 
 
-impl<Bus, I, N> Pipe<Bus, I, N>
+impl<Bus, I, const N: usize> Pipe<Bus, I, N>
 where
     Bus: 'static + UsbBus,
-    I: 'static + Interchange<REQUEST = Bytes<N>, RESPONSE = Bytes<N>>,
-    N: heapless::ArrayLength<u8>,
+    I: 'static + Interchange<REQUEST = Vec<u8, N>, RESPONSE = Vec<u8, N>>,
 {
     pub fn handle_packet(&mut self, packet: RawPacket) {
         use crate::types::packet::RawPacketExt;
@@ -228,7 +224,7 @@ where
 
     #[inline(never)]
     fn reset_interchange(&mut self) {
-        let message = Bytes::new();
+        let message = Vec::new();
         self.interchange.take_response();
         // this may no longer be needed
         // before the interchange change (adding the request_mut method),
@@ -378,7 +374,7 @@ where
         if self.outbox.is_some() { panic!(); }
 
         // if let Some(message) = self.interchange.response() {
-            let message: &mut Bytes<N> = unsafe { self.interchange.interchange.rp_mut() };
+            let message: &mut Vec<u8, N> = unsafe { self.interchange.interchange.rp_mut() };
 
             let chunk_size = core::cmp::min(PACKET_SIZE - 10, message.len() - self.sent);
             let chunk = &message[self.sent..][..chunk_size];

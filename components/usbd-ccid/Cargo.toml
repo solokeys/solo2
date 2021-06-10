@@ -8,9 +8,9 @@ edition = "2018"
 
 [dependencies]
 delog = "0.1.0"
-embedded-time = "0.10.1"
-heapless = "0.6"
-heapless-bytes = "0.2.0"
+embedded-time = "0.12"
+heapless = "0.7"
+# heapless-bytes = "0.3"
 interchange = "0.2.0"
 iso7816 = { git = "https://github.com/ycrypto/iso7816", branch = "main" }
 usb-device = { version = "0.2.3", features = ["control-buffer-256"] }
