@@ -9,7 +9,7 @@ pub type EnabledUsbPeripheral = hal::peripherals::usbfs::EnabledUsbfsDevice;
 pub type CcidClass = usbd_ccid::Ccid<
     UsbBus<EnabledUsbPeripheral>,
     apdu_dispatch::interchanges::Contact,
-    apdu_dispatch::interchanges::Size,
+    {apdu_dispatch::interchanges::SIZE},
 >;
 pub type CtapHidClass = usbd_ctaphid::CtapHid<'static, UsbBus<EnabledUsbPeripheral>>;
 // pub type KeyboardClass = usbd_hid::hid_class::HIDClass<'static, UsbBus<EnabledUsbPeripheral>>;

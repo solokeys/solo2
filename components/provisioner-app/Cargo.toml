@@ -10,8 +10,8 @@ edition = "2018"
 apdu-dispatch = { git = "https://github.com/solokeys/apdu-dispatch", branch = "main" }
 delog = "0.1.1"
 heapless = "0.6"
-heapless-bytes = "0.2.0"
-lpc55-hal = { version = "0.2.1", features = ["littlefs", "rtic-peripherals"] }
+heapless-bytes = "0.3"
+lpc55-hal = { version = "0.3", features = ["littlefs", "rtic-peripherals"] }
 littlefs2 = "0.2.2"
 trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main" }
 

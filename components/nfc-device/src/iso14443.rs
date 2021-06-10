@@ -2,7 +2,7 @@ use core::mem::MaybeUninit;
 
 use apdu_dispatch::interchanges;
 use embedded_time::duration::Milliseconds;
-use heapless_bytes::Bytes;
+use heapless::Vec;
 use interchange::Requester;
 
 use crate::traits::nfc;
@@ -21,7 +21,7 @@ pub enum Iso14443Status {
 }
 
 // Max iso14443 frame is 256 bytes
-type Iso14443Frame = heapless_bytes::Bytes<heapless::consts::U256>;
+type Iso14443Frame = Vec<u8, 256>;
 
 #[derive(Clone, PartialEq)]
 enum Iso14443State {
@@ -116,7 +116,7 @@ where
             wtx_requested: false,
             block_num: true,
 
-            buffer: Bytes::new(),
+            buffer: Vec::new(),
 
             interchange: interchange,
         }
@@ -192,7 +192,7 @@ where
                         Iso14443State::Transmitting(last_frame_range, _remaining_data_range) => {
                             info!("Retransmission requested..");
                             self.send_frame(
-                                &Bytes::try_from_slice(
+                                &Vec::from_slice(
                                     &self.buffer[last_frame_range]
                                 ).unwrap()
                             ).ok();
@@ -352,7 +352,7 @@ where
         debug!("{}", hex_str!(&self.buffer, sep:""));
         // logging::dump_hex(packet, l as usize);
 
-        let command = interchanges::Data::try_from_slice(&self.buffer);
+        let command = interchanges::Data::from_slice(&self.buffer);
         self.buffer.clear();
         if command.is_ok() {
             if self.interchange.request(

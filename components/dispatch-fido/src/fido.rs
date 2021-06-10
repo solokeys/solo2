@@ -37,7 +37,7 @@ where UP: UserPresence,
     }
 
     fn response_from_object<T: serde::Serialize>(&mut self, object: Option<T>, reply: &mut response::Data) -> app::Result {
-        reply.resize_to_capacity();
+        reply.resize_default(reply.capacity()).ok();
         if let Some(object) = object {
             match cbor_serialize(&object, &mut reply[1..]) {
                 Ok(ser) => {
@@ -144,18 +144,18 @@ where UP: UserPresence,
 
 }
 
-impl<UP, T> app::Aid for Fido<UP, T>
+impl<UP, T> iso7816::App for Fido<UP, T>
 where UP: UserPresence,
 {
-    fn aid(&self) -> &'static [u8] {
-        &[ 0xA0, 0x00, 0x00, 0x06, 0x47, 0x2F, 0x00, 0x01 ]
-    }
-    fn right_truncated_length(&self) -> usize {
-        8
+    fn aid(&self) -> iso7816::Aid {
+        iso7816::Aid::new(&[ 0xA0, 0x00, 0x00, 0x06, 0x47, 0x2F, 0x00, 0x01])
     }
 }
 
-impl<UP, T> app::App<apdu_dispatch::command::Size, apdu_dispatch::response::Size> for Fido<UP, T>
+impl<UP, T> app::App<
+    {apdu_dispatch::command::SIZE},
+    {apdu_dispatch::response::SIZE},
+> for Fido<UP, T>
 where UP: UserPresence,
       T: client::Client
        + client::P256

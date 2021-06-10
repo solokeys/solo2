@@ -1,8 +1,7 @@
 use core::{convert::TryInto, marker::PhantomData};
 use ctaphid_dispatch::app::{self as hid, Command as HidCommand, Message};
 use ctaphid_dispatch::command::VendorCommand;
-use apdu_dispatch::{Command, response, app as apdu};
-use apdu_dispatch::{command::Size as CommandSize, response::Size as ResponseSize};
+use apdu_dispatch::{Command, command, response, app as apdu};
 use apdu_dispatch::iso7816::Status;
 use trussed::{
     syscall,
@@ -120,20 +119,17 @@ where T: TrussedClient,
     }
 }
 
-impl<T, R> apdu::Aid for App<T, R>
+impl<T, R> iso7816::App for App<T, R>
 where T: TrussedClient,
       R: Reboot
 {
     // Solo management app
-    fn aid(&self) -> &'static [u8] {
-        &[ 0xA0, 0x00, 0x00, 0x08, 0x47, 0x00, 0x00, 0x00, 0x01]
-    }
-    fn right_truncated_length(&self) -> usize {
-        9
+    fn aid(&self) -> iso7816::Aid {
+        iso7816::Aid::new(&[ 0xA0, 0x00, 0x00, 0x08, 0x47, 0x00, 0x00, 0x00, 0x01])
     }
 }
 
-impl<T, R> apdu::App<CommandSize, ResponseSize> for App<T, R>
+impl<T, R> apdu::App<{command::SIZE}, {response::SIZE}> for App<T, R>
 where T: TrussedClient,
       R: Reboot
 {

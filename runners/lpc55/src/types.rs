@@ -4,10 +4,9 @@ use core::convert::TryInto;
 use crate::hal;
 use hal::drivers::timer;
 use interchange::Interchange;
-use littlefs2::const_ram_storage;
+use littlefs2::{const_ram_storage, consts};
 use trussed::types::{LfsResult, LfsStorage};
 use trussed::{platform, store};
-use ctap_types::consts;
 use hal::peripherals::ctimer;
 
 #[cfg(feature = "no-encrypted-storage")]
@@ -109,7 +108,7 @@ impl admin_app::Reboot for Lpc55Reboot {
 #[cfg(feature = "admin-app")]
 pub type AdminApp = admin_app::App<TrussedClient, Lpc55Reboot>;
 #[cfg(feature = "piv-authenticator")]
-pub type PivApp = piv_authenticator::Authenticator<apdu_dispatch::command::Size, TrussedClient>;
+pub type PivApp = piv_authenticator::Authenticator<TrussedClient, {apdu_dispatch::command::SIZE}>;
 #[cfg(feature = "oath-authenticator")]
 pub type OathApp = oath_authenticator::Authenticator<TrussedClient>;
 #[cfg(feature = "fido-authenticator")]
@@ -119,7 +118,7 @@ pub type NdefApp = ndef_app::App<'static>;
 #[cfg(feature = "provisioner-app")]
 pub type ProvisionerApp = provisioner_app::Provisioner<Store, FlashStorage, TrussedClient>;
 
-use apdu_dispatch::{App as ApduApp, command::Size as CommandSize, response::Size as ResponseSize};
+use apdu_dispatch::{App as ApduApp, command::SIZE as CommandSize, response::SIZE as ResponseSize};
 use ctaphid_dispatch::app::{App as CtaphidApp};
 
 pub type DynamicClockController = board::clock_controller::DynamicClockController;

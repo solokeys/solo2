@@ -6,13 +6,13 @@ pub enum Error {
     InvalidLength,
 }
 
-// 7609 bytes is max message size for ctaphid
-type U6144 = <heapless::consts::U4096 as core::ops::Add<heapless::consts::U2048>>::Output;
-type U7168 = <U6144 as core::ops::Add<heapless::consts::U1024>>::Output;
-pub type U7609 = <U7168 as core::ops::Add<heapless::consts::U441>>::Output;
+// // 7609 bytes is max message size for ctaphid
+// type U6144 = <heapless::consts::U4096 as core::ops::Add<heapless::consts::U2048>>::Output;
+// type U7168 = <U6144 as core::ops::Add<heapless::consts::U1024>>::Output;
+// pub type U7609 = <U7168 as core::ops::Add<heapless::consts::U441>>::Output;
 // pub type U7609 = heapless::consts::U4096;
 
-pub type Message = heapless_bytes::Bytes<U7609>;
+pub type Message = heapless::Vec<u8, 7609>;
 pub type AppResult = core::result::Result<(), Error>;
 pub type InterchangeResponse = core::result::Result<Message, Error>;
 

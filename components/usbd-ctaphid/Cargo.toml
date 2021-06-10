@@ -6,10 +6,10 @@ license = "Apache-2.0 OR MIT"
 edition = "2018"
 
 [dependencies]
-embedded-time = "0.10.1"
+embedded-time = "0.12"
 delog = "0.1.0"
-heapless = "0.6"
-heapless-bytes = "0.2.0"
+heapless = "0.7"
+heapless-bytes = "0.3"
 interchange = "0.2.0"
 serde = { version = "1.0", default-features = false }
 usb-device = "0.2.3"

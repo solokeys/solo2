@@ -9,7 +9,7 @@ edition = "2018"
 [dependencies]
 delog = "0.1.0"
 heapless = "0.6"
-heapless-bytes = "0.2.0"
+heapless-bytes = "0.3"
 interchange = "0.2.0"
 serde = { version = "1", default-features = false }
 

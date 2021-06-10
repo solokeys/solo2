@@ -8,7 +8,7 @@ edition = "2018"
 
 [dependencies]
 delog = "0.1.0"
-embedded-time = "0.10.1"
+embedded-time = "0.12"
 embedded-hal = { version = "0.2.5", features = ["unproven"] }
 nb = "1"
 nfc-device = {path = "../nfc-device"}

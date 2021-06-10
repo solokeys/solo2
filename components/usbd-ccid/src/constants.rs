@@ -1,16 +1,8 @@
-#![allow(non_camel_case_types)]
-use heapless_bytes::{
-    consts,
-    Unsigned as _
-};
-
 // can be 8, 16, 32, 64 or 512
 #[cfg(feature = "highspeed-usb")]
-pub type PACKET_SIZE_TYPE = consts::U512;
+pub const PACKET_SIZE: usize = 512;
 #[cfg(not(feature = "highspeed-usb"))]
-pub type PACKET_SIZE_TYPE = consts::U64;
-
-pub const PACKET_SIZE: usize = PACKET_SIZE_TYPE::USIZE;
+pub const PACKET_SIZE: usize = 64;
 
 pub const CLASS_CCID: u8 = 0x0B;
 pub const SUBCLASS_NONE: u8 = 0x0;
@@ -46,8 +38,7 @@ pub const MAX_IFSD: [u8; 4] = [0xfe, 0x00, 0x00, 0x00];
 
 // "The value shall be between 261 + 10 and 65544 + 10
 // dwMaxCCIDMsgLen 3072
-pub type MAX_MSG_LENGTH_TYPE = <consts::U2048 as core::ops::Add<consts::U1024>>::Output;
-pub const MAX_MSG_LENGTH: usize = MAX_MSG_LENGTH_TYPE::USIZE;
+pub const MAX_MSG_LENGTH: usize = 3072;
 pub const MAX_MSG_LENGTH_LE: [u8; 4] = [0x00, 0x0C, 0x00, 0x00];
 
 pub const NUM_SLOTS: u8 = 1;
