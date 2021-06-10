@@ -36,9 +36,15 @@ where
     I: 'static + Interchange<REQUEST = Bytes<N>, RESPONSE = Bytes<N>>,
     N: heapless::ArrayLength<u8>,
 {
+    /// Class constructor.
+    ///
+    /// The optional card issuer's data may be of length at most 13 bytes,
+    /// and allows personalizing the Answer-to-Reset, for instance by
+    /// ASCII-encoding vendor or model information.
     pub fn new(
         allocator: &'static UsbBusAllocator<Bus>,
         request_pipe: Requester<I>,
+        card_issuers_data: Option<&[u8]>,
     ) -> Self {
         let read = allocator.bulk(PACKET_SIZE as _);
         let write = allocator.bulk(PACKET_SIZE as _);
@@ -48,7 +54,7 @@ where
         // PROBLEM: We don't have enough endpoints on the peripheral :/
         // (USBHS should have one more)
         // let interrupt = allocator.interrupt(8 as _, 32);
-        let pipe = Pipe::new(write, request_pipe);
+        let pipe = Pipe::new(write, request_pipe, card_issuers_data);
         let interface_number = allocator.interface();
         let string_index = allocator.string();
         Self { interface_number, string_index, read, /* interrupt, */ pipe }

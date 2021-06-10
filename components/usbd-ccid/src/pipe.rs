@@ -62,6 +62,7 @@ where
     long_packet_missing: usize,
     in_chain: usize,
     pub(crate) started_processing: bool,
+    atr: Bytes<heapless::consts::U32>,
 }
 
 impl<Bus, I, N> Pipe<Bus, I, N>
@@ -73,6 +74,7 @@ where
     pub(crate) fn new(
         write: EndpointIn<'static, Bus>,
         request_pipe: Requester<I>,
+        card_issuers_data: Option<&[u8]>,
     ) -> Self {
 
         assert!(MAX_MSG_LENGTH >= PACKET_SIZE);
@@ -91,7 +93,43 @@ where
             long_packet_missing: 0,
             in_chain: 0,
             started_processing: false,
+            // later on, we only signal T=1 support
+            // if for some reason not signaling T=0 support leads to issues,
+            // we can enable it here.
+            atr: Self::construct_atr(card_issuers_data, false),
         }
+    }
+
+    fn construct_atr(card_issuers_data: Option<&[u8]>, signal_t_equals_0: bool) -> Bytes<heapless::consts::U32> {
+        assert!(card_issuers_data.map_or(true, |data| data.len() <= 13));
+        let k = card_issuers_data.map_or(0u8, |data| 2 + data.len() as u8);
+        let mut atr = Bytes::new();
+        // TS: direct convention
+        atr.push(0x3B).ok();
+        // T0: encode length of historical bytes
+        atr.push(0x80 | k).ok();
+        if signal_t_equals_0 {
+            // T=0, more to follow
+            atr.push(0x80).ok();
+        }
+        // T=1
+        atr.push(0x01).ok();
+
+        if let Some(data) = card_issuers_data {
+            // no status indicator
+            atr.push(0x80).ok();
+            // tag 5: card issuer's data
+            atr.push(0x50 | data.len() as u8).ok();
+            atr.extend_from_slice(data).ok();
+        }
+        // xor of all bytes except TS
+        let mut checksum = 0;
+        for byte in atr.iter().skip(1) {
+            checksum ^= *byte;
+        }
+        atr.push(checksum).ok();
+
+        atr
     }
 
     pub fn busy(&self) -> bool {
@@ -410,80 +448,21 @@ where
     }
 
     fn send_atr(&mut self) {
+        let atr = self.atr.clone();
         let packet = DataBlock::new(
             self.seq,
             Chain::BeginsAndEnds,
+            &atr,
 
-            // PivApp just uses:
-            // 3B 80 80 01 01
-            //
-            // 3B 88 80 01 80 57 53 6F 6C 6F 20 42 83
-            // T=0, T=1, card issuer's data "Solo B"
-            // https://smartcard-atr.apdu.fr/parse?ATR=3B+88+80+01+80+57+53+6F+6C+6F+20+42+83
-            //
-            // T=0, T=1, command chaining/extended Lc+Le/no logical channels, card issuer's data "Solo B"
-            // 3B 8C 80 01 80 73 C0 21 C0 56 53 6F 6C 6F 20 42 D4
-            // https://smartcard-atr.apdu.fr/parse?ATR=3B+8C+80+01+80+73+C0+21+C0+56+53+6F+6C+6F+20+42+D4
-            &[0x3B, 0x8C, 0x80, 0x01, 0x80, 0x73, 0xC0, 0x21, 0xC0, 0x56, 0x53, 0x6F, 0x6C, 0x6F, 0x20, 0x42, 0xD4]
+            // T=0, T=1, command chaining/extended Lc+Le/no logical channels, card issuer's data "Solo 2"
+            // 3B 8C 80 01 80 73 C0 21 C0 56 53 6F 6C 6F 20 32 A4
+            // https://smartcard-atr.apdu.fr/parse?ATR=3B+8C+80+01+80+73+C0+21+C0+56+53+6F+6C+6F+20+32+A4
+            // &[0x3B, 0x8C, 0x80, 0x01, 0x80, 0x73, 0xC0, 0x21, 0xC0, 0x56, 0x53, 0x6F, 0x6C, 0x6F, 0x20, 0x32, 0xA4]
             //
             // Not sure if we also need some TA/TB/TC data as in
             // https://smartcard-atr.apdu.fr/parse?ATR=3B+F8+13+00+00+81+31+FE+15+59+75+62+69+6B+65+79+34+D4
             // At least TB(1) is deprecated, so it makes no sense
             // Also, there TD(1) = 0x81 and TD(2) = 0x31 both refer to protocol T=1 which seems wrong
-
-            // don't remember where i got this from
-            // &[0x3b, 0x8c,0x80,0x01],
-            // "corrected"?
-            // &[
-            //     // TS
-            //     0x3b,
-            //     // D1 follows, no historical bytes
-            //     0x80,
-            //     // nothing more, T = 0
-            //     0x01,
-            // ],
-            // "simplified"?
-            // &[
-            //     // TS
-            //     0x3b,
-            //     // D1 follows, no historical bytes
-            //     0x00,
-            // ],
-            // Yubikey FIDO+CCID
-            // 3b:f8:13:00:00:81:31:fe:15:59:75:62:69:6b:65:79:34:d4
-            // &[
-            //     // TS
-            //     0x3b,
-            //     // TO = TA1, TB1, TB2, TB3 follow, 8 historical bytes
-            //     0xf8,
-
-            //     // TA1 = default clock (5MHz), default clock rate conversion (372)o
-            //     // But sets Di to 3 instead of default of 1
-            //     0x13,
-            //     // TB1 deprecated, should not transmit
-            //     0x00,
-            //     // TC1 = "extra guard time", default of 0
-            //     0x00,
-
-            //     // TD1 = (Y2, T) -> follows D2, T = 1
-            //     0x81,
-            //     // TD2 = (Y2, T)
-            //     0x31,
-            //     // TA2
-            //     0xfe,
-            //     // TB2
-            //     0x15,
-            //     // T1 = first historical byte
-            //     0x59,
-
-            //     // "SoloBee"
-            //     0x53, 0x6F, 0x6C, 0x6F, 0x42, 0x65 ,0x65,
-
-            //     // Checksum
-            //     0x94,
-            // ],
-            // Yubikey NEO OTP+U2F+CCID
-            // 3b:fc:13:00:00:81:31:fe:15:59:75:62:69:6b:65:79:4e:45:4f:72:33:e1
         );
         self.send_packet_assuming_possible(packet.into());
     }
