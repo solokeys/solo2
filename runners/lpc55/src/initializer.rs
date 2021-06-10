@@ -55,7 +55,7 @@ pub struct Config {
     /// Enable NFC operation.
     pub nfc_enabled: bool,
     /// Panic if prince has not been provisioned in CFPA.
-    pub require_prince: bool, 
+    pub require_prince: bool,
     /// If buttons are all activated for 5s, boot rom will boot.  Otherwise ignore.
     pub boot_to_bootrom: bool,
     /// For Usb initialization
@@ -100,6 +100,8 @@ fn get_product_string(pfr: &mut Pfr<hal::typestates::init_state::Enabled>) -> &'
     }
 
     // Use a default string
+    // NB: If this were to be re-used as card issuer's data in CCID ATR,
+    // it would need to be limited or truncated to 13 bytes.
     "Solo 2 (custom)"
 }
 
@@ -228,7 +230,7 @@ impl Initializer {
     }
 
     fn try_enable_fm11nc08 <T: Ctimer<hal::Enabled>>(
-        &mut self, 
+        &mut self,
         clocks: &Clocks,
         iocon: &mut hal::Iocon<hal::Enabled>,
         gpio: &mut hal::Gpio<hal::Enabled>,
@@ -415,7 +417,7 @@ impl Initializer {
         } else {
             None
         };
-    
+
         let mut iso14443: Option<nfc_device::Iso14443<board::nfc::NfcChip>> = None;
 
         let (contactless_requester, contactless_responder) = apdu_dispatch::interchanges::Contactless::claim()
@@ -497,7 +499,10 @@ impl Initializer {
             let usb_bus = unsafe { USB_BUS.as_ref().unwrap() };
 
             // our USB classes (must be allocated in order that they're passed in `.poll(...)` later!)
-            let ccid = usbd_ccid::Ccid::new(usb_bus, contact_requester);
+            //
+            // NB: Card issuer's data can be at most 13 bytes (otherwise the constructor panics).
+            // So for instance "Hacker Solo 2" would work, but "Solo 2 (custom)" would not.
+            let ccid = usbd_ccid::Ccid::new(usb_bus, contact_requester, Some(b"Solo 2"));
             let current_time = basic_stage.perf_timer.elapsed().0/1000;
             let ctaphid = usbd_ctaphid::CtapHid::new(usb_bus, ctaphid_requester, current_time)
                 .implements_ctap1()
@@ -534,7 +539,7 @@ impl Initializer {
         // Cancel any possible outstanding use in delay timing
         basic_stage.delay_timer.cancel().ok();
 
-        stages::Usb { 
+        stages::Usb {
             usb_classes,
             contact_responder: Some(contact_responder),
             ctaphid_responder: Some(ctaphid_responder),
@@ -825,7 +830,7 @@ impl Initializer {
     }
 
     /// Consumes the initializer -- must be done last.
-    pub fn get_dynamic_clock_control(self, clock_stage: &mut stages::Clock, basic_stage: &mut stages::Basic) 
+    pub fn get_dynamic_clock_control(self, clock_stage: &mut stages::Clock, basic_stage: &mut stages::Basic)
     -> Option<clock_controller::DynamicClockController> {
         if self.is_nfc_passive {
 
@@ -849,7 +854,7 @@ impl Initializer {
     }
 
     /// See if LPC55 will be in NFC passive operation.  Requires first initialization stage have been done.
-    pub fn is_in_passive_operation(&self, _clock_stage: &stages::Clock) 
+    pub fn is_in_passive_operation(&self, _clock_stage: &stages::Clock)
     -> bool {
         return self.is_nfc_passive;
     }
