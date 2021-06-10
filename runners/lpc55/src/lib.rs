@@ -42,6 +42,8 @@ impl delog::Flusher for Flusher {
 }
 
 delog!(Delogger, 16*1024, 3*1024, Flusher);
+
+#[cfg(any(feature = "log-semihosting", feature = "log-serial"))]
 static FLUSHER: Flusher = Flusher {};
 
 // TODO: move board-specifics to BSPs
@@ -66,7 +68,9 @@ pub fn init_board(
     #[cfg(feature = "log-rtt")]
     rtt_target::rtt_init_print!();
 
+    #[cfg(any(feature = "log-semihosting", feature = "log-serial"))]
     Delogger::init_default(delog::LevelFilter::Debug, &FLUSHER).ok();
+
     info_now!("entering init_board {}.{}.{}",
         build_constants::CARGO_PKG_VERSION_MAJOR,
         build_constants::CARGO_PKG_VERSION_MINOR,
