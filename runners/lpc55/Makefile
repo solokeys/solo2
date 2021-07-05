@@ -10,6 +10,12 @@ ifeq "${PROVISIONER}" "1"
 FEATURES := ${FEATURES},develop-provisioner
 endif
 
+.PHONY: ci
+ci:
+	$(MAKE) build 
+	$(MAKE) objcopy
+	$(MAKE) size
+
 .PHONY: build
 build:
 	cargo build --release --features $(FEATURES)
