@@ -28,10 +28,10 @@ use trussed::{
     Client as TrussedClient,
     key::{Kind as KeyKind, Key, Flags},
 };
-use heapless_bytes::Bytes;
+use heapless::Vec;
 use apdu_dispatch::iso7816::{Status, Instruction};
 use apdu_dispatch::app::Result as ResponseResult;
-use apdu_dispatch::types::{Command, response, command};
+use apdu_dispatch::{Command, response, command::SIZE as CommandSize, response::SIZE as ResponseSize};
 
 use lpc55_hal as hal;
 
@@ -129,8 +129,8 @@ where S: Store,
     trussed: T,
 
     selected_buffer: SelectedBuffer,
-    buffer_filename: Bytes<heapless::consts::U128>,
-    buffer_file_contents: Bytes<heapless::consts::U8192>,
+    buffer_filename: Vec<u8, 128>,
+    buffer_file_contents: Vec<u8, 8192>,
 
     store: S,
     stolen_filesystem: &'static mut FS,
@@ -155,8 +155,8 @@ where S: Store,
             trussed,
 
             selected_buffer: SelectedBuffer::Filename,
-            buffer_filename: Bytes::new(),
-            buffer_file_contents: Bytes::new(),
+            buffer_filename: Vec::new(),
+            buffer_file_contents: Vec::new(),
             store,
             stolen_filesystem,
             is_passive,
@@ -222,7 +222,7 @@ where S: Store,
                             let serialized_key = Key {
                                 flags: Flags::LOCAL | Flags::SENSITIVE,
                                 kind: KeyKind::P256,
-                                material: Bytes::try_from_slice(&seed).unwrap(),
+                                material: Vec::from_slice(&seed).unwrap(),
                             };
 
                             let serialized_bytes = serialized_key.serialize();
@@ -251,7 +251,7 @@ where S: Store,
                             let serialized_key = Key {
                                 flags: Flags::LOCAL | Flags::SENSITIVE,
                                 kind: KeyKind::Ed255,
-                                material: Bytes::try_from_slice(&seed).unwrap(),
+                                material: Vec::from_slice(&seed).unwrap(),
                             };
 
                             // let serialized_key = Key::try_deserialize(&seed[..])
@@ -283,7 +283,7 @@ where S: Store,
                             let serialized_key = Key {
                                 flags: Flags::LOCAL | Flags::SENSITIVE,
                                 kind: KeyKind::X255,
-                                material: Bytes::try_from_slice(&seed).unwrap(),
+                                material: Vec::from_slice(&seed).unwrap(),
                             };
 
                             // let serialized_key = Key::try_deserialize(&seed[..])
@@ -371,7 +371,7 @@ where S: Store,
                                 let serialized_key = Key {
                                     flags: Default::default(),
                                     kind: KeyKind::Ed255,
-                                    material: Bytes::try_from_slice(&public_key).unwrap(),
+                                    material: Vec::from_slice(&public_key).unwrap(),
                                 };
 
                                 let serialized_key = serialized_key.serialize();
@@ -410,7 +410,7 @@ where S: Store,
 
                             match p1 {
                                 _x if p1 == TestAttestationP1::P256Sign as u8 => {
-                                    let sig: Bytes<MAX_SIGNATURE_LENGTH> = syscall!(self.trussed.sign(
+                                    let sig: Vec<MAX_SIGNATURE_LENGTH> = syscall!(self.trussed.sign(
                                         Mechanism::P256,
                                         KeyId::from_special(1),
                                         &challenge,
@@ -433,7 +433,7 @@ where S: Store,
                                 }
                                 _x if p1 == TestAttestationP1::Ed255Sign as u8 => {
 
-                                    let sig: Bytes<MAX_SIGNATURE_LENGTH> = syscall!(self.trussed.sign(
+                                    let sig: Vec<MAX_SIGNATURE_LENGTH> = syscall!(self.trussed.sign(
                                         Mechanism::Ed255,
                                         KeyId::from_special(2),
                                         &challenge,
@@ -548,23 +548,18 @@ where S: Store,
 
 }
 
-impl<S, FS, T> apdu_dispatch::app::Aid for Provisioner<S, FS, T>
+impl<S, FS, T> apdu_dispatch::iso7816::App for Provisioner<S, FS, T>
 where S: Store,
       FS: 'static + LfsStorage,
       T: TrussedClient + client::X255 + client::HmacSha256,
 {
-
-    fn aid(&self) -> &'static [u8] {
-        &SOLO_PROVISIONER_AID
-    }
-
-    fn right_truncated_length(&self) -> usize {
-        9
+    fn aid(&self) -> apdu_dispatch::iso7816::Aid {
+        apdu_dispatch::iso7816::Aid::new(&SOLO_PROVISIONER_AID)
     }
 }
 
 
-impl<S, FS, T> apdu_dispatch::app::App<command::Size, response::Size> for Provisioner<S, FS, T>
+impl<S, FS, T> apdu_dispatch::app::App<CommandSize, ResponseSize> for Provisioner<S, FS, T>
 where S: Store,
       FS: 'static + LfsStorage,
       T: TrussedClient + client::X255 + client::HmacSha256,
