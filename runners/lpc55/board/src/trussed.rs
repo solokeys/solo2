@@ -142,7 +142,7 @@ RGB: RgbLed,
                 0x00_00_01 | (amplitude << 0)
             } else {
                 // Use green if no button is pressed.
-                0x00_00_01 | (amplitude << 8)
+                0x00_00_01 | (amplitude << 16)
             };
             // use logging::hex::*;
             // use logging::hex;
