@@ -13,7 +13,7 @@ env:
 
 jobs:
   build-lpc55:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     strategy:
       matrix:
         board:
