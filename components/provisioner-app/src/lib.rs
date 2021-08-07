@@ -410,7 +410,7 @@ where S: Store,
 
                             match p1 {
                                 _x if p1 == TestAttestationP1::P256Sign as u8 => {
-                                    let sig: Vec<MAX_SIGNATURE_LENGTH> = syscall!(self.trussed.sign(
+                                    let sig: trussed::Bytes<MAX_SIGNATURE_LENGTH> = syscall!(self.trussed.sign(
                                         Mechanism::P256,
                                         KeyId::from_special(1),
                                         &challenge,
@@ -433,7 +433,7 @@ where S: Store,
                                 }
                                 _x if p1 == TestAttestationP1::Ed255Sign as u8 => {
 
-                                    let sig: Vec<MAX_SIGNATURE_LENGTH> = syscall!(self.trussed.sign(
+                                    let sig: trussed::Bytes<MAX_SIGNATURE_LENGTH> = syscall!(self.trussed.sign(
                                         Mechanism::Ed255,
                                         KeyId::from_special(2),
                                         &challenge,

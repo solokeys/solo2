@@ -208,7 +208,7 @@ pub struct ProvisionerNonPortable {
 
 #[cfg(feature = "provisioner-app")]
 impl TrussedApp for ProvisionerApp {
-    const CLIENT_ID: &'static [u8] = b"pro\0";
+    const CLIENT_ID: &'static [u8] = b"attn\0";
 
     type NonPortable = ProvisionerNonPortable;
     fn with_client(trussed: TrussedClient, ProvisionerNonPortable { store, stolen_filesystem, nfc_powered }: Self::NonPortable) -> Self {
