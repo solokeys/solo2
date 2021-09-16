@@ -368,21 +368,22 @@ impl Initializer {
                 )
             };
 
-            if self.config.boot_to_bootrom {
-                info!("bootrom request start {}", perf_timer.elapsed().0/1000);
-                if self.is_bootrom_requested(&new_three_buttons, &mut delay_timer) {
-                    // Give a small red blink show success
-                    rgb.red(200); rgb.green(0); rgb.blue(0);
-                    delay_timer.start(100_000.microseconds()); nb::block!(delay_timer.wait()).ok();
-
-                    hal::boot_to_bootrom()
-                }
-            }
             three_buttons = Some(new_three_buttons);
         }
 
         let mut pfr = pfr.enabled(&clocks).unwrap();
         Self::validate_cfpa(&mut pfr, self.config.secure_firmware_version, self.config.require_prince);
+
+        if self.config.boot_to_bootrom && three_buttons.is_some() {
+            info!("bootrom request start {}", perf_timer.elapsed().0/1000);
+            if self.is_bootrom_requested(three_buttons.as_mut().unwrap(), &mut delay_timer) {
+                // Give a small red blink show success
+                rgb.red(200); rgb.green(200); rgb.blue(0);
+                delay_timer.start(100_000.microseconds()); nb::block!(delay_timer.wait()).ok();
+
+                hal::boot_to_bootrom()
+            }
+        }
 
         stages::Basic {
             delay_timer,
