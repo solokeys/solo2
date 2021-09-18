@@ -61,6 +61,10 @@ jobs:
       - name: Size
         run: |
           cargo size --release --features ${{ matrix.board }}
+      - name: Artifacts for firmware bundle
+        run: |
+          cargo objcopy --release --features ${{ matrix.board }} -- -O binary firmware-${{ matrix.board }}.bin
+          sudo cp *.bin /
       - name: Upload Firmware
         uses: actions/upload-artifact@v2
         continue-on-error: true
