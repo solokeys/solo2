@@ -4,7 +4,6 @@ include!(concat!(env!("OUT_DIR"), "/build_constants.rs"));
 // panic handler, depending on debug/release build
 // BUT: need to run in release anyway, to have USB work
 use panic_halt as _;
-use c_stubs as _;
 
 use usb_device::device::UsbVidPid;
 use board::clock_controller;
