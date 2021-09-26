@@ -19,7 +19,6 @@ piv-authenticator = { git = "https://github.com/solokeys/piv-authenticator", bra
 trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main", features = ["clients-3"] }
 
 # components
-c-stubs = { path = "../../components/c-stubs" }
 usbd-ccid = { path = "../../components/usbd-ccid" }
 usbd-ctaphid = { path = "../../components/usbd-ctaphid" }
 nfc-device = {path = "./../../components/nfc-device"}
