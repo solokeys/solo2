@@ -3,11 +3,13 @@ BOARD ?= nk3xn
 FEATURES := board-${BOARD}
 
 ifeq "${DEVELOP}" "1"
-FEATURES := ${FEATURES},develop
-endif
-
 ifeq "${PROVISIONER}" "1"
 FEATURES := ${FEATURES},develop-provisioner
+else
+FEATURES := ${FEATURES},develop
+endif
+else ifeq "${PROVISIONER}" "1"
+FEATURES := ${FEATURES},provisioner
 endif
 
 .PHONY: ci
