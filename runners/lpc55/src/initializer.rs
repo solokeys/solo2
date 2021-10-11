@@ -72,16 +72,6 @@ pub struct Initializer {
     config: Config,
 }
 
-fn get_serial_number() -> &'static str {
-    static mut SERIAL_NUMBER: heapless::String<heapless::consts::U36> = heapless::String(heapless::i::String::new());
-    use core::fmt::Write;
-    unsafe {
-        let uuid = crate::hal::uuid();
-        SERIAL_NUMBER.write_fmt(format_args!("{}", hexstr!(&uuid))).unwrap();
-        &SERIAL_NUMBER
-    }
-}
-
 // SoloKeys stores a product string in the first 64 bytes of CMPA.
 fn get_product_string(pfr: &mut Pfr<hal::typestates::init_state::Enabled>) -> &'static str {
     let data = pfr.cmpa_customer_data();
@@ -102,7 +92,7 @@ fn get_product_string(pfr: &mut Pfr<hal::typestates::init_state::Enabled>) -> &'
     // Use a default string
     // NB: If this were to be re-used as card issuer's data in CCID ATR,
     // it would need to be limited or truncated to 13 bytes.
-    "Solo 2 (custom)"
+    "Nitrokey 3"
 }
 
 #[cfg(feature = "write-undefined-flash")]
@@ -516,7 +506,7 @@ impl Initializer {
             //
             // NB: Card issuer's data can be at most 13 bytes (otherwise the constructor panics).
             // So for instance "Hacker Solo 2" would work, but "Solo 2 (custom)" would not.
-            let ccid = usbd_ccid::Ccid::new(usb_bus, contact_requester, Some(b"Solo 2"));
+            let ccid = usbd_ccid::Ccid::new(usb_bus, contact_requester, Some(b"Nitrokey 3"));
             let current_time = basic_stage.perf_timer.elapsed().0/1000;
             let ctaphid = usbd_ctaphid::CtapHid::new(usb_bus, ctaphid_requester, current_time)
                 .implements_ctap1()
@@ -535,12 +525,10 @@ impl Initializer {
                 UsbProductName::Custom(name) => name,
                 UsbProductName::UsePfr => get_product_string(&mut basic_stage.pfr),
             };
-            let serial_number = get_serial_number();
 
             let usbd = UsbDeviceBuilder::new(usb_bus, usb_config.vid_pid)
                 .manufacturer(usb_config.manufacturer_name)
                 .product(product_string)
-                .serial_number(serial_number)
                 .device_release(device_release)
                 .max_packet_size_0(64)
                 .composite_with_iads()

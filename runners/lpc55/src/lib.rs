@@ -87,9 +87,9 @@ pub fn init_board(
         require_prince: require_prince,
         boot_to_bootrom: true,
         usb_config: Some(initializer::UsbConfig {
-            manufacturer_name: "SoloKeys",
+            manufacturer_name: "Nitrokey",
             product_name: initializer::UsbProductName::UsePfr,
-            vid_pid: UsbVidPid(0x1209, 0xbeee),
+            vid_pid: UsbVidPid(0x20a0, 0x42b3),
         })
     };
 
