@@ -57,11 +57,11 @@ panic-halt = "0.2.0"
 littlefs2 = { version = "0.3.2", features = ["c-stubs"] }
 
 [features]
-default = ["admin-app", "fido-authenticator", "ndef-app", "oath-authenticator", "trussed/clients-3"]
+default = ["admin-app", "fido-authenticator", "ndef-app", "trussed/clients-2"]
 
-develop = ["piv-authenticator", "no-encrypted-storage", "no-buttons", "no-reset-time-window", "trussed/clients-4"]
-develop-provisioner = ["piv-authenticator", "no-encrypted-storage", "no-buttons", "no-reset-time-window", "provisioner-app", "trussed/clients-5"]
-provisioner = ["piv-authenticator", "write-undefined-flash", "no-buttons", "no-reset-time-window", "provisioner-app", "trussed/clients-5"]
+develop = ["oath-authenticator", "piv-authenticator", "no-encrypted-storage", "no-buttons", "no-reset-time-window", "trussed/clients-4"]
+develop-provisioner = ["oath-authenticator", "piv-authenticator", "no-encrypted-storage", "no-buttons", "no-reset-time-window", "provisioner-app", "trussed/clients-5"]
+provisioner = ["write-undefined-flash", "no-buttons", "no-reset-time-window", "provisioner-app", "trussed/clients-3"]
 
 # Do not use encryption for the filesystem
 no-encrypted-storage = []
