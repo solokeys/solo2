@@ -12,6 +12,20 @@ else ifeq "${PROVISIONER}" "1"
 FEATURES := ${FEATURES},provisioner
 endif
 
+ifeq "${PROVISIONER}" "1"
+FILENAME_PREFIX := provisioner-
+else
+FILENAME_PREFIX := firmware-
+endif
+
+ifeq "${DEVELOP}" "1"
+FILENAME_SUFFIX := -develop
+else
+FILENAME_SUFFIX := 
+endif
+
+FILENAME := ${FILENAME_PREFIX}${BOARD}${FILENAME_SUFFIX}.bin
+
 .PHONY: ci
 ci:
 	$(MAKE) build 
@@ -28,12 +42,12 @@ run:
 
 .PHONY: objcopy
 objcopy:
-	cargo objcopy --release --features $(FEATURES) -- -O binary "firmware-${BOARD}.bin"
+	cargo objcopy --release --features $(FEATURES) -- -O binary "${FILENAME}"
 
 .PHONY: flash
 flash: objcopy
 	mboot erase --mass
-	mboot write "firmware-${BOARD}.bin"
+	mboot write "${FILENAME}"
 
 .PHONY: size
 size:

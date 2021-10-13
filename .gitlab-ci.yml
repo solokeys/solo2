@@ -26,9 +26,11 @@ build-nk3xn:
   stage: build
   script:
     - make -C runners/lpc55 ci BOARD=nk3xn
+    - make -C runners/lpc55 ci BOARD=nk3xn PROVISIONER=1
   after_script:
     - mkdir -p artifacts
     - cp ./runners/lpc55/firmware-*.bin artifacts
+    - cp ./runners/lpc55/provisioner-*.bin artifacts
     - wget $icon_server/checkmark/$CI_COMMIT_REF_NAME/$CI_COMMIT_SHA/$CI_JOB_NAME/$CI_JOB_STATUS/${CI_JOB_URL#*/*/*/}
   artifacts:
     paths:
@@ -45,9 +47,11 @@ build-nk3am:
   stage: build
   script:
     - make -C runners/lpc55 ci BOARD=nk3am
+    - make -C runners/lpc55 ci BOARD=nk3am PROVISIONER=1
   after_script:
     - mkdir -p artifacts
     - cp ./runners/lpc55/firmware-*.bin artifacts
+    - cp ./runners/lpc55/provisioner-*.bin artifacts
     - wget $icon_server/checkmark/$CI_COMMIT_REF_NAME/$CI_COMMIT_SHA/$CI_JOB_NAME/$CI_JOB_STATUS/${CI_JOB_URL#*/*/*/}
   artifacts:
     paths:
