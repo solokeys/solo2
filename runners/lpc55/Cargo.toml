@@ -2,7 +2,7 @@
 
 [package]
 name = "runner"
-version = "0.2.1"
+version = "0.3.0"
 authors = ["Nicolas Stalder <n@stalder.io>", "Conor Patrick <conor@solokeys.com>"]
 edition = "2018"
 resolver = "2"
