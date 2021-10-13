@@ -1,7 +1,7 @@
 # Nitrokey 3 firmware
-SUBSYSTEM=="hidraw", ATTRS{idVendor}=="20a0", ATTRS{idProduct}=="42b3", TAG+="uaccess"
-SUBSYSTEM=="tty", ATTRS{idVendor}=="20a0", ATTRS{idProduct}=="42b3", TAG+="uaccess"
-SUBSYSTEM=="usb", ATTRS{idVendor}=="20a0", ATTRS{idProduct}=="42b3", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="20a0", ATTRS{idProduct}=="42b2", TAG+="uaccess"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="20a0", ATTRS{idProduct}=="42b2", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="20a0", ATTRS{idProduct}=="42b2", TAG+="uaccess"
 
 # Nitrokey 3 bootloader
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="20a0", ATTRS{idProduct}=="42dd", TAG+="uaccess"

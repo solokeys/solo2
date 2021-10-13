@@ -89,7 +89,7 @@ pub fn init_board(
         usb_config: Some(initializer::UsbConfig {
             manufacturer_name: "Nitrokey",
             product_name: initializer::UsbProductName::UsePfr,
-            vid_pid: UsbVidPid(0x20a0, 0x42b3),
+            vid_pid: UsbVidPid(0x20a0, 0x42b2),
         })
     };
 
