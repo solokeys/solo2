@@ -365,12 +365,12 @@ where S: Store,
                         SaveT1IntermediatePublicKey => {
                             info!("saving T1 INTERMEDIATE PUBLIC KEY, {} bytes", command.data().len());
                             let public_key = &command.data();
-                            if public_key.len() != 32 {
+                            if public_key.len() != 64 {
                                 Err(Status::IncorrectDataParameter)
                             } else {
                                 let serialized_key = Key {
                                     flags: Default::default(),
-                                    kind: KeyKind::Ed255,
+                                    kind: KeyKind::P256,
                                     material: Vec::from_slice(&public_key).unwrap(),
                                 };
 
