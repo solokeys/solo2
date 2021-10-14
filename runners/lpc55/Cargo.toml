@@ -41,7 +41,7 @@ dispatch-fido = {path = "../../components/dispatch-fido"}
 ndef-app = { path = "../../components/ndef-app", optional = true }
 admin-app = { path = "../../components/admin-app", optional = true }
 # NB: when using this app, need to raise trussed/clients-5
-provisioner-app = { path = "../../components/provisioner-app", optional = true }
+provisioner-app = { path = "../../components/provisioner-app", optional = true, features = ["test-attestation"] }
 fm11nc08 = {path = "../../components/fm11nc08"}
 ctaphid-dispatch = {path = "../../components/ctaphid-dispatch"}
 nfc-device = {path = "../../components/nfc-device"}
