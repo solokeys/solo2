@@ -101,6 +101,7 @@ enum TestAttestationP1 {
     Ed255Cert= 3,
     X255Agree = 4,
     X255Cert = 5,
+    T1Key = 6,
 }
 
 
@@ -497,6 +498,16 @@ where S: Store,
                                         &PathBuf::from(FILENAME_X255_CERT),
                                     ).map_err(|_| Status::NotFound)?;
                                     reply.extend_from_slice(&cert).unwrap();
+                                    Ok(())
+                                }
+                                _x if p1 == TestAttestationP1::T1Key as u8 => {
+                                    let key: Message = store::read(self.store,
+                                        trussed::types::Location::Internal,
+                                        &PathBuf::from(FILENAME_T1_PUBLIC),
+                                    ).map_err(|_| Status::NotFound)?;
+                                     let key = Key::try_deserialize(&key[..])
+                                         .map_err(|_| Status::WrongLength)?;
+                                    reply.extend_from_slice(&key.material).unwrap();
                                     Ok(())
                                 }
                                 _ => Err(Status::FunctionNotSupported)
