@@ -10,5 +10,5 @@ pid = 0x42dd
 puf-enrollment-disabled = true
 puf-keycode-generation-disabled = true
 dice-computation-disabled = true
-secure-boot-enabled = false
+secure-boot-enabled = true
 use-rsa4096-keys = true
