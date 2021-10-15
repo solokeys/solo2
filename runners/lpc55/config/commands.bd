@@ -1,8 +1,8 @@
 options {
 	flags = 0x8;
 	buildNumber = 0x1;
-	productVersion = "0.3.1";
-	componentVersion = "0.3.1";
+	productVersion = "0.4.0";
+	componentVersion = "0.4.0";
 	secureBinaryVersion = "2.1";
 }
 
@@ -11,8 +11,8 @@ sources {
 }
 
 section (0) {
-	version_check sec 193;
-	version_check nsec 193;
+	version_check sec 256;
+	version_check nsec 256;
 	erase 0x0..0x93000;
 	load inputFile > 0x0;
 }
