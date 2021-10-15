@@ -7,7 +7,6 @@ vid = 0x20a0
 pid = 0x42dd
 
 [factory-settings.secure-boot-configuration]
-puf-enrollment-disabled = true
 puf-keycode-generation-disabled = true
 dice-computation-disabled = true
 secure-boot-enabled = true
