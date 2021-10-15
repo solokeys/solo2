@@ -93,7 +93,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     // let config: Config = toml::from_str(&config)?;
 
     // Hardcode until cargo issue gets fixed.
-    let config = Config {parameters: Parameters{filesystem_boundary: 0x98_800}};
+    let config = Config {parameters: Parameters{filesystem_boundary: 0x93_000}};
 
 
     let linker_script_file = env::var("CARGO_MANIFEST_DIR").expect("No out dir");

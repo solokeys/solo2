@@ -13,6 +13,6 @@ sources {
 section (0) {
 	version_check sec 193;
 	version_check nsec 193;
-	erase 0x0..0x98800;
+	erase 0x0..0x93000;
 	load inputFile > 0x0;
 }
