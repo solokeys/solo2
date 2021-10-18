@@ -87,6 +87,9 @@ where T: TrussedClient,
 
     fn call(&mut self, command: HidCommand, input_data: &Message, response: &mut Message) -> hid::AppResult {
         match command {
+            HidCommand::Wink => {
+                self.got_wink = true;
+            }
             HidCommand::Vendor(REBOOT) => {
                 R::reboot();
             }
@@ -111,8 +114,12 @@ where T: TrussedClient,
                 // GET VERSION
                 response.extend_from_slice(&self.version.to_be_bytes()).ok();
             }
+            HidCommand::Vendor(UUID) => {
+                // Get UUID
+                response.extend_from_slice(&self.uuid).ok();
+            }
             _ => {
-                self.got_wink = true;
+                return Err(hid::Error::InvalidCommand);
             }
         }
         Ok(())
