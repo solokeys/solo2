@@ -1,6 +1,8 @@
 //! Implementation of `trussed::Platform` for the board,
 //! using the specific implementation of our `crate::traits`.
 
+use core::time::Duration;
+
 use crate::hal::{
     peripherals::rtc::Rtc,
     typestates::init_state,
@@ -52,6 +54,7 @@ RGB: RgbLed,
     rtc: Rtc<init_state::Enabled>,
     buttons: Option<BUTTONS>,
     rgb: Option<RGB>,
+    wink: Option<core::ops::Range<Duration>>,
 }
 
 impl<BUTTONS, RGB> UserInterface<BUTTONS, RGB>
@@ -60,10 +63,11 @@ BUTTONS: Press + Edge,
 RGB: RgbLed,
 {
     pub fn new(rtc: Rtc<init_state::Enabled>, _buttons: Option<BUTTONS>, rgb: Option<RGB>) -> Self {
+        let wink = None;
         #[cfg(not(feature = "no-buttons"))]
-        let ui = Self { rtc, buttons: _buttons, rgb };
+        let ui = Self { rtc, buttons: _buttons, rgb, wink };
         #[cfg(feature = "no-buttons")]
-        let ui = Self { rtc, buttons: None, rgb };
+        let ui = Self { rtc, buttons: None, rgb, wink };
 
         ui
     }
@@ -103,7 +107,6 @@ RGB: RgbLed,
     }
 
     fn set_status(&mut self, status: ui::Status) {
-
         if let Some(rgb) = &mut self.rgb {
 
             match status {
@@ -126,10 +129,35 @@ RGB: RgbLed,
             }
 
         }
+
+        // Abort winking if the device is no longer idle
+        if status != ui::Status::Idle {
+            self.wink = None;
+        }
     }
 
     fn refresh(&mut self) {
-        if self.rgb.is_some() && self.buttons.is_some() {
+        if self.rgb.is_none() {
+            return;
+        }
+
+        if let Some(wink) = self.wink.clone() {
+            let time = self.uptime();
+            if wink.contains(&time) {
+                // 250 ms white, 250 ms off
+                let color = if (time - wink.start).as_millis() % 500 < 250 {
+                    0xff_ff_ff
+                } else {
+                    0x00_00_00
+                };
+                self.rgb.as_mut().unwrap().set(color.into());
+                return;
+            } else {
+                self.wink = None;
+            }
+        }
+
+        if self.buttons.is_some() {
             // 1. Get time & pick a period (here 4096).
             // 2. Map it to a value between 0 and pi.
             // 3. Calculate sine and map to amplitude between 0 and 255.
@@ -153,7 +181,7 @@ RGB: RgbLed,
         }
     }
 
-    fn uptime(&mut self) -> core::time::Duration {
+    fn uptime(&mut self) -> Duration {
         self.rtc.uptime()
     }
 
@@ -162,4 +190,9 @@ RGB: RgbLed,
         panic!("this should no longer be called.");
     }
 
+    fn wink(&mut self, duration: Duration) {
+        let time = self.uptime();
+        self.wink = Some(time..time + duration);
+        self.rgb.as_mut().unwrap().set(0xff_ff_ff.into());
+    }
 }
