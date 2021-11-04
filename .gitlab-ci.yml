@@ -14,6 +14,8 @@ variables:
   REPO_USER: nitrokey
   REPO_NAME: nitrokey-3-firmware
   MAIN_BRANCH: nitrokey-main 
+  IMAGE_NAME: nitrokey3
+  COMMON_UPDATE_DOCKER: "true"
 
 build-nk3xn:
   image: registry.git.dotplex.com/nitrokey/nitrokey-3-firmware/nitrokey3:latest
