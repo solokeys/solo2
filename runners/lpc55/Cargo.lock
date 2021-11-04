@@ -5,6 +5,7 @@ version = 3
 [[package]]
 name = "admin-app"
 version = "0.1.0"
+source = "git+https://github.com/solokeys/admin-app#99951ba7bc2c577dac1c7a1bb74999eb29e01a34"
 dependencies = [
  "apdu-dispatch",
  "ctaphid-dispatch",
@@ -46,7 +47,7 @@ dependencies = [
 [[package]]
 name = "apdu-dispatch"
 version = "0.0.1"
-source = "git+https://github.com/solokeys/apdu-dispatch?branch=main#d5f21717c349715abd827359cae45aeabacd5f85"
+source = "git+https://github.com/solokeys/apdu-dispatch#f01d4ba9bf3b02fc68dc6b94fceba1750d3f47d9"
 dependencies = [
  "delog",
  "heapless 0.7.7",
@@ -393,7 +394,7 @@ dependencies = [
 [[package]]
 name = "ctap-types"
 version = "0.1.0"
-source = "git+https://github.com/solokeys/ctap-types?branch=main#fa46d6be22109664c598a61cbe7d84581fa93292"
+source = "git+https://github.com/solokeys/ctap-types#cf4c50f02693cdd2f9b8207c14390c1a43613be3"
 dependencies = [
  "bitflags",
  "cbor-smol",
@@ -411,6 +412,7 @@ dependencies = [
 [[package]]
 name = "ctaphid-dispatch"
 version = "0.0.1"
+source = "git+https://github.com/solokeys/ctaphid-dispatch#6dcbc0d1b79e597eb643b2d35ac5d6e548e30172"
 dependencies = [
  "delog",
  "heapless 0.7.7",
@@ -527,6 +529,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ed25519"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "74e1069e39f1454367eb2de793ed062fac4c35c2934b76a81d90dd9abcd28816"
+dependencies = [
+ "signature",
+]
+
+[[package]]
 name = "elliptic-curve"
 version = "0.9.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -574,7 +585,7 @@ dependencies = [
 [[package]]
 name = "fido-authenticator"
 version = "0.0.0-unreleased"
-source = "git+https://github.com/solokeys/fido-authenticator?branch=main#6955311ae0df56b729a8522b49dfabf1b8691baa"
+source = "git+https://github.com/solokeys/fido-authenticator#297114a126460fe57792752d579cb07583d54d8c"
 dependencies = [
  "ctap-types",
  "delog",
@@ -590,7 +601,8 @@ dependencies = [
 [[package]]
 name = "flexiber"
 version = "0.1.0"
-source = "git+https://github.com/nickray/flexiber?branch=main#9010bb0d8c3181f98cee19815e261602d3dbcfcc"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3df5b1466eec7b03f5848d8388b99975a0ba1a26510db61ba87c2a6177938e5"
 dependencies = [
  "delog",
  "flexiber_derive",
@@ -600,7 +612,8 @@ dependencies = [
 [[package]]
 name = "flexiber_derive"
 version = "0.1.0"
-source = "git+https://github.com/nickray/flexiber?branch=main#9010bb0d8c3181f98cee19815e261602d3dbcfcc"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "500c147f43e74e711720769dd7f37bc90dc6e0798621bfe5e3acb8239fd2f826"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -783,7 +796,7 @@ checksum = "65d9ab155e6b8e53ae742a06a850b2645e333d40d89ef2e28f190763742d768c"
 [[package]]
 name = "iso7816"
 version = "0.1.0-alpha.1"
-source = "git+https://github.com/ycrypto/iso7816?branch=main#b2350f41ea44f90c69cdde94ead869be017b844c"
+source = "git+https://github.com/ycrypto/iso7816#b2350f41ea44f90c69cdde94ead869be017b844c"
 dependencies = [
  "delog",
  "heapless 0.7.7",
@@ -1055,7 +1068,7 @@ dependencies = [
 [[package]]
 name = "oath-authenticator"
 version = "0.0.0-pre"
-source = "git+https://github.com/trussed-dev/oath-authenticator?branch=main#716cbd2f4be397ce90fbef2db1eff06968d87dc7"
+source = "git+https://github.com/trussed-dev/oath-authenticator#5d369ca7cba4f9c8df2a2968e0110ade01e961f7"
 dependencies = [
  "apdu-dispatch",
  "delog",
@@ -1128,7 +1141,7 @@ checksum = "19b17cddbe7ec3f8bc800887bab5e717348c95ea2ca0b1bf0837fb964dc67099"
 [[package]]
 name = "piv-authenticator"
 version = "0.0.0-unreleased"
-source = "git+https://github.com/solokeys/piv-authenticator?branch=main#8bdee0d35e4291c6e00e67cdb33d492c4cfc0500"
+source = "git+https://github.com/solokeys/piv-authenticator#91caa3c7ddbe3f8329c6a1830cab542d892c2c4d"
 dependencies = [
  "apdu-dispatch",
  "delog",
@@ -1336,10 +1349,12 @@ dependencies = [
 
 [[package]]
 name = "salty"
-version = "0.2.0-alpha.2"
-source = "git+https://github.com/ycrypto/salty?branch=main#828db52b951a3642760a58ee2be3011c8797c5fe"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77cdd38ed8bfe51e53ee991aae0791b94349d0a05cfdecd283835a8a965d4c37"
 dependencies = [
  "cosey 0.3.0",
+ "ed25519",
  "subtle",
  "zeroize",
 ]
@@ -1512,7 +1527,7 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 [[package]]
 name = "trussed"
 version = "0.1.0"
-source = "git+https://github.com/trussed-dev/trussed?branch=main#817a9e71db5f9654d66024acf3560508078d63d5"
+source = "git+https://github.com/trussed-dev/trussed#c52e9c7a3a075bb143ae23e01e6ec78851d3a0b0"
 dependencies = [
  "aes",
  "bitflags",
