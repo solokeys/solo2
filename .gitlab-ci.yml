@@ -14,9 +14,11 @@ variables:
   REPO_USER: nitrokey
   REPO_NAME: nitrokey-3-firmware
   MAIN_BRANCH: nitrokey-main 
+  IMAGE_NAME: nitrokey3
+  COMMON_UPDATE_DOCKER: "true"
 
 build-nk3xn:
-  image: registry.git.dotplex.com/nitrokey/nitrokey-3-firmware/nitrokey3@sha256:681889937a38a40982788af6205c6d9d69b6453d661ece97e79507a8fcd0f2ec
+  image: registry.git.dotplex.com/nitrokey/nitrokey-3-firmware/nitrokey3:latest
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push"'
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
@@ -37,7 +39,7 @@ build-nk3xn:
       - artifacts
 
 build-nk3am:
-  image: registry.git.dotplex.com/nitrokey/nitrokey-3-firmware/nitrokey3@sha256:681889937a38a40982788af6205c6d9d69b6453d661ece97e79507a8fcd0f2ec
+  image: registry.git.dotplex.com/nitrokey/nitrokey-3-firmware/nitrokey3:latest
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push"'
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
