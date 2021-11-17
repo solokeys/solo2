@@ -92,7 +92,11 @@ fn get_product_string(pfr: &mut Pfr<hal::typestates::init_state::Enabled>) -> &'
     // Use a default string
     // NB: If this were to be re-used as card issuer's data in CCID ATR,
     // it would need to be limited or truncated to 13 bytes.
-    "Nitrokey 3"
+    if cfg!(feature = "provisioner-app") {
+        "Nitrokey 3 (provisioner)"
+    } else {
+        "Nitrokey 3"
+    }
 }
 
 #[cfg(feature = "write-undefined-flash")]
@@ -733,7 +737,9 @@ impl Initializer {
 
         let three_buttons = basic_stage.three_buttons.take();
 
-        let mut solobee_interface = board::trussed::UserInterface::new(rtc, three_buttons, rgb);
+        let provisioner = cfg!(feature = "provisioner-app");
+        let mut solobee_interface =
+            board::trussed::UserInterface::new(rtc, three_buttons, rgb, provisioner);
         solobee_interface.set_status(trussed::platform::ui::Status::Idle);
 
         let rng = flash_stage.rng.take().unwrap();
