@@ -107,6 +107,10 @@ where T: TrussedClient,
                     &syscall!(self.trussed.random_bytes(57)).bytes.as_slice()
                 ).ok();
             }
+            HidCommand::Vendor(UUID) => {
+                // GET UUID
+                response.extend_from_slice(&self.uuid).ok();
+            }
             HidCommand::Vendor(VERSION) => {
                 // GET VERSION
                 response.extend_from_slice(&self.version.to_be_bytes()).ok();

@@ -13,16 +13,12 @@ heapless = "0.7"
 heapless-bytes = "0.3"
 lpc55-hal = { version = "0.3", features = ["littlefs", "rtic-peripherals"] }
 littlefs2 = "0.3.1"
+salty = { version = "0.2", features = ["cose"] }
 trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main" }
 
 [dependencies.nisty]
 version = "0.1.0-alpha.5"
 features = ["asn1-der", "cose"]
-
-[dependencies.salty]
-git = "https://github.com/ycrypto/salty"
-branch = "main"
-features = ["cose"]
 
 [features]
 log-all = []
