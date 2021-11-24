@@ -13,19 +13,19 @@ heapless = "0.6"
 interchange = "0.2.0"
 nb = "1"
 
-ctap-types = { git = "https://github.com/solokeys/ctap-types", branch = "main" }
-fido-authenticator = { git = "https://github.com/solokeys/fido-authenticator", branch = "main" }
-piv-authenticator = { git = "https://github.com/solokeys/piv-authenticator", branch = "main" }
-trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main", features = ["clients-3"] }
+admin-app = { git = "https://github.com/solokeys/admin-app" }
+apdu-dispatch = { git = "https://github.com/solokeys/apdu-dispatch", features = ["std"] }
+ctap-types = { git = "https://github.com/solokeys/ctap-types" }
+ctaphid-dispatch = { git = "https://github.com/solokeys/ctaphid-dispatch", features = ["std"] }
+fido-authenticator = { git = "https://github.com/solokeys/fido-authenticator" }
+piv-authenticator = { git = "https://github.com/solokeys/piv-authenticator" }
+trussed = { git = "https://github.com/trussed-dev/trussed", features = ["clients-3"] }
 
 # components
 usbd-ccid = { path = "../../components/usbd-ccid" }
 usbd-ctaphid = { path = "../../components/usbd-ctaphid" }
 nfc-device = {path = "./../../components/nfc-device"}
-apdu-dispatch = { git = "https://github.com/solokeys/apdu-dispatch", branch = "main", features = ["std"] }
-ctaphid-dispatch = {path = "./../../components/ctaphid-dispatch"}
 ndef-app = {path = "./../../components/ndef-app"}
-admin-app = {path = "./../../components/admin-app"}
 dispatch-fido = {path = "./../../components/dispatch-fido"}
 
 # storage

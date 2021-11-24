@@ -26,12 +26,14 @@ usb-device = "0.2.3"
 # usbd-hid = { version = "0.4.5", optional = true }
 usbd-serial = "0.1.0"
 
-apdu-dispatch = { git = "https://github.com/solokeys/apdu-dispatch", branch = "main" }
-ctap-types = { git = "https://github.com/solokeys/ctap-types", branch = "main" }
-fido-authenticator = { git = "https://github.com/solokeys/fido-authenticator", branch = "main", optional = true }
-oath-authenticator = { git = "https://github.com/trussed-dev/oath-authenticator", branch = "main", features = ["apdu-dispatch"], optional = true }
-piv-authenticator = { git = "https://github.com/solokeys/piv-authenticator", branch = "main", features = ["apdu-dispatch"], optional = true }
-trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main" }
+admin-app = { git = "https://github.com/solokeys/admin-app", optional = true }
+apdu-dispatch = { git = "https://github.com/solokeys/apdu-dispatch" }
+ctaphid-dispatch = { git = "https://github.com/solokeys/ctaphid-dispatch" }
+ctap-types = { git = "https://github.com/solokeys/ctap-types" }
+fido-authenticator = { git = "https://github.com/solokeys/fido-authenticator", optional = true }
+oath-authenticator = { git = "https://github.com/trussed-dev/oath-authenticator", features = ["apdu-dispatch"], optional = true }
+piv-authenticator = { git = "https://github.com/solokeys/piv-authenticator", features = ["apdu-dispatch"], optional = true }
+trussed = { git = "https://github.com/trussed-dev/trussed" }
 
 # board
 board = { path = "board" }
@@ -39,11 +41,9 @@ board = { path = "board" }
 # components
 dispatch-fido = {path = "../../components/dispatch-fido"}
 ndef-app = { path = "../../components/ndef-app", optional = true }
-admin-app = { path = "../../components/admin-app", optional = true }
 # NB: when using this app, need to raise trussed/clients-5
 provisioner-app = { path = "../../components/provisioner-app", optional = true }
 fm11nc08 = {path = "../../components/fm11nc08"}
-ctaphid-dispatch = {path = "../../components/ctaphid-dispatch"}
 nfc-device = {path = "../../components/nfc-device"}
 usbd-ccid = { path = "../../components/usbd-ccid" }
 usbd-ctaphid = { path = "../../components/usbd-ctaphid" }

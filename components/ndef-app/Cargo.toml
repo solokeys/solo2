@@ -9,5 +9,5 @@ edition = "2018"
 [dependencies]
 heapless = "0.7"
 
-apdu-dispatch = { git = "https://github.com/solokeys/apdu-dispatch", branch = "main" }
-iso7816 = { git = "https://github.com/ycrypto/iso7816", branch = "main" }
+apdu-dispatch = { git = "https://github.com/solokeys/apdu-dispatch" }
+iso7816 = { git = "https://github.com/ycrypto/iso7816" }
