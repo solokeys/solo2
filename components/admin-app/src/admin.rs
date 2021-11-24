@@ -87,11 +87,12 @@ where T: TrussedClient,
 
     fn call(&mut self, command: HidCommand, input_data: &Message, response: &mut Message) -> hid::AppResult {
         match command {
-            HidCommand::Wink => {
-                self.got_wink = true;
-            }
-            HidCommand::Vendor(REBOOT) => {
-                R::reboot();
+            HidCommand::Vendor(REBOOT) => R::reboot(),
+            HidCommand::Vendor(RNG) => {
+                // Fill the HID packet (57 bytes)
+                response.extend_from_slice(
+                    &syscall!(self.trussed.random_bytes(57)).bytes.as_slice()
+                ).ok();
             }
             HidCommand::Vendor(UPDATE) => {
                 if self.user_present() {
@@ -104,24 +105,15 @@ where T: TrussedClient,
                     return Err(hid::Error::InvalidLength);
                 }
             }
-            HidCommand::Vendor(RNG) => {
-                // Fill the HID packet (57 bytes)
-                response.extend_from_slice(
-                    &syscall!(self.trussed.random_bytes(57)).bytes.as_slice()
-                ).ok();
-            }
             HidCommand::Vendor(UUID) => {
-                // GET UUID
+                // Get UUID
                 response.extend_from_slice(&self.uuid).ok();
             }
             HidCommand::Vendor(VERSION) => {
                 // GET VERSION
                 response.extend_from_slice(&self.version.to_be_bytes()).ok();
             }
-            HidCommand::Vendor(UUID) => {
-                // Get UUID
-                response.extend_from_slice(&self.uuid).ok();
-            }
+            HidCommand::Wink => self.got_wink = true,
             _ => {
                 return Err(hid::Error::InvalidCommand);
             }
@@ -157,8 +149,10 @@ where T: TrussedClient,
         let command: VendorCommand = instruction.try_into().map_err(|_e| Status::InstructionNotSupportedOrInvalid)?;
 
         match command {
-            REBOOT => {
-                R::reboot();
+            REBOOT => R::reboot(),
+            RNG => {
+                // Random bytes
+                reply.extend_from_slice(&syscall!(self.trussed.random_bytes(57)).bytes.as_slice()).ok();
             }
             UPDATE => {
                 // Boot to mcuboot (only when contact interface)
@@ -172,24 +166,16 @@ where T: TrussedClient,
                 }
                 return Err(Status::ConditionsOfUseNotSatisfied);
             }
-
-            RNG => {
-                // Random bytes
-                reply.extend_from_slice(&syscall!(self.trussed.random_bytes(57)).bytes.as_slice()).ok();
+            UUID => {
+                // Get UUID
+                reply.extend_from_slice(&self.uuid).ok();
             }
             VERSION => {
                 // Get version
                 reply.extend_from_slice(&self.version.to_be_bytes()[..]).ok();
             }
 
-            UUID => {
-                // Get UUID
-                reply.extend_from_slice(&self.uuid).ok();
-            }
-
-            _ => {
-                return Err(Status::InstructionNotSupportedOrInvalid);
-            }
+            _ => return Err(Status::InstructionNotSupportedOrInvalid),
 
         }
         Ok(())
