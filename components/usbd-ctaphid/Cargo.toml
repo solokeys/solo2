@@ -14,9 +14,8 @@ interchange = "0.2.0"
 serde = { version = "1.0", default-features = false }
 usb-device = "0.2.3"
 
-ctap-types = { git = "https://github.com/solokeys/ctap-types", branch = "main" }
-
-ctaphid-dispatch = { path = "../ctaphid-dispatch" }
+ctaphid-dispatch = { git = "https://github.com/solokeys/ctaphid-dispatch" }
+ctap-types = { git = "https://github.com/solokeys/ctap-types" }
 
 [features]
 default = []
@@ -27,8 +26,3 @@ log-info = []
 log-debug = []
 log-warn = []
 log-error = []
-
-
-[patch.crates-io]
-heapless = { git = "https://github.com/nicolas-solokeys/heapless", branch = "bytebuf" }
-
