@@ -104,8 +104,6 @@ log-debug = []
 log-warn = []
 log-error = []
 
-# patch dependencies like so to test local changes
-
 [profile.release]
 codegen-units = 1
 lto = true
