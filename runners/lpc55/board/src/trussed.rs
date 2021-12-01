@@ -55,6 +55,7 @@ RGB: RgbLed,
     buttons: Option<BUTTONS>,
     rgb: Option<RGB>,
     wink: Option<core::ops::Range<Duration>>,
+    provisioner: bool,
 }
 
 impl<BUTTONS, RGB> UserInterface<BUTTONS, RGB>
@@ -62,12 +63,17 @@ where
 BUTTONS: Press + Edge,
 RGB: RgbLed,
 {
-    pub fn new(rtc: Rtc<init_state::Enabled>, _buttons: Option<BUTTONS>, rgb: Option<RGB>) -> Self {
+    pub fn new(
+        rtc: Rtc<init_state::Enabled>,
+        _buttons: Option<BUTTONS>,
+        rgb: Option<RGB>,
+        provisioner: bool,
+    ) -> Self {
         let wink = None;
         #[cfg(not(feature = "no-buttons"))]
-        let ui = Self { rtc, buttons: _buttons, rgb, wink };
+        let ui = Self { rtc, buttons: _buttons, rgb, wink, provisioner };
         #[cfg(feature = "no-buttons")]
-        let ui = Self { rtc, buttons: None, rgb, wink };
+        let ui = Self { rtc, buttons: None, rgb, wink, provisioner };
 
         ui
     }
@@ -111,8 +117,13 @@ RGB: RgbLed,
 
             match status {
                 ui::Status::Idle => {
-                    // green
-                    rgb.set(0x00_ff_02.into());
+                    if self.provisioner {
+                        // white
+                        rgb.set(0xff_ff_ff.into());
+                    } else {
+                        // green
+                        rgb.set(0x00_ff_02.into());
+                    }
                 },
                 ui::Status::Processing => {
                     // teal

@@ -1,5 +1,9 @@
 # Unreleased
 
+## Features
+
+- Change LED color and device name if provisioner app is enabled.
+
 ## Bugfixes
 
 - admin-app: Fix CTAPHID command dispatch ([#8][]).
