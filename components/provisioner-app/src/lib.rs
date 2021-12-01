@@ -18,8 +18,6 @@ use core::convert::TryFrom;
 
 use trussed::types::LfsStorage;
 
-pub const FILESYSTEM_BOUNDARY: usize = 0x8_0000;
-
 use littlefs2::path::{PathBuf};
 use trussed::store::{self, Store};
 use trussed::{

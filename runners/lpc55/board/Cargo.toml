@@ -9,7 +9,7 @@ delog = "0.1.0"
 fm11nc08 = {path = "../../../components/fm11nc08"}
 lpc55-hal = { version = "0.3", features = ["littlefs", "rtic-peripherals"] }
 nb = "1"
-trussed = { git = "https://github.com/trussed-dev/trussed", branch = "main" }
+trussed = { git = "https://github.com/trussed-dev/trussed" }
 
 [features]
 board-lpcxpresso55 = []
