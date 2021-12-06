@@ -1,4 +1,7 @@
-# Unreleased
+# v1.0.1-rc.1 (2021-12-06)
+
+This release fixes some issues with the FIDO authenticator and the admin
+application.
 
 ## Features
 
