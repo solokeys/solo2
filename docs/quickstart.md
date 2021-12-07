@@ -50,6 +50,15 @@ $ curl https://raw.githubusercontent.com/molejar/pyIMX/master/udev/90-imx-sdp.ru
 $ sudo udevadm control --reload-rules
 ```
 
+## Updating Dependencies
+
+If you already have some of the dependencies installed, you might have to update them.  To update the software installed through `rustup`, use `rustup update`.  To automatically update the software installed through `cargo install`, you can use the [`cargo-update`](https://github.com/nabijaczleweli/cargo-update) crate:
+
+```
+$ cargo install cargo-update
+$ cargo install-update -a
+```
+
 ## Compile Firmware
 
 Compile the firmware and create the firmware image:
@@ -63,8 +72,8 @@ cargo objcopy --release --features board-nk3xn,develop -- -O binary firmware-nk3
 You can use these variables when calling `make`:
 
 * `BOARD`: board selection
-  * `nk3xn` for NK3AN and NK3CN
-  * `nk3am` for NK3AM
+  * `nk3xn` for NK3AN and NK3CN (Nitrokey 3 A NFC and C NFC)
+  * `nk3am` for NK3AM (Nitrokey 3 A Mini)
 * `PROVISIONER`: provisioner feature selection
   * default: standard firmware build
   * `1` for a provisioner build (includes the provisioner app, initializes empty flash areas, disables the touch button)
@@ -115,6 +124,8 @@ The Nitrokey 3 board can be debugged using SWD. The SWD interface is exposed ove
   * Cable 3 (GND): GND
   * Cable 4 (SWDCLK): CLK
 * Connect the cable to the J7 socket on the debugger.
+
+Alternatively, use a [breakout connector](https://www.adafruit.com/product/2743).
 
 ### J-LINK
 
