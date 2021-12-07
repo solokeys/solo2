@@ -1,4 +1,6 @@
-# Nitrokey 3 Firmware Development Quickstart Guide
+# Quickstart Guide
+
+This guide explains how to compile and flash the firmware on a prototype device.
 
 *See also: [Solo 2 Getting Started](https://hackmd.io/@solokeys/solo2-getting-started)*
 
@@ -11,17 +13,16 @@
 
 ## Clone Firmware Repository
 
-Clone the firmware repository, currently [nitrokey/solo2](https://github.com/nitrokey/solo2) (upstream: [solokeys/solo2](https://github.com/solokeys/solo2)):
+Clone the firmware repository [nitrokey/nitrokey-3-firmware](https://github.com/nitrokey/nitrokey-3-firmware) (upstream: [solokeys/solo2](https://github.com/solokeys/solo2)):
 
 ```
-$ git clone https://github.com/nitrokey/solo2
-$ cd solo2
+$ git clone https://github.com/nitrokey/nitrokey-3-firmware
+$ cd nitrokey-3-firmware
 ```
 
 ## Install Dependencies
 
-Install the dependencies as described in the [readme](./README.md) and in the
-[Solo 2 Getting Started guide](https://solo2.dev), for example:
+Install the required dependencies as described in the [readme](./README.md) and in the [Solo 2 Getting Started guide](https://solo2.dev), for example on Debian:
 
 ```
 $ sudo apt-get install llvm clang libclang-dev gcc-arm-none-eabi libc6-dev-i386
@@ -55,23 +56,21 @@ Compile the firmware and create the firmware image:
 
 ```
 cd runners/lpc55
+make objcopy
 cargo objcopy --release --features board-nk3xn,develop -- -O binary firmware-nk3xn.bin
 ```
 
-Select the features according to the device you use and the settings you want to activate:
+You can use these variables when calling `make`:
 
-* board selection
-  * `board-nk3xn` for NK3AN and NK3CN
-  * `board-nk3am` for NK3AM
-* settings
-  * `no-buttons`: disable the touch button and always confirm actions
-  * `no-encrypted-storage`: don’t encrypt the flash chip (currently required)
-  * `no-reset-time-window`: allow resetting FIDO authenticator (and possibly others) even after 10s uptime
-  * `develop` = `no-buttons` + `no-encrypted-storage` + `no-reset-time-window`
-
-If you set the `BOARD` environment variable or update the `FEATURES` variable
-in the `Makefile` accordingly, you can also use `make build-dev` to compile the
-firmware or `make objcopy-dev` to create the firmware image.
+* `BOARD`: board selection
+  * `nk3xn` for NK3AN and NK3CN
+  * `nk3am` for NK3AM
+* `PROVISIONER`: provisioner feature selection
+  * default: standard firmware build
+  * `1` for a provisioner build (includes the provisioner app, initializes empty flash areas, disables the touch button)
+* `DEVELOP`: development feature selection
+  * default: no development features
+  * `1` for a development build (disables encrypted storage and the touch button)
 
 ## Flash Firmware
 
@@ -90,7 +89,11 @@ $ mboot write firmware-nk3xn.bin
 
 (If you did not install the udev rules, these commands require root privilges.)
 
-You can also compile and flash the firmware in one go by running `make flash-dev`.
+You can also compile and flash the firmware in one go by running `make flash`.
+
+## Provision Device
+
+TODO: explain fido2 and trussed provisioning, see the [Solo2 guide](https://hackmd.io/@solokeys/solo2-getting-started#fido-authenticator)
 
 ## Test Firmware
 
