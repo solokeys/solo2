@@ -13,7 +13,7 @@ variables:
   SCRIPTS_REPO: git@git.dotplex.com:nitrokey/gitlab-ci.git
   REPO_USER: nitrokey
   REPO_NAME: nitrokey-3-firmware
-  MAIN_BRANCH: nitrokey-main 
+  MAIN_BRANCH: main 
   IMAGE_NAME: nitrokey3
   COMMON_UPDATE_DOCKER: "true"
 
