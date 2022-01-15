@@ -1,3 +1,12 @@
+# v1.0.1 (2022-01-15)
+
+## Bugfixes
+- fido-authenticator: use smaller CredentialID - fixes issues with some services FIDO usage ([fido-authenticator#8][])
+- trussed: update P256 library - fixes signing failure in some cases ([#31][])
+
+[#31]: https://github.com/Nitrokey/nitrokey-3-firmware/issues/31
+[fido-authenticator#8]: https://github.com/solokeys/fido-authenticator/pull/8
+
 # v1.0.1-rc.1 (2021-12-06)
 
 This release fixes some issues with the FIDO authenticator and the admin
