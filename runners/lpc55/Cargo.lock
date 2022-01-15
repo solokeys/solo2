@@ -584,7 +584,7 @@ dependencies = [
 [[package]]
 name = "fido-authenticator"
 version = "0.0.0-unreleased"
-source = "git+https://github.com/Nitrokey/fido-authenticator?branch=sz-smaller-keyhandle-length#c9c70c34687581370de22073ada82d4cd1418810"
+source = "git+https://github.com/Nitrokey/fido-authenticator#5862c89b02b1cc8629e3a7fea8c2cbdab8211d39"
 dependencies = [
  "ctap-types",
  "delog",

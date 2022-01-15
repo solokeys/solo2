@@ -30,7 +30,7 @@ admin-app = { git = "https://github.com/solokeys/admin-app", optional = true }
 apdu-dispatch = { git = "https://github.com/solokeys/apdu-dispatch" }
 ctaphid-dispatch = { git = "https://github.com/solokeys/ctaphid-dispatch" }
 ctap-types = { git = "https://github.com/solokeys/ctap-types" }
-fido-authenticator = { git = "https://github.com/Nitrokey/fido-authenticator", branch = "sz-smaller-keyhandle-length", optional = true }
+fido-authenticator = { git = "https://github.com/Nitrokey/fido-authenticator", optional = true }
 oath-authenticator = { git = "https://github.com/trussed-dev/oath-authenticator", features = ["apdu-dispatch"], optional = true }
 piv-authenticator = { git = "https://github.com/solokeys/piv-authenticator", features = ["apdu-dispatch"], optional = true }
 trussed = { git = "https://github.com/trussed-dev/trussed" }
