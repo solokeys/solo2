@@ -16,7 +16,7 @@ serde = { version = "1", default-features = false }
 apdu-dispatch = { git = "https://github.com/solokeys/apdu-dispatch" }
 ctaphid-dispatch = { git = "https://github.com/solokeys/ctaphid-dispatch" }
 ctap-types = { git = "https://github.com/solokeys/ctap-types" }
-fido-authenticator = { git = "https://github.com/solokeys/fido-authenticator" }
+fido-authenticator = { git = "https://github.com/Nitrokey/fido-authenticator" }
 iso7816 = { git = "https://github.com/ycrypto/iso7816" }
 trussed = { git = "https://github.com/trussed-dev/trussed" }
 

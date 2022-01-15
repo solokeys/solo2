@@ -57,7 +57,7 @@ bacon:
 	bacon
 
 jlink:
-	../../scripts/bump-jlink
+	-../../scripts/bump-jlink
 	JLinkGDBServer -strict -device LPC55S69 -if SWD -vd
 
 
