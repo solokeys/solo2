@@ -1,3 +1,14 @@
+# Unreleased
+
+Update to upstream release 1.0.9.
+
+## Bugfixes
+
+- usbd-ctaphid: fix ctaphid keepalive messages - fixes "busy" issue under Windows  ([#21][]) 
+
+
+[#21]: https://github.com/Nitrokey/nitrokey-3-firmware/issues/21
+
 # v1.0.1 (2022-01-15)
 
 ## Bugfixes
