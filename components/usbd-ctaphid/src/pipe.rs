@@ -150,6 +150,8 @@ pub struct Pipe<'alloc, Bus: UsbBus> {
 
     // a "read once" indicator if now we're waiting on the application processing
     started_processing: bool,
+
+    needs_keepalive: bool,
 }
 
 impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
@@ -176,6 +178,7 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
             implements: 0x80,
             last_milliseconds: initial_milliseconds,
             started_processing: false,
+            needs_keepalive: false,
         }
     }
 
@@ -469,6 +472,11 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
             },
 
             _ => {
+                if request.command == Command::Cbor {
+                    self.needs_keepalive = true;
+                } else {
+                    self.needs_keepalive = false;
+                }
                 if self.interchange.state() == interchange::State::Responded {
                     info!("dumping stale response");
                     self.interchange.take_response();
@@ -502,23 +510,30 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
 
     pub fn send_keepalive(&mut self, is_waiting_for_user_presence: bool) -> bool {
         if let State::WaitingOnAuthenticator(request) = &self.state {
-            info!("keepalive");
-
-            let mut packet = [0u8; PACKET_SIZE];
-
-            packet[..4].copy_from_slice(&request.channel.to_be_bytes());
-            packet[4] = 0x80 | 0x3B;
-            packet[5..7].copy_from_slice(&1u16.to_be_bytes());
-
-            if is_waiting_for_user_presence {
-                packet[7] = KeepaliveStatus::UpNeeded as u8;
+            if !self.needs_keepalive {
+                // let response go out normally in idle loop
+                info!("cmd does not need keepalive messages");
+                false
             } else {
-                packet[7] = KeepaliveStatus::Processing as u8;
+
+                info!("keepalive");
+
+                let mut packet = [0u8; PACKET_SIZE];
+
+                packet[..4].copy_from_slice(&request.channel.to_be_bytes());
+                packet[4] = 0x80 | 0x3B;
+                packet[5..7].copy_from_slice(&1u16.to_be_bytes());
+
+                if is_waiting_for_user_presence {
+                    packet[7] = KeepaliveStatus::UpNeeded as u8;
+                } else {
+                    packet[7] = KeepaliveStatus::Processing as u8;
+                }
+
+                self.write_endpoint.write(&packet).ok();
+
+                true
             }
-
-            self.write_endpoint.write(&packet).ok();
-
-            true
         } else {
             info!("keepalive done");
             false
