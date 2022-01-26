@@ -1,4 +1,7 @@
-# Unreleased
+# v1.0.2 (2022-01-26)
+No changes since rc.1.
+
+# v1.0.2-rc.1 (2022-01-25)
 
 Update to upstream release 1.0.9.
 
