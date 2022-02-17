@@ -56,6 +56,7 @@ impl trussed::platform::UserInterface for TrussedUI {
 pub struct Reboot {
 }
 
+#[cfg(feature = "admin-app")]
 impl admin_app::Reboot for Reboot {
 	fn reboot() -> ! { todo!() }
 	fn reboot_to_firmware_update() -> ! { todo!() }

@@ -7,44 +7,44 @@ license = "ISC"
 resolver = "2"
 
 [dependencies]
-delog = "0.1.2"
+delog = "0.1"
 nrf52840-hal = { git = "https://github.com/nrf-rs/nrf-hal", optional = true }
 nrf52840-pac = "0.11"
 chacha20 = { version = "0.7", default-features = false, features = ["rng"] }
 cortex-m-rtic = { version = "0.5", default_features = false, features = ["cortex-m-7"] }
+panic-halt = "0.2"
+rtt-target = { version = "0.3", features = ["cortex-m"] }
 
 apdu-dispatch = { git = "https://github.com/solokeys/apdu-dispatch" }
 ctaphid-dispatch = { git = "https://github.com/solokeys/ctaphid-dispatch" }
 ctap-types = { git = "https://github.com/solokeys/ctap-types" }
-dispatch-fido = {path = "../../../components/dispatch-fido"}
+dispatch-fido = {path = "../../components/dispatch-fido"}
 
 admin-app = { git = "https://github.com/solokeys/admin-app", optional = true }
 fido-authenticator = { git = "https://github.com/Nitrokey/fido-authenticator", optional = true }
-ndef-app = { path = "../../../components/ndef-app", optional = true }
+ndef-app = { path = "../../components/ndef-app", optional = true }
 oath-authenticator = { git = "https://github.com/trussed-dev/oath-authenticator", features = ["apdu-dispatch"], optional = true }
 piv-authenticator = { git = "https://github.com/solokeys/piv-authenticator", features = ["apdu-dispatch"], optional = true }
-### TODO: how can we set the features for this dependency?
-### - we cannot put them here, because they depend on the chosen soc
-### - we cannot make them an element of the soc-*** feature list,
-###   as provisioner-app might not have been selected for the build,
-###   and then cargo will cry (setting feature flag for unknown dependency)
-provisioner-app = { path = "../../../components/provisioner-app", optional = true, features = ["nrf52"] }
+provisioner-app = { path = "../../components/provisioner-app", optional = true }
 
 trussed = { git = "https://github.com/trussed-dev/trussed" }
-interchange = "0.2.0"
-littlefs2 = { version = "0.3.2", features = ["c-stubs"] }
+interchange = "0.2"
+littlefs2 = { version = "0.3", features = ["c-stubs"] }
 
-usb-device = "0.2.3"
-usbd-serial = "0.1.0"
-usbd-ccid = { path = "../../../components/usbd-ccid" }
-usbd-ctaphid = { path = "../../../components/usbd-ctaphid" }
+usb-device = "0.2"
+usbd-serial = "0.1"
+usbd-ccid = { path = "../../components/usbd-ccid" }
+usbd-ctaphid = { path = "../../components/usbd-ctaphid" }
 
 [features]
-default = ["log-debugP"]
+default = ["admin-app", "fido-authenticator", "ndef-app", "oath-authenticator",
+		"piv-authenticator", # "provisioner-app",
+		"fido-authenticator/disable-reset-time-window",
+		"trussed/clients-5", "log-debugP"]
 
 board-nrfdk = ["soc-nrf52840"]
 
-soc-nrf52840 = ["nrf52840-hal"]
+soc-nrf52840 = ["nrf52840-hal", "provisioner-app/nrf52"]
 soc-lpc55 = []
 
 log-all = []
@@ -58,9 +58,6 @@ log-debugP = [ "log-debug", "log-info", "log-warn", "log-error" ]
 log-infoP = [ "log-info", "log-warn", "log-error" ]
 log-warnP = [ "log-warn", "log-error" ]
 
-# admin-app = ["dep:admin-app"]
-# fido-authenticator = ["dep:fido-authenticator"]
-# ndef-app = ["dep:ndef-app"]
-# oath-authenticator = ["dep:oath-authenticator"]
-# piv-authenticator = ["dep:piv-authenticator"]
-# provisioner-app = ["dep:provisioner-app"]
+[[bin]]
+name = "nrf-runner"
+path = "src/bin/app-nrf.rs"
