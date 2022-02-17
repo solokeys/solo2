@@ -1,0 +1,10 @@
+[build]
+target = "thumbv7em-none-eabihf"
+
+[target.thumbv7em-none-eabihf]
+rustflags = [
+	"-C", "linker=flip-link",
+	"-C", "link-arg=-Tlink.x",
+	"-C", "link-arg=-error-limit=0",
+	"-C", "inline-threshold=0",
+]

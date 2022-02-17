@@ -1,0 +1,7 @@
+[licenses]
+copyleft = "allow"
+confidence-threshold = 1.0
+allow = [ "ISC", "MIT", "0BSD", "BSD-3-Clause", "Apache-2.0" ]
+
+[sources]
+unknown-git = "allow"

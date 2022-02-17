@@ -1,0 +1,108 @@
+[package]
+name = "embedded-runner-nrf"
+version = "0.0.1"
+authors = ["Jan Nordholz <j.nordholz@tu-berlin.de"]
+edition = "2018"
+license = "ISC"
+resolver = "2"
+
+[dependencies]
+nrf52840-hal = { git = "https://github.com/nrf-rs/nrf-hal" }
+nrf52840-pac = "0.11"
+## picolcd114 = { git = "https://github.com/Nitrokey/picolcd114/" }
+## cortex-m = "0.6"
+## cortex-m-rt = "0.6"
+cortex-m-rtic = { version = "0.5", default_features = false, features = ["cortex-m-7"] }
+# cortex-m-rtic = { path = "../../cortex-m-rtic" }
+## cortex-m-semihosting = { version = "0.3", optional = true }
+## asm-delay = "*"
+delog = "0.1.2"
+# heapless = "0.6"
+# interchange = "0.2.0"
+# nb = "1"
+rtt-target = { version = "0.3", features = ["cortex-m"] }
+## usb-device = "0.2.3"
+# usbd-hid = "0.4"
+# usbd-serial = "0.1"
+## embedded-graphics = "0.6"
+## embedded-hal = "*"
+## embedded-storage = "0.1"
+## display-interface-spi = "*"
+## generic-array = "0.14"
+## rand_core = "0.6"
+## chacha20 = { version = "0.7", default-features = false, features = ["rng"] }
+embedded-runner-lib = { path = "../librunner" }
+
+# se050 = { path = "../../../components/se050", features = ["log-all"] }
+
+## admin-app = { git = "https://github.com/solokeys/admin-app", optional = true }
+## apdu-dispatch = { git = "https://github.com/solokeys/apdu-dispatch"}
+## ctaphid-dispatch = { git = "https://github.com/solokeys/ctaphid-dispatch" }
+## ctap-types = { git = "https://github.com/solokeys/ctap-types" }
+## fido-authenticator = { git = "https://github.com/Nitrokey/fido-authenticator", optional = true }
+## oath-authenticator = { git = "https://github.com/trussed-dev/oath-authenticator", features = ["apdu-dispatch"], optional = true }
+## piv-authenticator = { git = "https://github.com/solokeys/piv-authenticator", features = ["apdu-dispatch"], optional = true }
+# NB: when using this app, need to raise trussed/clients-5
+#provisioner-app = { path = "../../../components/provisioner-app", optional = true, features = ["test-attestation"] }
+## provisioner-app = { path = "../../../components/provisioner-app", optional = true, features = ["nrf52"] }
+## dispatch-fido = {path = "../../../components/dispatch-fido"}
+## ndef-app = { path = "../../../components/ndef-app", optional = true }
+
+trussed = { git = "https://github.com/trussed-dev/trussed" }
+
+# components
+## fm11nc08 = {path = "../../../components/fm11nc08"}
+## nfc-device = {path = "../../../components/nfc-device"}
+usbd-ccid = { path = "../../../components/usbd-ccid" }
+usbd-ctaphid = { path = "../../../components/usbd-ctaphid" }
+
+# panic
+panic-halt = "0.2.0"
+# panic-semihosting = "0.5.6"
+
+# storage
+littlefs2 = { version = "0.3.2", features = ["c-stubs"] }
+
+[features]
+board-nrfdk = ["embedded-runner-lib/board-nrfdk"]
+
+# default = ["no-reset-time-window", "trussed/clients-5", "hwcrypto-se050", "log-debugP"]
+default = ["embedded-runner-lib/admin-app", "embedded-runner-lib/piv-authenticator",
+	"embedded-runner-lib/provisioner-app", "embedded-runner-lib/fido-authenticator",
+	"embedded-runner-lib/ndef-app",
+	"no-reset-time-window", "trussed/clients-5",
+	"log-debugP"]
+
+#hwcrypto-se050 = [ "trussed/hwcrypto-se050" ]
+
+# Allow resetting FIDO authenticator (and possibly others) even after 10s uptime
+no-reset-time-window = [] # ["fido-authenticator/disable-reset-time-window"]
+no-encrypted-storage = []
+
+log-all = []
+log-debug = []
+log-info = []
+log-warn = []
+log-error = []
+log-none = []
+
+log-debugP = [ "log-debug", "log-info", "log-warn", "log-error" ]
+log-infoP = [ "log-info", "log-warn", "log-error" ]
+log-warnP = [ "log-warn", "log-error" ]
+
+reformat-flash = []
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "z"
+incremental = false
+debug = true
+
+# Speed up crypto packages
+[profile.release.package.salty]
+opt-level = 2
+
+# TODO: see which if any settings are best for p256-cortex-m4
+# [profile.release.package.nisty]
+# opt-level = 2
