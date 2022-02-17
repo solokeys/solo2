@@ -5,6 +5,7 @@ use embedded_runner_lib as ERL;
 use nrf52840_hal::{
 	gpio::{p0, p1},
 	gpiote::Gpiote,
+	spim::Spim,
 };
 use panic_halt as _;
 
@@ -60,6 +61,20 @@ const APP: () = {
 			ERL::soc::board::init_pins(&dev_gpiote, dev_gpio_p0, dev_gpio_p1)
 		};
 		dev_gpiote.reset_events();
+
+		let internal_flash = ERL::soc::init_internal_flash(ctx.device.NVMC);
+		let external_flash = {
+			let dev_spim3 = Spim::new(ctx.device.SPIM3,
+				board_gpio.flashnfc_spi.take().unwrap(),
+				nrf52840_hal::spim::Frequency::M2,
+				nrf52840_hal::spim::MODE_0,
+				0x00u8
+			);
+			ERL::soc::init_external_flash(dev_spim3,
+				board_gpio.flash_cs.take().unwrap(),
+				board_gpio.flash_power
+			)
+		};
 
 		// do common setup through (mostly) generic code in ERL::initializer
 		// - flash
