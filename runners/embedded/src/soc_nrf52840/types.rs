@@ -12,10 +12,23 @@ use trussed::types::{LfsStorage, LfsResult};
 //////////////////////////////////////////////////////////////////////////////
 // Upper Interface (definitions towards ERL Core)
 
-const_ram_storage!(FlashStorage, 4096);
+pub type FlashStorage = crate::soc::flash::FlashStorage;
 const_ram_storage!(ExternalStorage, 8192);
+/*
+  I would love to use the real external flash here, but only if I find a way
+  to hide the implementation details (= type parameters) from the type name
+  of the upper interface. What if other SoCs access their flash chips through
+  other busses - surely we don't want to accumulate a sh*tload of type
+  parameters here? */
+// pub type ExternalStorage = crate::soc::extflash::ExtFlashStorage<SPI, CS>;
 
-pub type UsbBus<'a> = Usbd<UsbPeripheral<'a>>;
+/*
+  The same rant as for ExternalStorage applies. However this time it's a
+  lifetime issue and we can get away with forcing the RHS type to static,
+  allowing us to drop the lifetime parameter from the LHS.
+  See also src/types/usb.rs...
+*/
+pub type UsbBus = Usbd<UsbPeripheral<'static>>;
 
 pub type Rng = chacha20::ChaCha8Rng;
 

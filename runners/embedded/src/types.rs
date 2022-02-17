@@ -5,7 +5,7 @@ use core::convert::TryInto;
 use crate::soc;
 use ctaphid_dispatch::app::{App as CtaphidApp};
 use interchange::Interchange;
-use littlefs2::{const_ram_storage, consts};
+use littlefs2::{const_ram_storage, consts, fs::Allocation};
 use trussed::types::{LfsResult, LfsStorage};
 use trussed::{platform, store};
 
@@ -36,6 +36,13 @@ store!(RunnerStore,
 	External: soc::types::ExternalStorage,
 	Volatile: VolatileStorage
 );
+
+pub static mut INTERNAL_STORAGE: Option<soc::types::FlashStorage> = None;
+pub static mut INTERNAL_FS_ALLOC: Option<Allocation<soc::types::FlashStorage>> = None;
+pub static mut EXTERNAL_STORAGE: Option<soc::types::ExternalStorage> = None;
+pub static mut EXTERNAL_FS_ALLOC: Option<Allocation<soc::types::ExternalStorage>> = None;
+pub static mut VOLATILE_STORAGE: Option<VolatileStorage> = None;
+pub static mut VOLATILE_FS_ALLOC: Option<Allocation<VolatileStorage>> = None;
 
 platform!(RunnerBoard,
 	R: soc::types::Rng,

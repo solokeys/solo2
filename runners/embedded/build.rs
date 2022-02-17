@@ -62,9 +62,9 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     let hash_short_cmd = Command::new("git").args(&["rev-parse", "--short", "HEAD"]).output().unwrap().stdout;
 
     let hash_long =
-        str::from_utf8(&hash_long_cmd[0..hash_long_cmd.len()-1]).unwrap();
+        str::from_utf8(&hash_long_cmd).unwrap().trim();
     let hash_short =
-        str::from_utf8(&hash_short_cmd[0..hash_short_cmd.len()-1]).unwrap();
+        str::from_utf8(&hash_short_cmd).unwrap().trim();
 
     writeln!(&mut f, "pub mod build_constants {{").expect("Could not write build_constants.rs.");
     add_build_variable!(&mut f, "CARGO_PKG_VERSION_MAJOR", u8);

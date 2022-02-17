@@ -7,11 +7,8 @@ license = "ISC"
 resolver = "2"
 
 [dependencies]
+### base dependencies
 delog = "0.1"
-# nrf52840-hal = { git = "https://github.com/nrf-rs/nrf-hal", optional = true }
-nrf52840-hal = { path = "../../../nrf-hal/nrf52840-hal", optional = true }
-nrf52840-pac = "0.11"
-chacha20 = { version = "0.7", default-features = false, features = ["rng"] }
 cortex-m-rtic = { version = "0.5", default_features = false, features = ["cortex-m-7"] }
 embedded-storage = "0.3"
 embedded-hal = "0.2.3"
@@ -20,11 +17,13 @@ panic-halt = "0.2"
 rtt-target = { version = "0.3", features = ["cortex-m"] }
 spi-memory = "0.2"
 
+### protocols and dispatchers
 apdu-dispatch = { git = "https://github.com/solokeys/apdu-dispatch" }
 ctaphid-dispatch = { git = "https://github.com/solokeys/ctaphid-dispatch" }
 ctap-types = { git = "https://github.com/solokeys/ctap-types" }
 dispatch-fido = {path = "../../components/dispatch-fido"}
 
+### client apps
 admin-app = { git = "https://github.com/solokeys/admin-app", optional = true }
 fido-authenticator = { git = "https://github.com/Nitrokey/fido-authenticator", optional = true }
 ndef-app = { path = "../../components/ndef-app", optional = true }
@@ -32,14 +31,24 @@ oath-authenticator = { git = "https://github.com/trussed-dev/oath-authenticator"
 piv-authenticator = { git = "https://github.com/solokeys/piv-authenticator", features = ["apdu-dispatch"], optional = true }
 provisioner-app = { path = "../../components/provisioner-app", optional = true }
 
+### trussed core
 trussed = { git = "https://github.com/trussed-dev/trussed" }
 interchange = "0.2"
 littlefs2 = { version = "0.3", features = ["c-stubs"] }
 
+### usb machinery
 usb-device = "0.2"
 usbd-serial = "0.1"
 usbd-ccid = { path = "../../components/usbd-ccid" }
 usbd-ctaphid = { path = "../../components/usbd-ctaphid" }
+
+### NRF52 specific dependencies
+chacha20 = { version = "0.7", default-features = false, features = ["rng"], optional = true }
+nrf52840-hal = { path = "../../../nrf-hal/nrf52840-hal", optional = true }
+	### { git = "https://github.com/nrf-rs/nrf-hal", optional = true }
+nrf52840-pac = { version = "0.11", optional = true }
+
+### LPC55 specific dependencies
 
 [features]
 default = ["admin-app", "fido-authenticator", "ndef-app", "oath-authenticator",
@@ -48,8 +57,10 @@ default = ["admin-app", "fido-authenticator", "ndef-app", "oath-authenticator",
 		"trussed/clients-5", "log-debugP"]
 
 board-nrfdk = ["soc-nrf52840"]
+board-proto1 = ["soc-nrf52840"]
+board-nk3mini = ["soc-nrf52840"]
 
-soc-nrf52840 = ["nrf52840-hal", "provisioner-app/nrf52"]
+soc-nrf52840 = ["nrf52840-hal", "nrf52840-pac", "chacha20", "provisioner-app/nrf52"]
 soc-lpc55 = []
 
 log-all = []

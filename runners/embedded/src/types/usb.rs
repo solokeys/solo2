@@ -1,26 +1,26 @@
 use crate::soc;
 
-pub type CcidClass<'a> = usbd_ccid::Ccid<
-    soc::types::UsbBus<'static>,
+pub type CcidClass = usbd_ccid::Ccid<
+    soc::types::UsbBus,
     apdu_dispatch::interchanges::Contact,
     {apdu_dispatch::interchanges::SIZE},
 >;
-pub type CtapHidClass<'a> = usbd_ctaphid::CtapHid<'a, soc::types::UsbBus<'static>>;
-// pub type KeyboardClass<'a> = usbd_hid::hid_class::HIDClass<'a, soc::types::UsbBus<'static>>;
-pub type SerialClass<'a> = usbd_serial::SerialPort<'a, soc::types::UsbBus<'static>>;
+pub type CtapHidClass = usbd_ctaphid::CtapHid<'static, soc::types::UsbBus>;
+// pub type KeyboardClass = usbd_hid::hid_class::HIDClass<'static, soc::types::UsbBus>;
+pub type SerialClass = usbd_serial::SerialPort<'static, soc::types::UsbBus>;
 
-type Usbd<'a> = usb_device::device::UsbDevice<'a, soc::types::UsbBus<'static>>;
+type Usbd = usb_device::device::UsbDevice<'static, soc::types::UsbBus>;
 
-pub struct UsbClasses<'a> {
-    pub usbd: Usbd<'a>,
-    pub ccid: CcidClass<'a>,
-    pub ctaphid: CtapHidClass<'a>,
-    // pub keyboard: KeyboardClass<'a>,
-    pub serial: SerialClass<'a>,
+pub struct UsbClasses {
+    pub usbd: Usbd,
+    pub ccid: CcidClass,
+    pub ctaphid: CtapHidClass,
+    // pub keyboard: KeyboardClass,
+    pub serial: SerialClass,
 }
 
-impl<'a> UsbClasses<'a> {
-    pub fn new(usbd: Usbd<'a>, ccid: CcidClass<'a>, ctaphid: CtapHidClass<'a>, serial: SerialClass<'a>) -> Self {
+impl UsbClasses {
+    pub fn new(usbd: Usbd, ccid: CcidClass, ctaphid: CtapHidClass, serial: SerialClass) -> Self {
         Self{ usbd, ccid, ctaphid, serial }
     }
     pub fn poll(&mut self) {

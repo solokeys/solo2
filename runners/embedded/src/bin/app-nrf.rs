@@ -22,7 +22,7 @@ const APP: () = {
 		ctaphid_dispatch: ERL::types::CtaphidDispatch,
 		trussed: ERL::types::Trussed,
 		apps: ERL::types::Apps,
-		usb_classes: Option<ERL::types::UsbClasses<'static>>,
+		usb_classes: Option<ERL::types::UsbClasses>,
 		contactless: Option<ERL::types::Iso14443>,
 
 		/* NRF specific elements */
@@ -62,8 +62,12 @@ const APP: () = {
 		};
 		dev_gpiote.reset_events();
 
+		// - usb (SoC)
+		// - nfc (SoC)
+		// - interfaces, generic USB machinery... (indep)
+
 		let internal_flash = ERL::soc::init_internal_flash(ctx.device.NVMC);
-		let external_flash = {
+		let _external_flash = {
 			let dev_spim3 = Spim::new(ctx.device.SPIM3,
 				board_gpio.flashnfc_spi.take().unwrap(),
 				nrf52840_hal::spim::Frequency::M2,
@@ -76,18 +80,12 @@ const APP: () = {
 			)
 		};
 
-		// do common setup through (mostly) generic code in ERL::initializer
-		// - flash
-		// - filesystem
-		// - trussed
-		// - apps
-		// - buttons
+		/* see src/soc_nrf52840/types.rs for the reason why we cannot use
+		   our lovingly crafted ExternalFlashStorage... */
+		let store: ERL::types::RunnerStore = ERL::init_store(internal_flash, ERL::soc::types::ExternalStorage::new());
 
-		// do board-specific setup
-		/* bspobj: ERL::soc::types::BSPObjects = ERL::soc::init_board_specific(...); */
-		/* -> idea: BSPObjects contains exactly the "specific" items of App::Resources above;
-		   objects have to be individually transferred to Resources to be usable as individual
-		   RTIC resources though */
+		// - trussed (indep)
+		// - apps (indep)
 
 		// compose LateResources
 		init::LateResources { }
