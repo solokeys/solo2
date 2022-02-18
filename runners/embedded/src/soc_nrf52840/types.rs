@@ -1,4 +1,4 @@
-use littlefs2::const_ram_storage;
+// use littlefs2::const_ram_storage;
 use nrf52840_hal::{
 	gpio::{Pin, Input, Output, PushPull, PullDown, PullUp},
 	spim,
@@ -6,21 +6,20 @@ use nrf52840_hal::{
 	uarte,
 	usbd::{Usbd, UsbPeripheral},
 };
-use trussed::platform::{consent, reboot, ui};
-use trussed::types::{LfsStorage, LfsResult};
+// use trussed::types::{LfsStorage, LfsResult};
 
 //////////////////////////////////////////////////////////////////////////////
 // Upper Interface (definitions towards ERL Core)
 
 pub type FlashStorage = crate::soc::flash::FlashStorage;
-const_ram_storage!(ExternalStorage, 8192);
+// const_ram_storage!(ExternalStorage, 8192);
 /*
   I would love to use the real external flash here, but only if I find a way
   to hide the implementation details (= type parameters) from the type name
   of the upper interface. What if other SoCs access their flash chips through
   other busses - surely we don't want to accumulate a sh*tload of type
   parameters here? */
-// pub type ExternalStorage = crate::soc::extflash::ExtFlashStorage<SPI, CS>;
+pub type ExternalStorage = crate::soc::extflash::ExtFlashStorage<nrf52840_hal::spim::Spim<nrf52840_pac::SPIM3>, Pin<Output<PushPull>>>;
 
 /*
   The same rant as for ExternalStorage applies. However this time it's a
@@ -37,34 +36,7 @@ pub static mut DEVICE_UUID: [u8; 16] = [0u8; 16];
 
 pub fn device_uuid() -> &'static [u8; 16] { unsafe { &DEVICE_UUID } }
 
-pub struct TrussedUI {
-}
-
-impl TrussedUI {
-	pub fn new() -> Self { Self {} }
-}
-
-impl trussed::platform::UserInterface for TrussedUI {
-	fn check_user_presence(&mut self) -> consent::Level {
-		consent::Level::None
-	}
-
-	fn set_status(&mut self, _status: ui::Status) {
-		info!("UI SetStatus");
-	}
-
-	fn refresh(&mut self) {}
-
-	fn uptime(&mut self) -> core::time::Duration {
-		// let _cyccnt = cortex_m::peripheral::DWT::get_cycle_count();
-		core::time::Duration::new(0, 0)
-	}
-
-	fn reboot(&mut self, _to: reboot::To) -> ! {
-		error!("TrussedUI::reboot() is deprecated!");
-		panic!();
-	}
-}
+pub type TrussedUI = crate::soc::dummy_ui::DummyUI;
 
 pub struct Reboot {
 }

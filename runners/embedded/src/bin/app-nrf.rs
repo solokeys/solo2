@@ -3,11 +3,15 @@
 
 use embedded_runner_lib as ERL;
 use nrf52840_hal::{
+	clocks::Clocks,
 	gpio::{p0, p1},
 	gpiote::Gpiote,
+	rng::Rng,
+	rtc::Rtc,
 	spim::Spim,
 };
 use panic_halt as _;
+use rand_core::SeedableRng;
 
 #[macro_use]
 extern crate delog;
@@ -15,14 +19,18 @@ delog::generate_macros!();
 
 delog!(Delogger, 3*1024, 512, ERL::types::DelogFlusher);
 
+type UsbClockType = Clocks<nrf52840_hal::clocks::ExternalOscillator, nrf52840_hal::clocks::Internal, nrf52840_hal::clocks::LfOscStarted>;
+static mut USB_CLOCK: Option<UsbClockType> = None;
+static mut USBD: Option<usb_device::bus::UsbBusAllocator<ERL::soc::types::UsbBus>> = None;
+
 #[rtic::app(device = nrf52840_hal::pac, peripherals = true, monotonic = rtic::cyccnt::CYCCNT)]
 const APP: () = {
         struct Resources {
+		trussed: ERL::types::Trussed,
+		//apps: ERL::types::Apps,
 		apdu_dispatch: ERL::types::ApduDispatch,
 		ctaphid_dispatch: ERL::types::CtaphidDispatch,
-		trussed: ERL::types::Trussed,
-		apps: ERL::types::Apps,
-		usb_classes: Option<ERL::types::UsbClasses>,
+		usb_classes: Option<ERL::types::usb::UsbClasses>,
 		contactless: Option<ERL::types::Iso14443>,
 
 		/* NRF specific elements */
@@ -30,8 +38,8 @@ const APP: () = {
 		// (fingerprint sensor)
 		// (SE050)
 		/* NRF specific device peripherals */
-		// gpiote
-		// power
+		gpiote: Gpiote,
+		power: nrf52840_pac::POWER,
 		// rtc
 
 		/* LPC55 specific elements */
@@ -55,19 +63,26 @@ const APP: () = {
 		ERL::soc::board::init_bootup(&ctx.device.FICR, &ctx.device.UICR, &mut ctx.device.POWER);
 
 		let dev_gpiote = Gpiote::new(ctx.device.GPIOTE);
-		let board_gpio = {
+		let mut board_gpio = {
 			let dev_gpio_p0 = p0::Parts::new(ctx.device.P0);
 			let dev_gpio_p1 = p1::Parts::new(ctx.device.P1);
 			ERL::soc::board::init_pins(&dev_gpiote, dev_gpio_p0, dev_gpio_p1)
 		};
 		dev_gpiote.reset_events();
 
-		// - usb (SoC)
-		// - nfc (SoC)
-		// - interfaces, generic USB machinery... (indep)
+		/* check reason for booting */
+		/* a) powered through NFC: enable NFC, keep external oscillator off, don't start USB */
+		/* b) powered through USB: start external oscillator, start USB, keep NFC off(?) */
+
+		let usb_clock = Clocks::new(ctx.device.CLOCK).start_lfclk().enable_ext_hfosc();
+		unsafe { USB_CLOCK.replace(usb_clock); }
+		let usb_peripheral = nrf52840_hal::usbd::UsbPeripheral::new(ctx.device.USBD, unsafe { USB_CLOCK.as_ref().unwrap() });
+		let usbd = nrf52840_hal::usbd::Usbd::new(usb_peripheral);
+		unsafe { USBD.replace(usbd); }
+		let usbinit = ERL::init_usb( unsafe { USBD.as_ref().unwrap() });
 
 		let internal_flash = ERL::soc::init_internal_flash(ctx.device.NVMC);
-		let _external_flash = {
+		let external_flash = {
 			let dev_spim3 = Spim::new(ctx.device.SPIM3,
 				board_gpio.flashnfc_spi.take().unwrap(),
 				nrf52840_hal::spim::Frequency::M2,
@@ -79,16 +94,31 @@ const APP: () = {
 				board_gpio.flash_power
 			)
 		};
+		let store: ERL::types::RunnerStore = ERL::init_store(internal_flash, external_flash);
 
-		/* see src/soc_nrf52840/types.rs for the reason why we cannot use
-		   our lovingly crafted ExternalFlashStorage... */
-		let store: ERL::types::RunnerStore = ERL::init_store(internal_flash, ERL::soc::types::ExternalStorage::new());
+		let dev_rng = Rng::new(ctx.device.RNG);
+		let chacha_rng = chacha20::ChaCha8Rng::from_rng(dev_rng).unwrap();
+		let dummy_ui = ERL::soc::dummy_ui::DummyUI::new();
 
-		// - trussed (indep)
+		let platform: ERL::types::RunnerPlatform = ERL::types::RunnerPlatform::new(
+			chacha_rng, store, dummy_ui);
+
+		let trussed_service = trussed::service::Service::new(platform);
+
 		// - apps (indep)
 
+		let _dev_rtc = Rtc::new(ctx.device.RTC0, 4095).unwrap();
+
 		// compose LateResources
-		init::LateResources { }
+		init::LateResources {
+			trussed: trussed_service,
+			apdu_dispatch: usbinit.apdu_dispatch,
+			ctaphid_dispatch: usbinit.ctaphid_dispatch,
+			usb_classes: Some(usbinit.classes),
+			contactless: None,
+			gpiote: dev_gpiote,
+			power: ctx.device.POWER,
+		}
 	}
 
 };

@@ -9,11 +9,13 @@ resolver = "2"
 [dependencies]
 ### base dependencies
 delog = "0.1"
+cortex-m = "0.7"
 cortex-m-rtic = { version = "0.5", default_features = false, features = ["cortex-m-7"] }
 embedded-storage = "0.3"
 embedded-hal = "0.2.3"
 generic-array = "0.14"
 panic-halt = "0.2"
+rand_core = "0.6"
 rtt-target = { version = "0.3", features = ["cortex-m"] }
 spi-memory = "0.2"
 

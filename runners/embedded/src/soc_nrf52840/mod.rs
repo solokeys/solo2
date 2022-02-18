@@ -14,6 +14,7 @@ compile_error!("No NRF52840 board chosen!");
 #[cfg_attr(feature = "board-nk3mini", path = "board_nk3mini.rs")]
 pub mod board;
 
+pub mod dummy_ui;
 mod extflash;
 mod flash;
 

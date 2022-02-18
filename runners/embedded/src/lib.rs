@@ -1,8 +1,9 @@
 #![no_std]
 
+use interchange::Interchange;
 use littlefs2::fs::Filesystem;
+use usb_device::device::{UsbDeviceBuilder, UsbVidPid};
 
-#[macro_use]
 extern crate delog;
 delog::generate_macros!();
 
@@ -39,4 +40,37 @@ pub fn init_store(int_flash: soc::types::FlashStorage, ext_flash: soc::types::Ex
         ).expect("store.mount() error");
 
 	store
+}
+
+pub fn init_usb(usbbus: &'static usb_device::bus::UsbBusAllocator<soc::types::UsbBus>) -> types::usb::UsbInit {
+
+	/* Class #1: CCID */
+	let (ccid_rq, ccid_rp) = apdu_dispatch::interchanges::Contact::claim().unwrap();
+	let (nfc_rq, nfc_rp) = apdu_dispatch::interchanges::Contactless::claim().unwrap();
+	let ccid = usbd_ccid::Ccid::new(usbbus, ccid_rq, Some(b"PTB/EMC"));
+	let apdu_dispatch = apdu_dispatch::dispatch::ApduDispatch::new(ccid_rp, nfc_rp);
+
+	/* Class #2: CTAPHID */
+	let (ctaphid_rq, ctaphid_rp) = ctaphid_dispatch::types::HidInterchange::claim().unwrap();
+	let ctaphid = usbd_ctaphid::CtapHid::new(usbbus, ctaphid_rq, 0u32)
+			.implements_ctap1()
+			.implements_ctap2()
+			.implements_wink();
+	let ctaphid_dispatch = ctaphid_dispatch::dispatch::Dispatch::new(ctaphid_rp);
+
+	/* Class #3: Serial */
+	let serial = usbd_serial::SerialPort::new(usbbus);
+
+	let usbdev = UsbDeviceBuilder::new(usbbus, UsbVidPid(0x1209, 0x5090))
+			.product("EMC Stick")
+			.manufacturer("Nitrokey/PTB")
+			.serial_number("imagine.a.uuid.here")
+			.device_release(0x0001u16)
+			.max_packet_size_0(64)
+			.composite_with_iads()
+			.build();
+
+	let classes = types::usb::UsbClasses::new(usbdev, ccid, ctaphid, serial);
+
+	types::usb::UsbInit { classes, apdu_dispatch, ctaphid_dispatch }
 }

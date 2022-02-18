@@ -1,6 +1,3 @@
-use nrf52840_pac::{
-	Peripherals, CorePeripherals
-};
 use nrf52840_hal::{
 	gpio::{p0, p1, Level},
 	gpiote::Gpiote,
