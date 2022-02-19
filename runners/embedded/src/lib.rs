@@ -2,6 +2,8 @@
 
 use interchange::Interchange;
 use littlefs2::fs::Filesystem;
+use soc::types::Soc as SocT;
+use types::Soc;
 use usb_device::device::{UsbDeviceBuilder, UsbVidPid};
 
 extern crate delog;
@@ -16,7 +18,7 @@ compile_error!("No SoC chosen!");
 #[cfg_attr(feature = "soc-lpc55", path = "soc_lpc55/mod.rs")]
 pub mod soc;
 
-pub fn init_store(int_flash: soc::types::FlashStorage, ext_flash: soc::types::ExternalStorage) -> types::RunnerStore {
+pub fn init_store(int_flash: <SocT as Soc>::InternalFlashStorage, ext_flash: <SocT as Soc>::ExternalFlashStorage) -> types::RunnerStore {
 	unsafe {
 		types::INTERNAL_STORAGE = Some(int_flash);
 		types::EXTERNAL_STORAGE = Some(ext_flash);
@@ -42,7 +44,7 @@ pub fn init_store(int_flash: soc::types::FlashStorage, ext_flash: soc::types::Ex
 	store
 }
 
-pub fn init_usb(usbbus: &'static usb_device::bus::UsbBusAllocator<soc::types::UsbBus>) -> types::usb::UsbInit {
+pub fn init_usb(usbbus: &'static usb_device::bus::UsbBusAllocator<<SocT as Soc>::UsbBus>) -> types::usb::UsbInit {
 
 	/* Class #1: CCID */
 	let (ccid_rq, ccid_rp) = apdu_dispatch::interchanges::Contact::claim().unwrap();

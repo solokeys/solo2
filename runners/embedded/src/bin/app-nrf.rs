@@ -21,13 +21,13 @@ delog!(Delogger, 3*1024, 512, ERL::types::DelogFlusher);
 
 type UsbClockType = Clocks<nrf52840_hal::clocks::ExternalOscillator, nrf52840_hal::clocks::Internal, nrf52840_hal::clocks::LfOscStarted>;
 static mut USB_CLOCK: Option<UsbClockType> = None;
-static mut USBD: Option<usb_device::bus::UsbBusAllocator<ERL::soc::types::UsbBus>> = None;
+static mut USBD: Option<usb_device::bus::UsbBusAllocator<<ERL::soc::types::Soc as ERL::types::Soc>::UsbBus>> = None;
 
 #[rtic::app(device = nrf52840_hal::pac, peripherals = true, monotonic = rtic::cyccnt::CYCCNT)]
 const APP: () = {
         struct Resources {
 		trussed: ERL::types::Trussed,
-		//apps: ERL::types::Apps,
+		apps: ERL::types::Apps,
 		apdu_dispatch: ERL::types::ApduDispatch,
 		ctaphid_dispatch: ERL::types::CtaphidDispatch,
 		usb_classes: Option<ERL::types::usb::UsbClasses>,
@@ -40,7 +40,7 @@ const APP: () = {
 		/* NRF specific device peripherals */
 		gpiote: Gpiote,
 		power: nrf52840_pac::POWER,
-		// rtc
+		rtc: Rtc<nrf52840_pac::RTC0>,
 
 		/* LPC55 specific elements */
 		// perf_timer
@@ -60,7 +60,7 @@ const APP: () = {
 			ERL::types::build_constants::CARGO_PKG_VERSION_MINOR,
 			ERL::types::build_constants::CARGO_PKG_VERSION_PATCH);
 
-		ERL::soc::board::init_bootup(&ctx.device.FICR, &ctx.device.UICR, &mut ctx.device.POWER);
+		ERL::soc::init_bootup(&ctx.device.FICR, &ctx.device.UICR, &mut ctx.device.POWER);
 
 		let dev_gpiote = Gpiote::new(ctx.device.GPIOTE);
 		let mut board_gpio = {
@@ -71,6 +71,7 @@ const APP: () = {
 		dev_gpiote.reset_events();
 
 		/* check reason for booting */
+		let powered_by_usb: bool = true;
 		/* a) powered through NFC: enable NFC, keep external oscillator off, don't start USB */
 		/* b) powered through USB: start external oscillator, start USB, keep NFC off(?) */
 
@@ -103,22 +104,55 @@ const APP: () = {
 		let platform: ERL::types::RunnerPlatform = ERL::types::RunnerPlatform::new(
 			chacha_rng, store, dummy_ui);
 
-		let trussed_service = trussed::service::Service::new(platform);
+		let mut trussed_service = trussed::service::Service::new(platform);
 
-		// - apps (indep)
+		let apps = {
+			#[cfg(feature = "provisioner-app")]
+			{
+				let store_2 = store.clone();
+				let int_flash_ref = unsafe { ERL::types::INTERNAL_STORAGE.as_mut().unwrap() };
+				let pnp = ERL::types::ProvisionerNonPortable {
+					store: store_2,
+					stolen_filesystem: int_flash_ref,
+					nfc_powered: !powered_by_usb
+				};
+				ERL::types::Apps::new(&mut trussed_service, pnp)
+			}
+			#[cfg(not(feature = "provisioner-app"))]
+			{ ERL::types::Apps::new(&mut trussed_service) }
+		};
 
-		let _dev_rtc = Rtc::new(ctx.device.RTC0, 4095).unwrap();
+		let dev_rtc = Rtc::new(ctx.device.RTC0, 4095).unwrap();
 
 		// compose LateResources
 		init::LateResources {
 			trussed: trussed_service,
+			apps,
 			apdu_dispatch: usbinit.apdu_dispatch,
 			ctaphid_dispatch: usbinit.ctaphid_dispatch,
 			usb_classes: Some(usbinit.classes),
 			contactless: None,
 			gpiote: dev_gpiote,
 			power: ctx.device.POWER,
+			rtc: dev_rtc,
 		}
+	}
+
+	#[idle()]
+	fn idle(_ctx: idle::Context) -> ! {
+		/*
+		   Note: ARM SysTick stops in WFI. This is unfortunate as
+		   - RTIC uses SysTick for its schedule() feature
+		   - we would really like to use WFI in order to save power
+		   In the future, we might even consider entering "System OFF".
+		   In short, don't expect schedule() to work.
+		*/
+		loop {
+			trace!("idle");
+			Delogger::flush();
+			cortex_m::asm::wfi();
+		}
+		// loop {}
 	}
 
 };

@@ -1,4 +1,5 @@
 // use littlefs2::const_ram_storage;
+use cortex_m::interrupt::InterruptNumber;
 use nrf52840_hal::{
 	gpio::{Pin, Input, Output, PushPull, PullDown, PullUp},
 	spim,
@@ -11,32 +12,25 @@ use nrf52840_hal::{
 //////////////////////////////////////////////////////////////////////////////
 // Upper Interface (definitions towards ERL Core)
 
-pub type FlashStorage = crate::soc::flash::FlashStorage;
-// const_ram_storage!(ExternalStorage, 8192);
-/*
-  I would love to use the real external flash here, but only if I find a way
-  to hide the implementation details (= type parameters) from the type name
-  of the upper interface. What if other SoCs access their flash chips through
-  other busses - surely we don't want to accumulate a sh*tload of type
-  parameters here? */
-pub type ExternalStorage = crate::soc::extflash::ExtFlashStorage<nrf52840_hal::spim::Spim<nrf52840_pac::SPIM3>, Pin<Output<PushPull>>>;
-
-/*
-  The same rant as for ExternalStorage applies. However this time it's a
-  lifetime issue and we can get away with forcing the RHS type to static,
-  allowing us to drop the lifetime parameter from the LHS.
-  See also src/types/usb.rs...
-*/
-pub type UsbBus = Usbd<UsbPeripheral<'static>>;
-
-pub type Rng = chacha20::ChaCha8Rng;
-
-pub const SYSCALL_IRQ: nrf52840_pac::Interrupt = nrf52840_pac::Interrupt::SWI0_EGU0;
 pub static mut DEVICE_UUID: [u8; 16] = [0u8; 16];
 
-pub fn device_uuid() -> &'static [u8; 16] { unsafe { &DEVICE_UUID } }
+pub struct Soc {}
+impl crate::types::Soc for Soc {
+	type InternalFlashStorage = super::flash::FlashStorage;
+/* If the choice of SPIM ever differs between products, change the first
+   type parameter to crate::soc::board::SOMETHING and handle it further down */
+	type ExternalFlashStorage = super::extflash::ExtFlashStorage<
+		nrf52840_hal::spim::Spim<nrf52840_pac::SPIM3>,
+		Pin<Output<PushPull>>>;
+	type UsbBus = Usbd<UsbPeripheral<'static>>;
+	type Rng = chacha20::ChaCha8Rng;
+	type TrussedUI = super::dummy_ui::DummyUI;
+	type Reboot = self::Reboot;
 
-pub type TrussedUI = crate::soc::dummy_ui::DummyUI;
+	const SYSCALL_IRQ: crate::types::IrqNr = crate::types::IrqNr { i: nrf52840_pac::Interrupt::SWI0_EGU0 as u16 };
+
+	fn device_uuid() -> &'static [u8; 16] { unsafe { &DEVICE_UUID } }
+}
 
 pub struct Reboot {
 }
@@ -92,4 +86,8 @@ pub fn is_pin_latched<T>(pin: &Pin<Input<T>>, latches: &[u32]) -> bool {
 	let pinshift = pin.pin();
 
 	((latches[pinport] >> pinshift) & 1) != 0
+}
+
+pub fn is_keepalive_pin(pinport: u32) -> bool {
+	crate::soc::board::KEEPALIVE_PINS.contains(&(pinport as u8))
 }

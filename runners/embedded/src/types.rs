@@ -2,7 +2,7 @@ include!(concat!(env!("OUT_DIR"), "/build_constants.rs"));
 
 use apdu_dispatch::{App as ApduApp, command::SIZE as ApduCommandSize, response::SIZE as ApduResponseSize};
 use core::convert::TryInto;
-use crate::soc;
+use crate::soc::types::Soc as SocT;
 use ctaphid_dispatch::app::{App as CtaphidApp};
 use interchange::Interchange;
 use littlefs2::{const_ram_storage, consts, fs::Allocation};
@@ -10,6 +10,29 @@ use trussed::types::{LfsResult, LfsStorage};
 use trussed::{platform, store};
 
 pub mod usb;
+
+#[derive(Clone,Copy)]
+pub struct IrqNr {
+	pub i: u16
+}
+unsafe impl cortex_m::interrupt::InterruptNumber for IrqNr {
+	fn number(self) -> u16 { self.i }
+}
+
+pub trait Soc {
+	type InternalFlashStorage;
+	type ExternalFlashStorage;
+	// VolatileStorage is always RAM
+	type UsbBus;
+	type Rng;
+	type TrussedUI;
+	type Reboot;
+
+	// cannot use dyn cortex_m::interrupt::Nr
+	// cannot use actual types, those are usually Enums exported by the soc PAC
+	const SYSCALL_IRQ: IrqNr;
+	fn device_uuid() -> &'static [u8; 16];
+}
 
 // 8KB of RAM
 const_ram_storage!(
@@ -31,22 +54,22 @@ const_ram_storage!(
 );
 
 store!(RunnerStore,
-	Internal: soc::types::FlashStorage,
-	External: soc::types::ExternalStorage,
+	Internal: <SocT as Soc>::InternalFlashStorage,
+	External: <SocT as Soc>::ExternalFlashStorage,
 	Volatile: VolatileStorage
 );
 
-pub static mut INTERNAL_STORAGE: Option<soc::types::FlashStorage> = None;
-pub static mut INTERNAL_FS_ALLOC: Option<Allocation<soc::types::FlashStorage>> = None;
-pub static mut EXTERNAL_STORAGE: Option<soc::types::ExternalStorage> = None;
-pub static mut EXTERNAL_FS_ALLOC: Option<Allocation<soc::types::ExternalStorage>> = None;
+pub static mut INTERNAL_STORAGE: Option<<SocT as Soc>::InternalFlashStorage> = None;
+pub static mut INTERNAL_FS_ALLOC: Option<Allocation<<SocT as Soc>::InternalFlashStorage>> = None;
+pub static mut EXTERNAL_STORAGE: Option<<SocT as Soc>::ExternalFlashStorage> = None;
+pub static mut EXTERNAL_FS_ALLOC: Option<Allocation<<SocT as Soc>::ExternalFlashStorage>> = None;
 pub static mut VOLATILE_STORAGE: Option<VolatileStorage> = None;
 pub static mut VOLATILE_FS_ALLOC: Option<Allocation<VolatileStorage>> = None;
 
 platform!(RunnerPlatform,
-	R: soc::types::Rng,
+	R: <SocT as Soc>::Rng,
 	S: RunnerStore,
-	UI: soc::types::TrussedUI,
+	UI: <SocT as Soc>::TrussedUI,
 );
 
 #[derive(Default)]
@@ -55,7 +78,7 @@ pub struct RunnerSyscall {}
 impl trussed::client::Syscall for RunnerSyscall {
     #[inline]
     fn syscall(&mut self) {
-        rtic::pend(soc::types::SYSCALL_IRQ);
+        rtic::pend(<SocT as Soc>::SYSCALL_IRQ);
     }
 }
 
@@ -69,7 +92,7 @@ pub type ApduDispatch = apdu_dispatch::dispatch::ApduDispatch;
 pub type CtaphidDispatch = ctaphid_dispatch::dispatch::Dispatch;
 
 #[cfg(feature = "admin-app")]
-pub type AdminApp = admin_app::App<TrussedClient, soc::types::Reboot>;
+pub type AdminApp = admin_app::App<TrussedClient, <SocT as Soc>::Reboot>;
 #[cfg(feature = "piv-authenticator")]
 pub type PivApp = piv_authenticator::Authenticator<TrussedClient, {ApduCommandSize}>;
 #[cfg(feature = "oath-authenticator")]
@@ -79,7 +102,7 @@ pub type FidoApp = dispatch_fido::Fido<fido_authenticator::NonSilentAuthenticato
 #[cfg(feature = "ndef-app")]
 pub type NdefApp = ndef_app::App<'static>;
 #[cfg(feature = "provisioner-app")]
-pub type ProvisionerApp = provisioner_app::Provisioner<RunnerStore, soc::types::FlashStorage, TrussedClient>;
+pub type ProvisionerApp = provisioner_app::Provisioner<RunnerStore, <SocT as Soc>::InternalFlashStorage, TrussedClient>;
 
 pub trait TrussedApp: Sized {
 
@@ -138,7 +161,7 @@ impl TrussedApp for AdminApp {
     type NonPortable = ();
     fn with_client(trussed: TrussedClient, _: ()) -> Self {
         let mut buf: [u8; 16] = [0u8; 16];
-	buf.copy_from_slice(soc::types::device_uuid());
+	buf.copy_from_slice(<SocT as Soc>::device_uuid());
         Self::new(trussed, buf, build_constants::CARGO_PKG_VERSION)
     }
 }
@@ -160,7 +183,7 @@ impl TrussedApp for FidoApp {
 
 pub struct ProvisionerNonPortable {
     pub store: RunnerStore,
-    pub stolen_filesystem: &'static mut soc::types::FlashStorage,
+    pub stolen_filesystem: &'static mut <SocT as Soc>::InternalFlashStorage,
     pub nfc_powered: bool,
 }
 

@@ -4,33 +4,9 @@ use nrf52840_hal::{
 	spim,
 };
 
-use crate::soc::types::*;
+use crate::soc::types::BoardGPIO;
 
-pub fn init_bootup(ficr: &nrf52840_pac::FICR, uicr: &nrf52840_pac::UICR, power: &mut nrf52840_pac::POWER) {
-	let deviceid0 = ficr.deviceid[0].read().bits();
-	let deviceid1 = ficr.deviceid[1].read().bits();
-	unsafe {
-		DEVICE_UUID[0..4].copy_from_slice(&deviceid0.to_be_bytes());
-		DEVICE_UUID[4..8].copy_from_slice(&deviceid1.to_be_bytes());
-	}
-
-	info!("RESET Reason: {:x}", power.resetreas.read().bits());
-	power.resetreas.write(|w| w);
-
-	info!("FICR DeviceID {:08x} {:08x}",
-		ficr.deviceid[0].read().bits(), ficr.deviceid[1].read().bits());
-	info!("FICR IdtRoot  {:08x} {:08x} {:08x} {:08x}",
-		ficr.ir[0].read().bits(), ficr.ir[1].read().bits(),
-		ficr.ir[2].read().bits(), ficr.ir[3].read().bits());
-	info!("FICR EncRoot  {:08x} {:08x} {:08x} {:08x}",
-		ficr.er[0].read().bits(), ficr.er[1].read().bits(),
-		ficr.er[2].read().bits(), ficr.er[3].read().bits());
-	info!("FICR DevAddr  {:08x}{:08x}",
-		ficr.deviceaddr[0].read().bits(), ficr.deviceaddr[1].read().bits());
-
-	info!("UICR REGOUT0 {:x} NFCPINS {:x}",
-		uicr.regout0.read().bits(), uicr.nfcpins.read().bits());
-}
+pub const KEEPALIVE_PINS: &'static [u8] = &[0x0b, 0x0c, 0x18, 0x19, 0x25, 0x26, 0x27, 0x28];
 
 pub fn init_pins(gpiote: &Gpiote, gpio_p0: p0::Parts, gpio_p1: p1::Parts) -> BoardGPIO {
 	/* Button 1-4: on DK */
@@ -122,18 +98,8 @@ pub fn init_pins(gpiote: &Gpiote, gpio_p0: p0::Parts, gpio_p1: p1::Parts) -> Boa
 		nfc_irq: None,
 	}
 }
-/*
-pub fn is_keepalive_pin(pinport: u32) -> bool {
-	(pinport == 0x0b) ||
-	(pinport == 0x0c) ||
-	(pinport == 0x18) ||
-	(pinport == 0x19) ||
-	(pinport == 0x25) ||
-	(pinport == 0x26) ||
-	(pinport == 0x27) ||
-	(pinport == 0x28)
-}
 
+/*
 pub fn gpio_irq_sources(dir: &[u32]) -> u32 {
 	let mut src: u32 = 0;
 	fn bit_set(x: u32, y: u32) -> bool { (x & (1u32 << y)) != 0 }
