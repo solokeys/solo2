@@ -1,0 +1,59 @@
+[package]
+name = "littlefs2"
+description = "Idiomatic Rust API for littlefs"
+version = "0.3.2"
+authors = ["Nicolas Stalder <n@stalder.io>", "Brandon Edens <brandonedens@gmail.com>"]
+edition = "2018"
+license = "Apache-2.0 OR MIT"
+readme = "README.md"
+categories = ["embedded", "filesystem", "no-std"]
+repository = "https://github.com/nickray/littlefs2"
+resolver = "2"
+
+[dependencies]
+bitflags = "1"
+cty = "0.2.1"
+delog = "0.1.0"
+generic-array = "0.14"
+heapless = "0.7"
+
+[dependencies.cstr_core]
+default-features = false
+version = "0.2"
+
+[dependencies.littlefs2-sys]
+version = "0.1.6"
+
+[dependencies.serde]
+version = "1"
+default-features = false
+features = ["derive"]
+optional = true
+
+[dev-dependencies]
+ssmarshal = "1"
+serde = { version = "1.0", default-features = false, features = ["derive"] }
+# trybuild = "1"
+
+[features]
+default = ["dir-entry-path", "serde"]
+# use experimental closure-based API
+dir-entry-path = []
+# enable assertions in backend C code
+ll-assertions = ["littlefs2-sys/assertions"]
+# enable trace in backend C code
+ll-trace = ["littlefs2-sys/trace"]
+c-stubs = []
+
+log-all = []
+log-none = []
+log-info = []
+log-debug = []
+log-warn = []
+log-error = []
+
+# TODO: LFS_NAME_MAX (and maybe other sizes) are baked into the
+# compiled C library. For instance, the `lfs_info` struct has a
+# member `char name[LFS_NAME_MAX+1]`.
+# This means that if we change `traits::Storage::FILENAME_MAX_PLUS_ONE`,
+# we need to pass this on!

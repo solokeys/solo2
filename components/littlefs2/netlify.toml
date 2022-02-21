@@ -1,0 +1,8 @@
+[build]
+  # command = "curl https://sh.rustup.rs -sSf | sh -s -- -y && source $HOME/.cargo/env && sudo apt-get install llvm && cargo doc"
+  command = "curl https://sh.rustup.rs -sSf | sh -s -- -y && source $HOME/.cargo/env && env && cargo doc"
+  publish = "target/doc"
+
+[[redirects]]
+  from = "/"
+  to = "/littlefs2"

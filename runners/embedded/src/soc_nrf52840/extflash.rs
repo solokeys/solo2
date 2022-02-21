@@ -50,7 +50,7 @@ impl<SPI, CS> littlefs2::driver::Storage for ExtFlashStorage<SPI, CS> where SPI:
 	type CACHE_SIZE = generic_array::typenum::U256;
 	type LOOKAHEADWORDS_SIZE = generic_array::typenum::U1;
 
-	fn read(&self, off: usize, buf: &mut [u8]) -> Result<usize, littlefs2::io::Error> {
+	fn read(&mut self, off: usize, buf: &mut [u8]) -> Result<usize, littlefs2::io::Error> {
 		if off + buf.len() > FLASH_PROPERTIES.flash_size {
 			return Err(littlefs2::io::Error::Unknown(0x6578_7046));
 		}

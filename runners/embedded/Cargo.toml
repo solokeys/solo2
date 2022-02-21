@@ -46,8 +46,7 @@ usbd-ctaphid = { path = "../../components/usbd-ctaphid" }
 
 ### NRF52 specific dependencies
 chacha20 = { version = "0.7", default-features = false, features = ["rng"], optional = true }
-nrf52840-hal = { path = "../../../nrf-hal/nrf52840-hal", optional = true }
-	### { git = "https://github.com/nrf-rs/nrf-hal", optional = true }
+nrf52840-hal = { git = "https://github.com/nrf-rs/nrf-hal", optional = true }
 nrf52840-pac = { version = "0.11", optional = true }
 
 ### LPC55 specific dependencies
@@ -79,3 +78,6 @@ log-warnP = [ "log-warn", "log-error" ]
 [[bin]]
 name = "nrf-runner"
 path = "src/bin/app-nrf.rs"
+
+[patch.crates-io]
+littlefs2 = { path = "../../components/littlefs2" }

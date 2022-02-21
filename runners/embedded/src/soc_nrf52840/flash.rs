@@ -1,4 +1,4 @@
-use embedded_storage::nor_flash::NorFlash;
+use embedded_storage::nor_flash::{NorFlash, ReadNorFlash};
 
 pub const FLASH_BASE: *mut u8 = 0x000e_0000 as *mut u8;
 /* TODO: grab this from build.rs (code:fs split) */
@@ -18,9 +18,9 @@ impl littlefs2::driver::Storage for FlashStorage {
 
 	// the ReadNorFlash trait exposes a try_read() which (stupidly) expects a mutable self
 	// can't get those two to align - so clone the function and drop the mut there
-	fn read(&self, off: usize, buf: &mut [u8]) -> Result<usize, littlefs2::io::Error> {
+	fn read(&mut self, off: usize, buf: &mut [u8]) -> Result<usize, littlefs2::io::Error> {
 		// trace!("F RD {:x} {:x}", off, buf.len());
-		let res = self.nvmc.read_nonmut(off as u32, buf);
+		let res = self.nvmc.read(off as u32, buf);
 		nvmc_to_lfs_return(res, buf.len())
 	}
 
