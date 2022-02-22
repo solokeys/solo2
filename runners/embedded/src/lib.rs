@@ -18,6 +18,15 @@ compile_error!("No SoC chosen!");
 #[cfg_attr(feature = "soc-lpc55", path = "soc_lpc55/mod.rs")]
 pub mod soc;
 
+pub fn banner() {
+		info_now!("Embedded Runner ({}:{}) using librunner {}.{}.{}",
+			<SocT as Soc>::SOC_NAME,
+			<SocT as Soc>::BOARD_NAME,
+			types::build_constants::CARGO_PKG_VERSION_MAJOR,
+			types::build_constants::CARGO_PKG_VERSION_MINOR,
+			types::build_constants::CARGO_PKG_VERSION_PATCH);
+}
+
 pub fn init_store(int_flash: <SocT as Soc>::InternalFlashStorage, ext_flash: <SocT as Soc>::ExternalFlashStorage) -> types::RunnerStore {
 	unsafe {
 		types::INTERNAL_STORAGE = Some(int_flash);

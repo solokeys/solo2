@@ -1,0 +1,15 @@
+/target
+**/*.rs.bk
+Cargo.lock
+/ref
+.gdb_history
+core
+**/*.log
+**/*.o
+**/*.a
+/jlink-fw-sw
+.idea/
+**/venv
+**/sdk-drivers
+**/sdk-examples
+notes.txt

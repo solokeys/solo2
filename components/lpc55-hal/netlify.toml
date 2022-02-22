@@ -1,0 +1,7 @@
+[build]
+  command = "curl https://sh.rustup.rs -sSf | sh -s -- -y && source $HOME/.cargo/env && rustup target add thumbv8m.main-none-eabi && cargo doc"
+  publish = "target/thumbv8m.main-none-eabi/doc"
+
+[[redirects]]
+  from = "/"
+  to = "/lpc55_hal"

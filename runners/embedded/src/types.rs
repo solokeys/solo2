@@ -30,6 +30,8 @@ pub trait Soc {
 
 	// cannot use dyn cortex_m::interrupt::Nr
 	// cannot use actual types, those are usually Enums exported by the soc PAC
+	const SOC_NAME: &'static str;
+	const BOARD_NAME: &'static str;
 	const SYSCALL_IRQ: IrqNr;
 	fn device_uuid() -> &'static [u8; 16];
 }

@@ -1,5 +1,4 @@
 // use littlefs2::const_ram_storage;
-use cortex_m::interrupt::InterruptNumber;
 use nrf52840_hal::{
 	gpio::{Pin, Input, Output, PushPull, PullDown, PullUp},
 	spim,
@@ -27,6 +26,8 @@ impl crate::types::Soc for Soc {
 	type TrussedUI = super::dummy_ui::DummyUI;
 	type Reboot = self::Reboot;
 
+	const SOC_NAME: &'static str = "NRF52840";
+	const BOARD_NAME: &'static str = super::board::BOARD_NAME;
 	const SYSCALL_IRQ: crate::types::IrqNr = crate::types::IrqNr { i: nrf52840_pac::Interrupt::SWI0_EGU0 as u16 };
 
 	fn device_uuid() -> &'static [u8; 16] { unsafe { &DEVICE_UUID } }
@@ -89,5 +90,5 @@ pub fn is_pin_latched<T>(pin: &Pin<Input<T>>, latches: &[u32]) -> bool {
 }
 
 pub fn is_keepalive_pin(pinport: u32) -> bool {
-	crate::soc::board::KEEPALIVE_PINS.contains(&(pinport as u8))
+	super::board::KEEPALIVE_PINS.contains(&(pinport as u8))
 }

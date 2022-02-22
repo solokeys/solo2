@@ -1,0 +1,33 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: circleci/rust:latest
+
+    steps:
+      - checkout
+
+      - restore_cache:
+          key: project-cache
+
+      - run:
+          name: Prepare build
+          command: make rustup
+
+      - run:
+          name: Build the examples
+          command: make build-examples-verbosely
+
+      - run:
+          name: Install dependencies for all-features build
+          command: sudo apt-get update && sudo apt-get install gcc-arm-none-eabi libclang-dev
+
+      - run:
+          name: Build crate with all features turned on
+          command: make build-all-features
+
+      - save_cache:
+          key: project-cache
+          paths:
+            - "~/.cargo"
+            - "./target"

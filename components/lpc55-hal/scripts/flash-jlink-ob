@@ -1,0 +1,39 @@
+#!/bin/bash
+
+# LPC55S69-EVK comes with CMSIS-DAP firmware installed.
+#
+# To use J-Link instead, the official instructions are:
+# https://www.segger.com/products/debug-probes/j-link/models/other-j-links/lpcxpresso-on-board/
+#
+# This is a minimal version, assuming `lpcscrypt` package has been installed,
+# `JLINK_OB_IMAGE` is downloaded, and jumper J4 set (forces boot into DFU).
+#
+# After running the script, remove jumper J4 again, and power-cycle the board.
+#
+# To revert, set `DEBUGGER_IMAGE` to `CMSIS_DAP_IMAGE` and re-run.
+
+INSTALL_DIR="/usr/local/lpcscrypt-2.1.0_842"
+LPCSCRYPT="${INSTALL_DIR}/bin/lpcscrypt"
+DFU_IMAGE="${INSTALL_DIR}/bin/LPCScrypt_227.bin.hdr"
+
+JLINK_OB_IMAGE="./Firmware_JLink_LPCXpressoV2_20190404.bin"
+CMSIS_DAP_IMAGE="${INSTALL_DIR}/probe_firmware/LPCXpressoV2/LPC432x_IAP_CMSIS_DAP_V5_224.bin"
+# DEBUGGER_IMAGE="${CMSIS_DAP_IMAGE}"
+DEBUGGER_IMAGE="${JLINK_OB_IMAGE}"
+
+# Load lpcscrypt firmware to RAM (via DFU) and run it
+# dfu-util --list 2>/dev/null
+dfu-util --device 1fc9:000c --download ${DFU_IMAGE} --reset | tail -n+7 >/dev/null
+# Wait for re-enumeration
+sleep 3
+
+# Some information (e.g., this is a LPC4322, BankA has size 512KB)
+# ${LPCSCRYPT} targetinfo
+# ${LPCSCRYPT} querypart
+
+# Flash the J-Link OB
+${LPCSCRYPT} program ${DEBUGGER_IMAGE} BANKA
+${LPCSCRYPT} verify ${DEBUGGER_IMAGE} BANKA
+
+# Boot back into DFU
+${LPCSCRYPT} resetcore

@@ -11,8 +11,8 @@ apdu-dispatch = "0.1"
 delog = "0.1"
 heapless = "0.7"
 heapless-bytes = "0.3"
-lpc55-hal = { version = "0.3", features = ["littlefs", "rtic-peripherals"] }
-nrf52840-pac = "0.11"
+lpc55-hal = { version = "0.3", features = ["littlefs", "rtic-peripherals"], optional = true }
+nrf52840-pac = { version = "0.11", optional = true }
 littlefs2 = "0.3.1"
 salty = { version = "0.2", features = ["cose"] }
 trussed = "0.1"
@@ -30,3 +30,7 @@ log-warn = []
 log-error = []
 
 test-attestation = []
+
+# supported boards / HALs
+lpc55 = ["lpc55-hal"]
+nrf52 = ["nrf52840-pac"]

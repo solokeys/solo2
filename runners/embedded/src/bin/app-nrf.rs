@@ -55,10 +55,7 @@ const APP: () = {
 
 		rtt_target::rtt_init_print!();
 		Delogger::init_default(delog::LevelFilter::Debug, &ERL::types::DELOG_FLUSHER).ok();
-		info_now!("Embedded Runner (NRF) using librunner {}.{}.{}",
-			ERL::types::build_constants::CARGO_PKG_VERSION_MAJOR,
-			ERL::types::build_constants::CARGO_PKG_VERSION_MINOR,
-			ERL::types::build_constants::CARGO_PKG_VERSION_PATCH);
+		ERL::banner();
 
 		ERL::soc::init_bootup(&ctx.device.FICR, &ctx.device.UICR, &mut ctx.device.POWER);
 

@@ -6,6 +6,7 @@ use nrf52840_hal::{
 
 use crate::soc::types::BoardGPIO;
 
+pub const BOARD_NAME: &'static str = "DK";
 pub const KEEPALIVE_PINS: &'static [u8] = &[0x0b, 0x0c, 0x18, 0x19, 0x25, 0x26, 0x27, 0x28];
 
 pub fn init_pins(gpiote: &Gpiote, gpio_p0: p0::Parts, gpio_p1: p1::Parts) -> BoardGPIO {

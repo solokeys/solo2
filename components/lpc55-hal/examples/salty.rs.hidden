@@ -1,0 +1,166 @@
+#![no_main]
+#![no_std]
+
+///
+/// Compare also with: https://github.com/Ko-/aes-armcortexm
+///
+// extern crate panic_halt;
+extern crate panic_semihosting;
+use cortex_m_rt::entry;
+
+#[allow(unused_imports)]
+use hal::prelude::*;
+#[allow(unused_imports)]
+use lpc55_hal as hal;
+
+use salty::{Keypair, Sha512};
+
+use cortex_m_semihosting::hprintln;
+
+fn test_ed25519ph_with_rfc_8032_test_vector() {
+    let seed: [u8; 32] = [
+        0x83, 0x3f, 0xe6, 0x24, 0x09, 0x23, 0x7b, 0x9d,
+        0x62, 0xec, 0x77, 0x58, 0x75, 0x20, 0x91, 0x1e,
+        0x9a, 0x75, 0x9c, 0xec, 0x1d, 0x19, 0x75, 0x5b,
+        0x7d, 0xa9, 0x01, 0xb9, 0x6d, 0xca, 0x3d, 0x42,
+    ];
+
+    let keypair = Keypair::from(&seed);
+
+    let message: [u8; 3] = [0x61, 0x62, 0x63];
+
+    let prehashed_message = Sha512::new().updated(&message).finalize();
+
+    let mut signature: salty::Signature = salty::Signature::default();
+    for _ in 1..=3 {
+        let cycles_before = hal::get_cycle_count();
+        signature = keypair.sign_prehashed(&prehashed_message, None);
+        let cycles_after = hal::get_cycle_count();
+        hprintln!("signing took {} cycles", cycles_after - cycles_before).ok();
+    }
+
+    let expected_r = [
+        0x98, 0xa7, 0x02, 0x22, 0xf0, 0xb8, 0x12, 0x1a,
+        0xa9, 0xd3, 0x0f, 0x81, 0x3d, 0x68, 0x3f, 0x80,
+        0x9e, 0x46, 0x2b, 0x46, 0x9c, 0x7f, 0xf8, 0x76,
+        0x39, 0x49, 0x9b, 0xb9, 0x4e, 0x6d, 0xae, 0x41,
+    ];
+
+    let expected_s = [
+        0x31, 0xf8, 0x50, 0x42, 0x46, 0x3c, 0x2a, 0x35,
+        0x5a, 0x20, 0x03, 0xd0, 0x62, 0xad, 0xf5, 0xaa,
+        0xa1, 0x0b, 0x8c, 0x61, 0xe6, 0x36, 0x06, 0x2a,
+        0xaa, 0xd1, 0x1c, 0x2a, 0x26, 0x08, 0x34, 0x06,
+    ];
+
+    assert_eq!(signature.r.to_bytes(), expected_r);
+    assert_eq!(signature.s.to_bytes(), expected_s);
+
+    let public_key = keypair.public;
+    let cycles_before = hal::get_cycle_count();
+    let verification = public_key.verify_prehashed(&prehashed_message, &signature, None);
+    let cycles_after = hal::get_cycle_count();
+    hprintln!("verification took {} cycles", cycles_after - cycles_before).ok();
+    assert!(verification.is_ok());
+}
+
+impl AsRef<[u8]> for &[u8; 64]
+{
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        self
+    }
+}
+
+#[entry]
+fn main() -> ! {
+
+    let hal = hal::Peripherals::take().unwrap();
+
+    let mut anactrl = hal.anactrl;
+    let mut pmc = hal.pmc;
+    let mut syscon = hal.syscon;
+
+
+    let seed: [u8; 32] = [
+        0x83, 0x3f, 0xe6, 0x24, 0x09, 0x23, 0x7b, 0x9d,
+        0x62, 0xec, 0x77, 0x58, 0x75, 0x20, 0x91, 0x1e,
+        0x9a, 0x75, 0x9c, 0xec, 0x1d, 0x19, 0x75, 0x5b,
+        0x7d, 0xa9, 0x01, 0xb9, 0x6d, 0xca, 0x3d, 0x42,
+    ];
+
+    let keypair = Keypair::from(&seed);
+    let context = b"";
+    let message: [u8; 3] = [0x61, 0x62, 0x63];
+    let prehashed_message = &salty::Sha512::new().updated(&message).finalize();
+    // let prehashed_message = &Sha512::new().chain(&message).result();
+    use sha2::{Sha512, Digest};
+    for _ in 1..=20 {
+        let cycles_before = hal::get_cycle_count();
+        let first_hash = Sha512::new()
+            // Ed25519ph parts
+            .chain(b"SigEd25519 no Ed25519 collisions")
+            .chain(&[1])
+            // context parts
+            .chain(&[context.len() as u8])
+            .chain(context)
+            // usual parts
+            .chain(&keypair.secret.nonce)
+            .chain(&prehashed_message)
+            // .finalize();
+            .result()
+            ;
+        // let first_hash = salty::Sha512::new()
+        //     // Ed25519ph parts
+        //     .updated(b"SigEd25519 no Ed25519 collisions")
+        //     .updated(&[1])
+        //     // context parts
+        //     .updated(&[context.len() as u8])
+        //     .updated(context)
+        //     // usual parts
+        //     .updated(&keypair.secret.nonce)
+        //     .updated(prehashed_message)
+        //     .finalize();
+        //     // .result()
+        //     ;
+        let cycles_after = hal::get_cycle_count();
+        hprintln!("first hash took {} cycles", cycles_after - cycles_before).ok();
+    }
+    for _ in 1..=20 {
+        let cycles_before = hal::get_cycle_count();
+        let first_hash = salty::Sha512::new()
+            // Ed25519ph parts
+            .updated(b"SigEd25519 no Ed25519 collisions")
+            .updated(&[1])
+            // context parts
+            // .updated(&[context.len() as u8])
+            .updated(context)
+            // usual parts
+            .updated(&keypair.secret.nonce)
+            .updated(prehashed_message)
+            // .finalize();
+            ;
+        let cycles_after = hal::get_cycle_count();
+        hprintln!("first hash took {} cycles", cycles_after - cycles_before).ok();
+    }
+
+    hal::enable_cycle_counter();
+    let cycles_before = hal::get_cycle_count();
+    hal::ClockRequirements::default()
+        .system_frequency(96.mhz())
+        .configure(&mut anactrl, &mut pmc, &mut syscon)
+        .unwrap();
+    let cycles_after = hal::get_cycle_count();
+    hprintln!("clocks configured in {} cycles", cycles_after - cycles_before).ok();
+
+    for _ in 1..=3 {
+        let cycles_before = hal::get_cycle_count();
+        test_ed25519ph_with_rfc_8032_test_vector();
+        let cycles_after = hal::get_cycle_count();
+        hprintln!("signing and verification took {} cycles", cycles_after - cycles_before).ok();
+    }
+
+    hprintln!("DONE").ok();
+
+    loop { continue; }
+}

@@ -8,9 +8,9 @@ resolver = "2"
 
 [dependencies]
 ### base dependencies
+cfg-if = "*"
 delog = "0.1"
 cortex-m = "0.7"
-cortex-m-rtic = { version = "0.5", default_features = false, features = ["cortex-m-7"] }
 embedded-storage = "0.3"
 embedded-hal = "0.2.3"
 generic-array = "0.14"
@@ -48,8 +48,18 @@ usbd-ctaphid = { path = "../../components/usbd-ctaphid" }
 chacha20 = { version = "0.7", default-features = false, features = ["rng"], optional = true }
 nrf52840-hal = { git = "https://github.com/nrf-rs/nrf-hal", optional = true }
 nrf52840-pac = { version = "0.11", optional = true }
+cortex-m-rtic = { version = "0.5", default_features = false, features = ["cortex-m-7"], optional = true }
 
 ### LPC55 specific dependencies
+lpc55-hal = { version = "0.3", features = ["littlefs", "rtic-peripherals"], optional = true }
+lpc55-rtic = { version = "0.5", optional = true }
+fm11nc08 = { path = "../../components/fm11nc08", optional = true }
+nfc-device = { path = "../../components/nfc-device", optional = true }
+nb = "1"
+
+[build-dependencies]
+serde = { version = "1", features = ["derive"] }
+toml = "0.5"
 
 [features]
 default = ["admin-app", "fido-authenticator", "ndef-app", "oath-authenticator",
@@ -61,8 +71,16 @@ board-nrfdk = ["soc-nrf52840"]
 board-proto1 = ["soc-nrf52840"]
 board-nk3mini = ["soc-nrf52840"]
 
-soc-nrf52840 = ["nrf52840-hal", "nrf52840-pac", "chacha20", "provisioner-app/nrf52"]
-soc-lpc55 = []
+board-lpcxpresso55 = ["soc-lpc55"]
+board-okdoe1 = ["soc-lpc55", "board-lpcxpresso55"]
+board-solo2 = ["soc-lpc55"]
+board-nk3xn = ["soc-lpc55"]
+board-nk3am = ["soc-lpc55", "board-solo2"]
+
+soc-nrf52840 = ["nrf52840-hal", "nrf52840-pac", "cortex-m-rtic",
+		"chacha20", "provisioner-app/nrf52"]
+soc-lpc55 = ["lpc55-hal", "lpc55-rtic",
+		"fm11nc08", "nfc-device"]
 
 log-all = []
 log-debug = []
@@ -78,6 +96,13 @@ log-warnP = [ "log-warn", "log-error" ]
 [[bin]]
 name = "nrf-runner"
 path = "src/bin/app-nrf.rs"
+required-features = ["soc-nrf52840"]
+
+[[bin]]
+name = "lpc-runner"
+path = "src/bin/app-lpc.rs"
+required-features = ["soc-lpc55"]
 
 [patch.crates-io]
 littlefs2 = { path = "../../components/littlefs2" }
+lpc55-hal = { path = "../../components/lpc55-hal" }

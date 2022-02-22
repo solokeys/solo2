@@ -3,16 +3,21 @@ use std::process::Command;
 use std::str;
 
 /// Waiting on cargo fix!
-// #[derive(serde::Deserialize)]
+#[derive(serde::Deserialize)]
 struct Config {
     parameters: Parameters,
 }
 
-// #[derive(serde::Deserialize)]
+#[derive(serde::Deserialize)]
 struct Parameters {
     filesystem_boundary: u32,
 }
 
+#[derive(Eq, PartialEq)]
+enum SocType {
+    Lpc55,
+    Nrf52840
+}
 
 macro_rules! add_build_variable{
     ($file:expr, $name:literal, u8) => {
@@ -38,22 +43,46 @@ macro_rules! add_build_variable{
     }
 }
 
+fn check_build_triplet() -> SocType {
+    let target = env::var("TARGET").expect("$TARGET unset");
+    let soc_is_lpc55 = env::var_os("CARGO_FEATURE_SOC_LPC55").is_some();
+    let soc_is_nrf52840 = env::var_os("CARGO_FEATURE_SOC_NRF52840").is_some();
+
+    if soc_is_lpc55 && !soc_is_nrf52840 {
+        if target != "thumbv8m.main-none-eabi" {
+            panic!("Wrong build triplet for LPC55, expecting thumbv8m.main-none-eabi, got {}", target);
+        }
+        SocType::Lpc55
+    } else if soc_is_nrf52840 && !soc_is_lpc55 {
+        if target != "thumbv7em-none-eabihf" {
+            panic!("Wrong build triplet for NRF52840, expecting thumbv7em-none-eabihf, got {}", target);
+        }
+        SocType::Nrf52840
+    } else {
+        panic!("Multiple or no SOC features set.");
+    }
+}
+
+fn generate_memory_x(outpath: &Path, template: &str, config: &Config) {
+    let template = std::fs::read_to_string(template).expect("cannot read memory.x template file");
+    let template = template.replace("##FLASH_LENGTH##", &format!("{}", config.parameters.filesystem_boundary >> 10));
+    let template = template.replace("##FS_LENGTH##", &format!("{}", 630 - (config.parameters.filesystem_boundary >> 10)));
+    let template = template.replace("##FS_BASE##", &format!("{:x}", config.parameters.filesystem_boundary));
+    std::fs::write(outpath, template).expect("cannot write memory.x");
+}
+
 fn main() -> Result<(), Box<dyn error::Error>> {
     println!("cargo:rerun-if-changed=config/src/lib.rs");
     println!("cargo:rerun-if-changed=cfg.toml");
 
-    let out_dir = env::var("OUT_DIR").expect("No out dir");
+    let out_dir = env::var("OUT_DIR").expect("$OUT_DIR unset");
+    let soc_type = check_build_triplet();
 
-    // We would like to put configuration variables in cfg.toml, but due to a Cargo bug,
-    // the serde feature flags will get merged with solo-bee's serde, causing build issues.
-    // So this will remain here until the Cargo bug gets fixed.
-
-    // let config = fs::read_to_string("cfg.toml")?;
-    // let config: Config = toml::from_str(&config)?;
-
-    // Hardcode until cargo issue gets fixed.
-    let config = Config {parameters: Parameters{filesystem_boundary: 0x93_000}};
-
+    let config = std::fs::read_to_string("cfg.toml").expect("cfg.toml not found");
+    let config: Config = toml::from_str(&config).expect("cannot parse cfg.toml");
+    if config.parameters.filesystem_boundary & 0x3ff != 0 {
+        panic!("filesystem boundary is not a multiple of the flash block size (1KB)");
+    }
 
     let dest_path = Path::new(&out_dir).join("build_constants.rs");
     let mut f = File::create(&dest_path).expect("Could not create file");
@@ -92,6 +121,11 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     add_build_variable!(&mut f, "CONFIG_FILESYSTEM_BOUNDARY", config.parameters.filesystem_boundary, usize);
 
     writeln!(&mut f, "}}").expect("Could not write build_constants.rs.");
+
+    if soc_type == SocType::Lpc55 {
+        let memory_x = Path::new(&env::var("CARGO_MANIFEST_DIR").expect("$CARGO_MANIFEST_DIR not set")).join("memory.x");
+        generate_memory_x(&memory_x, "lpc55-memory-template.x", &config);
+    }
 
     Ok(())
 }
