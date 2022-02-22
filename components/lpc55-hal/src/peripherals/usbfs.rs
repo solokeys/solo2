@@ -114,6 +114,7 @@ impl<State: init_state::InitState, Mode: usbfs_mode::UsbfsMode> Usbfs<State, Mod
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct UsbFsDevInfo {
     maj_rev: u8,
     min_rev: u8,

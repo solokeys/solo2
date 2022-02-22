@@ -161,6 +161,7 @@ impl<State: init_state::InitState, Mode: usbhs_mode::UsbhsMode> Usbhs<State, Mod
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct UsbHsDevInfo {
     maj_rev: u8,
     min_rev: u8,

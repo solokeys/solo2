@@ -17,6 +17,7 @@ crate::wrap_stateful_peripheral!(Rng, RNG);
 // }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 // not sure why this kind of thing is not in `svd2rust`?
 pub struct ModuleId {
     id: u16,

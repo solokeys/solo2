@@ -389,7 +389,7 @@ pub fn enable_cycle_counter() {
 }
 
 pub fn get_cycle_count() -> u32 {
-    raw::DWT::get_cycle_count()
+    raw::DWT::cycle_count()
 }
 
 pub fn count_cycles<Output>(f: impl FnOnce() -> Output) -> (u32, Output) {

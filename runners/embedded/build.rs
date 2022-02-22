@@ -72,7 +72,14 @@ fn generate_memory_x(outpath: &Path, template: &str, config: &Config) {
 }
 
 fn main() -> Result<(), Box<dyn error::Error>> {
-    println!("cargo:rerun-if-changed=config/src/lib.rs");
+    /* $CARGO_MANIFEST_DIR/memory.x is reused for LPC55 and NRF52 builds even
+       though different templates are used to generate it. Therefore, force
+       build.rs to run every time by looking at the mtime of 'memory.x' itself.
+       This also implies that building for different boards is not paralellizable!
+
+       We could work around this by placing memory.x in a target-specific directory
+       and adding the path using "link-arg=-L..." */
+    println!("cargo:rerun-if-changed=memory.x");
     println!("cargo:rerun-if-changed=cfg.toml");
 
     let out_dir = env::var("OUT_DIR").expect("$OUT_DIR unset");
@@ -122,10 +129,14 @@ fn main() -> Result<(), Box<dyn error::Error>> {
 
     writeln!(&mut f, "}}").expect("Could not write build_constants.rs.");
 
-    if soc_type == SocType::Lpc55 {
-        let memory_x = Path::new(&env::var("CARGO_MANIFEST_DIR").expect("$CARGO_MANIFEST_DIR not set")).join("memory.x");
-        generate_memory_x(&memory_x, "lpc55-memory-template.x", &config);
-    }
+    let (memory_x_infix, template_file) = match soc_type {
+        SocType::Lpc55 => ( "." /*"ld-lpc55"*/, "lpc55-memory-template.x"),
+        SocType::Nrf52840 => ( "." /*"ld-nrf52"*/, "nrf52-memory-template.x")
+    };
+    let memory_x_dir = Path::new(&env::var("CARGO_MANIFEST_DIR").expect("$CARGO_MANIFEST_DIR not set")).join(&memory_x_infix);
+    std::fs::create_dir(&memory_x_dir).ok();
+    let memory_x = memory_x_dir.join("memory.x");
+    generate_memory_x(&memory_x, template_file, &config);
 
     Ok(())
 }

@@ -5,7 +5,7 @@ MEMORY
 {
     FLASH : ORIGIN = 0x00000000, LENGTH = ##FLASH_LENGTH##K
 
-    FILESYSTEM: ORIGIN = 0x##FS_BASE##, LENGTH = ##FS_LENGTH##K
+    FILESYSTEM : ORIGIN = 0x##FS_BASE##, LENGTH = ##FS_LENGTH##K
 
     /* for use with standard link.x */
     RAM : ORIGIN = 0x20000000, LENGTH = 256K
