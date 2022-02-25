@@ -85,3 +85,20 @@ pub fn init_usb(usbbus: &'static usb_device::bus::UsbBusAllocator<<SocT as Soc>:
 
 	types::usb::UsbInit { classes, apdu_dispatch, ctaphid_dispatch }
 }
+
+#[cfg(feature = "provisioner-app")]
+pub fn init_apps(trussed: &mut types::Trussed, store: &types::RunnerStore, on_nfc_power: bool) -> types::Apps {
+	let store_2 = store.clone();
+	let int_flash_ref = unsafe { types::INTERNAL_STORAGE.as_mut().unwrap() };
+	let pnp = types::ProvisionerNonPortable {
+		store: store_2,
+		stolen_filesystem: int_flash_ref,
+		nfc_powered: on_nfc_power
+	};
+	types::Apps::new(trussed, pnp)
+}
+
+#[cfg(not(feature = "provisioner-app"))]
+pub fn init_apps(trussed: &mut types::Trussed, _store: &types::RunnerStore, _on_nfc_power: bool) -> types::Apps {
+	types::Apps::new(trussed)
+}

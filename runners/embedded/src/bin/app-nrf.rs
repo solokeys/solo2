@@ -103,21 +103,7 @@ const APP: () = {
 
 		let mut trussed_service = trussed::service::Service::new(platform);
 
-		let apps = {
-			#[cfg(feature = "provisioner-app")]
-			{
-				let store_2 = store.clone();
-				let int_flash_ref = unsafe { ERL::types::INTERNAL_STORAGE.as_mut().unwrap() };
-				let pnp = ERL::types::ProvisionerNonPortable {
-					store: store_2,
-					stolen_filesystem: int_flash_ref,
-					nfc_powered: !powered_by_usb
-				};
-				ERL::types::Apps::new(&mut trussed_service, pnp)
-			}
-			#[cfg(not(feature = "provisioner-app"))]
-			{ ERL::types::Apps::new(&mut trussed_service) }
-		};
+		let apps = ERL::init_apps(&mut trussed_service, &store, !powered_by_usb);
 
 		let dev_rtc = Rtc::new(ctx.device.RTC0, 4095).unwrap();
 
