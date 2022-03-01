@@ -1,0 +1,7 @@
+ffffffe1 T EXC_RETURN_handler_msp_fpext
+ffffffe9 T EXC_RETURN_thread_msp_fpext
+ffffffed T EXC_RETURN_thread_psp_fpext
+fffffff1 T EXC_RETURN_handler_msp
+fffffff9 T EXC_RETURN_thread_msp
+fffffffd T EXC_RETURN_thread_psp
+ffffffff T EXC_RETURN_RESET

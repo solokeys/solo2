@@ -130,8 +130,8 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     writeln!(&mut f, "}}").expect("Could not write build_constants.rs.");
 
     let (memory_x_infix, template_file) = match soc_type {
-        SocType::Lpc55 => ( "." /*"ld-lpc55"*/, "lpc55-memory-template.x"),
-        SocType::Nrf52840 => ( "." /*"ld-nrf52"*/, "nrf52-memory-template.x")
+        SocType::Lpc55 => ( "ld-lpc55", "lpc55-memory-template.x"),
+        SocType::Nrf52840 => ( "ld-nrf52", "nrf52-memory-template.x")
     };
     let memory_x_dir = Path::new(&env::var("CARGO_MANIFEST_DIR").expect("$CARGO_MANIFEST_DIR not set")).join(&memory_x_infix);
     std::fs::create_dir(&memory_x_dir).ok();
