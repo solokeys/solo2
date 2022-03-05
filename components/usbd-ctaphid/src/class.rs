@@ -48,7 +48,7 @@ where
             pipe,
         }
     }
-    
+
     /// Indicate in INIT response that Wink command is implemented.
     pub fn implements_wink(mut self) -> Self {
         self.pipe.implements |= 0x01;
@@ -188,11 +188,9 @@ where Bus: UsbBus
         Ok(())
     }
 
+    #[inline(never)]
     fn poll(&mut self) {
-        // if self.pipe.interchange.recv.ready() {
-        //     // hprintln!("recv pipe ready").ok();
-        // }
-        // // hprintln!("state = {:?}", self.pipe.state).ok();
+        // debug!("state = {:?}", self.pipe().state);
         self.pipe.handle_response();
         self.pipe.maybe_write_packet();
     }
