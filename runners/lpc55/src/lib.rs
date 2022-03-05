@@ -4,6 +4,7 @@ include!(concat!(env!("OUT_DIR"), "/build_constants.rs"));
 // panic handler, depending on debug/release build
 // BUT: need to run in release anyway, to have USB work
 use panic_halt as _;
+// use panic_semihosting as _;
 
 use usb_device::device::UsbVidPid;
 use board::clock_controller;
@@ -40,7 +41,8 @@ impl delog::Flusher for Flusher {
     }
 }
 
-delog!(Delogger, 16*1024, 3*1024, Flusher);
+// delog!(Delogger, 16*1024, 3*1024, Flusher);
+delog!(Delogger, 1, 256, Flusher);
 
 #[cfg(any(feature = "log-semihosting", feature = "log-serial"))]
 static FLUSHER: Flusher = Flusher {};

@@ -2,7 +2,7 @@
 
 [package]
 name = "runner"
-version = "1.0.9"
+version = "1.794.0"
 authors = ["Nicolas Stalder <n@stalder.io>", "Conor Patrick <conor@solokeys.com>"]
 edition = "2018"
 resolver = "2"
@@ -27,10 +27,10 @@ usb-device = "0.2.3"
 usbd-serial = "0.1.0"
 
 admin-app = { git = "https://github.com/solokeys/admin-app", optional = true }
-apdu-dispatch = { git = "https://github.com/solokeys/apdu-dispatch" }
-ctaphid-dispatch = { git = "https://github.com/solokeys/ctaphid-dispatch" }
+apdu-dispatch = "0.1"
+ctaphid-dispatch = "0.1"
 ctap-types = { git = "https://github.com/solokeys/ctap-types" }
-fido-authenticator = { git = "https://github.com/solokeys/fido-authenticator", optional = true }
+fido-authenticator = { git = "https://github.com/solokeys/fido-authenticator", branch = "less-ram", features = ["dispatch"], optional = true }
 oath-authenticator = { git = "https://github.com/trussed-dev/oath-authenticator", features = ["apdu-dispatch"], optional = true }
 piv-authenticator = { git = "https://github.com/solokeys/piv-authenticator", features = ["apdu-dispatch"], optional = true }
 trussed = { git = "https://github.com/trussed-dev/trussed" }
@@ -39,7 +39,7 @@ trussed = { git = "https://github.com/trussed-dev/trussed" }
 board = { path = "board" }
 
 # components
-dispatch-fido = {path = "../../components/dispatch-fido"}
+# dispatch-fido = {path = "../../components/dispatch-fido"}
 ndef-app = { path = "../../components/ndef-app", optional = true }
 # NB: when using this app, need to raise trussed/clients-5
 provisioner-app = { path = "../../components/provisioner-app", optional = true }
@@ -57,9 +57,11 @@ panic-halt = "0.2.0"
 littlefs2 = { version = "0.3.2", features = ["c-stubs"] }
 
 [features]
-default = ["admin-app", "fido-authenticator", "ndef-app", "oath-authenticator", "trussed/clients-3"]
+# default = ["admin-app", "fido-authenticator", "ndef-app", "oath-authenticator", "trussed/clients-4"]
+default = ["admin-app", "fido-authenticator", "oath-authenticator", "trussed/clients-3"]
 
-develop = ["piv-authenticator", "no-encrypted-storage", "no-buttons", "no-reset-time-window", "trussed/clients-4"]
+# develop = ["piv-authenticator", "no-encrypted-storage", "no-buttons", "no-reset-time-window", "trussed/clients-4"]
+develop = ["no-encrypted-storage", "no-buttons", "no-reset-time-window", "trussed/clients-3"]
 develop-provisioner = ["piv-authenticator", "no-encrypted-storage", "no-buttons", "no-reset-time-window", "provisioner-app", "trussed/clients-5"]
 
 # Do not use encryption for the filesystem

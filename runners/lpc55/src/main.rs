@@ -25,6 +25,15 @@ const NFC_INTERRUPT: board::hal::raw::Interrupt = board::hal::raw::Interrupt::PI
 extern crate delog;
 generate_macros!();
 
+use core::arch::asm;
+
+#[inline]
+pub fn msp() -> u32 {
+  let r;
+  unsafe { asm!("mrs {}, MSP", out(reg) r, options(nomem, nostack, preserves_flags)) };
+  r
+}
+
 #[rtic::app(device = runner::hal::raw, peripherals = true, monotonic = rtic::cyccnt::CYCCNT)]
 const APP: () = {
 
@@ -131,7 +140,7 @@ const APP: () = {
 
         let schedule = c.schedule;
 
-        info_now!("inside IDLE");
+        info_now!("inside IDLE, initial SP = {:08X}", msp());
         loop {
 
             let mut time = 0;
@@ -200,15 +209,25 @@ const APP: () = {
     /// Manages all traffic on the USB bus.
     #[task(binds = USB1, resources = [usb_classes], schedule = [ccid_wait_extension, ctaphid_keepalive], priority=6)]
     fn usb(c: usb::Context) {
+        // let remaining = msp() - 0x2000_0000;
+        // if remaining < 100_000 {
+        //     debug_now!("USB interrupt: remaining stack size: {} bytes", remaining);
+        // }
         let usb = unsafe { hal::raw::Peripherals::steal().USB1 } ;
         let before = Instant::now();
         let usb_classes = c.resources.usb_classes.as_mut().unwrap();
 
         //////////////
+        // if remaining < 60_000 {
+        //     debug_now!("polling usb classes");
+        // }
         usb_classes.poll();
 
         match usb_classes.ccid.did_start_processing() {
             usbd_ccid::types::Status::ReceivedData(milliseconds) => {
+                // if remaining < 60_000 {
+                //     debug_now!("scheduling CCID wait extension");
+                // }
                 c.schedule.ccid_wait_extension(
                     Instant::now() + (CLOCK_FREQ/1_000 * milliseconds.0).cycles()
                 ).ok();
@@ -217,6 +236,9 @@ const APP: () = {
         }
         match usb_classes.ctaphid.did_start_processing() {
             usbd_ctaphid::types::Status::ReceivedData(milliseconds) => {
+                // if remaining < 60_000 {
+                //     debug_now!("scheduling CTAPHID wait extension");
+                // }
                 c.schedule.ctaphid_keepalive(
                     Instant::now() + (CLOCK_FREQ/1_000 * milliseconds.0).cycles()
                 ).ok();
@@ -248,6 +270,10 @@ const APP: () = {
             // usb.intstat.write(|w| unsafe{ w.bits( usb.intstat.read().bits() ) });
         }
 
+        // if remaining < 60_000 {
+        //     debug_now!("USB interrupt done: {} bytes", remaining);
+        // }
+
 
     }
 
@@ -256,7 +282,8 @@ const APP: () = {
     /// until the application replied.
     #[task(resources = [usb_classes], schedule = [ccid_wait_extension], priority = 6)]
     fn ccid_wait_extension(c: ccid_wait_extension::Context) {
-        debug!("CCID WAIT EXTENSION");
+        debug_now!("CCID WAIT EXTENSION");
+        debug_now!("remaining stack size: {} bytes", msp() - 0x2000_0000);
         let status = c.resources.usb_classes.as_mut().unwrap().ccid.send_wait_extension();
         match status {
             usbd_ccid::types::Status::ReceivedData(milliseconds) => {
@@ -271,7 +298,8 @@ const APP: () = {
     /// Same as with CCID, but sending ctaphid keepalive statuses.
     #[task(resources = [usb_classes], schedule = [ctaphid_keepalive], priority = 6)]
     fn ctaphid_keepalive(c: ctaphid_keepalive::Context) {
-        debug!("keepalive");
+        debug_now!("CTAPHID keepalive");
+        debug_now!("remaining stack size: {} bytes", msp() - 0x2000_0000);
         let status = c.resources.usb_classes.as_mut().unwrap().ctaphid.send_keepalive(
             board::trussed::UserPresenceStatus::waiting()
         );
@@ -288,6 +316,7 @@ const APP: () = {
     #[task(binds = MAILBOX, resources = [usb_classes], priority = 5)]
     #[allow(unused_mut,unused_variables)]
     fn mailbox(mut c: mailbox::Context) {
+        // debug_now!("mailbox: remaining stack size: {} bytes", msp() - 0x2000_0000);
         #[cfg(feature = "log-serial")]
         c.resources.usb_classes.lock(|usb_classes_maybe| {
             match usb_classes_maybe.as_mut() {
@@ -310,6 +339,7 @@ const APP: () = {
 
     #[task(binds = OS_EVENT, resources = [trussed], priority = 5)]
     fn os_event(c: os_event::Context) {
+        // debug_now!("os event: remaining stack size: {} bytes", msp() - 0x2000_0000);
         c.resources.trussed.process();
     }
 
@@ -317,6 +347,7 @@ const APP: () = {
     fn update_ui(mut c: update_ui::Context) {
 
         static mut UPDATES: u32 = 1;
+        // debug_now!("update UI: remaining stack size: {} bytes", msp() - 0x2000_0000);
 
         // let wait_periods = c.resources.trussed.lock(|trussed| trussed.update_ui());
         c.resources.trussed.lock(|trussed| trussed.update_ui());
