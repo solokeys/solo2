@@ -114,6 +114,7 @@ where
             .then(|| FUNCTIONAL_INTERFACE_STRING)
     }
 
+    #[inline(never)]
     fn poll(&mut self) {
         // info_now!("poll of ccid");
         self.pipe.poll_app();

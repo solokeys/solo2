@@ -351,6 +351,7 @@ where
         self.state = State::Processing;
     }
 
+    #[inline(never)]
     pub fn poll_app(&mut self) {
         if let State::Processing = self.state {
             // info!("processing, checking for response, interchange state {:?}",
@@ -476,6 +477,7 @@ where
         self.maybe_send_packet();
     }
 
+    #[inline(never)]
     pub fn maybe_send_packet(&mut self) {
         if let Some(packet) = self.outbox.as_ref() {
             let needs_zlp = packet.len() == PACKET_SIZE;

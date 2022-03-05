@@ -20,11 +20,7 @@ use core::convert::TryFrom;
 use ctaphid_dispatch::types::HidInterchange;
 use ctaphid_dispatch::command::Command;
 
-use ctap_types::{
-    authenticator::Error as AuthenticatorError,
-};
-
-
+use ctap_types::Error as AuthenticatorError;
 
 use interchange::Requester;
 
@@ -38,7 +34,7 @@ use usb_device::{
 
 use crate::{
     constants::{
-        // 7609
+        // 1200
         MESSAGE_SIZE,
         // 64
         PACKET_SIZE,
@@ -540,6 +536,7 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
         }
     }
 
+    #[inline(never)]
     pub fn handle_response(&mut self) {
         if let State::WaitingOnAuthenticator(request) = self.state {
 
@@ -598,6 +595,7 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
     }
 
     // called from poll, and when a packet has been sent
+    #[inline(never)]
     pub(crate) fn maybe_write_packet(&mut self) {
 
         match self.state {
