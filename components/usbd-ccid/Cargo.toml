@@ -11,8 +11,8 @@ delog = "0.1.0"
 embedded-time = "0.12"
 heapless = "0.7"
 # heapless-bytes = "0.3"
-interchange = "0.2.0"
-iso7816 = { git = "https://github.com/ycrypto/iso7816" }
+interchange = "0.2"
+iso7816 = "0.1"
 usb-device = { version = "0.2.3", features = ["control-buffer-256"] }
 
 [features]
