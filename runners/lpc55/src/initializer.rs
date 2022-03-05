@@ -510,7 +510,7 @@ impl Initializer {
                 .implements_ctap2()
                 .implements_wink();
 
-            let serial = usbd_serial::SerialPort::new(usb_bus);
+            // let serial = usbd_serial::SerialPort::new(usb_bus);
 
             // Only 16 bits, so take the upper bits of our semver
             let device_release =
@@ -533,7 +533,7 @@ impl Initializer {
                 .composite_with_iads()
                 .build();
 
-            usb_classes = Some(types::UsbClasses::new(usbd, ccid, ctaphid, /*keyboard,*/ serial));
+            usb_classes = Some(types::UsbClasses::new(usbd, ccid, ctaphid));//, /*keyboard,*/ serial));
 
         }
 

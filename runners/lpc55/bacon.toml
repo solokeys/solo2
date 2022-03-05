@@ -10,7 +10,7 @@ command = ["cargo", "check", "--color", "always", "--features", "board-lpcxpress
 need_stdout = false
 
 [jobs.build-dev]
-command = ["cargo", "build", "--color", "always", "--features", "board-lpcxpresso55,develop"]
+command = ["cargo", "build", "--color", "always", "--release", "--features", "board-lpcxpresso55,develop"]
 need_stdout = false
 
 [jobs.check]

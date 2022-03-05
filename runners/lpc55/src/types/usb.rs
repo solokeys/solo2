@@ -22,12 +22,12 @@ pub struct UsbClasses {
     pub ccid: CcidClass,
     pub ctaphid: CtapHidClass,
     // pub keyboard: KeyboardClass,
-    pub serial: SerialClass,
+    // pub serial: SerialClass,
 }
 
 impl UsbClasses {
-    pub fn new(usbd: Usbd, ccid: CcidClass, ctaphid: CtapHidClass, serial: SerialClass) -> Self {
-        Self{ usbd, ccid, ctaphid, serial }
+    pub fn new(usbd: Usbd, ccid: CcidClass, ctaphid: CtapHidClass) -> Self {//, serial: SerialClass) -> Self {
+        Self{ usbd, ccid, ctaphid }//, serial }
     }
     pub fn poll(&mut self) {
         self.ctaphid.check_for_app_response();
@@ -35,7 +35,7 @@ impl UsbClasses {
         self.usbd.poll(&mut [
             &mut self.ccid,
             &mut self.ctaphid,
-            &mut self.serial,
+            // &mut self.serial,
         ]);
     }
 }
