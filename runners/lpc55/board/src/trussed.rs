@@ -118,12 +118,17 @@ RGB: RgbLed,
         }
     }
 
+    fn status(&self) -> ui::Status {
+        self.status
+    }
+
     fn refresh(&mut self) {
         let uptime = self.uptime().as_millis() as u32;
 
         if let Some(rgb) = self.rgb.as_mut() {
 
             let waiting_for_user = self.status == ui::Status::WaitingForUserPresence;
+            let processing = self.status == ui::Status::Processing;
             let winking = uptime < self.wink_until.as_millis() as u32;
             let any_button = self.buttons.as_mut()
                 .map(|buttons| buttons.state())
@@ -137,6 +142,9 @@ RGB: RgbLed,
                 let amplitude = calculate_amplitude(uptime, 2, 4, 128);
                 Intensities { red: 0, green: 0, blue: amplitude }
 
+            } else if processing {
+                let on = (((F32(uptime as f32) / 250.0).round().0 as u32) % 2) != 0;
+                if on { GREEN } else { BLACK }
             } else if winking {
 
                 // blink rapidly
@@ -148,11 +156,12 @@ RGB: RgbLed,
 
                 // regular behaviour: breathe slowly
 
-                let amplitude = calculate_amplitude(uptime, 5, 4, 64);
+                let amplitude = calculate_amplitude(uptime, 10, 4, 64);
 
                 if !any_button {
                     // Use green if no button is pressed.
-                    Intensities { red: 0, green: amplitude, blue: 0 }
+                    // Intensities { red: 0, green: amplitude, blue: 0 }
+                    Intensities { red: amplitude, green: 0, blue: 0 }
                 } else {
                     // Use blue if button is pressed.
                     Intensities { red: 0, green: 0, blue: amplitude }

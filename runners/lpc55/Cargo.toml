@@ -1,6 +1,6 @@
 [package]
 name = "runner"
-version = "1.794.0"
+version = "1.797.0"
 authors = ["Nicolas Stalder <n@stalder.io>", "Conor Patrick <conor@solokeys.com>"]
 edition = "2021"
 rust-version = "1.59.0"
@@ -55,15 +55,15 @@ littlefs2 = { version = "0.3.2", features = ["c-stubs"] }
 
 [features]
 # ndef-app is an annoyance on some mobile platforms
-default = ["admin-app", "fido-authenticator", "oath-authenticator", "trussed/clients-3"]
+default = ["admin-app", "fido-authenticator", "ndef-app", "oath-authenticator", "trussed/clients-4"]
 
 # develop = ["no-encrypted-storage", "no-buttons", "no-reset-time-window"]
 # develop = ["no-encrypted-storage", "no-reset-time-window"]
 # develop = ["no-encrypted-storage", "no-buttons"]
-develop = ["no-encrypted-storage", "trussed/clients-3"]
+develop = ["no-encrypted-storage", "trussed/clients-4"]
 
-develop-piv = ["develop", "piv-authenticator", "trussed/clients-4"]
-develop-provisioner = ["develop", "provisioner-app", "trussed/clients-4"]
+develop-piv = ["develop", "piv-authenticator", "trussed/clients-5"]
+develop-provisioner = ["develop", "provisioner-app", "trussed/clients-5"]
 
 # Do not use encryption for the filesystem
 no-encrypted-storage = []

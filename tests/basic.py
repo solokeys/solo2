@@ -13,6 +13,8 @@ client_pin = fido2.ctap2.ClientPin(dev)
 
 dev_info = dev.get_info()
 
+N = 3
+
 print(dev_info)
 if dev_info.options.get('clientPin', False):
     pin_token = client_pin.get_pin_token(pin)
@@ -56,6 +58,7 @@ for alg in (P256, Ed25519):
 
     credential_id = att.auth_data.credential_data.credential_id
     print(att.auth_data.credential_data)
+    print(f":: Credential ID (len{len(credential_id)}):\n{credential_id.hex()}")
     credential_ids.append(credential_id)
 
     public_key = att.auth_data.credential_data.public_key
@@ -64,19 +67,20 @@ for alg in (P256, Ed25519):
     # basic sanity check - would raise
     assert att.fmt == "packed"
     verifier = fido2.attestation.Attestation.for_type(att.fmt)()
-    verifier.verify(
-        att.att_statement, att.auth_data, b"1234567890ABCDEF1234567890ABCDEF"
-    )
+    # verifier.verify(
+    #     att.att_statement, att.auth_data, b"1234567890ABCDEF1234567890ABCDEF"
+    # )
 
     client_data_hash = b"some_client_data_hash_abcdefghij"
-    assn = dev.get_assertion(
-        "yamnord.com",
-        client_data_hash,
-        # allow_list=[{"type": "public-key", "id": credential_id}],
-    )
+    for _ in range(N):
+        assn = dev.get_assertion(
+            "yamnord.com",
+            client_data_hash,
+            allow_list=[{"type": "public-key", "id": credential_id}],
+        )
 
-    # basic sanity check - would raise
-    assn.verify(client_data_hash, public_key)
+        # basic sanity check - would raise
+        assn.verify(client_data_hash, public_key)
 
 # GA/GNA combo
 assn = dev.get_assertion("yamnord.com", client_data_hash)

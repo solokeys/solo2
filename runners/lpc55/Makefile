@@ -13,6 +13,10 @@ build-pro:
 	cargo build --release $(PROVISIONER)
 	cargo objcopy --release $(PROVISIONER) -- -O binary provisioner.bin
 
+build-release:
+	cargo build --release --features board-solo2
+	cargo objcopy --release --features board-solo2 -- -O binary app-solo2.bin
+
 .PHONY: today-as-minor-version
 today-in-days:
 	python -c "from datetime import date as d; print((d.today() - d(2020, 1, 1)).days)"
