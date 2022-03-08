@@ -13,10 +13,11 @@ interchange = "0.2.0"
 nb = "1"
 
 admin-app = { git = "https://github.com/solokeys/admin-app" }
-apdu-dispatch = { git = "https://github.com/solokeys/apdu-dispatch", features = ["std"] }
-ctap-types = { git = "https://github.com/solokeys/ctap-types" }
-ctaphid-dispatch = { git = "https://github.com/solokeys/ctaphid-dispatch", features = ["std"] }
-fido-authenticator = { git = "https://github.com/solokeys/fido-authenticator" }
+apdu-dispatch = "0.1"
+ctap-types = "0.1"
+ctaphid-dispatch = "0.1"
+# fido-authenticator = { git = "https://github.com/solokeys/fido-authenticator" }
+fido-authenticator = { git = "https://github.com/solokeys/fido-authenticator", branch = "less-ram", features = ["dispatch"], optional = true }
 piv-authenticator = { git = "https://github.com/solokeys/piv-authenticator" }
 trussed = { git = "https://github.com/trussed-dev/trussed", features = ["clients-3"] }
 
