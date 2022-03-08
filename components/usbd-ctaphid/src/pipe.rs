@@ -34,7 +34,7 @@ use usb_device::{
 
 use crate::{
     constants::{
-        // 1200
+        // 3072
         MESSAGE_SIZE,
         // 64
         PACKET_SIZE,

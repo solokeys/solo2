@@ -1,11 +1,9 @@
-# cargo-features = ["resolver"]
-
 [package]
 name = "runner"
 version = "1.794.0"
 authors = ["Nicolas Stalder <n@stalder.io>", "Conor Patrick <conor@solokeys.com>"]
-edition = "2018"
-resolver = "2"
+edition = "2021"
+rust-version = "1.59.0"
 
 [lib]
 name = "runner"
@@ -29,7 +27,7 @@ usbd-serial = "0.1.0"
 admin-app = { git = "https://github.com/solokeys/admin-app", optional = true }
 apdu-dispatch = "0.1"
 ctaphid-dispatch = "0.1"
-ctap-types = { git = "https://github.com/solokeys/ctap-types" }
+ctap-types = "0.1"
 fido-authenticator = { git = "https://github.com/solokeys/fido-authenticator", branch = "less-ram", features = ["dispatch"], optional = true }
 oath-authenticator = { git = "https://github.com/trussed-dev/oath-authenticator", features = ["apdu-dispatch"], optional = true }
 piv-authenticator = { git = "https://github.com/solokeys/piv-authenticator", features = ["apdu-dispatch"], optional = true }
@@ -57,12 +55,16 @@ panic-halt = "0.2.0"
 littlefs2 = { version = "0.3.2", features = ["c-stubs"] }
 
 [features]
-# default = ["admin-app", "fido-authenticator", "ndef-app", "oath-authenticator", "trussed/clients-4"]
+# ndef-app is an annoyance on some mobile platforms
 default = ["admin-app", "fido-authenticator", "oath-authenticator", "trussed/clients-3"]
 
-# develop = ["piv-authenticator", "no-encrypted-storage", "no-buttons", "no-reset-time-window", "trussed/clients-4"]
-develop = ["no-encrypted-storage", "no-buttons", "no-reset-time-window", "trussed/clients-3"]
-develop-provisioner = ["piv-authenticator", "no-encrypted-storage", "no-buttons", "no-reset-time-window", "provisioner-app", "trussed/clients-5"]
+# develop = ["no-encrypted-storage", "no-buttons", "no-reset-time-window"]
+# develop = ["no-encrypted-storage", "no-reset-time-window"]
+# develop = ["no-encrypted-storage", "no-buttons"]
+develop = ["no-encrypted-storage", "trussed/clients-3"]
+
+develop-piv = ["develop", "piv-authenticator", "trussed/clients-4"]
+develop-provisioner = ["develop", "provisioner-app", "trussed/clients-4"]
 
 # Do not use encryption for the filesystem
 no-encrypted-storage = []

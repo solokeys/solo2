@@ -42,7 +42,7 @@ impl delog::Flusher for Flusher {
 }
 
 // delog!(Delogger, 16*1024, 3*1024, Flusher);
-delog!(Delogger, 1, 256, Flusher);
+delog!(Delogger, 1, 2048, Flusher);
 
 #[cfg(any(feature = "log-semihosting", feature = "log-serial"))]
 static FLUSHER: Flusher = Flusher {};
