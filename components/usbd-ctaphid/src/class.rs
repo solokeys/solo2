@@ -49,6 +49,11 @@ where
         }
     }
 
+    /// Set versions returned in CTAPHID_INIT
+    pub fn set_version(&mut self, version: crate::Version) {
+        self.pipe.set_version(version);
+    }
+
     /// Indicate in INIT response that Wink command is implemented.
     pub fn implements_wink(mut self) -> Self {
         self.pipe.implements |= 0x01;
