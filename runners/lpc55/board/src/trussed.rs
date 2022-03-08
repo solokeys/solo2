@@ -1,35 +1,18 @@
 //! Implementation of `trussed::Platform` for the board,
 //! using the specific implementation of our `crate::traits`.
 
+use core::time::Duration;
+
 use crate::hal::{
     peripherals::rtc::Rtc,
     typestates::init_state,
 };
 use crate::traits::buttons::{Press, Edge};
-use crate::traits::rgb_led::RgbLed;
-use trussed::platform::{
-    ui,
-    reboot,
-    consent,
-};
+use crate::traits::rgb_led::{Intensities, RgbLed};
+use micromath::F32;
+use trussed::platform::{consent, ui};
 
-// translated from https://stackoverflow.com/a/2284929/2490057
-fn sin(x: f32) -> f32
-{
-
-    let mut res = 0f32;
-    let mut pow = x;
-    let mut fact = 1f32;
-    for i in 0..5 {
-        res += pow/fact;
-        pow *= -1f32 * x * x;
-        fact *= ((2*(i+1))*(2*(i+1)+1)) as f32;
-    }
-
-    res
-}
-
-// Assuming there will only be one way to 
+// Assuming there will only be one way to
 // get user presence, this should be fine.
 // Used for Ctaphid.keepalive message status.
 static mut WAITING: bool = false;
@@ -52,6 +35,8 @@ RGB: RgbLed,
     rtc: Rtc<init_state::Enabled>,
     buttons: Option<BUTTONS>,
     rgb: Option<RGB>,
+    status: ui::Status,
+    wink_until: Duration,
 }
 
 impl<BUTTONS, RGB> UserInterface<BUTTONS, RGB>
@@ -59,15 +44,28 @@ where
 BUTTONS: Press + Edge,
 RGB: RgbLed,
 {
-    pub fn new(rtc: Rtc<init_state::Enabled>, _buttons: Option<BUTTONS>, rgb: Option<RGB>) -> Self {
-        #[cfg(not(feature = "no-buttons"))]
-        let ui = Self { rtc, buttons: _buttons, rgb };
+    pub fn new(rtc: Rtc<init_state::Enabled>, buttons: Option<BUTTONS>, rgb: Option<RGB>) -> Self {
+        #[allow(unused_mut)]
+        let mut buttons = buttons;
         #[cfg(feature = "no-buttons")]
-        let ui = Self { rtc, buttons: None, rgb };
-
-        ui
+        {
+            buttons = None;
+        }
+        Self {
+            rtc, buttons, rgb,
+            status: ui::Status::Idle,
+            wink_until: Duration::new(0, 0),
+        }
     }
 }
+
+// color codes Conor picked
+const BLACK: Intensities = Intensities { red: 0, green: 0, blue: 0 };
+// const RED: Intensities = Intensities { red: u8::MAX, green: 0, blue: 0 };
+// const GREEN: Intensities = Intensities { red: 0, green: u8::MAX, blue: 0x02 };
+const BLUE: Intensities = Intensities { red: 0, green: 0, blue: u8::MAX };
+// const TEAL: Intensities = Intensities { red: 0, green: u8::MAX, blue: 0x5a };
+// const ORANGE: Intensities = Intensities { red: u8::MAX, green: 0x7e, blue: 0 };
 
 impl<BUTTONS, RGB> trussed::platform::UserInterface for UserInterface<BUTTONS,RGB>
 where
@@ -104,62 +102,78 @@ RGB: RgbLed,
 
     fn set_status(&mut self, status: ui::Status) {
 
-        if let Some(rgb) = &mut self.rgb {
+        self.status = status;
+        debug_now!("status set to {:?}", status);
 
-            match status {
-                ui::Status::Idle => {
-                    // green
-                    rgb.set(0x00_ff_02.into());
-                },
-                ui::Status::Processing => {
-                    // teal
-                    rgb.set(0x00_ff_5a.into());
-                }
-                ui::Status::WaitingForUserPresence => {
-                    // orange
-                    rgb.set(0xff_7e_00.into());
-                },
-                ui::Status::Error => {
-                    // Red
-                    rgb.set(0xff_00_00.into());
-                },
-            }
-
-        }
+        // self.refresh runs periodically and would overwrite this
+        // if let Some(rgb) = &mut self.rgb {
+        //     rgb.set(match status {
+        //         ui::Status::Idle => GREEN,
+        //         ui::Status::Processing => TEAL,
+        //         ui::Status::WaitingForUserPresence => ORANGE,
+        //         ui::Status::Error => RED,
+        //     });
+        // }
     }
 
     fn refresh(&mut self) {
-        if self.rgb.is_some() && self.buttons.is_some() {
-            // 1. Get time & pick a period (here 4096).
-            // 2. Map it to a value between 0 and pi.
-            // 3. Calculate sine and map to amplitude between 0 and 255.
-            let time = (self.uptime().as_millis()) % 4096;
-            let amplitude = (sin((time as f32) * 3.14159265f32/4096f32) * 255f32) as u32;
+        let uptime = self.uptime();
 
-            let state = self.buttons.as_mut().unwrap().state();
-            let color = if state.a || state.b || state.middle {
-                // Use blue if button is pressed.
-                0x00_00_01 | (amplitude << 0)
-            } else {
+        if let Some(rgb) = self.rgb.as_mut() {
+            let period = Duration::new(5, 0).as_millis() as u32;
+            let tau = F32(6.283185);
+            let angle = F32(uptime.as_millis() as f32) * tau / (period as f32);
+            let min_amplitude: u8 = 4;
+            let max_amplitude: u8 = 64;
+            let rel_amplitude = max_amplitude - min_amplitude;
+
+            // sinoidal wave on top of a baseline brightness
+            let amplitude = min_amplitude + (angle.sin().abs() * (rel_amplitude as f32)).floor().0 as u8;
+
+            let any_button = self.buttons.as_mut()
+                .map(|buttons| buttons.state())
+                .map(|state| state.a || state.b || state.middle)
+                .unwrap_or(false);
+
+            let mut color = if !any_button {
                 // Use green if no button is pressed.
-                0x00_00_01 | (amplitude << 8)
+                Intensities {
+                    red: 0,
+                    green: amplitude,
+                    blue: 0,
+                }
+            } else {
+                // Use blue if button is pressed.
+                Intensities {
+                    red: 0,
+                    green: 0,
+                    blue: amplitude,
+                }
             };
+            if self.status == ui::Status::WaitingForUserPresence {
+                color = BLUE;
+            }
+            if uptime < self.wink_until {
+                let on = (((F32(uptime.as_secs_f32())*4.0f32).round().0 as u32) % 2) != 0;
+                color = if on { BLUE } else { BLACK };
+            }
+
             // use logging::hex::*;
             // use logging::hex;
             // crate::logger::info!("time: {}", time).ok();
-            // crate::logger::info!("amp: {}", hex!(amplitude)).ok();
+            // debug_now!("amp: {:08X}", amplitude);
             // crate::logger::info!("color: {}", hex!(color)).ok();
-            self.rgb.as_mut().unwrap().set(color.into());
+            rgb.set(color.into());
         }
     }
 
-    fn uptime(&mut self) -> core::time::Duration {
+    fn uptime(&mut self) -> Duration {
         self.rtc.uptime()
     }
 
-    // delete this function after trussed is updated
-    fn reboot(&mut self, _to: reboot::To) -> ! {
-        panic!("this should no longer be called.");
+    fn wink(&mut self, duration: Duration) {
+        debug_now!("winking for {:?}", duration);
+        self.wink_until = self.uptime() + duration;
     }
 
 }

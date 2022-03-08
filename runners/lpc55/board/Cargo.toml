@@ -8,6 +8,7 @@ edition = "2018"
 delog = "0.1.0"
 fm11nc08 = {path = "../../../components/fm11nc08"}
 lpc55-hal = { version = "0.3", features = ["littlefs", "rtic-peripherals"] }
+micromath = "2"
 nb = "1"
 trussed = { git = "https://github.com/trussed-dev/trussed" }
 
