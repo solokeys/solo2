@@ -148,6 +148,8 @@ pub struct Pipe<'alloc, Bus: UsbBus> {
     started_processing: bool,
 
     needs_keepalive: bool,
+
+    pub(crate) version: crate::Version,
 }
 
 impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
@@ -175,7 +177,12 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
             last_milliseconds: initial_milliseconds,
             started_processing: false,
             needs_keepalive: false,
+            version: Default::default(),
         }
+    }
+
+    pub(crate) fn set_version(&mut self, version: crate::Version) {
+        self.version = version;
     }
 
     pub fn read_address(&self) -> EndpointAddress {
@@ -445,11 +452,11 @@ impl<'alloc, Bus: UsbBus> Pipe<'alloc, Bus> {
                             // CTAPHID protocol version
                             self.buffer[12] = 2;
                             // major device version number
-                            self.buffer[13] = 0;
+                            self.buffer[13] = self.version.major;
                             // minor device version number
-                            self.buffer[14] = 0;
+                            self.buffer[14] = self.version.minor;
                             // build device version number
-                            self.buffer[15] = 0;
+                            self.buffer[15] = self.version.build;
                             // capabilities flags
                             // 0x1: implements WINK
                             // 0x4: implements CBOR
