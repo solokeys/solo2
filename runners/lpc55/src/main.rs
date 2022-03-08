@@ -17,6 +17,7 @@ use rtic::cyccnt::{Instant, U32Ext as _};
 
 const CLOCK_FREQ: u32 = 96_000_000;
 const PERIOD: u32 = CLOCK_FREQ/16;
+// const PERIOD: u32 = CLOCK_FREQ/4;
 
 const USB_INTERRUPT: board::hal::raw::Interrupt = board::hal::raw::Interrupt::USB1;
 const NFC_INTERRUPT: board::hal::raw::Interrupt = board::hal::raw::Interrupt::PIN_INT0;
@@ -354,7 +355,7 @@ const APP: () = {
         // c.schedule.update_ui(Instant::now() + wait_periods * PERIOD.cycles()).unwrap();
         c.schedule.update_ui(Instant::now() + PERIOD.cycles()).unwrap();
 
-        *UPDATES += 1;
+        *UPDATES = UPDATES.wrapping_add(1);
     }
 
 

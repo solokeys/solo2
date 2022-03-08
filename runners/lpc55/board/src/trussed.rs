@@ -61,11 +61,12 @@ RGB: RgbLed,
 
 // color codes Conor picked
 const BLACK: Intensities = Intensities { red: 0, green: 0, blue: 0 };
-// const RED: Intensities = Intensities { red: u8::MAX, green: 0, blue: 0 };
-// const GREEN: Intensities = Intensities { red: 0, green: u8::MAX, blue: 0x02 };
+const RED: Intensities = Intensities { red: u8::MAX, green: 0, blue: 0 };
+const GREEN: Intensities = Intensities { red: 0, green: u8::MAX, blue: 0x02 };
 const BLUE: Intensities = Intensities { red: 0, green: 0, blue: u8::MAX };
-// const TEAL: Intensities = Intensities { red: 0, green: u8::MAX, blue: 0x5a };
-// const ORANGE: Intensities = Intensities { red: u8::MAX, green: 0x7e, blue: 0 };
+const TEAL: Intensities = Intensities { red: 0, green: u8::MAX, blue: 0x5a };
+#[allow(dead_code)]
+const ORANGE: Intensities = Intensities { red: u8::MAX, green: 0x7e, blue: 0 };
 
 impl<BUTTONS, RGB> trussed::platform::UserInterface for UserInterface<BUTTONS,RGB>
 where
@@ -106,57 +107,57 @@ RGB: RgbLed,
         debug_now!("status set to {:?}", status);
 
         // self.refresh runs periodically and would overwrite this
-        // if let Some(rgb) = &mut self.rgb {
-        //     rgb.set(match status {
-        //         ui::Status::Idle => GREEN,
-        //         ui::Status::Processing => TEAL,
-        //         ui::Status::WaitingForUserPresence => ORANGE,
-        //         ui::Status::Error => RED,
-        //     });
-        // }
+        if let Some(rgb) = &mut self.rgb {
+            rgb.set(match status {
+                ui::Status::Idle => GREEN,
+                ui::Status::Processing => TEAL,
+                // ui::Status::WaitingForUserPresence => ORANGE,
+                ui::Status::WaitingForUserPresence => BLUE,
+                ui::Status::Error => RED,
+            });
+        }
     }
 
     fn refresh(&mut self) {
-        let uptime = self.uptime();
+        let uptime = self.uptime().as_millis() as u32;
 
         if let Some(rgb) = self.rgb.as_mut() {
-            let period = Duration::new(5, 0).as_millis() as u32;
-            let tau = F32(6.283185);
-            let angle = F32(uptime.as_millis() as f32) * tau / (period as f32);
-            let min_amplitude: u8 = 4;
-            let max_amplitude: u8 = 64;
-            let rel_amplitude = max_amplitude - min_amplitude;
 
-            // sinoidal wave on top of a baseline brightness
-            let amplitude = min_amplitude + (angle.sin().abs() * (rel_amplitude as f32)).floor().0 as u8;
-
+            let waiting_for_user = self.status == ui::Status::WaitingForUserPresence;
+            let winking = uptime < self.wink_until.as_millis() as u32;
             let any_button = self.buttons.as_mut()
                 .map(|buttons| buttons.state())
                 .map(|state| state.a || state.b || state.middle)
                 .unwrap_or(false);
 
-            let mut color = if !any_button {
-                // Use green if no button is pressed.
-                Intensities {
-                    red: 0,
-                    green: amplitude,
-                    blue: 0,
-                }
+            let color = if waiting_for_user {
+
+                // breathe fast, in blue
+
+                let amplitude = calculate_amplitude(uptime, 2, 4, 128);
+                Intensities { red: 0, green: 0, blue: amplitude }
+
+            } else if winking {
+
+                // blink rapidly
+
+                let on = (((F32(uptime as f32) / 250.0).round().0 as u32) % 2) != 0;
+                if on { BLUE } else { BLACK }
+
             } else {
-                // Use blue if button is pressed.
-                Intensities {
-                    red: 0,
-                    green: 0,
-                    blue: amplitude,
+
+                // regular behaviour: breathe slowly
+
+                let amplitude = calculate_amplitude(uptime, 5, 4, 64);
+
+                if !any_button {
+                    // Use green if no button is pressed.
+                    Intensities { red: 0, green: amplitude, blue: 0 }
+                } else {
+                    // Use blue if button is pressed.
+                    Intensities { red: 0, green: 0, blue: amplitude }
                 }
             };
-            if self.status == ui::Status::WaitingForUserPresence {
-                color = BLUE;
-            }
-            if uptime < self.wink_until {
-                let on = (((F32(uptime.as_secs_f32())*4.0f32).round().0 as u32) % 2) != 0;
-                color = if on { BLUE } else { BLACK };
-            }
 
             // use logging::hex::*;
             // use logging::hex;
@@ -176,4 +177,15 @@ RGB: RgbLed,
         self.wink_until = self.uptime() + duration;
     }
 
+}
+
+fn calculate_amplitude(now_millis: u32, period_secs: u8, min_amplitude: u8, max_amplitude: u8) -> u8 {
+    let period = Duration::new(period_secs as u64, 0).as_millis() as u32;
+    let tau = F32(6.283185);
+    let angle = F32(now_millis as f32) * tau / (period as f32);
+    let rel_amplitude = max_amplitude - min_amplitude;
+
+    // sinoidal wave on top of a baseline brightness
+    let amplitude = min_amplitude + (angle.sin().abs() * (rel_amplitude as f32)).floor().0 as u8;
+    amplitude
 }

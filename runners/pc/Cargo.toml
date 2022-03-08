@@ -9,7 +9,6 @@ chacha20 = { version = "0.7", features = ["rng"] }
 delog = "0.1.0"
 embedded-hal = { version = "0.2", features = ["unproven"] }
 generic-array = "0.14.3"
-heapless = "0.6"
 interchange = "0.2.0"
 nb = "1"
 
@@ -26,7 +25,6 @@ usbd-ccid = { path = "../../components/usbd-ccid" }
 usbd-ctaphid = { path = "../../components/usbd-ctaphid" }
 nfc-device = {path = "./../../components/nfc-device"}
 ndef-app = {path = "./../../components/ndef-app"}
-dispatch-fido = {path = "./../../components/dispatch-fido"}
 
 # storage
 littlefs2 = "0.3.1"

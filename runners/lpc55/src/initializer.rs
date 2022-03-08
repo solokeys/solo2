@@ -308,8 +308,6 @@ impl Initializer {
 
         let clocks = clock_stage.clocks;
 
-        let mut three_buttons: Option<board::ThreeButtons> = None;
-
         let pmc = &mut self.pmc;
         let syscon = &mut self.syscon;
 
@@ -332,28 +330,34 @@ impl Initializer {
         let iocon = &mut clock_stage.iocon;
         let gpio = &mut clock_stage.gpio;
 
-        #[cfg(feature = "board-lpcxpresso55")]
-        let mut rgb = board::RgbLed::new(
-            Pwm::new(ctimer2.enabled(syscon, clocks.support_1mhz_fro_token().unwrap())),
-            iocon,
-        );
-
-        #[cfg(feature = "board-solo2")]
-        let mut rgb = board::RgbLed::new(
-            Pwm::new(_ctimer3.enabled(syscon, clocks.support_1mhz_fro_token().unwrap())),
-            iocon,
-        );
-
-        if !self.is_nfc_passive {
+        let rgb = if !self.is_nfc_passive {
             #[cfg(feature = "board-lpcxpresso55")]
-            let new_three_buttons = board::ThreeButtons::new(
+            let rgb = board::RgbLed::new(
+                Pwm::new(ctimer2.enabled(syscon, clocks.support_1mhz_fro_token().unwrap())),
+                iocon,
+            );
+
+            #[cfg(feature = "board-solo2")]
+            let rgb = board::RgbLed::new(
+                Pwm::new(_ctimer3.enabled(syscon, clocks.support_1mhz_fro_token().unwrap())),
+                iocon,
+            );
+
+            Some(rgb)
+        } else {
+            None
+        };
+
+        let mut three_buttons = if !self.is_nfc_passive {
+            #[cfg(feature = "board-lpcxpresso55")]
+            let three_buttons = board::ThreeButtons::new(
                 Timer::new(ctimer1.enabled(syscon, clocks.support_1mhz_fro_token().unwrap())),
                 gpio,
                 iocon,
             );
 
             #[cfg(feature = "board-solo2")]
-            let new_three_buttons = {
+            let three_buttons = {
                 // TODO this should get saved somewhere to be released later.
                 let mut dma = hal::Dma::from(_dma).enabled(syscon);
 
@@ -368,20 +372,26 @@ impl Initializer {
                 )
             };
 
-            three_buttons = Some(new_three_buttons);
-        }
+            Some(three_buttons)
+        } else {
+            None
+        };
 
         let mut pfr = pfr.enabled(&clocks).unwrap();
         Self::validate_cfpa(&mut pfr, self.config.secure_firmware_version, self.config.require_prince);
 
-        if self.config.boot_to_bootrom && three_buttons.is_some() {
-            info!("bootrom request start {}", perf_timer.elapsed().0/1000);
-            if self.is_bootrom_requested(three_buttons.as_mut().unwrap(), &mut delay_timer) {
-                // Give a small red blink show success
-                rgb.red(200); rgb.green(200); rgb.blue(0);
-                delay_timer.start(100_000.microseconds()); nb::block!(delay_timer.wait()).ok();
+        if self.config.boot_to_bootrom {
+            if let Some(three_buttons) = three_buttons.as_mut() {
+                info!("bootrom request start {}", perf_timer.elapsed().0/1000);
+                if self.is_bootrom_requested(three_buttons, &mut delay_timer) {
+                    if let Some(mut rgb) = rgb {
+                        // Give a small red blink show success
+                        rgb.red(200); rgb.green(200); rgb.blue(0);
+                    }
+                    delay_timer.start(100_000.microseconds()); nb::block!(delay_timer.wait()).ok();
 
-                hal::boot_to_bootrom()
+                    hal::boot_to_bootrom()
+                }
             }
         }
 
@@ -392,7 +402,7 @@ impl Initializer {
 
             adc,
             three_buttons,
-            rgb: Some(rgb),
+            rgb,
         }
     }
 
