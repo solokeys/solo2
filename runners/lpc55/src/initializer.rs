@@ -515,10 +515,16 @@ impl Initializer {
             // So for instance "Hacker Solo 2" would work, but "Solo 2 (custom)" would not.
             let ccid = usbd_ccid::Ccid::new(usb_bus, contact_requester, Some(b"Solo 2"));
             let current_time = basic_stage.perf_timer.elapsed().0/1000;
-            let ctaphid = usbd_ctaphid::CtapHid::new(usb_bus, ctaphid_requester, current_time)
+            let mut ctaphid = usbd_ctaphid::CtapHid::new(usb_bus, ctaphid_requester, current_time)
                 .implements_ctap1()
                 .implements_ctap2()
                 .implements_wink();
+
+            ctaphid.set_version(usbd_ctaphid::Version {
+                major: crate::build_constants::CARGO_PKG_VERSION_MAJOR,
+                minor: crate::build_constants::CARGO_PKG_VERSION_MINOR.to_be_bytes()[0],
+                build: crate::build_constants::CARGO_PKG_VERSION_MINOR.to_be_bytes()[1],
+            });
 
             // let serial = usbd_serial::SerialPort::new(usb_bus);
 
