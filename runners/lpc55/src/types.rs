@@ -1,5 +1,4 @@
 include!(concat!(env!("OUT_DIR"), "/build_constants.rs"));
-use core::convert::TryInto;
 
 use crate::hal;
 use hal::drivers::timer;
@@ -85,32 +84,8 @@ pub type ExternalInterrupt = hal::Pint<hal::typestates::init_state::Enabled>;
 pub type ApduDispatch = apdu_dispatch::dispatch::ApduDispatch;
 pub type CtaphidDispatch = ctaphid_dispatch::dispatch::Dispatch;
 
-pub struct Lpc55Reboot {}
-impl admin_app::Reboot for Lpc55Reboot {
-    fn reboot() -> ! {
-        hal::raw::SCB::sys_reset()
-    }
-    fn reboot_to_firmware_update() -> ! {
-        hal::boot_to_bootrom()
-    }
-    fn reboot_to_firmware_update_destructive() -> ! {
-        // Erasing the first flash page & rebooting will keep processor in bootrom persistently.
-        // This is however destructive, as a valid firmware will need to be flashed.
-        use hal::traits::flash::WriteErase;
-        let flash = unsafe { hal::peripherals::flash::Flash::steal() }.enabled(
-            &mut unsafe {hal::peripherals::syscon::Syscon::steal()}
-        );
-        hal::drivers::flash::FlashGordon::new(flash).erase_page(0).ok();
-        hal::raw::SCB::sys_reset()
-    }
-    fn locked() -> bool {
-        let seal = &unsafe { hal::raw::Peripherals::steal() }.FLASH_CMPA.sha256_digest;
-        seal.iter().any(|word| word.read().bits() != 0)
-    }
-}
-
 #[cfg(feature = "admin-app")]
-pub type AdminApp = admin_app::App<TrussedClient, Lpc55Reboot>;
+pub type AdminApp = admin_app::App<TrussedClient, board::Reboot>;
 #[cfg(feature = "piv-authenticator")]
 pub type PivApp = piv_authenticator::Authenticator<TrussedClient, {apdu_dispatch::command::SIZE}>;
 #[cfg(feature = "oath-authenticator")]

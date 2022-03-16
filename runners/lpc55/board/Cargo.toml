@@ -5,17 +5,19 @@ authors = ["Conor Patrick <conor@solokeys.com>"]
 edition = "2021"
 
 [dependencies]
+admin-app = { git = "https://github.com/solokeys/admin-app" }
 delog = "0.1.0"
 fm11nc08 = {path = "../../../components/fm11nc08"}
 lpc55-hal = { version = "0.3", features = ["littlefs", "rtic-peripherals"] }
+lpc55-rtic = "0.5.7"
 micromath = "2"
 nb = "1"
 trussed = { git = "https://github.com/trussed-dev/trussed" }
 
 [features]
-board-lpcxpresso55 = []
-board-okdoe1 = ["board-lpcxpresso55"]
-board-solo2 = []
+lpcxpresso55 = []
+okdoe1 = ["lpcxpresso55"]
+solo2 = []
 
 no-buttons = []
 no-clock-controller = []

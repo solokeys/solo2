@@ -6,19 +6,13 @@
 #![no_main]
 // #![deny(warnings)]
 
-use core::convert::TryFrom;
 use runner::hal;
 use hal::traits::wg::timer::Cancel;
 use hal::traits::wg::timer::CountDown;
 use hal::drivers::timer::Elapsed;
 use hal::time::{DurationExtensions, Microseconds};
 
-// use rtic::cyccnt::{Instant, U32Ext as _};
-
-const CLOCK_FREQ: u32 = 96_000_000;
 const REFRESH_MILLISECS: i32 = 50;
-// const PERIOD: u32 = CLOCK_FREQ/16;
-// const PERIOD: u32 = CLOCK_FREQ/4;
 
 const USB_INTERRUPT: board::hal::raw::Interrupt = board::hal::raw::Interrupt::USB1;
 const NFC_INTERRUPT: board::hal::raw::Interrupt = board::hal::raw::Interrupt::PIN_INT0;
@@ -36,27 +30,7 @@ pub fn msp() -> u32 {
   r
 }
 
-pub struct StolenRtc;
-
-impl rtic::Monotonic for StolenRtc {
-    // intended to be: milliseconds
-    type Instant = i32;//core::time::Duration;
-    unsafe fn reset() {}
-    fn ratio() -> rtic::Fraction {
-        rtic::Fraction { numerator: CLOCK_FREQ/1000, denominator: 1 }
-    }
-    fn now() -> Self::Instant {
-        let rtc = unsafe { crate::hal::raw::Peripherals::steal() }.RTC;
-        let secs = rtc.count.read().bits() as i32;
-        let ticks_32k = rtc.subsec.read().bits() as i32;
-        secs*1000 + ((ticks_32k * 61)/2000)
-    }
-    fn zero() -> Self::Instant {
-        Self::Instant::default()
-    }
-}
-
-#[rtic::app(device = runner::hal::raw, peripherals = true, monotonic = crate::StolenRtc)]
+#[rtic::app(device = runner::hal::raw, peripherals = true, monotonic = board::Monotonic)]
 const APP: () = {
 
     struct Resources {
@@ -129,7 +103,7 @@ const APP: () = {
         if usb_classes.is_some() {
             hal::enable_cycle_counter();
             // c.schedule.update_ui(Instant::now() + PERIOD.cycles()).unwrap();
-            c.schedule.update_ui(<StolenRtc as rtic::Monotonic>::now() + REFRESH_MILLISECS).unwrap();
+            c.schedule.update_ui(<board::Monotonic as rtic::Monotonic>::now() + REFRESH_MILLISECS).unwrap();
         }
 
         init::LateResources {
@@ -203,7 +177,7 @@ const APP: () = {
                         usbd_ccid::types::Status::ReceivedData(milliseconds) => {
                             schedule.ccid_wait_extension(
                                 // Instant::now() + (CLOCK_FREQ/1_000 * milliseconds.0).cycles()
-                                <StolenRtc as rtic::Monotonic>::now() + milliseconds.0 as i32
+                                <board::Monotonic as rtic::Monotonic>::now() + milliseconds.0 as i32
                             ).ok();
                         }
                         _ => {}
@@ -213,7 +187,7 @@ const APP: () = {
                         usbd_ctaphid::types::Status::ReceivedData(milliseconds) => {
                             schedule.ctaphid_keepalive(
                                 // Instant::now() + (CLOCK_FREQ/1_000 * milliseconds.0).cycles()
-                                <StolenRtc as rtic::Monotonic>::now() + milliseconds.0 as i32
+                                <board::Monotonic as rtic::Monotonic>::now() + milliseconds.0 as i32
                             ).ok();
                         }
                         _ => {}
@@ -254,7 +228,7 @@ const APP: () = {
                 // }
                 c.schedule.ccid_wait_extension(
                     // Instant::now() + (CLOCK_FREQ/1_000 * milliseconds.0).cycles()
-                    <StolenRtc as rtic::Monotonic>::now() + milliseconds.0 as i32
+                    <board::Monotonic as rtic::Monotonic>::now() + milliseconds.0 as i32
                 ).ok();
             }
             _ => {}
@@ -266,7 +240,7 @@ const APP: () = {
                 // }
                 c.schedule.ctaphid_keepalive(
                     // Instant::now() + (CLOCK_FREQ/1_000 * milliseconds.0).cycles()
-                    <StolenRtc as rtic::Monotonic>::now() + milliseconds.0 as i32
+                    <board::Monotonic as rtic::Monotonic>::now() + milliseconds.0 as i32
                 ).ok();
             }
             _ => {}
@@ -315,7 +289,7 @@ const APP: () = {
             usbd_ccid::types::Status::ReceivedData(milliseconds) => {
                 c.schedule.ccid_wait_extension(
                     // Instant::now() + (CLOCK_FREQ/1_000 * milliseconds.0).cycles()
-                    <StolenRtc as rtic::Monotonic>::now() + milliseconds.0 as i32
+                    <board::Monotonic as rtic::Monotonic>::now() + milliseconds.0 as i32
                 ).ok();
             }
             _ => {}
@@ -334,7 +308,7 @@ const APP: () = {
             usbd_ctaphid::types::Status::ReceivedData(milliseconds) => {
                 c.schedule.ctaphid_keepalive(
                     // Instant::now() + (CLOCK_FREQ/1_000 * milliseconds.0).cycles()
-                    <StolenRtc as rtic::Monotonic>::now() + milliseconds.0 as i32
+                    <board::Monotonic as rtic::Monotonic>::now() + milliseconds.0 as i32
                 ).ok();
             }
             _ => {}
@@ -380,7 +354,7 @@ const APP: () = {
         // let wait_periods = c.resources.trussed.lock(|trussed| trussed.update_ui());
         c.resources.trussed.lock(|trussed| trussed.update_ui());
         // c.schedule.update_ui(Instant::now() + wait_periods * PERIOD.cycles()).unwrap();
-        c.schedule.update_ui(<StolenRtc as rtic::Monotonic>::now() + REFRESH_MILLISECS).ok();
+        c.schedule.update_ui(<board::Monotonic as rtic::Monotonic>::now() + REFRESH_MILLISECS).ok();
 
         *UPDATES = UPDATES.wrapping_add(1);
     }

@@ -22,16 +22,16 @@ pub enum Color {
 use crate::traits::rgb_led;
 
 // OKdo E1 has pins switched for red+blue LED
-#[cfg(not(feature = "board-okdoe1"))]
+#[cfg(not(feature = "okdoe1"))]
 pub type RedLedPin = pins::Pio1_6;
-#[cfg(feature = "board-okdoe1")]
+#[cfg(feature = "okdoe1")]
 pub type RedLedPin = pins::Pio1_4;
 
 pub type GreenLedPin = pins::Pio1_7;
 
-#[cfg(not(feature = "board-okdoe1"))]
+#[cfg(not(feature = "okdoe1"))]
 pub type BlueLedPin = pins::Pio1_4;
-#[cfg(feature = "board-okdoe1")]
+#[cfg(feature = "okdoe1")]
 pub type BlueLedPin = pins::Pio1_6;
 
 

@@ -6,7 +6,7 @@ The main ones are:
 - [LPCXpresso55S69][lpcxpresso], the official development board by NXP
 - [Solo 2][solo2], the new security key by SoloKeys
 
-These can be selected via the features `board-lpcxpresso55` and `board-solo2`,
+These can be selected via the features `lpcxpresso55` and `solo2`,
 respectively.
 
 It is more convenient to develop on the LPC55S69-EVK as it has `PIO0_5`, the `ISP0` pin, exposed.
@@ -18,8 +18,8 @@ on the dev kit, two buttons instead of three, and the RGB led doesn't work prope
 There is also some low-effort support for the (cheap!) [OKdo E1][okdoe1]. This board however
 does not have a crystal soldered by default, and hence cannot run the USB HS peripheral.
 This also means it has one less bidirectional USB endpoint; keep this in mind when
-USB classes stop working. It can be selected via the `board-okdoe1`, which patches
-the `board-lpcxpresso55` implementation.
+USB classes stop working. It can be selected via the `okdoe1`, which patches
+the `lpcxpresso55` implementation.
 
 For development, on the main boards, we recommend using Segger's JLinkGDBServer:
 ```
