@@ -80,9 +80,10 @@ no-reset-time-window = ["fido-authenticator/disable-reset-time-window"]
 # Format filesystem anyway
 format-filesystem = []
 
-board-lpcxpresso55 = ["board/board-lpcxpresso55"]
-board-okdoe1 = ["board/board-okdoe1", "board-lpcxpresso55", "usbfs-peripheral"]
-board-solo2 = ["board/board-solo2"]
+# TODO: get rid of these (depends on moving "initialize_basic" &friends into `board`
+board-lpcxpresso55 = ["board/lpcxpresso55"]
+board-okdoe1 = ["board/okdoe1", "usbfs-peripheral"]
+board-solo2 = ["board/solo2"]
 
 log-rtt = ["rtt-target"]
 log-semihosting = ["cortex-m-semihosting"]
