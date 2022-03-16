@@ -27,6 +27,11 @@ macro_rules! add_build_variable{
             .expect("Could not write build_constants.rs file");
     };
 
+    ($file:expr, $name:literal, $value:expr, u16) => {
+        writeln!($file, "pub const {}: u16 = {};", $name, $value)
+            .expect("Could not write build_constants.rs file");
+    };
+
     ($file:expr, $name:literal, $value:expr, u32) => {
         writeln!($file, "pub const {}: u32 = {};", $name, $value)
             .expect("Could not write build_constants.rs file");
@@ -117,13 +122,15 @@ fn main() -> Result<(), Box<dyn error::Error>> {
 
     if major >= 1024 || minor > 9999 || patch >= 64 {
         panic!("config.firmware.product can at most be 1023.9999.63 for versions in customer data");
+    } else if major >= 256 || minor >= 256 {
+        panic!("USB release version number overflow (maximum: major 255, minor 255)");
     }
 
-    let version_to_check: u32 =
-        (major << 22) |
-        (minor << 6) | patch;
-
+    let version_to_check: u32 = (major << 22) | (minor << 6) | patch;
     add_build_variable!(&mut f, "CARGO_PKG_VERSION", version_to_check, u32);
+
+    let usb_release_version: u16 = ((major as u16) << 8) | (minor as u16);
+    add_build_variable!(&mut f, "USB_RELEASE", usb_release_version, u16);
 
     add_build_variable!(&mut f, "CONFIG_FILESYSTEM_BOUNDARY", config.parameters.filesystem_boundary, usize);
 

@@ -1,12 +1,13 @@
 use embedded_hal::blocking::spi::Transfer;
-use nrf52840_hal::gpio::{
-	Pin, Output, PushPull
+use nrf52840_hal::{
+	clocks::Clocks,
+	gpio::{Pin, Output, PushPull},
+	prelude::OutputPin
 };
-use nrf52840_hal::prelude::OutputPin;
 
 pub mod types;
 
-#[cfg(not(any(feature = "board-nrfdk")))]
+#[cfg(not(any(feature = "board-nrfdk", feature = "board-proto1", feature = "board-nk3mini")))]
 compile_error!("No NRF52840 board chosen!");
 
 #[cfg_attr(feature = "board-nrfdk", path = "board_nrfdk.rs")]
@@ -56,4 +57,24 @@ pub fn init_external_flash<SPI, CS>(spim: SPI, cs: CS,
 		pwr: Option<Pin<Output<PushPull>>>)
 		-> extflash::ExtFlashStorage<SPI, CS> where SPI: Transfer<u8>, CS: OutputPin {
 	extflash::ExtFlashStorage::new(spim, cs, pwr)
+}
+
+type UsbClockType = Clocks<nrf52840_hal::clocks::ExternalOscillator, nrf52840_hal::clocks::Internal, nrf52840_hal::clocks::LfOscStarted>;
+type UsbBusType = usb_device::bus::UsbBusAllocator<<types::Soc as crate::types::Soc>::UsbBus>;
+
+static mut USB_CLOCK: Option<UsbClockType> = None;
+static mut USBD: Option<UsbBusType> = None;
+
+pub fn setup_usb_bus(clock: nrf52840_pac::CLOCK, usbd: nrf52840_pac::USBD) -> &'static UsbBusType {
+	let usb_clock = Clocks::new(clock).start_lfclk().enable_ext_hfosc();
+	unsafe { USB_CLOCK.replace(usb_clock); }
+	let usb_clock_ref = unsafe { USB_CLOCK.as_ref().unwrap() };
+
+	let usb_peripheral = nrf52840_hal::usbd::UsbPeripheral::new(usbd, usb_clock_ref);
+
+	let usbd = nrf52840_hal::usbd::Usbd::new(usb_peripheral);
+	unsafe { USBD.replace(usbd); }
+	let usbd_ref = unsafe { USBD.as_ref().unwrap() };
+
+	usbd_ref
 }

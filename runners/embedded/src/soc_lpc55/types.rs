@@ -32,19 +32,30 @@ type UsbPeripheral = lpc55_hal::peripherals::usbfs::EnabledUsbfsDevice;
 #[cfg(not(feature = "usbfs-peripheral"))]
 type UsbPeripheral = lpc55_hal::peripherals::usbhs::EnabledUsbhsDevice;
 
+const INTERFACE_CONFIG: crate::types::Config = crate::types::Config {
+	card_issuer: b"Nitrokey 3\0\0\0",
+	usb_product: "--from PFR!--", /* TODO */
+	usb_manufacturer: "Nitrokey",
+	usb_serial: "00000000-0000-0000-00000000",
+	usb_id_vendor: crate::types::USB_ID_VENDOR_NITROKEY,
+	usb_id_product: 0x42b2_u16,
+};
+
 pub struct Soc {}
 impl crate::types::Soc for Soc {
 	type InternalFlashStorage = InternalFilesystem;
 	type ExternalFlashStorage = ExternalRAMStorage;
 	type UsbBus = lpc55_hal::drivers::UsbBus<UsbPeripheral>;
+	type NfcDevice = super::nfc::NfcChip;
 	type Rng = rng::Rng<lpc55_hal::Enabled>;
 	type TrussedUI = UserInterface<ThreeButtons, RgbLed>;
 	type Reboot = Lpc55Reboot;
 
-	const SOC_NAME: &'static str = "LPC55";
-	const BOARD_NAME: &'static str = super::board::BOARD_NAME;
 	const SYSCALL_IRQ: crate::types::IrqNr = crate::types::IrqNr { i: raw::Interrupt::OS_EVENT as u16 };
 
+	const SOC_NAME: &'static str = "LPC55";
+	const BOARD_NAME: &'static str = super::board::BOARD_NAME;
+	const INTERFACE_CONFIG: &'static crate::types::Config = &INTERFACE_CONFIG;
 	fn device_uuid() -> &'static [u8; 16] { unsafe { &DEVICE_UUID } }
 }
 

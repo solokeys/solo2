@@ -19,20 +19,36 @@ unsafe impl cortex_m::interrupt::InterruptNumber for IrqNr {
 	fn number(self) -> u16 { self.i }
 }
 
+pub const USB_ID_VENDOR_NITROKEY: u16 = 0x20a0_u16;
+
+pub struct Config {
+	pub card_issuer: &'static [u8; 13],
+	pub usb_product: &'static str,
+	pub usb_manufacturer: &'static str,
+	pub usb_serial: &'static str,
+	// pub usb_release: u16 --> taken from build_constants::USB_RELEASE
+	pub usb_id_vendor: u16,
+	pub usb_id_product: u16,
+}
+
 pub trait Soc {
 	type InternalFlashStorage;
 	type ExternalFlashStorage;
 	// VolatileStorage is always RAM
 	type UsbBus;
+	type NfcDevice;
 	type Rng;
 	type TrussedUI;
 	type Reboot;
 
 	// cannot use dyn cortex_m::interrupt::Nr
 	// cannot use actual types, those are usually Enums exported by the soc PAC
+	const SYSCALL_IRQ: IrqNr;
+
 	const SOC_NAME: &'static str;
 	const BOARD_NAME: &'static str;
-	const SYSCALL_IRQ: IrqNr;
+	const INTERFACE_CONFIG: &'static Config;
+
 	fn device_uuid() -> &'static [u8; 16];
 }
 
@@ -299,3 +315,9 @@ impl delog::Flusher for DelogFlusher {
 }
 
 pub static DELOG_FLUSHER: DelogFlusher = DelogFlusher {};
+
+#[derive(PartialEq)]
+pub enum BootMode {
+	NFCPassive,
+	Full
+}

@@ -36,7 +36,7 @@ impl UsbClasses {
 }
 
 pub struct UsbInit {
-	pub classes: UsbClasses,
+	pub usb_classes: Option<UsbClasses>,
 	pub apdu_dispatch: apdu_dispatch::dispatch::ApduDispatch,
 	pub ctaphid_dispatch: ctaphid_dispatch::dispatch::Dispatch
 }

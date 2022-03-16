@@ -19,10 +19,6 @@ delog::generate_macros!();
 
 delog!(Delogger, 3*1024, 512, ERL::types::DelogFlusher);
 
-type UsbClockType = Clocks<nrf52840_hal::clocks::ExternalOscillator, nrf52840_hal::clocks::Internal, nrf52840_hal::clocks::LfOscStarted>;
-static mut USB_CLOCK: Option<UsbClockType> = None;
-static mut USBD: Option<usb_device::bus::UsbBusAllocator<<ERL::soc::types::Soc as ERL::types::Soc>::UsbBus>> = None;
-
 #[rtic::app(device = nrf52840_hal::pac, peripherals = true, monotonic = rtic::cyccnt::CYCCNT)]
 const APP: () = {
         struct Resources {
@@ -72,12 +68,13 @@ const APP: () = {
 		/* a) powered through NFC: enable NFC, keep external oscillator off, don't start USB */
 		/* b) powered through USB: start external oscillator, start USB, keep NFC off(?) */
 
-		let usb_clock = Clocks::new(ctx.device.CLOCK).start_lfclk().enable_ext_hfosc();
-		unsafe { USB_CLOCK.replace(usb_clock); }
-		let usb_peripheral = nrf52840_hal::usbd::UsbPeripheral::new(ctx.device.USBD, unsafe { USB_CLOCK.as_ref().unwrap() });
-		let usbd = nrf52840_hal::usbd::Usbd::new(usb_peripheral);
-		unsafe { USBD.replace(usbd); }
-		let usbinit = ERL::init_usb( unsafe { USBD.as_ref().unwrap() });
+		let usbd_ref = { if powered_by_usb {
+			Some(ERL::soc::setup_usb_bus(ctx.device.CLOCK, ctx.device.USBD))
+		} else {
+			None
+		}};
+		/* TODO: set up NFC chip */
+		let usbnfcinit = ERL::init_usb_nfc(usbd_ref, None);
 
 		let internal_flash = ERL::soc::init_internal_flash(ctx.device.NVMC);
 		let external_flash = {
@@ -93,6 +90,9 @@ const APP: () = {
 			)
 		};
 		let store: ERL::types::RunnerStore = ERL::init_store(internal_flash, external_flash);
+
+		/* TODO: set up fingerprint device */
+		/* TODO: set up SE050 device */
 
 		let dev_rng = Rng::new(ctx.device.RNG);
 		let chacha_rng = chacha20::ChaCha8Rng::from_rng(dev_rng).unwrap();
@@ -111,9 +111,9 @@ const APP: () = {
 		init::LateResources {
 			trussed: trussed_service,
 			apps,
-			apdu_dispatch: usbinit.apdu_dispatch,
-			ctaphid_dispatch: usbinit.ctaphid_dispatch,
-			usb_classes: Some(usbinit.classes),
+			apdu_dispatch: usbnfcinit.apdu_dispatch,
+			ctaphid_dispatch: usbnfcinit.ctaphid_dispatch,
+			usb_classes: usbnfcinit.usb_classes,
 			contactless: None,
 			gpiote: dev_gpiote,
 			power: ctx.device.POWER,

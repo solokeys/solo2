@@ -1,7 +1,12 @@
 #![no_std]
 #![no_main]
 
-use embedded_runner_lib as ERL;
+use embedded_runner_lib::{
+	self as ERL,
+	types::BootMode
+};
+use embedded_hal::digital::v2::InputPin;
+use embedded_time::rate::Megahertz;
 use panic_halt as _;
 
 #[macro_use]
@@ -15,10 +20,11 @@ const APP: () = {
         struct Resources {
 		// trussed: ERL::types::Trussed,
 		// apps: ERL::types::Apps,
-		// apdu_dispatch: ERL::types::ApduDispatch,
-		// ctaphid_dispatch: ERL::types::CtaphidDispatch,
-		// usb_classes: Option<ERL::types::usb::UsbClasses>,
+		apdu_dispatch: ERL::types::ApduDispatch,
+		ctaphid_dispatch: ERL::types::CtaphidDispatch,
+		usb_classes: Option<ERL::types::usb::UsbClasses>,
 		// contactless: Option<ERL::types::Iso14443>,
+		boot_mode: BootMode,
 
 		/* LPC55 specific elements */
 		v: u32,
@@ -33,13 +39,79 @@ const APP: () = {
 		Delogger::init_default(delog::LevelFilter::Debug, &ERL::types::DELOG_FLUSHER).ok();
 		ERL::banner();
 
-		ERL::soc::init_bootup();
+		ERL::soc::init_bootup(&mut ctx.device.IOCON);
+
+		let mut hal = lpc55_hal::Peripherals::from((ctx.device, ctx.core));
+		let (anactrl, pmc, syscon) = (
+			&mut hal.anactrl,
+			&mut hal.pmc,
+			&mut hal.syscon);
+
+		let iocon = &mut hal.iocon.enabled(syscon);
+		let gpio = &mut hal.gpio.enabled(syscon);
+		let nfc_irq = lpc55_hal::drivers::pins::Pio0_19::take().unwrap().into_gpio_pin(iocon, gpio).into_input();
+		let bootmode = if nfc_irq.is_low().ok().unwrap() { BootMode::NFCPassive } else { BootMode::Full };
 
 		// GPIO
 
 		/* check reason for booting */
 		/* a) powered through NFC: enable NFC, keep external oscillator off, don't start USB */
 		/* b) powered through USB: start external oscillator, start USB, keep NFC off(?) */
+
+		/* initializer::initialize_all() */
+		/* -> initializer::initialize_clocks() */
+		let clockfreq = if bootmode == BootMode::NFCPassive { Megahertz(4_u32) } else { Megahertz(96_u32) };
+		let mut clocks = lpc55_hal::ClockRequirements::default().system_frequency(clockfreq)
+					.configure(anactrl, pmc, syscon)
+					.expect("LPC55 Clock Configuration Failed");
+
+		let mut delay_timer = lpc55_hal::drivers::Timer::new(hal.ctimer.0.enabled(syscon, clocks.support_1mhz_fro_token().unwrap()));
+		let mut perf_timer = lpc55_hal::drivers::Timer::new(hal.ctimer.4.enabled(syscon, clocks.support_1mhz_fro_token().unwrap()));
+		// out: { nfc_irq, clocks, iocon, gpio }
+
+		/* -> initializer::initialize_basic() */
+		let _adc = lpc55_hal::Adc::from(hal.adc)
+					.configure(ERL::soc::clock_controller::DynamicClockController::adc_configuration())
+					.enabled(pmc, syscon);
+
+		let _rgb = ERL::soc::init_rgb(syscon, iocon, hal.ctimer.3, &mut clocks);
+		// let _buttons = ...;
+		// check CFPA
+		// BOOTROM check
+		// out: { delay_timer, perf_timer, pfr, adc, buttons, rgb }
+
+		/* -> initializer::initialize_usb() */
+		let usbd_ref = { if bootmode == BootMode::Full {
+			#[cfg(feature = "usbfs-peripheral")]
+			{ Some(ERL::soc::setup_usb_bus(hal.usbfs, anactrl, iocon, pmc, syscon, clocks, &mut delay_timer)) }
+			#[cfg(not(feature = "usbfs-peripheral"))]
+			{ Some(ERL::soc::setup_usb_bus(hal.usbhs, anactrl, iocon, pmc, syscon, clocks, &mut delay_timer)) }
+		} else {
+			None
+		}};
+		// out: { usb_classes, contact_responder, ctaphid_responder }
+
+		/* -> initializer::initialize_nfc() */
+		let nfc_dev = { if bootmode == BootMode::NFCPassive {
+			ERL::soc::setup_fm11nc08(&clocks, syscon, iocon, gpio,
+					hal.flexcomm.0, hal.inputmux, hal.pint, nfc_irq, &mut delay_timer)
+		} else {
+			None
+		}};
+		// out: { iso14443, contactless_responder }
+
+		/* -> initializer::initialize_interfaces() */
+		let usbnfcinit = ERL::init_usb_nfc(usbd_ref, nfc_dev);
+		// out: { apdu_dispatch, ctaphid_dispatch }
+
+		/* -> initializer::initialize_flash() */
+		// out: { flash_gordon, prince, rng }
+
+		/* -> initializer::initialize_filesystem() */
+		// out: { store, internal_storage_fs }
+
+		/* -> initializer::initialize_trussed() */
+		// out: trussed
 
 		// let usbinit = ERL::init_usb( unsafe { USBD.as_ref().unwrap() });
 
@@ -67,32 +139,18 @@ const APP: () = {
 
 		// let mut trussed_service = trussed::service::Service::new(platform);
 
-		/*let apps = {
-			#[cfg(feature = "provisioner-app")]
-			{
-				let store_2 = store.clone();
-				let int_flash_ref = unsafe { ERL::types::INTERNAL_STORAGE.as_mut().unwrap() };
-				let pnp = ERL::types::ProvisionerNonPortable {
-					store: store_2,
-					stolen_filesystem: int_flash_ref,
-					nfc_powered: !powered_by_usb
-				};
-				ERL::types::Apps::new(&mut trussed_service, pnp)
-			}
-			#[cfg(not(feature = "provisioner-app"))]
-			{ ERL::types::Apps::new(&mut trussed_service) }
-		};*/
-
-		//let dev_rtc = Rtc::new(ctx.device.RTC0, 4095).unwrap();
+		/*let apps = ERL::init_apps(&mut trussed_service, &store, powered?); */
 
 		// compose LateResources
 		init::LateResources {
 			//trussed: trussed_service,
 			//apps,
-			//apdu_dispatch: usbinit.apdu_dispatch,
-			//ctaphid_dispatch: usbinit.ctaphid_dispatch,
-			//usb_classes: Some(usbinit.classes),
+			apdu_dispatch: usbnfcinit.apdu_dispatch,
+			ctaphid_dispatch: usbnfcinit.ctaphid_dispatch,
+			usb_classes: usbnfcinit.usb_classes,
 			//contactless: None,
+			boot_mode: bootmode,
+
 			//gpiote: dev_gpiote,
 			//power: ctx.device.POWER,
 			//rtc: dev_rtc,

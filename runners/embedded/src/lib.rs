@@ -53,37 +53,60 @@ pub fn init_store(int_flash: <SocT as Soc>::InternalFlashStorage, ext_flash: <So
 	store
 }
 
-pub fn init_usb(usbbus: &'static usb_device::bus::UsbBusAllocator<<SocT as Soc>::UsbBus>) -> types::usb::UsbInit {
+pub fn init_usb_nfc(usbbus_opt: Option<&'static usb_device::bus::UsbBusAllocator<<SocT as Soc>::UsbBus>>,
+		nfcdev_opt: Option<<SocT as Soc>::NfcDevice>) -> types::usb::UsbInit {
 
-	/* Class #1: CCID */
+	let config = <SocT as Soc>::INTERFACE_CONFIG;
+
+	/* claim interchanges */
 	let (ccid_rq, ccid_rp) = apdu_dispatch::interchanges::Contact::claim().unwrap();
 	let (nfc_rq, nfc_rp) = apdu_dispatch::interchanges::Contactless::claim().unwrap();
-	let ccid = usbd_ccid::Ccid::new(usbbus, ccid_rq, Some(b"PTB/EMC"));
-	let apdu_dispatch = apdu_dispatch::dispatch::ApduDispatch::new(ccid_rp, nfc_rp);
-
-	/* Class #2: CTAPHID */
 	let (ctaphid_rq, ctaphid_rp) = ctaphid_dispatch::types::HidInterchange::claim().unwrap();
-	let ctaphid = usbd_ctaphid::CtapHid::new(usbbus, ctaphid_rq, 0u32)
+
+	/* initialize dispatchers */
+	let apdu_dispatch = apdu_dispatch::dispatch::ApduDispatch::new(ccid_rp, nfc_rp);
+	let ctaphid_dispatch = ctaphid_dispatch::dispatch::Dispatch::new(ctaphid_rp);
+
+	/* populate requesters (if bus options are provided) */
+	let mut usb_classes = None;
+
+	if let Some(usbbus) = usbbus_opt {
+		/* Class #1: CCID */
+		let ccid = usbd_ccid::Ccid::new(usbbus, ccid_rq, Some(config.card_issuer));
+
+		/* Class #2: CTAPHID */
+		let ctaphid = usbd_ctaphid::CtapHid::new(usbbus, ctaphid_rq, 0u32)
 			.implements_ctap1()
 			.implements_ctap2()
 			.implements_wink();
-	let ctaphid_dispatch = ctaphid_dispatch::dispatch::Dispatch::new(ctaphid_rp);
 
-	/* Class #3: Serial */
-	let serial = usbd_serial::SerialPort::new(usbbus);
+		/* Class #3: Serial */
+		let serial = usbd_serial::SerialPort::new(usbbus);
 
-	let usbdev = UsbDeviceBuilder::new(usbbus, UsbVidPid(0x1209, 0x5090))
-			.product("EMC Stick")
-			.manufacturer("Nitrokey/PTB")
-			.serial_number("imagine.a.uuid.here")
-			.device_release(0x0001u16)
+		let vidpid = UsbVidPid(config.usb_id_vendor, config.usb_id_product);
+		let usbdev = UsbDeviceBuilder::new(usbbus, vidpid)
+			.product(config.usb_product)
+			.manufacturer(config.usb_manufacturer)
+			.serial_number(config.usb_serial)
+			.device_release(crate::types::build_constants::USB_RELEASE)
 			.max_packet_size_0(64)
 			.composite_with_iads()
 			.build();
 
-	let classes = types::usb::UsbClasses::new(usbdev, ccid, ctaphid, serial);
+		usb_classes = Some(types::usb::UsbClasses::new(usbdev, ccid, ctaphid, serial));
+	}
 
-	types::usb::UsbInit { classes, apdu_dispatch, ctaphid_dispatch }
+	if let Some(nfcdev) = nfcdev_opt {
+		let mut iso14443 = nfc_device::Iso14443::new(nfcdev, nfc_rq);
+
+		iso14443.poll();
+		if true {
+			// Give a small delay to charge up capacitors
+			// basic_stage.delay_timer.start(5_000.microseconds()); nb::block!(basic_stage.delay_timer.wait()).ok();
+		}
+	}
+
+	types::usb::UsbInit { usb_classes, apdu_dispatch, ctaphid_dispatch }
 }
 
 #[cfg(feature = "provisioner-app")]

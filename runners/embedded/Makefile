@@ -31,7 +31,9 @@ define board-targets
 build-$(1):
 	@echo "***** BUILD $(1) *****"
 	rm -f target/$(2)/release/$(4)-$(1)
-	cargo build --release --target $(2) --features board-$(1) $(EXTRA_FEATURES) --color always 2> build-$(1).err.log
+	cargo build --release --target $(2) --features board-$(1) $(EXTRA_FEATURES) \
+		--color always 2> build-$(1).err.log \
+		|| ( cat build-$(1).err.log; exit 1 )
 	cp target/$(2)/release/$(4) ./$(4)-$(1)
 	$(3)-nm ./$(4)-$(1) | grep ' [ABbDdRrTt] ' | sort | c++filt > symbols-$(1).txt
 	cat $(3)-arch-symbols.txt >> symbols-$(1).txt
