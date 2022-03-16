@@ -103,6 +103,10 @@ impl admin_app::Reboot for Lpc55Reboot {
         hal::drivers::flash::FlashGordon::new(flash).erase_page(0).ok();
         hal::raw::SCB::sys_reset()
     }
+    fn locked() -> bool {
+        let seal = &unsafe { hal::raw::Peripherals::steal() }.FLASH_CMPA.sha256_digest;
+        seal.iter().any(|word| word.read().bits() != 0)
+    }
 }
 
 #[cfg(feature = "admin-app")]

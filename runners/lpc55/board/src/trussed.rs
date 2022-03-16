@@ -64,9 +64,11 @@ const BLACK: Intensities = Intensities { red: 0, green: 0, blue: 0 };
 const RED: Intensities = Intensities { red: u8::MAX, green: 0, blue: 0 };
 const GREEN: Intensities = Intensities { red: 0, green: u8::MAX, blue: 0x02 };
 const BLUE: Intensities = Intensities { red: 0, green: 0, blue: u8::MAX };
-const TEAL: Intensities = Intensities { red: 0, green: u8::MAX, blue: 0x5a };
+// const TEAL: Intensities = Intensities { red: 0, green: u8::MAX, blue: 0x5a };
 #[allow(dead_code)]
 const ORANGE: Intensities = Intensities { red: u8::MAX, green: 0x7e, blue: 0 };
+#[allow(dead_code)]
+const WHITE: Intensities = Intensities { red: u8::MAX, green: u8::MAX, blue: u8::MAX };
 
 impl<BUTTONS, RGB> trussed::platform::UserInterface for UserInterface<BUTTONS,RGB>
 where
@@ -109,8 +111,10 @@ RGB: RgbLed,
         // self.refresh runs periodically and would overwrite this
         if let Some(rgb) = &mut self.rgb {
             rgb.set(match status {
-                ui::Status::Idle => GREEN,
-                ui::Status::Processing => TEAL,
+                // ui::Status::Idle => GREEN,
+                ui::Status::Idle => RED,
+                // ui::Status::Processing => TEAL,
+                ui::Status::Processing => GREEN,
                 // ui::Status::WaitingForUserPresence => ORANGE,
                 ui::Status::WaitingForUserPresence => BLUE,
                 ui::Status::Error => RED,
@@ -151,6 +155,7 @@ RGB: RgbLed,
 
                 let on = (((F32(uptime as f32) / 250.0).round().0 as u32) % 2) != 0;
                 if on { BLUE } else { BLACK }
+                // if on { WHITE } else { BLACK }
 
             } else {
 
