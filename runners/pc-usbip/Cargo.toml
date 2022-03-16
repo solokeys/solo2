@@ -1,0 +1,65 @@
+[package]
+name = "solo-usbip"
+version = "0.0.1"
+authors = ["Nicolas Stalder <n@stalder.io>", "Conor Patrick <conor@solokeys.com>", "Szczepan Zalega <szczepan@nitrokey.com>"]
+edition = "2021"
+
+[[bin]]
+name = "usbip-simulation"
+path = "src/bin/main.rs"
+
+[dependencies]
+chacha20 = { version = "0.7", features = ["rng"] }
+generic-array = "0.14.3"
+heapless = "0.6"
+interchange = "0.2.0"
+nb = "1"
+log = { version = "0.4.14", default-features = false }
+clap = { version = "3.0.0", features = ["derive"] }
+clap-num = "1.0.0"
+
+#admin-app = { git = "https://github.com/solokeys/admin-app" }
+apdu-dispatch = { git = "https://github.com/solokeys/apdu-dispatch", features = ["std"] }
+ctap-types = { git = "https://github.com/solokeys/ctap-types" }
+ctaphid-dispatch = { git = "https://github.com/solokeys/ctaphid-dispatch", features = ["std"] }
+fido-authenticator = { git = "https://github.com/Nitrokey/fido-authenticator" }
+#piv-authenticator = { git = "https://github.com/solokeys/piv-authenticator" }
+trussed = { git = "https://github.com/trussed-dev/trussed", features = ["clients-3"] }
+
+# components
+usbd-ctaphid = { path = "../../components/usbd-ctaphid" }
+dispatch-fido = {path = "./../../components/dispatch-fido"}
+
+# storage
+littlefs2 = "0.3.1"
+
+# USB related
+usbip-device = "*"
+usb-device = { version = "0.2.7", default-features = false }
+
+# Optional
+pretty_env_logger = { version = "0.4.0", optional = true}
+
+[features]
+default = [ "enable-logs" ]
+enable-logs = ["pretty_env_logger"]
+
+# Use to auto-succeed every user presence check
+no-buttons= []
+
+# Reconfigure the NFC chip in any case
+reconfigure-nfc = []
+
+log-all = []
+log-none = []
+log-info = []
+log-debug = []
+log-warn = []
+log-error = []
+
+
+#[profile.release]
+#codegen-units = 1
+#opt-level = "z"
+#incremental = false
+#debug = true
