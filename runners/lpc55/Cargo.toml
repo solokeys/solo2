@@ -1,6 +1,6 @@
 [package]
 name = "runner"
-version = "1.797.1"
+version = "1.806.0"
 authors = ["Nicolas Stalder <n@stalder.io>", "Conor Patrick <conor@solokeys.com>"]
 edition = "2021"
 rust-version = "1.59.0"
@@ -28,7 +28,7 @@ admin-app = { git = "https://github.com/solokeys/admin-app", optional = true }
 apdu-dispatch = "0.1"
 ctaphid-dispatch = "0.1"
 ctap-types = "0.1"
-fido-authenticator = { git = "https://github.com/solokeys/fido-authenticator", branch = "less-ram", features = ["dispatch"], optional = true }
+fido-authenticator = { git = "https://github.com/solokeys/fido-authenticator", features = ["dispatch"], optional = true }
 oath-authenticator = { git = "https://github.com/trussed-dev/oath-authenticator", features = ["apdu-dispatch"], optional = true }
 piv-authenticator = { git = "https://github.com/solokeys/piv-authenticator", features = ["apdu-dispatch"], optional = true }
 trussed = { git = "https://github.com/trussed-dev/trussed" }
