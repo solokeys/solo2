@@ -12,14 +12,13 @@ generic-array = "0.14.3"
 interchange = "0.2.0"
 nb = "1"
 
-admin-app = { git = "https://github.com/solokeys/admin-app" }
+admin-app = "0.1"
 apdu-dispatch = "0.1"
 ctap-types = "0.1"
 ctaphid-dispatch = "0.1"
-# fido-authenticator = { git = "https://github.com/solokeys/fido-authenticator" }
-fido-authenticator = { git = "https://github.com/solokeys/fido-authenticator", branch = "less-ram", features = ["dispatch"], optional = true }
+fido-authenticator = { version = "0.1", features = ["dispatch"], optional = true }
 piv-authenticator = { git = "https://github.com/solokeys/piv-authenticator" }
-trussed = { git = "https://github.com/trussed-dev/trussed", features = ["clients-3"] }
+trussed = { version = "0.1", features = ["clients-3"] }
 
 # components
 usbd-ccid = { path = "../../components/usbd-ccid" }
