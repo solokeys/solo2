@@ -1,18 +1,18 @@
 [package]
 name = "board"
-version = "0.0.0-unreleased"
+version = "0.1.0-unreleased"
 authors = ["Conor Patrick <conor@solokeys.com>"]
 edition = "2021"
 
 [dependencies]
-admin-app = { git = "https://github.com/solokeys/admin-app" }
-delog = "0.1.0"
+admin-app = "0.1"
+delog = "0.1"
 fm11nc08 = {path = "../../../components/fm11nc08"}
 lpc55-hal = { version = "0.3", features = ["littlefs", "rtic-peripherals"] }
 lpc55-rtic = "0.5.7"
 micromath = "2"
 nb = "1"
-trussed = { git = "https://github.com/trussed-dev/trussed" }
+trussed = "0.1"
 
 [features]
 lpcxpresso55 = []
