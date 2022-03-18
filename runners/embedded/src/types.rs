@@ -9,7 +9,7 @@ use littlefs2::{const_ram_storage, consts, fs::Allocation};
 use trussed::types::{LfsResult, LfsStorage};
 use trussed::{platform, store};
 
-pub mod usb;
+pub mod usbnfc;
 
 #[derive(Clone,Copy)]
 pub struct IrqNr {
@@ -103,8 +103,7 @@ impl trussed::client::Syscall for RunnerSyscall {
 pub type Trussed = trussed::Service<RunnerPlatform>;
 pub type TrussedClient = trussed::ClientImplementation<RunnerSyscall>;
 
-// pub type Iso14443 = nfc_device::Iso14443<board::soc::nfc::NfcChip>;
-pub struct Iso14443 {}
+pub type Iso14443 = nfc_device::Iso14443<<SocT as Soc>::NfcDevice>;
 
 pub type ApduDispatch = apdu_dispatch::dispatch::ApduDispatch;
 pub type CtaphidDispatch = ctaphid_dispatch::dispatch::Dispatch;

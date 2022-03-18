@@ -54,10 +54,7 @@ pub fn init_bootup(iocon: &mut lpc55_pac::IOCON) {
 	iocon.pio0_19.modify(|_,w| w.mode().pull_up() );
 }
 
-#[cfg(feature = "board-nk3xn")]
-type PwmTimer = lpc55_hal::peripherals::ctimer::Ctimer3<Unknown>;
-
-pub fn init_rgb(syscon: &mut lpc55_hal::Syscon, iocon: &mut lpc55_hal::Iocon<Enabled>, ctimer: PwmTimer, clocks: &mut lpc55_hal::drivers::clocks::Clocks) -> board::led::RgbLed {
+pub fn init_rgb(syscon: &mut lpc55_hal::Syscon, iocon: &mut lpc55_hal::Iocon<Enabled>, ctimer: board::PwmTimer, clocks: &mut lpc55_hal::drivers::clocks::Clocks) -> board::led::RgbLed {
 	#[cfg(any(feature = "board-lpcxpresso55"))]
 	{ board::led::RgbLed::new(
 		lpc55_hal::drivers::Pwm::new(ctimer.enabled(syscon, clocks.support_1mhz_fro_token().unwrap())),

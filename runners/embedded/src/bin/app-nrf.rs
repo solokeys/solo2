@@ -26,7 +26,7 @@ const APP: () = {
 		apps: ERL::types::Apps,
 		apdu_dispatch: ERL::types::ApduDispatch,
 		ctaphid_dispatch: ERL::types::CtaphidDispatch,
-		usb_classes: Option<ERL::types::usb::UsbClasses>,
+		usb_classes: Option<ERL::types::usbnfc::UsbClasses>,
 		contactless: Option<ERL::types::Iso14443>,
 
 		/* NRF specific elements */
@@ -114,7 +114,7 @@ const APP: () = {
 			apdu_dispatch: usbnfcinit.apdu_dispatch,
 			ctaphid_dispatch: usbnfcinit.ctaphid_dispatch,
 			usb_classes: usbnfcinit.usb_classes,
-			contactless: None,
+			contactless: usbnfcinit.iso14443,
 			gpiote: dev_gpiote,
 			power: ctx.device.POWER,
 			rtc: dev_rtc,

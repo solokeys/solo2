@@ -35,8 +35,9 @@ impl UsbClasses {
     }
 }
 
-pub struct UsbInit {
+pub struct UsbNfcInit {
 	pub usb_classes: Option<UsbClasses>,
 	pub apdu_dispatch: apdu_dispatch::dispatch::ApduDispatch,
-	pub ctaphid_dispatch: ctaphid_dispatch::dispatch::Dispatch
+	pub ctaphid_dispatch: ctaphid_dispatch::dispatch::Dispatch,
+	pub iso14443: Option<super::Iso14443>,
 }

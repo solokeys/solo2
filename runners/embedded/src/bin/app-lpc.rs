@@ -18,12 +18,12 @@ delog!(Delogger, 3*1024, 512, ERL::types::DelogFlusher);
 #[rtic::app(device = lpc55_hal::raw, peripherals = true, monotonic = rtic::cyccnt::CYCCNT)]
 const APP: () = {
         struct Resources {
-		// trussed: ERL::types::Trussed,
-		// apps: ERL::types::Apps,
+		trussed: ERL::types::Trussed,
+		apps: ERL::types::Apps,
 		apdu_dispatch: ERL::types::ApduDispatch,
 		ctaphid_dispatch: ERL::types::CtaphidDispatch,
-		usb_classes: Option<ERL::types::usb::UsbClasses>,
-		// contactless: Option<ERL::types::Iso14443>,
+		usb_classes: Option<ERL::types::usbnfc::UsbClasses>,
+		contactless: Option<ERL::types::Iso14443>,
 		boot_mode: BootMode,
 
 		/* LPC55 specific elements */
@@ -74,7 +74,8 @@ const APP: () = {
 					.configure(ERL::soc::clock_controller::DynamicClockController::adc_configuration())
 					.enabled(pmc, syscon);
 
-		let _rgb = ERL::soc::init_rgb(syscon, iocon, hal.ctimer.3, &mut clocks);
+		let rtc = hal.rtc.enabled(syscon, clocks.enable_32k_fro(pmc));
+		let rgb = ERL::soc::init_rgb(syscon, iocon, hal.ctimer.3, &mut clocks);
 		// let _buttons = ...;
 		// check CFPA
 		// BOOTROM check
@@ -105,50 +106,37 @@ const APP: () = {
 		// out: { apdu_dispatch, ctaphid_dispatch }
 
 		/* -> initializer::initialize_flash() */
+		let mut rng = hal.rng.enabled(syscon);
+		let mut prince = hal.prince.enabled(&mut rng);
+		prince.disable_all_region_2();
+		let mut flash_gordon = lpc55_hal::FlashGordon::new(hal.flash.enabled(syscon));
 		// out: { flash_gordon, prince, rng }
 
 		/* -> initializer::initialize_filesystem() */
+		// TODO: make fs encryption configurable
+		let internal_fs = ERL::soc::types::InternalFilesystem::new(flash_gordon, prince);
+		let external_fs = ERL::soc::types::ExternalRAMStorage::new();
+		let store: ERL::types::RunnerStore = ERL::init_store(internal_fs, external_fs);
 		// out: { store, internal_storage_fs }
 
 		/* -> initializer::initialize_trussed() */
+		let ui = <ERL::soc::types::Soc as ERL::types::Soc>::TrussedUI::new(
+				rtc, None, None, true);
+		let platform: ERL::types::RunnerPlatform = ERL::types::RunnerPlatform::new(
+				rng, store, ui);
+		let mut trussed_service = trussed::service::Service::new(platform);
 		// out: trussed
 
-		// let usbinit = ERL::init_usb( unsafe { USBD.as_ref().unwrap() });
-
-		/*let internal_flash = ERL::soc::init_internal_flash(ctx.device.NVMC);
-		let external_flash = {
-			let dev_spim3 = Spim::new(ctx.device.SPIM3,
-				board_gpio.flashnfc_spi.take().unwrap(),
-				nrf52840_hal::spim::Frequency::M2,
-				nrf52840_hal::spim::MODE_0,
-				0x00u8
-			);
-			ERL::soc::init_external_flash(dev_spim3,
-				board_gpio.flash_cs.take().unwrap(),
-				board_gpio.flash_power
-			)
-		};*/
-		// let store: ERL::types::RunnerStore = ERL::init_store(internal_flash, external_flash);
-
-		// let dev_rng = Rng::new(ctx.device.RNG);
-		// let chacha_rng = chacha20::ChaCha8Rng::from_rng(dev_rng).unwrap();
-		// let dummy_ui = ERL::soc::dummy_ui::DummyUI::new();
-
-		// let platform: ERL::types::RunnerPlatform = ERL::types::RunnerPlatform::new(
-			// chacha_rng, store, dummy_ui);
-
-		// let mut trussed_service = trussed::service::Service::new(platform);
-
-		/*let apps = ERL::init_apps(&mut trussed_service, &store, powered?); */
+		let apps = ERL::init_apps(&mut trussed_service, &store, bootmode == BootMode::NFCPassive);
 
 		// compose LateResources
 		init::LateResources {
-			//trussed: trussed_service,
-			//apps,
+			trussed: trussed_service,
+			apps,
 			apdu_dispatch: usbnfcinit.apdu_dispatch,
 			ctaphid_dispatch: usbnfcinit.ctaphid_dispatch,
 			usb_classes: usbnfcinit.usb_classes,
-			//contactless: None,
+			contactless: usbnfcinit.iso14443,
 			boot_mode: bootmode,
 
 			//gpiote: dev_gpiote,

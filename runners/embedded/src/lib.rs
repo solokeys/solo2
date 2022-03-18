@@ -54,7 +54,7 @@ pub fn init_store(int_flash: <SocT as Soc>::InternalFlashStorage, ext_flash: <So
 }
 
 pub fn init_usb_nfc(usbbus_opt: Option<&'static usb_device::bus::UsbBusAllocator<<SocT as Soc>::UsbBus>>,
-		nfcdev_opt: Option<<SocT as Soc>::NfcDevice>) -> types::usb::UsbInit {
+		nfcdev_opt: Option<<SocT as Soc>::NfcDevice>) -> types::usbnfc::UsbNfcInit {
 
 	let config = <SocT as Soc>::INTERFACE_CONFIG;
 
@@ -93,10 +93,10 @@ pub fn init_usb_nfc(usbbus_opt: Option<&'static usb_device::bus::UsbBusAllocator
 			.composite_with_iads()
 			.build();
 
-		usb_classes = Some(types::usb::UsbClasses::new(usbdev, ccid, ctaphid, serial));
+		usb_classes = Some(types::usbnfc::UsbClasses::new(usbdev, ccid, ctaphid, serial));
 	}
 
-	if let Some(nfcdev) = nfcdev_opt {
+	let iso14443 = { if let Some(nfcdev) = nfcdev_opt {
 		let mut iso14443 = nfc_device::Iso14443::new(nfcdev, nfc_rq);
 
 		iso14443.poll();
@@ -104,9 +104,13 @@ pub fn init_usb_nfc(usbbus_opt: Option<&'static usb_device::bus::UsbBusAllocator
 			// Give a small delay to charge up capacitors
 			// basic_stage.delay_timer.start(5_000.microseconds()); nb::block!(basic_stage.delay_timer.wait()).ok();
 		}
-	}
 
-	types::usb::UsbInit { usb_classes, apdu_dispatch, ctaphid_dispatch }
+		Some(iso14443)
+	} else {
+		None
+	}};
+
+	types::usbnfc::UsbNfcInit { usb_classes, apdu_dispatch, ctaphid_dispatch, iso14443 }
 }
 
 #[cfg(feature = "provisioner-app")]
