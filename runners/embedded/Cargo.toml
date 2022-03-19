@@ -22,21 +22,20 @@ rtt-target = { version = "0.3", features = ["cortex-m"] }
 spi-memory = "0.2"
 
 ### protocols and dispatchers
-apdu-dispatch = { git = "https://github.com/solokeys/apdu-dispatch" }
-ctaphid-dispatch = { git = "https://github.com/solokeys/ctaphid-dispatch" }
-ctap-types = { git = "https://github.com/solokeys/ctap-types" }
-dispatch-fido = {path = "../../components/dispatch-fido"}
+apdu-dispatch = "0.1"
+ctaphid-dispatch = "0.1"
+ctap-types = "0.1"
 
 ### client apps
 admin-app = { git = "https://github.com/solokeys/admin-app", optional = true }
-fido-authenticator = { git = "https://github.com/Nitrokey/fido-authenticator", optional = true }
+fido-authenticator = { git = "https://github.com/solokeys/fido-authenticator", features = ["dispatch"], optional = true }
 ndef-app = { path = "../../components/ndef-app", optional = true }
 oath-authenticator = { git = "https://github.com/trussed-dev/oath-authenticator", features = ["apdu-dispatch"], optional = true }
 piv-authenticator = { git = "https://github.com/solokeys/piv-authenticator", features = ["apdu-dispatch"], optional = true }
 provisioner-app = { path = "../../components/provisioner-app", optional = true }
 
 ### trussed core
-trussed = { git = "https://github.com/trussed-dev/trussed" }
+trussed = "0.1"
 interchange = "0.2"
 littlefs2 = { version = "0.3", features = ["c-stubs"] }
 
@@ -60,6 +59,7 @@ fm11nc08 = { path = "../../components/fm11nc08", optional = true }
 nb = "1"
 
 [build-dependencies]
+cargo-lock = "7"
 serde = { version = "1", features = ["derive"] }
 toml = "0.5"
 
@@ -108,3 +108,4 @@ required-features = ["soc-lpc55"]
 [patch.crates-io]
 littlefs2 = { path = "../../components/littlefs2" }
 lpc55-hal = { path = "../../components/lpc55-hal" }
+trussed = { git = "https://github.com/trussed-dev/trussed" }

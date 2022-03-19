@@ -76,6 +76,7 @@ impl admin_app::Reboot for Lpc55Reboot {
 		lpc55_hal::drivers::flash::FlashGordon::new(flash).erase_page(0).ok();
 		raw::SCB::sys_reset()
 	}
+	fn locked() -> bool { todo!() }
 }
 
 pub type DynamicClockController = super::clock_controller::DynamicClockController;

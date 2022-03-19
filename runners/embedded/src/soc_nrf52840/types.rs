@@ -63,6 +63,7 @@ impl admin_app::Reboot for Reboot {
 	fn reboot() -> ! { todo!() }
 	fn reboot_to_firmware_update() -> ! { todo!() }
 	fn reboot_to_firmware_update_destructive() -> ! { todo!() }
+	fn locked() -> bool { todo!() }
 }
 
 //////////////////////////////////////////////////////////////////////////////

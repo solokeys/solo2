@@ -1,8 +1,6 @@
 [target.thumbv7em-none-eabihf]
 rustflags = [
 	"-C", "linker=flip-link",
-	"-C", "link-args=-L ./ld-nrf52",
-	"-C", "link-arg=-Tlink.x",
 	"-C", "link-arg=-error-limit=0",
 	"-C", "inline-threshold=0",
 ]
@@ -10,8 +8,6 @@ rustflags = [
 [target.thumbv8m.main-none-eabi]
 rustflags = [
 	"-C", "linker=flip-link",
-	"-C", "link-args=-L ./ld-lpc55",
-	"-C", "link-arg=-Tlink.x",
 	"-C", "link-arg=-error-limit=0",
 	"-C", "inline-threshold=0",
 ]

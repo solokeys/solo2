@@ -3,3 +3,4 @@
 /lpc-runner*
 /nrf-runner*
 /symbols*.txt
+custom_memory.x

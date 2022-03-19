@@ -115,7 +115,7 @@ pub type PivApp = piv_authenticator::Authenticator<TrussedClient, {ApduCommandSi
 #[cfg(feature = "oath-authenticator")]
 pub type OathApp = oath_authenticator::Authenticator<TrussedClient>;
 #[cfg(feature = "fido-authenticator")]
-pub type FidoApp = dispatch_fido::Fido<fido_authenticator::NonSilentAuthenticator, TrussedClient>;
+pub type FidoApp = fido_authenticator::Authenticator<fido_authenticator::Conforming, TrussedClient>;
 #[cfg(feature = "ndef-app")]
 pub type NdefApp = ndef_app::App<'static>;
 #[cfg(feature = "provisioner-app")]
@@ -191,10 +191,11 @@ impl TrussedApp for FidoApp {
     fn with_client(trussed: TrussedClient, _: ()) -> Self {
         let authnr = fido_authenticator::Authenticator::new(
             trussed,
-            fido_authenticator::NonSilentAuthenticator {},
+            fido_authenticator::Conforming {},
+            fido_authenticator::Config { max_msg_size: usbd_ctaphid::constants::MESSAGE_SIZE }
         );
 
-        Self::new(authnr)
+        authnr
     }
 }
 
