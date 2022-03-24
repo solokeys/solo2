@@ -15,7 +15,7 @@ GNU_TRIPLET_NRF52 := arm-none-eabi
 RUST_TRIPLET_LPC55 := thumbv8m.main-none-eabi
 GNU_TRIPLET_LPC55 := arm-none-eabi
 
-BOARDS_NRF52 := nrfdk # proto1 nk3mini
+BOARDS_NRF52 := nrfdk nk3am # proto1
 BOARDS_LPC55 := nk3xn # nk3am solo2 okdoe1 lpcxpresso55
 
 .PHONY: all clean build-all
@@ -54,6 +54,16 @@ program-nrf-$(1):
 reset-nrf-$(1):
 	nrfjprog -f NRF52 -s $(1) --chiperase --program ./nrf-runner-$(2).ihex
 	nrfjprog -f NRF52 -s $(1) --program fidokeys_lfs_e0000+20000.ihex
+	
+	# set APPROTECT (disable debugging port - reset with: `nrfjprog -f NRF52 --recover` or --chiperase(?)
+	#nrfjprog --memwr 0x10001208 --val 0xFFFFFF00
+	
+	# set UICR::REGOUT0 to 3v3
+	nrfjprog -f NRF52 -s $(1) --memwr 0x10001304 --val 0xfffffffc
+	
+	# set UICR::NFCPINS to disabled
+	nrfjprog -f NRF52 -s $(1) --memwr 0x1000120C --val 0xfffffffe
+
 	nrfjprog -f NRF52 -s $(1) --reset
 
 .PHONY: program-nrf-$(1) reset-nrf-$(1)
@@ -64,7 +74,7 @@ $(foreach b,$(BOARDS_LPC55), $(eval $(call board-targets,$(b),$(RUST_TRIPLET_LPC
 
 $(foreach s,$(SERIAL_NRFDK), $(eval $(call nrf-targets,$(s),nrfdk)) )
 $(foreach s,$(SERIAL_PROTO1), $(eval $(call nrf-targets,$(s),proto1)) )
-$(foreach s,$(SERIAL_NK3MINI), $(eval $(call nrf-targets,$(s),nk3mini)) )
+$(foreach s,$(SERIAL_NK3AM), $(eval $(call nrf-targets,$(s),nk3am)) )
 
 ifeq ($(words $(NRF_SERIAL)),0)
 DEVICES_PRESENT := $(shell nrfjprog -i)
@@ -75,7 +85,7 @@ endif
 endif
 
 ifeq ($(words $(NRF_SERIAL)),1)
-ifneq ($(filter $(NRF_SERIAL),$(SERIAL_NRFDK)),)
+ifneq ($(filter $(NRF_SERIAL),$(SERIAL_NRFDK),$(SERIAL_NK3AM)),)
 program: program-nrf-$(NRF_SERIAL)
 
 reset: reset-nrf-$(NRF_SERIAL)

@@ -71,13 +71,12 @@ default = ["admin-app", "fido-authenticator", "ndef-app", "oath-authenticator",
 
 board-nrfdk = ["soc-nrf52840"]
 board-proto1 = ["soc-nrf52840"]
-board-nk3mini = ["soc-nrf52840"]
+board-nk3am = ["soc-nrf52840"]
 
 board-lpcxpresso55 = ["soc-lpc55"]
 board-okdoe1 = ["soc-lpc55", "board-lpcxpresso55"]
 board-solo2 = ["soc-lpc55"]
 board-nk3xn = ["soc-lpc55"]
-board-nk3am = ["soc-lpc55", "board-solo2"]
 
 soc-nrf52840 = ["nrf52840-hal", "nrf52840-pac", "cortex-m-rtic",
 		"chacha20", "provisioner-app/nrf52"]

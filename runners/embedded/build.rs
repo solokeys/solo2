@@ -84,8 +84,14 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     let out_dir = env::var("OUT_DIR").expect("$OUT_DIR unset");
     let soc_type = check_build_triplet();
 
-    let config = std::fs::read_to_string("cfg.toml").expect("cfg.toml not found");
-    let config: Config = toml::from_str(&config).expect("cannot parse cfg.toml");
+    let config_fn = match soc_type {
+        SocType::Lpc55 => "lpc55_cfg.toml",
+        SocType::Nrf52840 => "nrf52_cfg.toml"
+    };
+
+    let config = std::fs::read_to_string(&config_fn).expect("failed reading *_cfg.toml");
+
+    let config: Config = toml::from_str(&config).expect("failed parsing *_cfg.toml");
     if config.parameters.filesystem_boundary & 0x3ff != 0 {
         panic!("filesystem boundary is not a multiple of the flash block size (1KB)");
     }

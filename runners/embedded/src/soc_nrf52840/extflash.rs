@@ -14,13 +14,13 @@ struct FlashProperties {
 }
 
 /* GD25Q16C, 16 Mbit == 2 MB */
-#[cfg(any(feature = "board-proto1", feature = "board-nk3mini"))]
+#[cfg(any(feature = "board-proto1", feature = "board-nk3am"))]
 const FLASH_GD25Q16C: FlashProperties = FlashProperties {
 	size: 0x20_0000,
 	jedec: [0xc8, 0x40, 0x15],
 	_cont: 0 /* should be 6, but device doesn't report those */
 };
-#[cfg(any(feature = "board-proto1", feature = "board-nk3mini"))]
+#[cfg(any(feature = "board-proto1", feature = "board-nk3am"))]
 const FLASH_PROPERTIES: &FlashProperties = &FLASH_GD25Q16C;
 
 /* MX25R6435F, 64 Mbit == 8 MB */

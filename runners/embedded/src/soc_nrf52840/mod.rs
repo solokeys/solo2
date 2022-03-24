@@ -7,12 +7,12 @@ use nrf52840_hal::{
 
 pub mod types;
 
-#[cfg(not(any(feature = "board-nrfdk", feature = "board-proto1", feature = "board-nk3mini")))]
+#[cfg(not(any(feature = "board-nrfdk", feature = "board-proto1", feature = "board-nk3am")))]
 compile_error!("No NRF52840 board chosen!");
 
 #[cfg_attr(feature = "board-nrfdk", path = "board_nrfdk.rs")]
 #[cfg_attr(feature = "board-proto1", path = "board_proto1.rs")]
-#[cfg_attr(feature = "board-nk3mini", path = "board_nk3mini.rs")]
+#[cfg_attr(feature = "board-nk3am", path = "board_nk3am.rs")]
 pub mod board;
 
 pub mod dummy_ui;
