@@ -4,3 +4,4 @@
 /nrf-runner*
 /symbols*.txt
 custom_memory.x
+!/Cargo.lock
