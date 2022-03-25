@@ -22,6 +22,10 @@ const INTERFACE_CONFIG: crate::types::Config = crate::types::Config {
 	usb_id_product: super::board::USB_ID_PRODUCT,
 };
 
+/* the base address of the internal filesystem is compile-time configurable
+   and placed into build_constants::CONFIG_FILESYSTEM_BOUNDARY */
+pub const FILESYSTEM_END: usize = 0x000E_C000;
+
 pub struct Soc {}
 impl crate::types::Soc for Soc {
 	type InternalFlashStorage = super::flash::FlashStorage;

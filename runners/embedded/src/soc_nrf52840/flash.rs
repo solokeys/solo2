@@ -1,8 +1,9 @@
 use embedded_storage::nor_flash::{NorFlash, ReadNorFlash};
+use crate::types::build_constants::CONFIG_FILESYSTEM_BOUNDARY as FS_BASE;
+use super::types::FILESYSTEM_END as FS_CEIL;
 
-pub const FLASH_BASE: *mut u8 = 0x000e_0000 as *mut u8;
-/* TODO: grab this from build.rs (code:fs split) */
-pub const FLASH_SIZE: usize = 0x2_0000;
+pub const FLASH_BASE: *mut u8 = FS_BASE as *mut u8;
+pub const FLASH_SIZE: usize = FS_CEIL - FS_BASE;
 
 pub struct FlashStorage {
 	nvmc: nrf52840_hal::nvmc::Nvmc<nrf52840_pac::NVMC>,
