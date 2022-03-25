@@ -51,9 +51,9 @@ program-nrf-$(1):
 	nrfjprog -f NRF52 -s $(1) --sectorerase --program ./nrf-runner-$(2).ihex
 	nrfjprog -f NRF52 -s $(1) --reset
 
-reset-nrf-$(1):
+reset-nrf-$(1): fidokeys_lfs_e0000+c000.ihex
 	nrfjprog -f NRF52 -s $(1) --chiperase --program ./nrf-runner-$(2).ihex
-	nrfjprog -f NRF52 -s $(1) --program fidokeys_lfs_e0000+20000.ihex
+	nrfjprog -f NRF52 -s $(1) --program fidokeys_lfs_e0000+c000.ihex
 	
 	# set APPROTECT (disable debugging port - reset with: `nrfjprog -f NRF52 --recover` or --chiperase(?)
 	#nrfjprog --memwr 0x10001208 --val 0xFFFFFF00
@@ -71,12 +71,21 @@ reset-nrf-$(1):
 .PHONY: program-nrf-$(1) reset-nrf-$(1)
 endef
 
+define fidokeys_lfs
+fidokeys_lfs_$(1)+$(2).ihex:
+	$(MAKE) -C deployment clean
+	$(MAKE) -C deployment fs.hex FS_BASE=0x$(1) FS_SIZE=0x$(2)
+	cp deployment/fs.hex $$@
+endef
+
 $(foreach b,$(BOARDS_NRF52), $(eval $(call board-targets,$(b),$(RUST_TRIPLET_NRF52),$(GNU_TRIPLET_NRF52),nrf-runner)) )
 $(foreach b,$(BOARDS_LPC55), $(eval $(call board-targets,$(b),$(RUST_TRIPLET_LPC55),$(GNU_TRIPLET_LPC55),lpc-runner)) )
 
 $(foreach s,$(SERIAL_NRFDK), $(eval $(call nrf-targets,$(s),nrfdk)) )
 $(foreach s,$(SERIAL_PROTO1), $(eval $(call nrf-targets,$(s),proto1)) )
 $(foreach s,$(SERIAL_NK3AM), $(eval $(call nrf-targets,$(s),nk3am)) )
+
+$(eval $(call fidokeys_lfs,e0000,c000))
 
 ifeq ($(words $(NRF_SERIAL)),0)
 DEVICES_PRESENT := $(shell nrfjprog -i)

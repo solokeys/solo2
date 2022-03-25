@@ -1,0 +1,5 @@
+fs.*
+*.o
+*.a
+gen_init_fs
+list_fs
