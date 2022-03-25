@@ -105,7 +105,10 @@ const APP: () = {
 
 		let apps = ERL::init_apps(&mut trussed_service, &store, !powered_by_usb);
 
-		let dev_rtc = Rtc::new(ctx.device.RTC0, 4095).unwrap();
+		let mut dev_rtc = Rtc::new(ctx.device.RTC0, 4095).unwrap();
+		dev_rtc.enable_interrupt(nrf52840_hal::rtc::RtcInterrupt::Tick, None);
+		dev_rtc.clear_counter();
+		dev_rtc.enable_counter();
 
 		// compose LateResources
 		init::LateResources {
@@ -139,37 +142,47 @@ const APP: () = {
 			let (_ccid_busy, _ctaphid_busy) = usb_classes.lock(
 				|usb_classes| ERL::runtime::poll_usb_classes(usb_classes)
 			);
-			// let (_ccid_busy, _ctaphid_busy) = ERL::runtime::poll_usb_classes(usb_classes);
-
-			// kick off wait extensions if necessary
+			// TODO: kick off wait extensions
 		}
 		// loop {}
 	}
 
 	#[task(priority = 2, binds = SWI0_EGU0, resources = [trussed])]
 	fn task_trussed(ctx: task_trussed::Context) {
-		trace!("irq SYS");
+		trace!("irq SWI0_EGU0");
 		ERL::runtime::run_trussed(ctx.resources.trussed);
 	}
 
 	#[task(priority = 2, binds = GPIOTE, resources = [gpiote])] /* ui, fpr */
 	fn task_button_irq(_ctx: task_button_irq::Context) {
+		trace!("irq GPIOTE");
 	}
 
         #[task(priority = 3, binds = USBD, resources = [usb_classes])]
         fn task_usb(ctx: task_usb::Context) {
+		trace!("irq USB");
 		let usb_classes = ctx.resources.usb_classes;
 
 		let (_ccid_busy, _ctaphid_busy) = ERL::runtime::poll_usb_classes(usb_classes);
+		// TODO: kick off wait extensions
 	}
 
-	/* TODO: ctaphid_keepalive(), ccid_keepalive(), nfc_keepalive() */
+	/* TODO: implement ctaphid_keepalive(), ccid_keepalive(), nfc_keepalive() */
 
+        #[task(priority = 3, binds = RTC0, resources = [rtc], schedule = [foo])]
+        fn task_rtc(ctx: task_rtc::Context) {
+		trace!("irq RTC");
+	}
+
+	#[task()]
+	fn foo(_ctx: foo::Context) {}
 /*
-        #[task(priority = 4, binds = RTC0, resources = [rtc], spawn = [playground, frontend, userspace_apps, comm_keepalives, try_system_off])]
-        fn rtc_handler(ctx: rtc_handler::Context) {}
-
         #[task(priority = 3, binds = POWER_CLOCK, resources = [power], spawn = [frontend, late_setup_usb])]
         fn power_handler(ctx: power_handler::Context) {}
 **/
+
+	extern "C" {
+		fn SWI4_EGU4();
+		// fn SWI5_EGU5();
+	}
 };
