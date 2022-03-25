@@ -15,7 +15,7 @@ GNU_TRIPLET_NRF52 := arm-none-eabi
 RUST_TRIPLET_LPC55 := thumbv8m.main-none-eabi
 GNU_TRIPLET_LPC55 := arm-none-eabi
 
-BOARDS_NRF52 := nrfdk nk3am # proto1
+BOARDS_NRF52 := nrfdk nk3am proto1
 BOARDS_LPC55 := nk3xn # nk3am solo2 okdoe1 lpcxpresso55
 
 .PHONY: all clean build-all
