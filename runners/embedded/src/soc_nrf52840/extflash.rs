@@ -1,5 +1,8 @@
 // use crate::spi_nor_flash::SpiNorFlash;
-use embedded_hal::blocking::spi::Transfer;
+use embedded_hal::blocking::{
+	delay::DelayMs,
+	spi::Transfer
+};
 use nrf52840_hal::{
 	gpio::{Output, Pin, PushPull},
 	prelude::OutputPin,
@@ -91,9 +94,10 @@ fn map_result<SPI, CS>(r: Result<(), spi_memory::Error<SPI, CS>>, len: usize)
 
 impl<SPI, CS> ExtFlashStorage<SPI, CS> where SPI: Transfer<u8>, CS: OutputPin {
 
-	pub fn new(spim: SPI, cs: CS, mut power_pin: Option<Pin<Output<PushPull>>>) -> Self {
+	pub fn new(spim: SPI, cs: CS, mut power_pin: Option<Pin<Output<PushPull>>>, delay_timer: &mut dyn DelayMs<u32>) -> Self {
 		if let Some(p) = power_pin.as_mut() {
 			p.set_high().ok();
+			delay_timer.delay_ms(200u32);
 		}
 
 		let mut flash = spi_memory::series25::Flash::init(spim, cs).ok().unwrap();
@@ -107,10 +111,10 @@ impl<SPI, CS> ExtFlashStorage<SPI, CS> where SPI: Transfer<u8>, CS: OutputPin {
 		Self { s25flash: flash, power_pin }
 	}
 
-	pub fn power_on(&mut self) {
+	pub fn power_on(&mut self, delay_timer: &mut dyn DelayMs<u32>) {
 		if let Some(pwr_pin) = self.power_pin.as_mut() {
 			pwr_pin.set_high().ok();
-			// TODO: crate::board_delay(200u32);
+			delay_timer.delay_ms(200u32);
 		}
 	}
 

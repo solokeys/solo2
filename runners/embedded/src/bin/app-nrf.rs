@@ -9,6 +9,7 @@ use nrf52840_hal::{
 	rng::Rng,
 	rtc::Rtc,
 	spim::Spim,
+	timer::Timer,
 };
 use panic_halt as _;
 use rand_core::SeedableRng;
@@ -55,6 +56,8 @@ const APP: () = {
 
 		ERL::soc::init_bootup(&ctx.device.FICR, &ctx.device.UICR, &mut ctx.device.POWER);
 
+		let mut delay_timer = Timer::<nrf52840_pac::TIMER0>::new(ctx.device.TIMER0);
+
 		let dev_gpiote = Gpiote::new(ctx.device.GPIOTE);
 		let mut board_gpio = {
 			let dev_gpio_p0 = p0::Parts::new(ctx.device.P0);
@@ -74,7 +77,7 @@ const APP: () = {
 			None
 		}};
 		/* TODO: set up NFC chip */
-		let usbnfcinit = ERL::init_usb_nfc(usbd_ref, None);
+		// let usbnfcinit = ERL::init_usb_nfc(usbd_ref, None);
 
 		let internal_flash = ERL::soc::init_internal_flash(ctx.device.NVMC);
 		let external_flash = {
@@ -86,13 +89,16 @@ const APP: () = {
 			);
 			ERL::soc::init_external_flash(dev_spim3,
 				board_gpio.flash_cs.take().unwrap(),
-				board_gpio.flash_power
+				board_gpio.flash_power,
+				&mut delay_timer
 			)
 		};
 		let store: ERL::types::RunnerStore = ERL::init_store(internal_flash, external_flash);
 
+		let usbnfcinit = ERL::init_usb_nfc(usbd_ref, None);
 		/* TODO: set up fingerprint device */
 		/* TODO: set up SE050 device */
+		/* TODO: set up display */
 
 		let dev_rng = Rng::new(ctx.device.RNG);
 		let chacha_rng = chacha20::ChaCha8Rng::from_rng(dev_rng).unwrap();

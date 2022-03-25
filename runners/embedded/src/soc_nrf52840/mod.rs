@@ -1,4 +1,7 @@
-use embedded_hal::blocking::spi::Transfer;
+use embedded_hal::blocking::{
+	delay::DelayMs,
+	spi::Transfer
+};
 use nrf52840_hal::{
 	clocks::Clocks,
 	gpio::{Pin, Output, PushPull},
@@ -54,9 +57,10 @@ pub fn init_internal_flash(nvmc: nrf52840_pac::NVMC) -> flash::FlashStorage {
 }
 
 pub fn init_external_flash<SPI, CS>(spim: SPI, cs: CS,
-		pwr: Option<Pin<Output<PushPull>>>)
+		pwr: Option<Pin<Output<PushPull>>>,
+		delay_timer: &mut dyn DelayMs<u32>)
 		-> extflash::ExtFlashStorage<SPI, CS> where SPI: Transfer<u8>, CS: OutputPin {
-	extflash::ExtFlashStorage::new(spim, cs, pwr)
+	extflash::ExtFlashStorage::new(spim, cs, pwr, delay_timer)
 }
 
 type UsbClockType = Clocks<nrf52840_hal::clocks::ExternalOscillator, nrf52840_hal::clocks::Internal, nrf52840_hal::clocks::LfOscStarted>;
