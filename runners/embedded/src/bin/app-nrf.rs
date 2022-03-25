@@ -121,19 +121,24 @@ const APP: () = {
 		}
 	}
 
-	#[idle()]
-	fn idle(_ctx: idle::Context) -> ! {
-		/*
-		   Note: ARM SysTick stops in WFI. This is unfortunate as
-		   - RTIC uses SysTick for its schedule() feature
-		   - we would really like to use WFI in order to save power
-		   In the future, we might even consider entering "System OFF".
-		   In short, don't expect schedule() to work.
-		*/
+	#[idle(resources = [apps, apdu_dispatch, ctaphid_dispatch, usb_classes])]
+	fn idle(ctx: idle::Context) -> ! {
+		let idle::Resources { apps, apdu_dispatch, ctaphid_dispatch, mut usb_classes } = ctx.resources;
+
+		trace!("idle");
+		// TODO: figure out whether entering WFI is really worth it
+		// cortex_m::asm::wfi();
+
 		loop {
-			trace!("idle");
 			Delogger::flush();
-			cortex_m::asm::wfi();
+
+			let _apdu_poll = ERL::poll_apdu(apdu_dispatch, apps);
+			let _ctaphid_poll = ERL::poll_ctaphid(ctaphid_dispatch, apps);
+			// raise appropriate interrupts
+
+			/// let _usb_poll = usb_classes.lock(|usb_classes_opt| ERL::poll_usb_classes(usb_classes_opt));
+			let _usb_poll = ERL::poll_usb_classes(usb_classes);
+			// kick off wait extensions if necessary
 		}
 		// loop {}
 	}

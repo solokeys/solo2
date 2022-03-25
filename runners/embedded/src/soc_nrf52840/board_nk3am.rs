@@ -94,17 +94,6 @@ pub fn init_pins(gpiote: &Gpiote, gpio_p0: p0::Parts, gpio_p1: p1::Parts) -> Boa
 	}
 }
 
-pub fn is_keepalive_pin(pinport: u32) -> bool {
-	(pinport == 0x0b) ||
-	(pinport == 0x0c) ||
-	(pinport == 0x18) ||
-	(pinport == 0x19) ||
-	(pinport == 0x25) ||
-	(pinport == 0x26) ||
-	(pinport == 0x27) ||
-	(pinport == 0x28)
-}
-
 pub fn gpio_irq_sources(dir: &[u32]) -> u32 {
 	let mut src: u32 = 0;
 	fn bit_set(x: u32, y: u32) -> bool { (x & (1u32 << y)) != 0 }

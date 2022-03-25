@@ -62,7 +62,9 @@ reset-nrf-$(1):
 	nrfjprog -f NRF52 -s $(1) --memwr 0x10001304 --val 0xfffffffc
 	
 	# set UICR::NFCPINS to disabled
-	nrfjprog -f NRF52 -s $(1) --memwr 0x1000120C --val 0xfffffffe
+	if [ "$(2)" = "nk3am" ]; then \
+		nrfjprog -f NRF52 -s $(1) --memwr 0x1000120C --val 0xfffffffe; \
+	fi
 
 	nrfjprog -f NRF52 -s $(1) --reset
 

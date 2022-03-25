@@ -1,9 +1,9 @@
 include!(concat!(env!("OUT_DIR"), "/build_constants.rs"));
 
-use apdu_dispatch::{App as ApduApp, command::SIZE as ApduCommandSize, response::SIZE as ApduResponseSize};
+pub use apdu_dispatch::{App as ApduApp, command::SIZE as ApduCommandSize, response::SIZE as ApduResponseSize};
 use core::convert::TryInto;
 use crate::soc::types::Soc as SocT;
-use ctaphid_dispatch::app::{App as CtaphidApp};
+pub use ctaphid_dispatch::app::{App as CtaphidApp};
 use interchange::Interchange;
 use littlefs2::{const_ram_storage, consts, fs::Allocation};
 use trussed::types::{LfsResult, LfsStorage};
