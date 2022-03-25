@@ -64,7 +64,7 @@ impl<SPI, CS> littlefs2::driver::Storage for ExtFlashStorage<SPI, CS> where SPI:
 	fn write(&mut self, off: usize, buf: &[u8]) -> Result<usize, littlefs2::io::Error> {
 		let mut i: usize = 0;
 		while i < buf.len() {
-			let ilen: usize = core::cmp::max(buf.len() - i, 256);
+			let ilen: usize = core::cmp::min(buf.len() - i, 256);
 			let r = self._write(off + i, &buf[i..i+ilen]);
 			if r.is_err() {
 				return r;
