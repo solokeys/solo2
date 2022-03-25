@@ -132,15 +132,44 @@ const APP: () = {
 		loop {
 			Delogger::flush();
 
-			let _apdu_poll = ERL::poll_apdu(apdu_dispatch, apps);
-			let _ctaphid_poll = ERL::poll_ctaphid(ctaphid_dispatch, apps);
+			let (_usb_activity, _nfc_activity) =
+				ERL::runtime::poll_dispatchers(apdu_dispatch, ctaphid_dispatch, apps);
 			// raise appropriate interrupts
 
-			/// let _usb_poll = usb_classes.lock(|usb_classes_opt| ERL::poll_usb_classes(usb_classes_opt));
-			let _usb_poll = ERL::poll_usb_classes(usb_classes);
+			let (_ccid_busy, _ctaphid_busy) = usb_classes.lock(
+				|usb_classes| ERL::runtime::poll_usb_classes(usb_classes)
+			);
+			// let (_ccid_busy, _ctaphid_busy) = ERL::runtime::poll_usb_classes(usb_classes);
+
 			// kick off wait extensions if necessary
 		}
 		// loop {}
 	}
 
+	#[task(priority = 2, binds = SWI0_EGU0, resources = [trussed])]
+	fn task_trussed(ctx: task_trussed::Context) {
+		trace!("irq SYS");
+		ERL::runtime::run_trussed(ctx.resources.trussed);
+	}
+
+	#[task(priority = 2, binds = GPIOTE, resources = [gpiote])] /* ui, fpr */
+	fn task_button_irq(_ctx: task_button_irq::Context) {
+	}
+
+        #[task(priority = 3, binds = USBD, resources = [usb_classes])]
+        fn task_usb(ctx: task_usb::Context) {
+		let usb_classes = ctx.resources.usb_classes;
+
+		let (_ccid_busy, _ctaphid_busy) = ERL::runtime::poll_usb_classes(usb_classes);
+	}
+
+	/* TODO: ctaphid_keepalive(), ccid_keepalive(), nfc_keepalive() */
+
+/*
+        #[task(priority = 4, binds = RTC0, resources = [rtc], spawn = [playground, frontend, userspace_apps, comm_keepalives, try_system_off])]
+        fn rtc_handler(ctx: rtc_handler::Context) {}
+
+        #[task(priority = 3, binds = POWER_CLOCK, resources = [power], spawn = [frontend, late_setup_usb])]
+        fn power_handler(ctx: power_handler::Context) {}
+**/
 };

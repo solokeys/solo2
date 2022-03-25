@@ -9,6 +9,7 @@ use usb_device::device::{UsbDeviceBuilder, UsbVidPid};
 extern crate delog;
 delog::generate_macros!();
 
+pub mod runtime;
 pub mod types;
 
 #[cfg(not(any(feature = "soc-lpc55", feature = "soc-nrf52840")))]
@@ -128,24 +129,4 @@ pub fn init_apps(trussed: &mut types::Trussed, store: &types::RunnerStore, on_nf
 #[cfg(not(feature = "provisioner-app"))]
 pub fn init_apps(trussed: &mut types::Trussed, _store: &types::RunnerStore, _on_nfc_power: bool) -> types::Apps {
 	types::Apps::new(trussed)
-}
-
-pub fn poll_apdu(apdu_dispatch: &mut types::ApduDispatch, apps: &mut types::Apps) -> Option<apdu_dispatch::dispatch::Interface> {
-	apps.apdu_dispatch(|apps| apdu_dispatch.poll(apps))
-}
-
-pub fn poll_ctaphid(ctaphid_dispatch: &mut types::CtaphidDispatch, apps: &mut types::Apps) -> bool {
-	apps.ctaphid_dispatch(|apps| ctaphid_dispatch.poll(apps))
-}
-
-pub fn poll_usb_classes(usb_classes_opt: &mut Option<types::usbnfc::UsbClasses>) -> (bool, bool) {
-	if usb_classes_opt.is_none() {
-		return (false, false);
-	}
-
-	let usb_classes = usb_classes_opt.as_mut().unwrap();
-
-	usb_classes.ctaphid.check_timeout(0); //TODO
-	usb_classes.poll();
-	(false, false)
 }
