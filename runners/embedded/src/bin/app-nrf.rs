@@ -77,7 +77,7 @@ const APP: () = {
 			None
 		}};
 		/* TODO: set up NFC chip */
-		// let usbnfcinit = ERL::init_usb_nfc(usbd_ref, None);
+		let usbnfcinit = ERL::init_usb_nfc(usbd_ref, None);
 
 		let internal_flash = ERL::soc::init_internal_flash(ctx.device.NVMC);
 		let external_flash = {
@@ -93,9 +93,8 @@ const APP: () = {
 				&mut delay_timer
 			)
 		};
-		let store: ERL::types::RunnerStore = ERL::init_store(internal_flash, external_flash);
+		let store: ERL::types::RunnerStore = ERL::init_store(internal_flash, /*external_flash*/ERL::soc::types::ExternalStorage::new());
 
-		let usbnfcinit = ERL::init_usb_nfc(usbd_ref, None);
 		/* TODO: set up fingerprint device */
 		/* TODO: set up SE050 device */
 		/* TODO: set up display */
@@ -178,6 +177,7 @@ const APP: () = {
         #[task(priority = 3, binds = RTC0, resources = [rtc], schedule = [foo])]
         fn task_rtc(ctx: task_rtc::Context) {
 		trace!("irq RTC");
+		ctx.resources.rtc.reset_event(nrf52840_hal::rtc::RtcInterrupt::Tick);
 	}
 
 	#[task()]

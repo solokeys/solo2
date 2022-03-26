@@ -1,4 +1,4 @@
-// use littlefs2::const_ram_storage;
+use littlefs2::const_ram_storage;
 use nrf52840_hal::{
 	gpio::{Pin, Input, Output, PushPull, PullDown, PullUp},
 	spim,
@@ -6,7 +6,7 @@ use nrf52840_hal::{
 	uarte,
 	usbd::{Usbd, UsbPeripheral},
 };
-// use trussed::types::{LfsStorage, LfsResult};
+use trussed::types::{LfsStorage, LfsResult};
 
 //////////////////////////////////////////////////////////////////////////////
 // Upper Interface (definitions towards ERL Core)
@@ -26,14 +26,19 @@ const INTERFACE_CONFIG: crate::types::Config = crate::types::Config {
    and placed into build_constants::CONFIG_FILESYSTEM_BOUNDARY */
 pub const FILESYSTEM_END: usize = 0x000E_C000;
 
+const_ram_storage!(ExternalStorage, 8192);
+
 pub struct Soc {}
 impl crate::types::Soc for Soc {
 	type InternalFlashStorage = super::flash::FlashStorage;
 /* If the choice of SPIM ever differs between products, change the first
    type parameter to crate::soc::board::SOMETHING and handle it further down */
+	/*
 	type ExternalFlashStorage = super::extflash::ExtFlashStorage<
 		nrf52840_hal::spim::Spim<nrf52840_pac::SPIM3>,
 		Pin<Output<PushPull>>>;
+	*/
+	type ExternalFlashStorage = ExternalStorage;
 	type UsbBus = Usbd<UsbPeripheral<'static>>;
 	type NfcDevice = DummyNfc;
 	type Rng = chacha20::ChaCha8Rng;

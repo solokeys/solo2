@@ -69,12 +69,18 @@ type UsbBusType = usb_device::bus::UsbBusAllocator<<types::Soc as crate::types::
 static mut USB_CLOCK: Option<UsbClockType> = None;
 static mut USBD: Option<UsbBusType> = None;
 
-pub fn setup_usb_bus(clock: nrf52840_pac::CLOCK, usbd: nrf52840_pac::USBD) -> &'static UsbBusType {
+pub fn setup_usb_bus(clock: nrf52840_pac::CLOCK, usb_pac: nrf52840_pac::USBD) -> &'static UsbBusType {
 	let usb_clock = Clocks::new(clock).start_lfclk().enable_ext_hfosc();
 	unsafe { USB_CLOCK.replace(usb_clock); }
 	let usb_clock_ref = unsafe { USB_CLOCK.as_ref().unwrap() };
 
-	let usb_peripheral = nrf52840_hal::usbd::UsbPeripheral::new(usbd, usb_clock_ref);
+	usb_pac.intenset.write(|w| w.usbreset().set_bit()
+					.usbevent().set_bit()
+					.sof().set_bit()
+					.ep0datadone().set_bit()
+					.ep0setup().set_bit());
+
+	let usb_peripheral = nrf52840_hal::usbd::UsbPeripheral::new(usb_pac, usb_clock_ref);
 
 	let usbd = nrf52840_hal::usbd::Usbd::new(usb_peripheral);
 	unsafe { USBD.replace(usbd); }

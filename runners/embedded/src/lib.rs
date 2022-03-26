@@ -28,28 +28,57 @@ pub fn banner() {
 			types::build_constants::CARGO_PKG_VERSION_PATCH);
 }
 
-pub fn init_store(int_flash: <SocT as Soc>::InternalFlashStorage, ext_flash: <SocT as Soc>::ExternalFlashStorage) -> types::RunnerStore {
-	unsafe {
-		types::INTERNAL_STORAGE = Some(int_flash);
-		types::EXTERNAL_STORAGE = Some(ext_flash);
-		types::VOLATILE_STORAGE = Some(types::VolatileStorage::new());
+pub fn init_store(mut int_flash: <SocT as Soc>::InternalFlashStorage, mut ext_flash: <SocT as Soc>::ExternalFlashStorage) -> types::RunnerStore {
+	let mut volatile_storage = types::VolatileStorage::new();
 
-		types::INTERNAL_FS_ALLOC = Some(Filesystem::allocate());
-		types::EXTERNAL_FS_ALLOC = Some(Filesystem::allocate());
-		types::VOLATILE_FS_ALLOC = Some(Filesystem::allocate());
+	/* Step 1: let our stack-based filesystem objects transcend into higher
+	   beings by blessing them with static lifetime
+	   */
+	macro_rules! transcend {
+		($global:expr, $content:expr) => { unsafe { $global.replace($content); $global.as_mut().unwrap() }};
 	}
 
-	let store = types::RunnerStore::claim().unwrap();
+	let ifs_storage = transcend!(types::INTERNAL_STORAGE, int_flash);
+	let ifs_alloc = transcend!(types::INTERNAL_FS_ALLOC, Filesystem::allocate());
+	let efs_storage = transcend!(types::EXTERNAL_STORAGE, ext_flash);
+	let efs_alloc = transcend!(types::EXTERNAL_FS_ALLOC, Filesystem::allocate());
+	let vfs_storage = transcend!(types::VOLATILE_STORAGE, volatile_storage);
+	let vfs_alloc = transcend!(types::VOLATILE_FS_ALLOC, Filesystem::allocate());
 
-	store.mount(
-		unsafe { types::INTERNAL_FS_ALLOC.as_mut().unwrap() },
-		unsafe { types::INTERNAL_STORAGE.as_mut().unwrap() },
-		unsafe { types::EXTERNAL_FS_ALLOC.as_mut().unwrap() },
-		unsafe { types::EXTERNAL_STORAGE.as_mut().unwrap() },
-		unsafe { types::VOLATILE_FS_ALLOC.as_mut().unwrap() },
-		unsafe { types::VOLATILE_STORAGE.as_mut().unwrap() },
-		true
-        ).expect("store.mount() error");
+	/* Step 2: try mounting each FS in turn */
+	let ifs = match littlefs2::fs::Filesystem::mount(ifs_alloc, ifs_storage) {
+		Ok(ifs_) => { transcend!(types::INTERNAL_FS, ifs_) }
+		Err(e) => {
+			error!("IFS Mount Error {:?}", e);
+			panic!("store");
+		}
+	};
+	if !littlefs2::fs::Filesystem::is_mountable(efs_storage) {
+		// #[cfg(feature = "soc-nrf52840")]
+		// efs_storage.erase_chip();
+		let fmt_ext = littlefs2::fs::Filesystem::format(efs_storage);
+		error!("EFS Mount Error, Reformat {:?}", fmt_ext);
+	};
+	let efs = match littlefs2::fs::Filesystem::mount(efs_alloc, efs_storage) {
+		Ok(efs_) => { transcend!(types::EXTERNAL_FS, efs_) }
+		Err(e) => {
+			error!("EFS Mount Error {:?}", e);
+			panic!("store");
+		}
+	};
+	if !littlefs2::fs::Filesystem::is_mountable(vfs_storage) {
+		littlefs2::fs::Filesystem::format(vfs_storage);
+	}
+	let vfs = match littlefs2::fs::Filesystem::mount(vfs_alloc, vfs_storage) {
+		Ok(vfs_) => { transcend!(types::VOLATILE_FS, vfs_) }
+		Err(e) => {
+			error!("VFS Mount Error {:?}", e);
+			panic!("store");
+		}
+	};
+
+	let store = types::RunnerStore::claim().unwrap();
+	store.activate(ifs, efs, vfs);
 
 	store
 }

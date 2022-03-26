@@ -5,7 +5,7 @@ use core::convert::TryInto;
 use crate::soc::types::Soc as SocT;
 pub use ctaphid_dispatch::app::{App as CtaphidApp};
 use interchange::Interchange;
-use littlefs2::{const_ram_storage, consts, fs::Allocation};
+use littlefs2::{const_ram_storage, consts, fs::Allocation, fs::Filesystem};
 use trussed::types::{LfsResult, LfsStorage};
 use trussed::{platform, store};
 
@@ -53,23 +53,7 @@ pub trait Soc {
 }
 
 // 8KB of RAM
-const_ram_storage!(
-    name=VolatileStorage,
-    trait=LfsStorage,
-    erase_value=0xff,
-    read_size=1,
-    write_size=1,
-    cache_size_ty=consts::U128,
-    // this is a limitation of littlefs
-    // https://git.io/JeHp9
-    block_size=128,
-    // block_size=128,
-    block_count=8192/104,
-    lookaheadwords_size_ty=consts::U8,
-    filename_max_plus_one_ty=consts::U256,
-    path_max_plus_one_ty=consts::U256,
-    result=LfsResult,
-);
+const_ram_storage!(VolatileStorage, 8192);
 
 store!(RunnerStore,
 	Internal: <SocT as Soc>::InternalFlashStorage,
@@ -79,10 +63,13 @@ store!(RunnerStore,
 
 pub static mut INTERNAL_STORAGE: Option<<SocT as Soc>::InternalFlashStorage> = None;
 pub static mut INTERNAL_FS_ALLOC: Option<Allocation<<SocT as Soc>::InternalFlashStorage>> = None;
+pub static mut INTERNAL_FS: Option<Filesystem<<SocT as Soc>::InternalFlashStorage>> = None;
 pub static mut EXTERNAL_STORAGE: Option<<SocT as Soc>::ExternalFlashStorage> = None;
 pub static mut EXTERNAL_FS_ALLOC: Option<Allocation<<SocT as Soc>::ExternalFlashStorage>> = None;
+pub static mut EXTERNAL_FS: Option<Filesystem<<SocT as Soc>::ExternalFlashStorage>> = None;
 pub static mut VOLATILE_STORAGE: Option<VolatileStorage> = None;
 pub static mut VOLATILE_FS_ALLOC: Option<Allocation<VolatileStorage>> = None;
+pub static mut VOLATILE_FS: Option<Filesystem<VolatileStorage>> = None;
 
 platform!(RunnerPlatform,
 	R: <SocT as Soc>::Rng,
