@@ -68,7 +68,7 @@ toml = "0.5"
 default = ["admin-app", "fido-authenticator", "ndef-app", "oath-authenticator",
 		"piv-authenticator", # "provisioner-app",
 		"fido-authenticator/disable-reset-time-window",
-		"trussed/clients-5", "log-debugP"]
+		"trussed/clients-5", "log-traceP", "log-rtt"]
 
 board-nrfdk = ["soc-nrf52840"]
 board-proto1 = ["soc-nrf52840"]
@@ -85,15 +85,20 @@ soc-lpc55 = ["lpc55-hal", "lpc55-pac", "lpc55-rtic",
 		"fm11nc08"]
 
 log-all = []
+log-trace = []
 log-debug = []
 log-info = []
 log-warn = []
 log-error = []
 log-none = []
 
+log-traceP = [ "log-trace", "log-debug", "log-info", "log-warn", "log-error" ]
 log-debugP = [ "log-debug", "log-info", "log-warn", "log-error" ]
 log-infoP = [ "log-info", "log-warn", "log-error" ]
 log-warnP = [ "log-warn", "log-error" ]
+
+log-rtt = []
+log-semihosting = []
 
 [[bin]]
 name = "nrf-runner"
@@ -108,4 +113,7 @@ required-features = ["soc-lpc55"]
 [patch.crates-io]
 littlefs2 = { path = "../../components/littlefs2" }
 lpc55-hal = { path = "../../components/lpc55-hal" }
-trussed = { git = "https://github.com/trussed-dev/trussed" }
+trussed = { git = "https://github.com/jnordholz/trussed" }
+
+[patch.'https://github.com/trussed-dev/trussed']
+trussed = { git = "https://github.com/jnordholz/trussed" }
