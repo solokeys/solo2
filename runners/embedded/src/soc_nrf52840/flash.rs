@@ -20,20 +20,21 @@ impl littlefs2::driver::Storage for FlashStorage {
 	// the ReadNorFlash trait exposes a try_read() which (stupidly) expects a mutable self
 	// can't get those two to align - so clone the function and drop the mut there
 	fn read(&mut self, off: usize, buf: &mut [u8]) -> Result<usize, littlefs2::io::Error> {
-		// trace!("F RD {:x} {:x}", off, buf.len());
+		trace!("IFr {:x} {:x}", off, buf.len());
 		let res = self.nvmc.read(off as u32, buf);
 		nvmc_to_lfs_return(res, buf.len())
 	}
 
 	fn write(&mut self, off: usize, buf: &[u8]) -> Result<usize, littlefs2::io::Error> {
-		// trace!("F WR {:x} {:x}", off, buf.len());
+		trace!("IFw {:x} {:x}", off, buf.len());
 		let res = self.nvmc.write(off as u32, buf);
 		nvmc_to_lfs_return(res, buf.len())
 	}
 
 	fn erase(&mut self, off: usize, len: usize) -> Result<usize, littlefs2::io::Error> {
-		// trace!("F ER {:x} {:x}", off, len);
-		let res = self.nvmc.erase(off as u32, len as u32);
+		trace!("IFe {:x} {:x}", off, len);
+		/* nrf52840_hal has nvmc.erase(from, to) */
+		let res = self.nvmc.erase(off as u32, (off+len) as u32);
 		nvmc_to_lfs_return(res, len)
 	}
 }

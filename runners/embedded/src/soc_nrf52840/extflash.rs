@@ -51,17 +51,23 @@ impl<SPI, CS> littlefs2::driver::Storage for ExtFlashStorage<SPI, CS> where SPI:
 	type LOOKAHEADWORDS_SIZE = generic_array::typenum::U1;
 
 	fn read(&mut self, off: usize, buf: &mut [u8]) -> Result<usize, littlefs2::io::Error> {
+		trace!("EFr {:x} {:x}", off, buf.len());
+		if buf.len() == 0 { return Ok(0); }
 		if buf.len() > FLASH_PROPERTIES.size ||
 			off > FLASH_PROPERTIES.size - buf.len() {
 			return Err(littlefs2::io::Error::Unknown(0x6578_7046));
 		}
-		map_result(self.s25flash.read(off as u32, buf), buf.len())
+		let r = self.s25flash.read(off as u32, buf);
+		if r.is_ok() { trace!("r >>> {}", delog::hex_str!(&buf[0..4])); }
+		map_result(r, buf.len())
 	}
 
 	/* Holy sh*t, could these moronic Trait designers finally make up their mind
 		about the mutability of their function arguments... why the f**k is
 		spi_memory::BlockDevice expecting a mutable buffer on write_bytes()!? */
 	fn write(&mut self, off: usize, buf: &[u8]) -> Result<usize, littlefs2::io::Error> {
+		trace!("EFw {:x} {:x}", off, buf.len());
+		trace!("w >>> {}", delog::hex_str!(&buf[0..4]));
 		let mut i: usize = 0;
 		while i < buf.len() {
 			let ilen: usize = core::cmp::min(buf.len() - i, 256);
@@ -75,6 +81,7 @@ impl<SPI, CS> littlefs2::driver::Storage for ExtFlashStorage<SPI, CS> where SPI:
 	}
 
 	fn erase(&mut self, off: usize, len: usize) -> Result<usize, littlefs2::io::Error> {
+		trace!("EFe {:x} {:x}", off, len);
 		if len > FLASH_PROPERTIES.size ||
 			off > FLASH_PROPERTIES.size - len {
 			return Err(littlefs2::io::Error::Unknown(0x6578_7046));
@@ -94,11 +101,23 @@ fn map_result<SPI, CS>(r: Result<(), spi_memory::Error<SPI, CS>>, len: usize)
 
 impl<SPI, CS> ExtFlashStorage<SPI, CS> where SPI: Transfer<u8>, CS: OutputPin {
 
-	pub fn new(spim: SPI, cs: CS, mut power_pin: Option<Pin<Output<PushPull>>>, delay_timer: &mut dyn DelayMs<u32>) -> Self {
+	fn raw_command(spim: &mut SPI, cs: &mut CS, buf: &mut [u8]) {
+		trace!("RAW Q {}", delog::hex_str!(buf));
+		cs.set_low().ok();
+		spim.transfer(buf);
+		cs.set_high().ok();
+		trace!("RAW A {}", delog::hex_str!(buf));
+	}
+
+	pub fn new(mut spim: SPI, mut cs: CS, mut power_pin: Option<Pin<Output<PushPull>>>, delay_timer: &mut dyn DelayMs<u32>) -> Self {
 		if let Some(p) = power_pin.as_mut() {
 			p.set_high().ok();
 			delay_timer.delay_ms(200u32);
 		}
+
+		{ let mut buf0: [u8; 4] = [0x9f, 0, 0, 0]; Self::raw_command(&mut spim, &mut cs, &mut buf0); }
+		{ let mut buf1: [u8; 3] = [0x05, 0, 0]; Self::raw_command(&mut spim, &mut cs, &mut buf1); }
+		{ let mut buf2: [u8; 3] = [0x35, 0, 0]; Self::raw_command(&mut spim, &mut cs, &mut buf2); }
 
 		let mut flash = spi_memory::series25::Flash::init(spim, cs).ok().unwrap();
 		let jedec_id = flash.read_jedec_id().ok().unwrap();
@@ -109,6 +128,14 @@ impl<SPI, CS> ExtFlashStorage<SPI, CS> where SPI: Transfer<u8>, CS: OutputPin {
 		}
 
 		Self { s25flash: flash, power_pin }
+	}
+
+	pub fn size(&self) -> usize {
+		FLASH_PROPERTIES.size
+	}
+
+	pub fn erase_chip(&mut self) {
+		self.s25flash.erase_all();
 	}
 
 	pub fn power_on(&mut self, delay_timer: &mut dyn DelayMs<u32>) {

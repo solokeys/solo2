@@ -140,9 +140,13 @@ const APP: () = {
 		loop {
 			Delogger::flush();
 
-			let (_usb_activity, _nfc_activity) =
+			let (usb_activity, _nfc_activity) =
 				ERL::runtime::poll_dispatchers(apdu_dispatch, ctaphid_dispatch, apps);
-			// raise appropriate interrupts
+			if usb_activity {
+				trace!("app->usb");
+				rtic::pend(nrf52840_pac::Interrupt::USBD);
+			}
+			// TODO: handle _nfc_activity
 
 			let (_ccid_busy, _ctaphid_busy) = usb_classes.lock(
 				|usb_classes| ERL::runtime::poll_usb_classes(usb_classes)
@@ -165,7 +169,7 @@ const APP: () = {
 
         #[task(priority = 3, binds = USBD, resources = [usb_classes])]
         fn task_usb(ctx: task_usb::Context) {
-		trace!("irq USB");
+		// trace!("irq USB");
 		let usb_classes = ctx.resources.usb_classes;
 
 		let (_ccid_busy, _ctaphid_busy) = ERL::runtime::poll_usb_classes(usb_classes);
