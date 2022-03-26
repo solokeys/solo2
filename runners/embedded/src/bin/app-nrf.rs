@@ -51,7 +51,7 @@ const APP: () = {
 		ctx.core.DWT.enable_cycle_counter();
 
 		rtt_target::rtt_init_print!();
-		Delogger::init_default(delog::LevelFilter::Debug, &ERL::types::DELOG_FLUSHER).ok();
+		Delogger::init_default(delog::LevelFilter::Trace, &ERL::types::DELOG_FLUSHER).ok();
 		ERL::banner();
 
 		ERL::soc::init_bootup(&ctx.device.FICR, &ctx.device.UICR, &mut ctx.device.POWER);

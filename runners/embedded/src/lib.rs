@@ -20,7 +20,7 @@ compile_error!("No SoC chosen!");
 pub mod soc;
 
 pub fn banner() {
-		info_now!("Embedded Runner ({}:{}) using librunner {}.{}.{}",
+		info!("Embedded Runner ({}:{}) using librunner {}.{}.{}",
 			<SocT as Soc>::SOC_NAME,
 			<SocT as Soc>::BOARD_NAME,
 			types::build_constants::CARGO_PKG_VERSION_MAJOR,

@@ -36,7 +36,7 @@ const APP: () = {
         #[init()]
         fn init(mut ctx: init::Context) -> init::LateResources {
 		rtt_target::rtt_init_print!();
-		Delogger::init_default(delog::LevelFilter::Debug, &ERL::types::DELOG_FLUSHER).ok();
+		Delogger::init_default(delog::LevelFilter::Trace, &ERL::types::DELOG_FLUSHER).ok();
 		ERL::banner();
 
 		ERL::soc::init_bootup(&mut ctx.device.IOCON);

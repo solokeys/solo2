@@ -59,8 +59,8 @@ reset-nrf-$(1): fidokeys_lfs_e0000+c000.ihex
 	#nrfjprog --memwr 0x10001208 --val 0xFFFFFF00
 	
 	# set UICR::REGOUT0 to 3v3
-	nrfjprog -f NRF52 -s $(1) --memwr 0x10001304 --val 0xfffffffc
-	
+	nrfjprog -f NRF52 -s $(1) --memwr 0x10001304 --val 0xfffffffd
+
 	# set UICR::NFCPINS to disabled
 	if [ "$(2)" = "nk3am" ]; then \
 		nrfjprog -f NRF52 -s $(1) --memwr 0x1000120C --val 0xfffffffe; \

@@ -48,7 +48,7 @@ pub fn init_bootup(ficr: &nrf52840_pac::FICR, uicr: &nrf52840_pac::UICR, power: 
 	info!("UICR REGOUT0 {:x} NFCPINS {:x}",
 		uicr.regout0.read().bits(), uicr.nfcpins.read().bits());
 	if !uicr.regout0.read().vout().is_3v3() {
-		error_now!("REGOUT0 is not at 3.3V - external flash will fail!");
+		error!("REGOUT0 is not at 3.3V - external flash will fail!");
 	}
 }
 
