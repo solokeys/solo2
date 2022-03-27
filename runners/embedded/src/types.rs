@@ -308,3 +308,14 @@ pub enum BootMode {
 	NFCPassive,
 	Full
 }
+
+pub struct DummyPinError {}
+pub struct DummyPin {}
+impl DummyPin {
+	pub fn new() -> Self { Self {} }
+}
+impl embedded_hal::digital::v2::OutputPin for DummyPin {
+	type Error = DummyPinError;
+	fn set_low(&mut self) -> Result<(), DummyPinError> { Ok(()) }
+	fn set_high(&mut self) -> Result<(), DummyPinError> { Ok(()) }
+}

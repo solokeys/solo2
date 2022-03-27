@@ -45,7 +45,7 @@ impl<SPI, CS> littlefs2::driver::Storage for ExtFlashStorage<SPI, CS> where SPI:
 
 	const BLOCK_SIZE: usize = 4096;
 	const READ_SIZE: usize = 4;
-	const WRITE_SIZE: usize = 4;
+	const WRITE_SIZE: usize = 256;
 	const BLOCK_COUNT: usize = FLASH_PROPERTIES.size / Self::BLOCK_SIZE;
 	type CACHE_SIZE = generic_array::typenum::U256;
 	type LOOKAHEADWORDS_SIZE = generic_array::typenum::U1;
@@ -68,6 +68,7 @@ impl<SPI, CS> littlefs2::driver::Storage for ExtFlashStorage<SPI, CS> where SPI:
 	fn write(&mut self, off: usize, buf: &[u8]) -> Result<usize, littlefs2::io::Error> {
 		trace!("EFw {:x} {:x}", off, buf.len());
 		trace!("w >>> {}", delog::hex_str!(&buf[0..4]));
+/*
 		let mut i: usize = 0;
 		while i < buf.len() {
 			let ilen: usize = core::cmp::min(buf.len() - i, 256);
@@ -78,6 +79,9 @@ impl<SPI, CS> littlefs2::driver::Storage for ExtFlashStorage<SPI, CS> where SPI:
 			i += ilen;
 		}
 		Ok(buf.len())
+*/
+		let r = self.s25flash.write_bytes(off as u32, buf);
+		map_result(r, buf.len())
 	}
 
 	fn erase(&mut self, off: usize, len: usize) -> Result<usize, littlefs2::io::Error> {
@@ -102,11 +106,9 @@ fn map_result<SPI, CS>(r: Result<(), spi_memory::Error<SPI, CS>>, len: usize)
 impl<SPI, CS> ExtFlashStorage<SPI, CS> where SPI: Transfer<u8>, CS: OutputPin {
 
 	fn raw_command(spim: &mut SPI, cs: &mut CS, buf: &mut [u8]) {
-		trace!("RAW Q {}", delog::hex_str!(buf));
 		cs.set_low().ok();
 		spim.transfer(buf);
 		cs.set_high().ok();
-		trace!("RAW A {}", delog::hex_str!(buf));
 	}
 
 	pub fn new(mut spim: SPI, mut cs: CS, mut power_pin: Option<Pin<Output<PushPull>>>, delay_timer: &mut dyn DelayMs<u32>) -> Self {
@@ -115,9 +117,7 @@ impl<SPI, CS> ExtFlashStorage<SPI, CS> where SPI: Transfer<u8>, CS: OutputPin {
 			delay_timer.delay_ms(200u32);
 		}
 
-		{ let mut buf0: [u8; 4] = [0x9f, 0, 0, 0]; Self::raw_command(&mut spim, &mut cs, &mut buf0); }
-		{ let mut buf1: [u8; 3] = [0x05, 0, 0]; Self::raw_command(&mut spim, &mut cs, &mut buf1); }
-		{ let mut buf2: [u8; 3] = [0x35, 0, 0]; Self::raw_command(&mut spim, &mut cs, &mut buf2); }
+		Self::selftest(&mut spim, &mut cs);
 
 		let mut flash = spi_memory::series25::Flash::init(spim, cs).ok().unwrap();
 		let jedec_id = flash.read_jedec_id().ok().unwrap();
@@ -130,12 +130,25 @@ impl<SPI, CS> ExtFlashStorage<SPI, CS> where SPI: Transfer<u8>, CS: OutputPin {
 		Self { s25flash: flash, power_pin }
 	}
 
+	pub fn selftest(spim: &mut SPI, cs: &mut CS) {
+		macro_rules! doraw {
+			($buf:expr, $len:expr, $str:expr) => {
+			let mut buf: [u8; $len] = $buf;
+			Self::raw_command(spim, cs, &mut buf);
+			trace!($str, delog::hex_str!(&buf[1..]));
+		}}
+
+		doraw!([0x9f, 0, 0, 0], 4, "JEDEC {}");
+		doraw!([0x05, 0], 2, "RDSRl {}");
+		doraw!([0x35, 0], 2, "RDSRh {}");
+	}
+
 	pub fn size(&self) -> usize {
 		FLASH_PROPERTIES.size
 	}
 
-	pub fn erase_chip(&mut self) {
-		self.s25flash.erase_all();
+	pub fn erase_chip(&mut self) -> Result<usize, littlefs2::io::Error> {
+		map_result(self.s25flash.erase_all(), FLASH_PROPERTIES.size)
 	}
 
 	pub fn power_on(&mut self, delay_timer: &mut dyn DelayMs<u32>) {

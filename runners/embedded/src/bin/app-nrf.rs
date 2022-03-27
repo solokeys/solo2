@@ -77,10 +77,27 @@ const APP: () = {
 			None
 		}};
 		/* TODO: set up NFC chip */
-		let usbnfcinit = ERL::init_usb_nfc(usbd_ref, None);
+		// let usbnfcinit = ERL::init_usb_nfc(usbd_ref, None);
 
 		let internal_flash = ERL::soc::init_internal_flash(ctx.device.NVMC);
-		let external_flash = {
+
+		let mut crispy = ERL::soc::qspiflash::QspiFlash::new(ctx.device.QSPI,
+			board_gpio.flashnfc_spi.take().unwrap(),
+			board_gpio.flash_cs.take().unwrap(),
+			board_gpio.flash_power,
+			&mut delay_timer);
+		crispy.activate();
+		trace!("qspi jedec: {}", delog::hex_str!(&crispy.read_jedec_id()));
+		let mut mybuf: [u8; 32] = [0u8; 32];
+		mybuf[2] = 0x5a;
+		use littlefs2::driver::Storage;
+		crispy.read(0x400, &mut mybuf[0..16]);
+		trace!("qspi read: {}", delog::hex_str!(&mybuf[0..16]));
+		panic!("QSPI done");
+
+		/*let mut external_flash = {
+			//ctx.device.SPIM3.psel.csn.write(|w| { unsafe { w.bits(board_gpio.flash_cs.take().unwrap().psel_bits()) } });
+
 			let dev_spim3 = Spim::new(ctx.device.SPIM3,
 				board_gpio.flashnfc_spi.take().unwrap(),
 				nrf52840_hal::spim::Frequency::M2,
@@ -89,12 +106,64 @@ const APP: () = {
 			);
 			ERL::soc::init_external_flash(dev_spim3,
 				board_gpio.flash_cs.take().unwrap(),
+				// ERL::types::DummyPin::new(),
 				board_gpio.flash_power,
 				&mut delay_timer
 			)
 		};
+		{
+			use littlefs2::driver::Storage;
+			let mut mybuf: [u8; 16] = [0u8; 16];
+			//
+			external_flash.read(0x0000, &mut mybuf[0..4]).expect("r0a");
+			external_flash.read(0x1000, &mut mybuf[4..8]).expect("r0b");
+			external_flash.read(0x2000, &mut mybuf[8..12]).expect("r0c");
+			external_flash.read(0x3000, &mut mybuf[12..16]).expect("r0d");
+			//
+			mybuf[0..4].copy_from_slice(&[0x5a, 0xa5, 0x5b, 0xb5]);
+			external_flash.write(0x0000, &mut mybuf[0..4]).expect("w1a");
+			external_flash.write(0x1000, &mut mybuf[0..4]).expect("w1b");
+			external_flash.write(0x2000, &mut mybuf[0..4]).expect("w1c");
+			external_flash.write(0x3000, &mut mybuf[0..4]).expect("w1d");
+			//
+			external_flash.read(0x0000, &mut mybuf[0..4]).expect("r2a");
+			external_flash.read(0x1000, &mut mybuf[4..8]).expect("r2b");
+			external_flash.read(0x2000, &mut mybuf[8..12]).expect("r2c");
+			external_flash.read(0x3000, &mut mybuf[12..16]).expect("r2d");
+			//
+			external_flash.erase(0x0000, 0x1000).expect("e3a");
+			external_flash.erase(0x1000, 0x1000).expect("e3b");
+			external_flash.erase(0x2000, 0x1000).expect("e3c");
+			external_flash.erase(0x3000, 0x1000).expect("e3d");
+			//
+			external_flash.read(0x0000, &mut mybuf[0..4]).expect("r4a");
+			external_flash.read(0x1000, &mut mybuf[4..8]).expect("r4b");
+			external_flash.read(0x2000, &mut mybuf[8..12]).expect("r4c");
+			external_flash.read(0x3000, &mut mybuf[12..16]).expect("r4d");
+			mybuf[0..4].copy_from_slice(&[0x5a, 0xa5, 0x5b, 0xb5]);
+			external_flash.write(0x0000, &mut mybuf[0..4]).expect("w5a");
+			external_flash.write(0x1000, &mut mybuf[0..4]).expect("w5b");
+			external_flash.write(0x2000, &mut mybuf[0..4]).expect("w5c");
+			external_flash.write(0x3000, &mut mybuf[0..4]).expect("w5d");
+			//
+			external_flash.read(0x0000, &mut mybuf[0..4]).expect("r6a");
+			external_flash.read(0x1000, &mut mybuf[4..8]).expect("r6b");
+			external_flash.read(0x2000, &mut mybuf[8..12]).expect("r6c");
+			external_flash.read(0x3000, &mut mybuf[12..16]).expect("r6d");
+			//
+			external_flash.erase_chip().expect("E7");
+			//
+			external_flash.read(0x0000, &mut mybuf[0..4]).expect("r8a");
+			external_flash.read(0x1000, &mut mybuf[4..8]).expect("r8b");
+			external_flash.read(0x2000, &mut mybuf[8..12]).expect("r8c");
+			external_flash.read(0x3000, &mut mybuf[12..16]).expect("r8d");
+			//
+			Delogger::flush();
+			panic!("extflash test done");
+		}*/
 		let store: ERL::types::RunnerStore = ERL::init_store(internal_flash, /*external_flash*/ERL::soc::types::ExternalStorage::new());
 
+		let usbnfcinit = ERL::init_usb_nfc(usbd_ref, None);
 		/* TODO: set up fingerprint device */
 		/* TODO: set up SE050 device */
 		/* TODO: set up display */

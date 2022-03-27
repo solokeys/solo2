@@ -21,6 +21,7 @@ pub mod board;
 pub mod dummy_ui;
 mod extflash;
 mod flash;
+pub mod qspiflash;
 
 pub fn init_bootup(ficr: &nrf52840_pac::FICR, uicr: &nrf52840_pac::UICR, power: &mut nrf52840_pac::POWER) {
 	let deviceid0 = ficr.deviceid[0].read().bits();
