@@ -9,6 +9,7 @@ struct Config {
 
 #[derive(serde::Deserialize)]
 struct Parameters {
+    flash_origin: u32,
     filesystem_boundary: u32,
 }
 
@@ -75,6 +76,7 @@ fn generate_memory_x(outpath: &Path, template: &str, config: &Config) {
     let template = template.replace("##FLASH_LENGTH##", &format!("{}", config.parameters.filesystem_boundary >> 10));
     let template = template.replace("##FS_LENGTH##", &format!("{}", 630 - (config.parameters.filesystem_boundary >> 10)));
     let template = template.replace("##FS_BASE##", &format!("{:x}", config.parameters.filesystem_boundary));
+    let template = template.replace("##FLASH_BASE##", &format!("{:x}", config.parameters.flash_origin));
     std::fs::write(outpath, [buildrs_caveat, &template].join("")).expect("cannot write memory.x");
 }
 
@@ -133,6 +135,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     add_build_variable!(&mut f, "USB_RELEASE", usb_release_version, u16);
 
     add_build_variable!(&mut f, "CONFIG_FILESYSTEM_BOUNDARY", config.parameters.filesystem_boundary, usize);
+    add_build_variable!(&mut f, "CONFIG_FLASH_BASE", config.parameters.flash_origin, usize);
 
     writeln!(&mut f, "}}").expect("Could not write build_constants.rs.");
 
