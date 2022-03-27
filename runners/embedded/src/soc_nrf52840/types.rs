@@ -26,7 +26,7 @@ const INTERFACE_CONFIG: crate::types::Config = crate::types::Config {
    and placed into build_constants::CONFIG_FILESYSTEM_BOUNDARY */
 pub const FILESYSTEM_END: usize = 0x000E_C000;
 
-const_ram_storage!(ExternalStorage, 8192);
+const_ram_storage!(_ExternalStorage, 8192);
 
 pub struct Soc {}
 impl crate::types::Soc for Soc {
@@ -38,7 +38,7 @@ impl crate::types::Soc for Soc {
 		nrf52840_hal::spim::Spim<nrf52840_pac::SPIM3>,
 		Pin<Output<PushPull>>>;
 	*/
-	type ExternalFlashStorage = ExternalStorage;
+	type ExternalFlashStorage = super::qspiflash::QspiFlash;
 	type UsbBus = Usbd<UsbPeripheral<'static>>;
 	type NfcDevice = DummyNfc;
 	type Rng = chacha20::ChaCha8Rng;

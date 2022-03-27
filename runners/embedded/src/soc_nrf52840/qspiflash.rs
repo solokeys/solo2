@@ -14,7 +14,12 @@ pub struct QspiFlash {
 }
 
 impl QspiFlash {
+	/* GD25Q16C, 16 Mbit == 2 MB, c8 40 15 */
+	#[cfg(any(feature = "board-nk3am", feature = "board-proto1"))]
 	const FLASH_SIZE: usize = 0x20_0000;
+	/* MX25R6435F, 64 Mbit == 8 MB, c2 28 17 */
+	#[cfg(feature = "board-nrfdk")]
+	const FLASH_SIZE: usize = 0x80_0000;
 
 	pub fn new(qspi_pac: nrf52840_pac::QSPI,
 		mut spi_pins: SpimPins,
@@ -63,6 +68,10 @@ impl QspiFlash {
 		self.qspi.events_ready.write(|w| unsafe { w.bits(0) });
 	}
 
+	pub fn wait_wip_clear(&self) {
+		while self.qspi.status.read().sreg().bits() & 1 != 0 {}
+	}
+
 	pub fn read_jedec_id(&mut self) -> [u8; 3] {
 		self.qspi.cinstrdat0.write(|w| unsafe { w.bits(0) });
 		self.qspi.cinstrconf.write(|w| unsafe { w.opcode().bits(0x9F)
@@ -76,6 +85,13 @@ impl QspiFlash {
 
 		[val as u8, (val >> 8) as u8, (val >> 16) as u8]
 	}
+
+	pub fn _erase(&mut self, off: usize) {
+		self.qspi.erase.ptr.write(|w| unsafe { w.bits(off as u32) });
+
+		self.qspi.tasks_erasestart.write(|w| w.tasks_erasestart().set_bit() );
+		self.wait_ready();
+	}
 }
 
 impl littlefs2::driver::Storage for QspiFlash {
@@ -88,6 +104,7 @@ impl littlefs2::driver::Storage for QspiFlash {
         type LOOKAHEADWORDS_SIZE = generic_array::typenum::U1;
 
         fn read(&mut self, off: usize, buf: &mut [u8]) -> Result<usize, littlefs2::io::Error> {
+		trace!("EFr {:x} {:x}", off, buf.len());
 		let bufptr: *mut u8 = buf.as_mut_ptr();
 		if (bufptr as usize & buf.len() & (Self::READ_SIZE - 1)) != 0 {
 			return Err(littlefs2::io::Error::Invalid);
@@ -105,6 +122,7 @@ impl littlefs2::driver::Storage for QspiFlash {
 	}
 
 	fn write(&mut self, off: usize, buf: &[u8]) -> Result<usize, littlefs2::io::Error> {
+		trace!("EFw {:x} {:x}", off, buf.len());
 		let bufptr: *const u8 = buf.as_ptr();
 		if (bufptr as usize & buf.len() & (Self::READ_SIZE - 1)) != 0 {
 			return Err(littlefs2::io::Error::Invalid);
@@ -122,19 +140,25 @@ impl littlefs2::driver::Storage for QspiFlash {
 	}
 
 	fn erase(&mut self, off: usize, len: usize) -> Result<usize, littlefs2::io::Error> {
+		trace!("EFe {:x} {:x}", off, len);
+		let mut step: usize;
 		if off == 0 && len == Self::FLASH_SIZE {
-			self.qspi.erase.ptr.write(|w| unsafe { w.bits(0) });
 			self.qspi.erase.len.write(|w| w.len().all());
+			self._erase(0);
+			return Ok(len);
 		} else if (off & len & (0x1_0000 - 1)) == 0 {
-			self.qspi.erase.ptr.write(|w| unsafe { w.bits(off as u32) });
 			self.qspi.erase.len.write(|w| w.len()._64kb());
+			step = 0x1_0000;
 		} else if (off & len & (0x1000 - 1)) == 0 {
-			self.qspi.erase.ptr.write(|w| unsafe { w.bits(off as u32) });
 			self.qspi.erase.len.write(|w| w.len()._4kb());
+			step = 0x1000;
+		} else {
+			return Err(littlefs2::io::Error::Invalid);
 		}
-		self.qspi.tasks_erasestart.write(|w| w.tasks_erasestart().set_bit() );
-		self.wait_ready();
 
-		Ok(len)
+		for x in (off..off+len).step_by(step) {
+			self._erase(x);
+		}
+		return Ok(len);
 	}
 }

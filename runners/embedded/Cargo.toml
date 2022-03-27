@@ -19,7 +19,6 @@ nfc-device = { path = "../../components/nfc-device" }
 panic-halt = "0.2"
 rand_core = "0.6"
 rtt-target = { version = "0.3", features = ["cortex-m"] }
-spi-memory = "0.2"
 
 ### protocols and dispatchers
 apdu-dispatch = "0.1"

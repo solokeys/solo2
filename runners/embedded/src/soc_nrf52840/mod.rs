@@ -19,7 +19,6 @@ compile_error!("No NRF52840 board chosen!");
 pub mod board;
 
 pub mod dummy_ui;
-mod extflash;
 mod flash;
 pub mod qspiflash;
 
@@ -55,13 +54,6 @@ pub fn init_bootup(ficr: &nrf52840_pac::FICR, uicr: &nrf52840_pac::UICR, power: 
 
 pub fn init_internal_flash(nvmc: nrf52840_pac::NVMC) -> flash::FlashStorage {
 	flash::FlashStorage::new(nvmc)
-}
-
-pub fn init_external_flash<SPI, CS>(spim: SPI, cs: CS,
-		pwr: Option<Pin<Output<PushPull>>>,
-		delay_timer: &mut dyn DelayMs<u32>)
-		-> extflash::ExtFlashStorage<SPI, CS> where SPI: Transfer<u8>, CS: OutputPin {
-	extflash::ExtFlashStorage::new(spim, cs, pwr, delay_timer)
 }
 
 type UsbClockType = Clocks<nrf52840_hal::clocks::ExternalOscillator, nrf52840_hal::clocks::Internal, nrf52840_hal::clocks::LfOscStarted>;

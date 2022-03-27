@@ -629,7 +629,6 @@ dependencies = [
  "rand_core",
  "rtt-target",
  "serde",
- "spi-memory",
  "toml",
  "trussed",
  "usb-device",
@@ -1615,16 +1614,6 @@ checksum = "f2807892cfa58e081aa1f1111391c7a0649d4fa127a4ffbe34bcbfb35a1171a4"
 dependencies = [
  "digest",
  "rand_core",
-]
-
-[[package]]
-name = "spi-memory"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f94caf9e6bd5673e05be1a3f4113b85cdc7976a1ac8bc2763731ae5a4acee4a9"
-dependencies = [
- "bitflags",
- "embedded-hal",
 ]
 
 [[package]]
