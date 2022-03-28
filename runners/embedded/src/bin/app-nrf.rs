@@ -81,26 +81,27 @@ const APP: () = {
 
 		let internal_flash = ERL::soc::init_internal_flash(ctx.device.NVMC);
 
-		let mut qspi_extflash = ERL::soc::qspiflash::QspiFlash::new(ctx.device.QSPI,
-			board_gpio.flashnfc_spi.take().unwrap(),
-			board_gpio.flash_cs.take().unwrap(),
-			board_gpio.flash_power,
-			&mut delay_timer);
-		qspi_extflash.activate();
-		trace!("qspi jedec: {}", delog::hex_str!(&qspi_extflash.read_jedec_id()));
-		{
+		#[cfg(feature = "extflash_qspi")]
+		let extflash = {
+			let mut qspi_extflash = ERL::soc::qspiflash::QspiFlash::new(ctx.device.QSPI,
+				board_gpio.flashnfc_spi.take().unwrap(),
+				board_gpio.flash_cs.take().unwrap(),
+				board_gpio.flash_power,
+				&mut delay_timer);
+			qspi_extflash.activate();
+			trace!("qspi jedec: {}", delog::hex_str!(&qspi_extflash.read_jedec_id()));
 			use littlefs2::driver::Storage;
 			let mut mybuf: [u8; 32] = [0u8; 32];
 			mybuf[2] = 0x5a;
 			qspi_extflash.read(0x400, &mut mybuf[0..16]);
 			trace!("qspi read: {}", delog::hex_str!(&mybuf[0..16]));
-		}
 
-		let store: ERL::types::RunnerStore = ERL::init_store(internal_flash,
-					// external_flash
-					qspi_extflash
-					// ERL::soc::types::ExternalStorage::new()
-		);
+			qspi_extflash
+		};
+		#[cfg(not(feature = "extflash_qspi"))]
+		let extflash = ERL::soc::types::ExternalStorage::new();
+
+		let store: ERL::types::RunnerStore = ERL::init_store(internal_flash, extflash);
 
 		let usbnfcinit = ERL::init_usb_nfc(usbd_ref, None);
 		/* TODO: set up fingerprint device */

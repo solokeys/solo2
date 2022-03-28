@@ -20,6 +20,7 @@ pub mod board;
 
 pub mod dummy_ui;
 mod flash;
+#[cfg(feature = "extflash_qspi")]
 pub mod qspiflash;
 
 pub fn init_bootup(ficr: &nrf52840_pac::FICR, uicr: &nrf52840_pac::UICR, power: &mut nrf52840_pac::POWER) {

@@ -69,9 +69,9 @@ default = ["admin-app", "fido-authenticator", "ndef-app", "oath-authenticator",
 		"fido-authenticator/disable-reset-time-window",
 		"trussed/clients-5", "log-traceP", "log-rtt"]
 
-board-nrfdk = ["soc-nrf52840"]
+board-nrfdk = ["soc-nrf52840", "extflash_qspi"]
 board-proto1 = ["soc-nrf52840"]
-board-nk3am = ["soc-nrf52840"]
+board-nk3am = ["soc-nrf52840", "extflash_qspi"]
 
 board-lpcxpresso55 = ["soc-lpc55"]
 board-okdoe1 = ["soc-lpc55", "board-lpcxpresso55"]
@@ -82,6 +82,8 @@ soc-nrf52840 = ["nrf52840-hal", "nrf52840-pac", "cortex-m-rtic",
 		"chacha20", "provisioner-app/nrf52"]
 soc-lpc55 = ["lpc55-hal", "lpc55-pac", "lpc55-rtic",
 		"fm11nc08"]
+
+extflash_qspi = []
 
 log-all = []
 log-trace = []
