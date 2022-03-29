@@ -3,12 +3,10 @@
 
 use embedded_runner_lib as ERL;
 use nrf52840_hal::{
-	clocks::Clocks,
 	gpio::{p0, p1},
 	gpiote::Gpiote,
 	rng::Rng,
 	rtc::Rtc,
-	spim::Spim,
 	timer::Timer,
 };
 use panic_halt as _;
@@ -93,7 +91,7 @@ const APP: () = {
 			use littlefs2::driver::Storage;
 			let mut mybuf: [u8; 32] = [0u8; 32];
 			mybuf[2] = 0x5a;
-			qspi_extflash.read(0x400, &mut mybuf[0..16]);
+			qspi_extflash.read(0x400, &mut mybuf[0..16]).ok();
 			trace!("qspi read: {}", delog::hex_str!(&mybuf[0..16]));
 
 			qspi_extflash

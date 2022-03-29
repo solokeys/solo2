@@ -52,10 +52,10 @@ impl crate::types::Soc for Soc {
 
 pub struct DummyNfc;
 impl nfc_device::traits::nfc::Device for DummyNfc {
-	fn read(&mut self, buf: &mut [u8]) -> Result<nfc_device::traits::nfc::State, nfc_device::traits::nfc::Error> {
+	fn read(&mut self, _buf: &mut [u8]) -> Result<nfc_device::traits::nfc::State, nfc_device::traits::nfc::Error> {
 		Err(nfc_device::traits::nfc::Error::NoActivity)
 	}
-	fn send(&mut self, buf: &[u8]) -> Result<(), nfc_device::traits::nfc::Error> {
+	fn send(&mut self, _buf: &[u8]) -> Result<(), nfc_device::traits::nfc::Error> {
 		Err(nfc_device::traits::nfc::Error::NoActivity)
 	}
 	fn frame_size(&self) -> usize { 0 }

@@ -1,12 +1,4 @@
-use embedded_hal::blocking::{
-	delay::DelayMs,
-	spi::Transfer
-};
-use nrf52840_hal::{
-	clocks::Clocks,
-	gpio::{Pin, Output, PushPull},
-	prelude::OutputPin
-};
+use nrf52840_hal::clocks::Clocks;
 
 pub mod types;
 

@@ -28,7 +28,7 @@ const APP: () = {
 
 		/* LPC55 specific elements */
 		v: u32,
-		// perf_timer
+		perf_timer: lpc55_hal::drivers::Timer<lpc55_hal::peripherals::ctimer::Ctimer4<lpc55_hal::Enabled>>,
 		// clock_ctrl
 		// wait_extender
 	}
@@ -66,7 +66,7 @@ const APP: () = {
 					.expect("LPC55 Clock Configuration Failed");
 
 		let mut delay_timer = lpc55_hal::drivers::Timer::new(hal.ctimer.0.enabled(syscon, clocks.support_1mhz_fro_token().unwrap()));
-		let mut perf_timer = lpc55_hal::drivers::Timer::new(hal.ctimer.4.enabled(syscon, clocks.support_1mhz_fro_token().unwrap()));
+		let perf_timer = lpc55_hal::drivers::Timer::new(hal.ctimer.4.enabled(syscon, clocks.support_1mhz_fro_token().unwrap()));
 		// out: { nfc_irq, clocks, iocon, gpio }
 
 		/* -> initializer::initialize_basic() */
@@ -107,9 +107,9 @@ const APP: () = {
 
 		/* -> initializer::initialize_flash() */
 		let mut rng = hal.rng.enabled(syscon);
-		let mut prince = hal.prince.enabled(&mut rng);
+		let prince = hal.prince.enabled(&mut rng);
 		prince.disable_all_region_2();
-		let mut flash_gordon = lpc55_hal::FlashGordon::new(hal.flash.enabled(syscon));
+		let flash_gordon = lpc55_hal::FlashGordon::new(hal.flash.enabled(syscon));
 		// out: { flash_gordon, prince, rng }
 
 		/* -> initializer::initialize_filesystem() */
@@ -121,7 +121,7 @@ const APP: () = {
 
 		/* -> initializer::initialize_trussed() */
 		let ui = <ERL::soc::types::Soc as ERL::types::Soc>::TrussedUI::new(
-				rtc, None, None, true);
+				rtc, None, Some(rgb), true);
 		let platform: ERL::types::RunnerPlatform = ERL::types::RunnerPlatform::new(
 				rng, store, ui);
 		let mut trussed_service = trussed::service::Service::new(platform);
@@ -142,7 +142,8 @@ const APP: () = {
 			//gpiote: dev_gpiote,
 			//power: ctx.device.POWER,
 			//rtc: dev_rtc,
-			v: 5
+			v: 5,
+			perf_timer
 		}
 	}
 

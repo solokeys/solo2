@@ -28,8 +28,8 @@ pub fn banner() {
 			types::build_constants::CARGO_PKG_VERSION_PATCH);
 }
 
-pub fn init_store(mut int_flash: <SocT as Soc>::InternalFlashStorage, mut ext_flash: <SocT as Soc>::ExternalFlashStorage) -> types::RunnerStore {
-	let mut volatile_storage = types::VolatileStorage::new();
+pub fn init_store(int_flash: <SocT as Soc>::InternalFlashStorage, ext_flash: <SocT as Soc>::ExternalFlashStorage) -> types::RunnerStore {
+	let volatile_storage = types::VolatileStorage::new();
 
 	/* Step 1: let our stack-based filesystem objects transcend into higher
 	   beings by blessing them with static lifetime
@@ -54,8 +54,6 @@ pub fn init_store(mut int_flash: <SocT as Soc>::InternalFlashStorage, mut ext_fl
 		}
 	};
 	if !littlefs2::fs::Filesystem::is_mountable(efs_storage) {
-		// #[cfg(feature = "soc-nrf52840")]
-		// efs_storage.erase_chip();
 		let fmt_ext = littlefs2::fs::Filesystem::format(efs_storage);
 		error!("EFS Mount Error, Reformat {:?}", fmt_ext);
 	};
@@ -67,7 +65,7 @@ pub fn init_store(mut int_flash: <SocT as Soc>::InternalFlashStorage, mut ext_fl
 		}
 	};
 	if !littlefs2::fs::Filesystem::is_mountable(vfs_storage) {
-		littlefs2::fs::Filesystem::format(vfs_storage);
+		littlefs2::fs::Filesystem::format(vfs_storage).ok();
 	}
 	let vfs = match littlefs2::fs::Filesystem::mount(vfs_alloc, vfs_storage) {
 		Ok(vfs_) => { transcend!(types::VOLATILE_FS, vfs_) }

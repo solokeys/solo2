@@ -5,7 +5,7 @@ use core::convert::TryInto;
 use crate::soc::types::Soc as SocT;
 pub use ctaphid_dispatch::app::{App as CtaphidApp};
 use interchange::Interchange;
-use littlefs2::{const_ram_storage, consts, fs::Allocation, fs::Filesystem};
+use littlefs2::{const_ram_storage, fs::Allocation, fs::Filesystem};
 use trussed::types::{LfsResult, LfsStorage};
 use trussed::{platform, store};
 
