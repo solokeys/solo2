@@ -1,13 +1,7 @@
 #![no_std]
 #![no_main]
 
-use embedded_runner_lib::{
-	self as ERL,
-	types::BootMode
-};
-use embedded_hal::digital::v2::InputPin;
-use embedded_time::rate::Megahertz;
-use panic_halt as _;
+use embedded_runner_lib as ERL;
 
 #[macro_use]
 extern crate delog;
@@ -15,9 +9,15 @@ delog::generate_macros!();
 
 delog!(Delogger, 3*1024, 512, ERL::types::DelogFlusher);
 
-#[rtic::app(device = lpc55_hal::raw, peripherals = true, monotonic = rtic::cyccnt::CYCCNT)]
-const APP: () = {
-        struct Resources {
+#[rtic::app(device = lpc55_hal::raw, peripherals = true)]
+mod app {
+	use super::{ERL, Delogger, ERL::types::BootMode};
+	use embedded_hal::digital::v2::InputPin;
+	use embedded_time::rate::Megahertz;
+	use panic_halt as _;
+
+	#[shared]
+        struct SharedResources {
 		trussed: ERL::types::Trussed,
 		apps: ERL::types::Apps,
 		apdu_dispatch: ERL::types::ApduDispatch,
@@ -27,14 +27,17 @@ const APP: () = {
 		boot_mode: BootMode,
 
 		/* LPC55 specific elements */
-		v: u32,
 		perf_timer: lpc55_hal::drivers::Timer<lpc55_hal::peripherals::ctimer::Ctimer4<lpc55_hal::Enabled>>,
 		// clock_ctrl
 		// wait_extender
 	}
 
+	#[local]
+	struct LocalResources {
+	}
+
         #[init()]
-        fn init(mut ctx: init::Context) -> init::LateResources {
+        fn init(mut ctx: init::Context) -> (SharedResources, LocalResources, init::Monotonics) {
 		rtt_target::rtt_init_print!();
 		Delogger::init_default(delog::LevelFilter::Trace, &ERL::types::DELOG_FLUSHER).ok();
 		ERL::banner();
@@ -144,7 +147,7 @@ const APP: () = {
 		let apps = ERL::init_apps(&mut trussed_service, &store, bootmode == BootMode::NFCPassive);
 
 		// compose LateResources
-		init::LateResources {
+		( SharedResources {
 			trussed: trussed_service,
 			apps,
 			apdu_dispatch: usbnfcinit.apdu_dispatch,
@@ -153,12 +156,8 @@ const APP: () = {
 			contactless: usbnfcinit.iso14443,
 			boot_mode: bootmode,
 
-			//gpiote: dev_gpiote,
-			//power: ctx.device.POWER,
-			//rtc: dev_rtc,
-			v: 5,
 			perf_timer
-		}
+		}, LocalResources {}, init::Monotonics() )
 	}
 
 	#[idle()]
@@ -178,4 +177,4 @@ const APP: () = {
 		// loop {}
 	}
 
-};
+}

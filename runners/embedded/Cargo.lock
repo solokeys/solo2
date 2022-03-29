@@ -204,7 +204,7 @@ version = "7.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7fb04b88bd5b2036e30704f95c6ee16f3b5ca3b4ca307da2889d9006648e5c88"
 dependencies = [
- "semver 1.0.6",
+ "semver 1.0.7",
  "serde",
  "toml",
  "url",
@@ -329,26 +329,29 @@ dependencies = [
 
 [[package]]
 name = "cortex-m-rtic"
-version = "0.5.9"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb77bb72c171d0aa52a2954d8dc7e3f0800ab54b8df7d826f138abbea9eb2794"
+checksum = "daae9c453d0d5b467ebcdeae7aba537cb45a7de899930ad09f01c8dc42aa531f"
 dependencies = [
+ "bare-metal 1.0.0",
  "cortex-m",
  "cortex-m-rtic-macros",
- "heapless 0.6.1",
- "rtic-core",
+ "heapless 0.7.10",
+ "rtic-core 1.0.0",
+ "rtic-monotonic",
  "version_check",
 ]
 
 [[package]]
 name = "cortex-m-rtic-macros"
-version = "0.5.3"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc874eda99515b15e67f03562726a530388f454431096d30131051b52b840559"
+checksum = "7ba355d1639cf8df7c0658f01bd8952d11d49a029309118787eb54afc47a6cf8"
 dependencies = [
+ "proc-macro-error",
  "proc-macro2",
  "quote",
- "rtic-syntax",
+ "rtic-syntax 1.0.0",
  "syn",
 ]
 
@@ -616,7 +619,6 @@ dependencies = [
  "littlefs2",
  "lpc55-hal",
  "lpc55-pac",
- "lpc55-rtic",
  "nb 1.0.0",
  "ndef-app",
  "nfc-device",
@@ -1016,7 +1018,7 @@ dependencies = [
  "cortex-m-rt",
  "heapless 0.6.1",
  "lpc55-rtic-macros",
- "rtic-core",
+ "rtic-core 0.3.1",
  "version_check",
 ]
 
@@ -1028,7 +1030,7 @@ checksum = "1c4958d6458bf70ef0789830bb2ed28e9a8d95d500e7cad2b1e9bd3a3169c680"
 dependencies = [
  "proc-macro2",
  "quote",
- "rtic-syntax",
+ "rtic-syntax 0.4.0",
  "syn",
 ]
 
@@ -1356,6 +1358,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c68cb38ed13fd7bc9dd5db8f165b7c8d9c1a315104083a2b10f11354c2af97f"
 
 [[package]]
+name = "proc-macro-error"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da25490ff9892aab3fcf7c36f08cfb902dd3e71ca0f9f9517bea02a73a5ce38c"
+dependencies = [
+ "proc-macro-error-attr",
+ "proc-macro2",
+ "quote",
+ "syn",
+ "version_check",
+]
+
+[[package]]
+name = "proc-macro-error-attr"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a1be40180e52ecc98ad80b184934baf3d0d29f979574e439af5a55274b35f869"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "version_check",
+]
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.36"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1373,6 +1399,7 @@ dependencies = [
  "heapless 0.7.10",
  "heapless-bytes 0.3.0",
  "littlefs2",
+ "lpc55-hal",
  "nisty",
  "nrf52840-pac",
  "salty",
@@ -1445,6 +1472,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8bd58a6949de8ff797a346a28d9f13f7b8f54fa61bb5e3cb0985a4efb497a5ef"
 
 [[package]]
+name = "rtic-core"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d9369355b04d06a3780ec0f51ea2d225624db777acbc60abd8ca4832da5c1a42"
+
+[[package]]
+name = "rtic-monotonic"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fb8b0b822d1a366470b9cea83a1d4e788392db763539dc4ba022bcc787fece82"
+
+[[package]]
 name = "rtic-syntax"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1452,6 +1491,18 @@ checksum = "8152fcaa845720d61e6cc570548b89144c2c307f18a480bbd97e55e9f6eeff04"
 dependencies = [
  "indexmap",
  "proc-macro2",
+ "syn",
+]
+
+[[package]]
+name = "rtic-syntax"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "24b149ff3177daeee442bb81ef7867d20d3c1ffea8a0a94e46e0e4b876ec4be2"
+dependencies = [
+ "indexmap",
+ "proc-macro2",
+ "quote",
  "syn",
 ]
 
@@ -1509,9 +1560,9 @@ dependencies = [
 
 [[package]]
 name = "semver"
-version = "1.0.6"
+version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4a3381e03edd24287172047536f20cabde766e2cd3e65e6b00fb3af51c4f38d"
+checksum = "d65bd28f48be7196d222d95b9243287f48d27aca604e08497513019ff0502cc4"
 dependencies = [
  "serde",
 ]
@@ -1639,9 +1690,9 @@ checksum = "6bdef32e8150c2a081110b42772ffe7d7c9032b606bc226c8260fd97e0976601"
 
 [[package]]
 name = "syn"
-version = "1.0.89"
+version = "1.0.90"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea297be220d52398dcc07ce15a209fce436d361735ac1db700cab3b6cdfb9f54"
+checksum = "704df27628939572cd88d33f171cd6f896f4eaca85252c6e0a72d8d8287ee86f"
 dependencies = [
  "proc-macro2",
  "quote",

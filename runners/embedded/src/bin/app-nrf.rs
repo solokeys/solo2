@@ -2,15 +2,6 @@
 #![no_main]
 
 use embedded_runner_lib as ERL;
-use nrf52840_hal::{
-	gpio::{p0, p1},
-	gpiote::Gpiote,
-	rng::Rng,
-	rtc::Rtc,
-	timer::Timer,
-};
-use panic_halt as _;
-use rand_core::SeedableRng;
 
 #[macro_use]
 extern crate delog;
@@ -18,9 +9,20 @@ delog::generate_macros!();
 
 delog!(Delogger, 3*1024, 512, ERL::types::DelogFlusher);
 
-#[rtic::app(device = nrf52840_hal::pac, peripherals = true, monotonic = rtic::cyccnt::CYCCNT)]
-const APP: () = {
-        struct Resources {
+#[rtic::app(device = nrf52840_hal::pac, peripherals = true, dispatchers = [SWI4_EGU4])]
+mod app {
+	use super::{Delogger, ERL};
+	use nrf52840_hal::{
+		gpio::{p0, p1},
+		gpiote::Gpiote,
+		rng::Rng,
+		timer::Timer,
+	};
+	use panic_halt as _;
+	use rand_core::SeedableRng;
+
+	#[shared]
+        struct SharedResources {
 		trussed: ERL::types::Trussed,
 		apps: ERL::types::Apps,
 		apdu_dispatch: ERL::types::ApduDispatch,
@@ -33,9 +35,6 @@ const APP: () = {
 		// (fingerprint sensor)
 		// (SE050)
 		/* NRF specific device peripherals */
-		gpiote: Gpiote,
-		power: nrf52840_pac::POWER,
-		rtc: Rtc<nrf52840_pac::RTC0>,
 
 		/* LPC55 specific elements */
 		// perf_timer
@@ -43,8 +42,17 @@ const APP: () = {
 		// wait_extender
 	}
 
+	#[local]
+	struct LocalResources {
+		gpiote: Gpiote,
+		power: nrf52840_pac::POWER,
+	}
+
+	#[monotonic(binds = RTC0, default = true)]
+	type RtcMonotonic = ERL::soc::rtic_monotonic::RtcMonotonic;
+
         #[init()]
-        fn init(mut ctx: init::Context) -> init::LateResources {
+        fn init(mut ctx: init::Context) -> (SharedResources, LocalResources, init::Monotonics) {
 		ctx.core.DCB.enable_trace();
 		ctx.core.DWT.enable_cycle_counter();
 
@@ -109,10 +117,9 @@ const APP: () = {
 		let dev_rng = Rng::new(ctx.device.RNG);
 		let chacha_rng = chacha20::ChaCha8Rng::from_rng(dev_rng).unwrap();
 
-		let mut dev_rtc = Rtc::new(ctx.device.RTC0, 4095).unwrap();
-		dev_rtc.enable_interrupt(nrf52840_hal::rtc::RtcInterrupt::Tick, None);
-		dev_rtc.clear_counter();
-		dev_rtc.enable_counter();
+		let rtc_mono = RtcMonotonic::new(ctx.device.RTC0);
+
+		ui::spawn_after(ERL::soc::rtic_monotonic::RtcDuration::from_ms(2500));
 
 		#[cfg(feature = "board-nk3am")]
 		let ui = ERL::soc::board::init_ui(board_gpio.rgb_led,
@@ -135,22 +142,22 @@ const APP: () = {
 		
 
 		// compose LateResources
-		init::LateResources {
+		( SharedResources {
 			trussed: trussed_service,
 			apps,
 			apdu_dispatch: usbnfcinit.apdu_dispatch,
 			ctaphid_dispatch: usbnfcinit.ctaphid_dispatch,
 			usb_classes: usbnfcinit.usb_classes,
 			contactless: usbnfcinit.iso14443,
+		}, LocalResources {
 			gpiote: dev_gpiote,
 			power: ctx.device.POWER,
-			rtc: dev_rtc,
-		}
+		}, init::Monotonics(rtc_mono))
 	}
 
-	#[idle(resources = [apps, apdu_dispatch, ctaphid_dispatch, usb_classes])]
+	#[idle(shared = [apps, apdu_dispatch, ctaphid_dispatch, usb_classes])]
 	fn idle(ctx: idle::Context) -> ! {
-		let idle::Resources { apps, apdu_dispatch, ctaphid_dispatch, mut usb_classes } = ctx.resources;
+		let idle::SharedResources { mut apps, mut apdu_dispatch, mut ctaphid_dispatch, mut usb_classes } = ctx.shared;
 
 		trace!("idle");
 		// TODO: figure out whether entering WFI is really worth it
@@ -159,8 +166,12 @@ const APP: () = {
 		loop {
 			Delogger::flush();
 
-			let (usb_activity, _nfc_activity) =
-				ERL::runtime::poll_dispatchers(apdu_dispatch, ctaphid_dispatch, apps);
+			let (usb_activity, _nfc_activity) = 
+				apps.lock(|apps|
+				apdu_dispatch.lock(|apdu_dispatch|
+				ctaphid_dispatch.lock(|ctaphid_dispatch|
+				ERL::runtime::poll_dispatchers(apdu_dispatch, ctaphid_dispatch, apps)
+			)));
 			if usb_activity {
 				trace!("app->usb");
 				rtic::pend(nrf52840_pac::Interrupt::USBD);
@@ -175,43 +186,60 @@ const APP: () = {
 		// loop {}
 	}
 
-	#[task(priority = 2, binds = SWI0_EGU0, resources = [trussed])]
+	#[task(priority = 2, binds = SWI0_EGU0, shared = [trussed])]
 	fn task_trussed(ctx: task_trussed::Context) {
+		let mut trussed = ctx.shared.trussed;
+
 		trace!("irq SWI0_EGU0");
-		ERL::runtime::run_trussed(ctx.resources.trussed);
+		trussed.lock(|trussed| {
+			ERL::runtime::run_trussed(trussed);
+		});
 	}
 
-	#[task(priority = 2, binds = GPIOTE, resources = [gpiote])] /* ui, fpr */
+	#[task(priority = 2, binds = GPIOTE, local = [gpiote])] /* ui, fpr */
 	fn task_button_irq(_ctx: task_button_irq::Context) {
 		trace!("irq GPIOTE");
 	}
 
-        #[task(priority = 3, binds = USBD, resources = [usb_classes])]
+        #[task(priority = 3, binds = USBD, shared = [usb_classes])]
         fn task_usb(ctx: task_usb::Context) {
 		// trace!("irq USB");
-		let usb_classes = ctx.resources.usb_classes;
+		let mut usb_classes = ctx.shared.usb_classes;
 
-		let (_ccid_busy, _ctaphid_busy) = ERL::runtime::poll_usb_classes(usb_classes);
+		usb_classes.lock(|usb_classes| {
+			let (_ccid_busy, _ctaphid_busy) = ERL::runtime::poll_usb_classes(usb_classes);
+		});
 		// TODO: kick off wait extensions
 	}
 
 	/* TODO: implement ctaphid_keepalive(), ccid_keepalive(), nfc_keepalive() */
 
-        #[task(priority = 3, binds = RTC0, resources = [rtc], schedule = [foo])]
-        fn task_rtc(ctx: task_rtc::Context) {
-		trace!("irq RTC");
-		ctx.resources.rtc.reset_event(nrf52840_hal::rtc::RtcInterrupt::Tick);
+        #[task(priority = 3, binds = POWER_CLOCK, local = [power])]
+        fn power_handler(ctx: power_handler::Context) {
+		let mut power = ctx.local.power;
+
+		trace!("irq PWR {:x} {:x} {:x}",
+			power.mainregstatus.read().bits(),
+			power.usbregstatus.read().bits(),
+			power.pofcon.read().bits());
+
+		if power.events_usbdetected.read().events_usbdetected().bits() {
+			power.events_usbdetected.write(|w| unsafe { w.bits(0) });
+			trace!("usb+");
+		}
+		if power.events_usbpwrrdy.read().events_usbpwrrdy().bits() {
+			power.events_usbpwrrdy.write(|w| unsafe { w.bits(0) });
+			trace!("usbY");
+		}
+		if power.events_usbremoved.read().events_usbremoved().bits() {
+			power.events_usbremoved.write(|w| unsafe { w.bits(0) });
+			trace!("usb-");
+		}
 	}
 
-	#[task()]
-	fn foo(_ctx: foo::Context) {}
-/*
-        #[task(priority = 3, binds = POWER_CLOCK, resources = [power], spawn = [frontend, late_setup_usb])]
-        fn power_handler(ctx: power_handler::Context) {}
-**/
-
-	extern "C" {
-		fn SWI4_EGU4();
-		// fn SWI5_EGU5();
+	#[task]
+	fn ui(ctx: ui::Context) {
+		trace!("UI");
+		ui::spawn_after(ERL::soc::rtic_monotonic::RtcDuration::from_ms(2500));
 	}
-};
+}

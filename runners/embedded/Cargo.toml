@@ -11,6 +11,7 @@ resolver = "2"
 cfg-if = "*"
 delog = "0.1"
 cortex-m = "0.7"
+cortex-m-rtic = "1.0"
 embedded-storage = "0.3"
 embedded-hal = "0.2.3"
 embedded-time = "0.12"
@@ -48,13 +49,10 @@ usbd-ctaphid = { path = "../../components/usbd-ctaphid" }
 chacha20 = { version = "0.7", default-features = false, features = ["rng"], optional = true }
 nrf52840-hal = { git = "https://github.com/nrf-rs/nrf-hal", optional = true }
 nrf52840-pac = { version = "0.11", optional = true }
-cortex-m-rtic = { version = "0.5", default_features = false, features = ["cortex-m-7"], optional = true }
-# cortex-m-rtic = { version = "1.0", optional = true }
 
 ### LPC55 specific dependencies
 lpc55-hal = { version = "0.3", features = ["littlefs", "rtic-peripherals"], optional = true }
 lpc55-pac = { version = "0.4", optional = true }
-lpc55-rtic = { version = "0.5", optional = true }
 fm11nc08 = { path = "../../components/fm11nc08", optional = true }
 nb = "1"
 
@@ -78,10 +76,10 @@ board-okdoe1 = ["soc-lpc55", "board-lpcxpresso55"]
 board-solo2 = ["soc-lpc55"]
 board-nk3xn = ["soc-lpc55"]
 
-soc-nrf52840 = ["nrf52840-hal", "nrf52840-pac", "cortex-m-rtic",
-		"chacha20", "provisioner-app/nrf52"]
-soc-lpc55 = ["lpc55-hal", "lpc55-pac", "lpc55-rtic",
-		"fm11nc08"]
+soc-nrf52840 = ["nrf52840-hal", "nrf52840-pac", "chacha20",
+		"provisioner-app/nrf52"]
+soc-lpc55 = ["lpc55-hal", "lpc55-pac", "fm11nc08",
+		"provisioner-app/lpc55"]
 
 extflash_qspi = []
 
