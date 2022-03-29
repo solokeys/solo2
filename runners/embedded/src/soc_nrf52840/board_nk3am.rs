@@ -9,6 +9,10 @@ use nrf52840_hal::{
 
 use crate::soc::types::BoardGPIO;
 
+
+
+
+
 pub const BOARD_NAME: &'static str = "NK3AM";
 pub const KEEPALIVE_PINS: &'static [u8] = &[0x0b, 0x0c, 0x18, 0x19, 0x25, 0x26, 0x27, 0x28];
 
@@ -16,6 +20,8 @@ pub const USB_PRODUCT: &'static str = "Nitrokey NK3AM Meissn0rHack3d";
 pub const USB_SERIAL: &'static str = "4bb17fc5-fddd-46f0-8244-cafecafecafe"; /* randomly generated */
 
 pub const USB_ID_PRODUCT: u16 = 0x42ef_u16;
+
+
 
 
 pub fn init_early(_device: &Peripherals, _core: &CorePeripherals) -> () {
@@ -30,8 +36,6 @@ pub fn init_pins(gpiote: &Gpiote, gpio_p0: p0::Parts, gpio_p1: p1::Parts) -> Boa
 	gpio_p0.p0_06.into_push_pull_output(Level::Low).degrade();
 	
 	/* irq configuration */
-	//gpiote.port().input_pin(&t_sense).low();
-	//gpiote.port().input_pin(&t_rst).low();
 
 	// gpiote.port().input_pin(&btn3).low();
 	// gpiote.port().input_pin(&btn4).low();
@@ -73,7 +77,8 @@ pub fn init_pins(gpiote: &Gpiote, gpio_p0: p0::Parts, gpio_p1: p1::Parts) -> Boa
 
 	BoardGPIO { buttons: [
 			None, None, None, None, None, None, None, None ],
-		leds: [ Some(led_r), Some(led_g), Some(led_b), None ],
+		leds: [ None, None, None, None ],
+		rgb_led: [Some(led_r), Some(led_g), Some(led_b)],
 		touch: Some(touch),
 		uart_pins: None,
 		fpr_detect: None,

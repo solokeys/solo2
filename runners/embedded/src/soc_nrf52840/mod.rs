@@ -1,6 +1,5 @@
 use nrf52840_hal::clocks::Clocks;
 
-pub mod types;
 
 #[cfg(not(any(feature = "board-nrfdk", feature = "board-proto1", feature = "board-nk3am")))]
 compile_error!("No NRF52840 board chosen!");
@@ -10,7 +9,14 @@ compile_error!("No NRF52840 board chosen!");
 #[cfg_attr(feature = "board-nk3am", path = "board_nk3am.rs")]
 pub mod board;
 
-pub mod dummy_ui;
+pub mod board_common;
+
+pub mod types;
+pub mod traits;
+pub mod trussed;
+
+
+//pub mod dummy_ui;
 mod flash;
 #[cfg(feature = "extflash_qspi")]
 pub mod qspiflash;
@@ -74,3 +80,4 @@ pub fn setup_usb_bus(clock: nrf52840_pac::CLOCK, usb_pac: nrf52840_pac::USBD) ->
 
 	usbd_ref
 }
+

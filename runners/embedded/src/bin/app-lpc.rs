@@ -76,7 +76,21 @@ const APP: () = {
 
 		let rtc = hal.rtc.enabled(syscon, clocks.enable_32k_fro(pmc));
 		let rgb = ERL::soc::init_rgb(syscon, iocon, hal.ctimer.3, &mut clocks);
-		// let _buttons = ...;
+		/* let three_buttons = {
+                // TODO this should get saved somewhere to be released later.
+                let mut dma = hal::Dma::from(_dma).enabled(syscon);
+
+                board::ThreeButtons::new (
+                    adc.take().unwrap(),
+                    ctimer1.enabled(syscon, clocks.support_1mhz_fro_token().unwrap()),
+                    ctimer2.enabled(syscon, clocks.support_1mhz_fro_token().unwrap()),
+                    &mut dma,
+                    clocks.support_touch_token().unwrap(),
+                    gpio,
+                    iocon,
+                )
+            };*/
+
 		// check CFPA
 		// BOOTROM check
 		// out: { delay_timer, perf_timer, pfr, adc, buttons, rgb }
@@ -121,7 +135,7 @@ const APP: () = {
 
 		/* -> initializer::initialize_trussed() */
 		let ui = <ERL::soc::types::Soc as ERL::types::Soc>::TrussedUI::new(
-				rtc, None, Some(rgb), true);
+				rtc, None /* rgb */, None /* three_buttons */, true);
 		let platform: ERL::types::RunnerPlatform = ERL::types::RunnerPlatform::new(
 				rng, store, ui);
 		let mut trussed_service = trussed::service::Service::new(platform);

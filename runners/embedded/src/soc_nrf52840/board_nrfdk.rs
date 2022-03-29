@@ -85,6 +85,7 @@ pub fn init_pins(gpiote: &Gpiote, gpio_p0: p0::Parts, gpio_p1: p1::Parts) -> Boa
 			Some(btn1), Some(btn2), Some(btn3), Some(btn4),
 			Some(btn5), Some(btn6), Some(btn7), Some(btn8) ],
 		leds: [ Some(led1), Some(led2), Some(led3), Some(led4) ],
+		rgb_led: [None, None, None],
 		touch: None,
 		uart_pins: Some(uart_pins),
 		fpr_detect: None,
