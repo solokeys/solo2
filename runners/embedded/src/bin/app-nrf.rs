@@ -120,11 +120,12 @@ const APP: () = {
 		#[cfg(feature = "board_nrfdk")]
 		#[cfg(feature = "board_nk3am")]*/
 
-		let rgb = ERL::soc::board_common::RgbLed { 
-			red: board_gpio.rgb_led[0].take(), 
-			green: board_gpio.rgb_led[1].take(), 
-			blue: board_gpio.rgb_led[2].take(),
-		};
+		let rgb = ERL::soc::board_common::RgbLed::new( 
+			board_gpio.rgb_led,
+			Some((ctx.device.PWM0, ctx.device.TIMER1)),
+			Some((ctx.device.PWM1, ctx.device.TIMER2)),
+			Some((ctx.device.PWM2, ctx.device.TIMER3)),
+		);
 
 		let buttons = ERL::soc::board_common::HardwareButtons {
 			touch_button: board_gpio.touch.take(),
