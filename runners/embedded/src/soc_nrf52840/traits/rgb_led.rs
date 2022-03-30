@@ -5,6 +5,13 @@ pub struct Intensities {
     pub blue: u8,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
 impl From<u32> for Intensities {
     // set all LEDs using (R||G||B) formatted word.
     fn from(hex: u32) -> Self{

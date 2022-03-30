@@ -3,13 +3,13 @@ use nrf52840_hal::{
     prelude::{OutputPin, InputPin},
     pwm::Pwm,
     timer::Timer,
-    pac, pwm
+    pac, pwm, timer
 };
 
 
-use core::convert::Infallible;
 
 pub type OutPin = Pin<Output<PushPull>>;
+
 
 pub struct RgbLed {
     pub red: Option<OutPin>,
@@ -26,33 +26,77 @@ pub struct HardwareButtons {
 }
 
 use super::traits::rgb_led;
+use super::traits::rgb_led::Color;
+
 
 use super::traits::buttons::{
 	Button, Press
 };
 
 
- /*
 
 impl RgbLed {
 
-    pub fn init_led<T, S>(led: Option<OutPin>, raw: Option<(T, S)>) -> (Option<OutPin>, Option<(Pwm<T>, Timer<S>)>) {
+    pub fn init_led<T: pwm::Instance, S: timer::Instance>(
+        led: Option<OutPin>, 
+        raw: Option<(T, S)>,
+        channel: pwm::Channel)
+        -> (Option<OutPin>, Option<(Pwm<T>, Timer<S>)>) {
+
         if led.is_some() && raw.is_some() {
             let (raw_pwm, raw_timer) = raw.unwrap();
+            
             let pwm = Pwm::new(raw_pwm);
-            //
-            if let Some(pin) = led {
-                pwm.set_output_pin(pwm::Channel::C2, pin);
-            };
+            pwm.set_output_pin(channel, led.unwrap());
+            
             //pwm.set_period(500u32.hz());
-            pwm.set_max_duty(255);
+            //debug!("max duty: {:?}", pwm.max_duty());
+            //pwm.set_max_duty(255);
             (None, Some((pwm, Timer::new(raw_timer))))
         } else {
             (led, None)
+        }
+    }
+
+    pub fn set_led(
+        &mut self, 
+        color: Color, 
+        channel: pwm::Channel, 
+        intensity: u8) {
+
+        let mut cur_led = match color {
+            Color::Red => self.red.as_mut(),
+            Color::Green => self.green.as_mut(),
+            Color::Blue => self.blue.as_mut(),
         };
+
+        if let Some(led) = &mut cur_led {
+            if intensity > 127 {
+                led.set_high();
+            } else {
+                led.set_low();
+            }
+        } else {
+            /* @TODO: this is sooooo wrong.... 1) rust! 2) rust arithmetic (rofl) 3) type-safety-no-friend */
+            match color {
+                Color::Red =>   {
+                    let duty: u16 = ((intensity as f32 / 255.0) * self.pwm_red.as_ref().unwrap().0.max_duty() as f32) as u16;
+                    self.pwm_red.as_ref().unwrap().0.set_duty_on(channel, duty as u16);
+                },
+                Color::Green => {
+                    let duty: u16 = ((intensity as f32 / 255.0) * self.pwm_green.as_ref().unwrap().0.max_duty() as f32) as u16;
+                    self.pwm_green.as_ref().unwrap().0.set_duty_on(channel, duty as u16);
+                },
+                Color::Blue =>  {
+                    let duty: u16 = ((intensity as f32 / 255.0) * self.pwm_blue.as_ref().unwrap().0.max_duty() as f32) as u16;
+                    self.pwm_blue.as_ref().unwrap().0.set_duty_on(channel, duty as u16);
+                },
+            }
+            
+            debug!("pwm set");
+        }
     }
 }
-*/
 
 impl RgbLed {
     pub fn new (
@@ -64,54 +108,10 @@ impl RgbLed {
 
         let [mut red, mut green, mut blue] = leds;
 
-        // init red pwm if requested
-        let (red, red_pwm_obj) = if red.is_some() && pwm_red.is_some() {
-            let (raw_pwm, raw_timer) = pwm_red.unwrap();
-            let pwm = Pwm::new(raw_pwm);
-            //
-            if let Some(pin) = red {
-                pwm.set_output_pin(pwm::Channel::C0, pin);
-            };
-            //pwm.set_period(500u32.hz());
-            pwm.set_max_duty(255);
-            (None, Some((pwm, Timer::new(raw_timer))))
-        } else {
-            (red, None)
-        };
-
-        // init green pwm if requested
-        let (green, green_pwm_obj) = if green.is_some() && pwm_green.is_some() {
-            let (raw_pwm, raw_timer) = pwm_green.unwrap();
-            let pwm = Pwm::new(raw_pwm);
-            //
-            if let Some(pin) = green {
-                pwm.set_output_pin(pwm::Channel::C1, pin);
-            };
-            //pwm.set_period(500u32.hz());
-            pwm.set_max_duty(255);
-            (None, Some((pwm, Timer::new(raw_timer))))
-        } else {
-            (green, None)
-        };
-
-        // init blue pwm if requested
-        let (blue, blue_pwm_obj) = if blue.is_some() && pwm_blue.is_some() {
-            let (raw_pwm, raw_timer) = pwm_blue.unwrap();
-            let pwm = Pwm::new(raw_pwm);
-            //
-            if let Some(pin) = blue {
-                pwm.set_output_pin(pwm::Channel::C2, pin);
-            };
-            //pwm.set_period(500u32.hz());
-            pwm.set_max_duty(255);
-            (None, Some((pwm, Timer::new(raw_timer))))
-        } else {
-            (blue, None)
-        };
-
-        //let (blue, blue_pwm_obj) = RgbLed::init_led(blue, pwm_blue);
+        let (red, red_pwm_obj) = RgbLed::init_led(red, pwm_red, pwm::Channel::C0);
+        let (green, green_pwm_obj) = RgbLed::init_led(green, pwm_green, pwm::Channel::C1);
+        let (blue, blue_pwm_obj) = RgbLed::init_led(blue, pwm_blue, pwm::Channel::C2);
         
-
         Self { 
             red, green, blue, 
             pwm_red: red_pwm_obj, pwm_green: green_pwm_obj, pwm_blue: blue_pwm_obj 
@@ -120,44 +120,17 @@ impl RgbLed {
     }
 }
 
-
-
 impl rgb_led::RgbLed for RgbLed {
     fn red(&mut self, intensity: u8){
-        if let Some(led) = &mut self.red {
-            if intensity > 127 {
-                led.set_high();
-            } else {
-                led.set_low();
-            }
-        } else {
-            self.pwm_red.as_ref().unwrap().0.set_duty_on(pwm::Channel::C0, intensity as u16);
-            debug!("pwm set");
-        }
+        self.set_led(Color::Red, pwm::Channel::C0, intensity);
     }
 
     fn green(&mut self, intensity: u8){
-        if let Some(led) = &mut self.green {
-            if intensity > 127 {
-                led.set_high();
-            } else {
-                led.set_low();
-            }
-        } else {
-            self.pwm_green.as_ref().unwrap().0.set_duty_on(pwm::Channel::C1, intensity as u16);
-        }       
+        self.set_led(Color::Green, pwm::Channel::C1, intensity);
     }
 
     fn blue(&mut self, intensity: u8) {
-        if let Some(led) = &mut self.blue {
-            if intensity > 127 {
-                led.set_high();
-            } else {
-                led.set_low();
-            }
-        } else {
-            self.pwm_blue.as_ref().unwrap().0.set_duty_on(pwm::Channel::C2, intensity as u16);
-        }
+        self.set_led(Color::Blue, pwm::Channel::C2, intensity);
     }
 }
 
