@@ -43,6 +43,9 @@ impl crate::types::Soc for Soc {
 	type TrussedUI = super::board::TrussedUI;
 	type Reboot = self::Reboot;
 
+	type Duration = super::rtic_monotonic::RtcDuration;
+	type Instant = super::rtic_monotonic::RtcInstant;
+
 	const SYSCALL_IRQ: crate::types::IrqNr = crate::types::IrqNr { i: nrf52840_pac::Interrupt::SWI0_EGU0 as u16 };
 
 	const SOC_NAME: &'static str = "NRF52840";

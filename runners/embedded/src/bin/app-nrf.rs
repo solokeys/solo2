@@ -9,9 +9,9 @@ delog::generate_macros!();
 
 delog!(Delogger, 3*1024, 512, ERL::types::DelogFlusher);
 
-#[rtic::app(device = nrf52840_hal::pac, peripherals = true, dispatchers = [SWI4_EGU4])]
+#[rtic::app(device = nrf52840_hal::pac, peripherals = true, dispatchers = [SWI4_EGU4, SWI5_EGU5])]
 mod app {
-	use super::{Delogger, ERL};
+	use super::{Delogger, ERL, ERL::soc::rtic_monotonic::RtcDuration};
 	use nrf52840_hal::{
 		gpio::{p0, p1},
 		gpiote::Gpiote,
@@ -117,10 +117,6 @@ mod app {
 		let dev_rng = Rng::new(ctx.device.RNG);
 		let chacha_rng = chacha20::ChaCha8Rng::from_rng(dev_rng).unwrap();
 
-		let rtc_mono = RtcMonotonic::new(ctx.device.RTC0);
-
-		ui::spawn_after(ERL::soc::rtic_monotonic::RtcDuration::from_ms(2500));
-
 		#[cfg(feature = "board-nk3am")]
 		let ui = ERL::soc::board::init_ui(board_gpio.rgb_led,
 			ctx.device.PWM0, ctx.device.TIMER1,
@@ -139,7 +135,9 @@ mod app {
 
 		let apps = ERL::init_apps(&mut trussed_service, &store, !powered_by_usb);
 
-		
+		let rtc_mono = RtcMonotonic::new(ctx.device.RTC0);
+
+		ui::spawn_after(RtcDuration::from_ms(2500));
 
 		// compose LateResources
 		( SharedResources {
@@ -155,9 +153,9 @@ mod app {
 		}, init::Monotonics(rtc_mono))
 	}
 
-	#[idle(shared = [apps, apdu_dispatch, ctaphid_dispatch, usb_classes])]
+	#[idle(shared = [apps, apdu_dispatch, ctaphid_dispatch, usb_classes, contactless])]
 	fn idle(ctx: idle::Context) -> ! {
-		let idle::SharedResources { mut apps, mut apdu_dispatch, mut ctaphid_dispatch, mut usb_classes } = ctx.shared;
+		let idle::SharedResources { mut apps, mut apdu_dispatch, mut ctaphid_dispatch, mut usb_classes, mut contactless } = ctx.shared;
 
 		trace!("idle");
 		// TODO: figure out whether entering WFI is really worth it
@@ -176,12 +174,17 @@ mod app {
 				trace!("app->usb");
 				rtic::pend(nrf52840_pac::Interrupt::USBD);
 			}
-			// TODO: handle _nfc_activity
 
-			let (_ccid_busy, _ctaphid_busy) = usb_classes.lock(
-				|usb_classes| ERL::runtime::poll_usb_classes(usb_classes)
-			);
-			// TODO: kick off wait extensions
+			usb_classes.lock(|usb_classes| {
+				ERL::runtime::poll_usb(usb_classes,
+					ccid_keepalive::spawn_after,
+					ctaphid_keepalive::spawn_after,
+					monotonics::now().into());
+			});
+
+			contactless.lock(|contactless| {
+				ERL::runtime::poll_nfc(contactless, nfc_keepalive::spawn_after);
+			});
 		}
 		// loop {}
 	}
@@ -207,12 +210,39 @@ mod app {
 		let mut usb_classes = ctx.shared.usb_classes;
 
 		usb_classes.lock(|usb_classes| {
-			let (_ccid_busy, _ctaphid_busy) = ERL::runtime::poll_usb_classes(usb_classes);
+			ERL::runtime::poll_usb(usb_classes,
+				ccid_keepalive::spawn_after,
+				ctaphid_keepalive::spawn_after,
+				monotonics::now().into());
 		});
-		// TODO: kick off wait extensions
 	}
 
-	/* TODO: implement ctaphid_keepalive(), ccid_keepalive(), nfc_keepalive() */
+	#[task(priority = 4, shared = [usb_classes])]
+	fn ccid_keepalive(ctx: ccid_keepalive::Context) {
+		let mut usb_classes = ctx.shared.usb_classes;
+
+		usb_classes.lock(|usb_classes| {
+			ERL::runtime::ccid_keepalive(usb_classes, ccid_keepalive::spawn_after);
+		});
+	}
+
+	#[task(priority = 4, shared = [usb_classes])]
+	fn ctaphid_keepalive(ctx: ctaphid_keepalive::Context) {
+		let mut usb_classes = ctx.shared.usb_classes;
+
+		usb_classes.lock(|usb_classes| {
+			ERL::runtime::ctaphid_keepalive(usb_classes, ctaphid_keepalive::spawn_after);
+		});
+	}
+
+	#[task(priority = 4, shared = [contactless])]
+	fn nfc_keepalive(ctx: nfc_keepalive::Context) {
+		let mut contactless = ctx.shared.contactless;
+
+		contactless.lock(|contactless| {
+			ERL::runtime::nfc_keepalive(contactless, nfc_keepalive::spawn_after);
+		});
+	}
 
         #[task(priority = 3, binds = POWER_CLOCK, local = [power])]
         fn power_handler(ctx: power_handler::Context) {
@@ -240,6 +270,6 @@ mod app {
 	#[task]
 	fn ui(ctx: ui::Context) {
 		trace!("UI");
-		ui::spawn_after(ERL::soc::rtic_monotonic::RtcDuration::from_ms(2500));
+		ui::spawn_after(RtcDuration::from_ms(2500));
 	}
 }

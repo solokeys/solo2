@@ -51,12 +51,20 @@ impl crate::types::Soc for Soc {
 	type TrussedUI = UserInterface<ThreeButtons, RgbLed>;
 	type Reboot = Lpc55Reboot;
 
+	type Instant = ();
+	type Duration = LpcTimerDuration;
+
 	const SYSCALL_IRQ: crate::types::IrqNr = crate::types::IrqNr { i: raw::Interrupt::OS_EVENT as u16 };
 
 	const SOC_NAME: &'static str = "LPC55";
 	const BOARD_NAME: &'static str = super::board::BOARD_NAME;
 	const INTERFACE_CONFIG: &'static crate::types::Config = &INTERFACE_CONFIG;
 	fn device_uuid() -> &'static [u8; 16] { unsafe { &DEVICE_UUID } }
+}
+
+pub struct LpcTimerDuration { /* TODO: code me */ }
+impl From<embedded_time::duration::units::Milliseconds> for LpcTimerDuration {
+	fn from(ms: embedded_time::duration::units::Milliseconds) -> Self { Self{} }
 }
 
 pub struct Lpc55Reboot {}

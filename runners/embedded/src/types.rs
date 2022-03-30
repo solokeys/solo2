@@ -41,6 +41,9 @@ pub trait Soc {
 	type TrussedUI;
 	type Reboot;
 
+	type Duration;
+	type Instant;
+
 	// cannot use dyn cortex_m::interrupt::Nr
 	// cannot use actual types, those are usually Enums exported by the soc PAC
 	const SYSCALL_IRQ: IrqNr;
