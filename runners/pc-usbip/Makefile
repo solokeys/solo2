@@ -1,7 +1,12 @@
-APPNAME=usb-ip-simulation
-APPPATH=target/debug/usb-ip-simulation
+APPNAME=usbip-simulation
+APPPATH=target/debug/usbip-simulation
 
-all: | start-sim attach
+all: | start-sim attach help
+
+.PHONY:
+help:
+	@echo "###################################################"
+	@echo "Done. Device should be visible in your system now. Run 'make stop' to disconnect it."
 
 .PHONY: start-sim
 start-sim: $(APPNAME)
@@ -16,6 +21,7 @@ attach:
 	sudo usbip list -r "localhost"
 	sudo usbip attach -r "localhost" -b "1-1"
 	sudo usbip attach -r "localhost" -b "1-1"
+	sleep 5
 
 .PHONY: build
 build: $(APPNAME)
