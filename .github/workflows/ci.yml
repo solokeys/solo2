@@ -118,3 +118,32 @@ jobs:
       - name: Build
         run: cargo build --release
 
+
+  build-pc-usbip:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+        rust:
+          - stable
+    defaults:
+      run:
+        working-directory: runners/pc-usbip
+    steps:
+      - uses: actions/checkout@v1
+      - name: Install Linux build dependencies
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          apt-get update && apt-get install sudo
+          sudo apt update -y -qq && sudo apt install -y -qq llvm libclang-dev build-essential clang
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.rust }}
+          override: true
+      - name: Build
+        run: cargo build --release
+
