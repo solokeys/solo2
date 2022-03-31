@@ -1,12 +1,15 @@
 use clap::Parser;
 use clap_num::maybe_hex;
 
-use dispatch_fido::Fido;
 use interchange::Interchange;
 use usb_device::{bus::UsbBusAllocator, prelude::*};
 use usbip_device::UsbIpBus;
 
 use solo_usbip::platform::init_platform;
+use fido_authenticator;
+use usbd_ctaphid::constants::MESSAGE_SIZE;
+
+pub type FidoConfig = fido_authenticator::Config;
 
 /// USP/IP based virtualization of the Nitrokey 3 / Solo2 device.
 /// Supports FIDO application at the moment.
@@ -67,8 +70,10 @@ fn main() {
         .device_sub_class(0)
         .build();
 
-    let fido_auth = fido_authenticator::Authenticator::new(trussed_client, fido_authenticator::NonSilentAuthenticator {});
-    let mut fido_app = Fido::<fido_authenticator::NonSilentAuthenticator, _>::new(fido_auth);
+    let fido_auth =
+        fido_authenticator::Authenticator::new(trussed_client, fido_authenticator::Conforming {},
+                                               fido_authenticator::Config { max_msg_size: MESSAGE_SIZE});
+    let mut fido_app = fido_auth;
 
     log::info!("Ready for work");
     loop {
