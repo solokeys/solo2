@@ -3,6 +3,19 @@
 version = 3
 
 [[package]]
+name = "admin-app"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "67d9f4831720ac3f95d708922b71cbec0d085548affb935f4af35395af28366c"
+dependencies = [
+ "apdu-dispatch",
+ "ctaphid-dispatch",
+ "delog",
+ "iso7816",
+ "trussed",
+]
+
+[[package]]
 name = "aead"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -35,8 +48,9 @@ dependencies = [
 
 [[package]]
 name = "apdu-dispatch"
-version = "0.0.1"
-source = "git+https://github.com/solokeys/apdu-dispatch#f01d4ba9bf3b02fc68dc6b94fceba1750d3f47d9"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4984da9e0c0fa55506888d6fa48bab859b20d788654267bebedfac64f54dff17"
 dependencies = [
  "delog",
  "heapless 0.7.9",
@@ -380,8 +394,9 @@ dependencies = [
 
 [[package]]
 name = "ctap-types"
-version = "0.1.0"
-source = "git+https://github.com/solokeys/ctap-types#98534ed1167a87dfb6f0a93ceab9c98980a8164d"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e4fa005ff525537460e1fd70a1ff4f417ae4a6ed14887f3e4720221e20f7562"
 dependencies = [
  "bitflags",
  "cbor-smol",
@@ -398,8 +413,9 @@ dependencies = [
 
 [[package]]
 name = "ctaphid-dispatch"
-version = "0.0.1"
-source = "git+https://github.com/solokeys/ctaphid-dispatch#6dcbc0d1b79e597eb643b2d35ac5d6e548e30172"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "24f378100ce2ecda0bc9c882254583168b63afd788f277f45d494c33b4493d5a"
 dependencies = [
  "delog",
  "heapless 0.7.9",
@@ -415,9 +431,9 @@ checksum = "b365fabc795046672053e29c954733ec3b05e4be654ab130fe8f1f94d7051f35"
 
 [[package]]
 name = "delog"
-version = "0.1.2"
+version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1abe705f4932cb84b67569a7e05cda7ffc9b8847980b2e1cf290f41045eea73b"
+checksum = "cb73cae03ad02cd38353f93fe84b288daffcb6371212226e09b9a4c7fc93b03f"
 dependencies = [
  "log",
 ]
@@ -462,23 +478,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3dd60d1080a57a05ab032377049e0591415d2b31afd7028356dbf3cc6dcb066"
 dependencies = [
  "generic-array 0.14.4",
-]
-
-[[package]]
-name = "dispatch-fido"
-version = "0.1.0"
-dependencies = [
- "apdu-dispatch",
- "ctap-types",
- "ctaphid-dispatch",
- "delog",
- "fido-authenticator",
- "heapless 0.6.1",
- "heapless-bytes",
- "interchange",
- "iso7816",
- "serde",
- "trussed",
 ]
 
 [[package]]
@@ -562,13 +561,17 @@ dependencies = [
 
 [[package]]
 name = "fido-authenticator"
-version = "0.0.0-unreleased"
-source = "git+https://github.com/Nitrokey/fido-authenticator#5862c89b02b1cc8629e3a7fea8c2cbdab8211d39"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c809364e63e0bfc7153a6101235cd407a11d34e97b27984eb1f49e8e6a25122"
 dependencies = [
+ "apdu-dispatch",
  "ctap-types",
+ "ctaphid-dispatch",
  "delog",
  "heapless 0.7.9",
  "interchange",
+ "iso7816",
  "littlefs2",
  "serde",
  "serde-indexed",
@@ -775,8 +778,9 @@ checksum = "65d9ab155e6b8e53ae742a06a850b2645e333d40d89ef2e28f190763742d768c"
 
 [[package]]
 name = "iso7816"
-version = "0.1.0-alpha.1"
-source = "git+https://github.com/ycrypto/iso7816#b2350f41ea44f90c69cdde94ead869be017b844c"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a921942ff6163b5dc8be6996deed8193064db1f57ae3c327ac29a7c3cfffc71d"
 dependencies = [
  "delog",
  "heapless 0.7.9",
@@ -1280,13 +1284,13 @@ dependencies = [
 name = "solo-usbip"
 version = "0.0.1"
 dependencies = [
+ "admin-app",
  "apdu-dispatch",
  "chacha20",
  "clap",
  "clap-num",
  "ctap-types",
  "ctaphid-dispatch",
- "dispatch-fido",
  "fido-authenticator",
  "generic-array 0.14.4",
  "heapless 0.6.1",
@@ -1375,7 +1379,8 @@ checksum = "b1141d4d61095b28419e22cb0bbf02755f5e54e0526f97f1e3d1d160e60885fb"
 [[package]]
 name = "trussed"
 version = "0.1.0"
-source = "git+https://github.com/trussed-dev/trussed#c52e9c7a3a075bb143ae23e01e6ec78851d3a0b0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f7173399ed80afefa978da6c601d9712d1de03f7c6e2b9d4630addfcc0598f5e"
 dependencies = [
  "aes",
  "bitflags",

@@ -18,17 +18,16 @@ log = { version = "0.4.14", default-features = false }
 clap = { version = "3.0.0", features = ["derive"] }
 clap-num = "1.0.0"
 
-#admin-app = { git = "https://github.com/solokeys/admin-app" }
-apdu-dispatch = { git = "https://github.com/solokeys/apdu-dispatch", features = ["std"] }
-ctap-types = { git = "https://github.com/solokeys/ctap-types" }
-ctaphid-dispatch = { git = "https://github.com/solokeys/ctaphid-dispatch", features = ["std"] }
-fido-authenticator = { git = "https://github.com/Nitrokey/fido-authenticator" }
+apdu-dispatch = "0.1"
+ctap-types = "0.1"
+ctaphid-dispatch = "0.1"
+admin-app = "0.1"
+fido-authenticator = { version = "0.1", features = ["dispatch"], optional = true }
 #piv-authenticator = { git = "https://github.com/solokeys/piv-authenticator" }
-trussed = { git = "https://github.com/trussed-dev/trussed", features = ["clients-3"] }
+trussed = { version = "0.1", features = ["clients-3"] }
 
 # components
 usbd-ctaphid = { path = "../../components/usbd-ctaphid" }
-dispatch-fido = {path = "./../../components/dispatch-fido"}
 
 # storage
 littlefs2 = "0.3.1"
@@ -41,7 +40,7 @@ usb-device = { version = "0.2.7", default-features = false }
 pretty_env_logger = { version = "0.4.0", optional = true}
 
 [features]
-default = [ "enable-logs" ]
+default = [ "fido-authenticator",  "trussed/clients-1"]
 enable-logs = ["pretty_env_logger"]
 
 # Use to auto-succeed every user presence check
