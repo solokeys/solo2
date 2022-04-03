@@ -9,7 +9,7 @@ delog::generate_macros!();
 
 delog!(Delogger, 3*1024, 512, ERL::types::DelogFlusher);
 
-#[rtic::app(device = nrf52840_hal::pac, peripherals = true, dispatchers = [SWI4_EGU4, SWI5_EGU5])]
+#[rtic::app(device = nrf52840_hal::pac, peripherals = true, dispatchers = [SWI3_EGU3, SWI4_EGU4, SWI5_EGU5])]
 mod app {
 	use super::{Delogger, ERL, ERL::soc::rtic_monotonic::RtcDuration};
 	use nrf52840_hal::{
@@ -137,7 +137,7 @@ mod app {
 
 		let rtc_mono = RtcMonotonic::new(ctx.device.RTC0);
 
-		ui::spawn_after(RtcDuration::from_ms(2500));
+		ui::spawn_after(RtcDuration::from_ms(2500)).ok();
 
 		// compose LateResources
 		( SharedResources {
@@ -199,7 +199,7 @@ mod app {
 		});
 	}
 
-	#[task(priority = 2, binds = GPIOTE, local = [gpiote])] /* ui, fpr */
+	#[task(priority = 5, binds = GPIOTE, local = [gpiote])] /* ui, fpr */
 	fn task_button_irq(_ctx: task_button_irq::Context) {
 		trace!("irq GPIOTE");
 	}
@@ -217,7 +217,7 @@ mod app {
 		});
 	}
 
-	#[task(priority = 4, shared = [usb_classes])]
+	#[task(priority = 3, shared = [usb_classes])]
 	fn ccid_keepalive(ctx: ccid_keepalive::Context) {
 		let mut usb_classes = ctx.shared.usb_classes;
 
@@ -226,7 +226,7 @@ mod app {
 		});
 	}
 
-	#[task(priority = 4, shared = [usb_classes])]
+	#[task(priority = 3, shared = [usb_classes])]
 	fn ctaphid_keepalive(ctx: ctaphid_keepalive::Context) {
 		let mut usb_classes = ctx.shared.usb_classes;
 
@@ -244,7 +244,7 @@ mod app {
 		});
 	}
 
-        #[task(priority = 3, binds = POWER_CLOCK, local = [power])]
+        #[task(priority = 5, binds = POWER_CLOCK, local = [power])]
         fn power_handler(ctx: power_handler::Context) {
 		let mut power = ctx.local.power;
 
@@ -267,9 +267,9 @@ mod app {
 		}
 	}
 
-	#[task]
-	fn ui(ctx: ui::Context) {
+	#[task(priority = 1)]
+	fn ui(_ctx: ui::Context) {
 		trace!("UI");
-		ui::spawn_after(RtcDuration::from_ms(2500));
+		ui::spawn_after(RtcDuration::from_ms(2500)).ok();
 	}
 }
