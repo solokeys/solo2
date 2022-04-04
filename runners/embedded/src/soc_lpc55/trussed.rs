@@ -7,7 +7,7 @@ use lpc55_hal::{
     peripherals::rtc::Rtc,
     typestates::init_state,
 };
-use super::traits::{
+use crate::traits::{
 	buttons::{Press, Edge},
 	rgb_led::RgbLed
 };

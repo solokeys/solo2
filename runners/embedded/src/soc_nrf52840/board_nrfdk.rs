@@ -4,7 +4,15 @@ use nrf52840_hal::{
 	spim,
 };
 
+use nrf52840_pac::{
+	Peripherals, CorePeripherals
+};
+
 use crate::soc::types::BoardGPIO;
+
+
+
+pub type TrussedUI = super::dummy_ui::DummyUI;
 
 pub const BOARD_NAME: &'static str = "DK";
 pub const KEEPALIVE_PINS: &'static [u8] = &[0x0b, 0x0c, 0x18, 0x19, 0x25, 0x26, 0x27, 0x28];
@@ -13,6 +21,11 @@ pub const USB_PRODUCT: &'static str = "Nitrokey NRFDK Eval";
 pub const USB_SERIAL: &'static str = "4bb17fc5-fddd-46f0-8244-0da6bd13ca1b"; /* randomly generated */
 
 pub const USB_ID_PRODUCT: u16 = 0x42ee_u16;
+
+
+pub fn init_ui() -> TrussedUI {
+	TrussedUI::new()
+}
 
 pub fn init_pins(gpiote: &Gpiote, gpio_p0: p0::Parts, gpio_p1: p1::Parts) -> BoardGPIO {
 	/* Button 1-4: on DK */

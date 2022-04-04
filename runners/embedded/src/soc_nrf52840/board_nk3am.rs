@@ -2,15 +2,13 @@ use nrf52840_pac::{
 	Peripherals, CorePeripherals
 };
 use nrf52840_hal::{
-	gpio::{p0, p1, Level},
+	gpio::{p0, p1, Level, Pin, Output, PushPull},
 	gpiote::Gpiote,
-	spim,
+    prelude::{OutputPin, InputPin},
+    pwm::Pwm,
+    timer::Timer,
+    pac, pwm, timer, spim,
 };
-
-use crate::soc::types::BoardGPIO;
-
-
-
 
 
 pub const BOARD_NAME: &'static str = "NK3AM";
@@ -22,11 +20,188 @@ pub const USB_SERIAL: &'static str = "4bb17fc5-fddd-46f0-8244-cafecafecafe"; /* 
 pub const USB_ID_PRODUCT: u16 = 0x42ef_u16;
 
 
+use crate::traits::rgb_led;
+use crate::traits::rgb_led::Color;
+use crate::traits::buttons::{
+	Button, Press
+};
+
+
+pub type OutPin = Pin<Output<PushPull>>;
+
+
+pub struct RgbLed {
+	pwm_red: Pwm<pac::PWM0>,
+	pwm_green: Pwm<pac::PWM1>,
+	pwm_blue: Pwm<pac::PWM2>,
+	timer_red: Timer<pac::TIMER1>,
+	timer_green: Timer<pac::TIMER2>,
+	timer_blue: Timer<pac::TIMER3>,
+}
+
+pub struct HardwareButtons {
+    pub touch_button: Option<OutPin>,
+}
+
+
+use crate::soc::types::BoardGPIO;
+
+use crate::soc::trussed_ui::UserInterface;
+
+pub type TrussedUI = UserInterface<HardwareButtons, RgbLed>;
+
+
+
+impl RgbLed {
+
+    pub fn init_led<T: pwm::Instance, S: timer::Instance>(
+        led: OutPin, 
+        raw_pwm: T, 
+		raw_timer: S,
+        channel: pwm::Channel)
+        -> (Pwm<T>, Timer<S>) {
+
+		let pwm = Pwm::new(raw_pwm);
+		pwm.set_output_pin(channel, led);
+		
+		//pwm.set_period(500u32.hz());
+		//debug!("max duty: {:?}", pwm.max_duty());
+		//pwm.set_max_duty(255);
+		(pwm, Timer::new(raw_timer))
+        
+    }
+
+    pub fn set_led(
+        &mut self, 
+        color: Color, 
+        channel: pwm::Channel, 
+        intensity: u8) {
+
+            match color {
+                Color::Red =>   {
+                    let duty: u16 = ((intensity as f32 / 255.0) * self.pwm_red.max_duty() as f32) as u16;
+                    self.pwm_red.set_duty_on(channel, duty as u16);
+                },
+                Color::Green => {
+                    let duty: u16 = ((intensity as f32 / 255.0) * self.pwm_green.max_duty() as f32) as u16;
+                    self.pwm_green.set_duty_on(channel, duty as u16);
+                },
+                Color::Blue =>  {
+                    let duty: u16 = ((intensity as f32 / 255.0) * self.pwm_blue.max_duty() as f32) as u16;
+                    self.pwm_blue.set_duty_on(channel, duty as u16);
+                },
+            }
+        //}
+    }
+}
+
+impl RgbLed {
+    pub fn new (
+        leds: [Option<OutPin>; 3], 
+		pwm_red: pac::PWM0,
+		timer_red: pac::TIMER1,
+		pwm_green: pac::PWM1,
+		timer_green: pac::TIMER2,
+		pwm_blue: pac::PWM2,
+		timer_blue: pac::TIMER3,
+    ) -> RgbLed {
+
+        let [mut red, mut green, mut blue] = leds;
+
+        let (red_pwm_obj, red_timer_obj) = 
+			RgbLed::init_led(red.unwrap(), pwm_red, timer_red, pwm::Channel::C0);
+        let (green_pwm_obj, green_timer_obj) = 
+			RgbLed::init_led(green.unwrap(), pwm_green, timer_green, pwm::Channel::C1);
+        let (blue_pwm_obj, blue_timer_obj) = 
+			RgbLed::init_led(blue.unwrap(), pwm_blue, timer_blue, pwm::Channel::C2);
+        
+        Self { 
+            pwm_red: red_pwm_obj, pwm_green: green_pwm_obj, pwm_blue: blue_pwm_obj,
+			timer_red: red_timer_obj, timer_green: green_timer_obj, timer_blue: blue_timer_obj
+
+        }
+
+    }
+}
+
+impl rgb_led::RgbLed for RgbLed {
+    fn red(&mut self, intensity: u8){
+        self.set_led(Color::Red, pwm::Channel::C0, intensity);
+    }
+
+    fn green(&mut self, intensity: u8){
+        self.set_led(Color::Green, pwm::Channel::C1, intensity);
+    }
+
+    fn blue(&mut self, intensity: u8) {
+        self.set_led(Color::Blue, pwm::Channel::C2, intensity);
+    }
+}
+
+impl Press for HardwareButtons {
+	fn is_pressed(&mut self, but: Button) -> bool {
+        match but {
+            
+            Button::A => {
+                let mut ticks = 0;
+		
+                if let Some(touch) = self.touch_button.take() {
+                    let floating = touch.into_floating_input();
+
+                    for idx in 0..10_000 {
+                        match floating.is_low() {
+                            Err(e) => { debug!("err!"); },
+                            Ok(v) => match v {
+                                true => { 
+                                    ticks = idx; 
+                                    break; 
+                                },
+                                false => { }
+                            },
+                        }
+                    }
+                    self.touch_button = Some(floating.into_push_pull_output(Level::High));
+                }
+                ticks > 50
+            }
+            _ => {
+                false
+            }
+        }		
+	}
+}
+
+
 
 
 pub fn init_early(_device: &Peripherals, _core: &CorePeripherals) -> () {
 
 }
+
+pub fn init_ui(leds: [Option<OutPin>; 3], 
+		pwm_red: pac::PWM0,
+		timer_red: pac::TIMER1,
+		pwm_green: pac::PWM1,
+		timer_green: pac::TIMER2,
+		pwm_blue: pac::PWM2,
+		timer_blue: pac::TIMER3,
+	 	touch: OutPin
+	) -> TrussedUI {
+
+	let rgb = RgbLed::new( 
+		leds,
+		pwm_red, timer_red,
+		pwm_green, timer_green,
+		pwm_blue, timer_blue,
+	);
+
+	let buttons = HardwareButtons {
+		touch_button: Some(touch),
+	};
+	TrussedUI::new(Some(buttons), Some(rgb), true)
+}
+
+
 
 pub fn init_pins(gpiote: &Gpiote, gpio_p0: p0::Parts, gpio_p1: p1::Parts) -> BoardGPIO {
 	

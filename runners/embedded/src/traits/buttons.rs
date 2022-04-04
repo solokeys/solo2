@@ -70,3 +70,20 @@ pub trait Press {
         }
     }
 }
+
+pub trait Edge {
+    /// Wait for the given button to be pressed.  Edge sensitive, meaning this returns Ok only once per button press.
+    fn wait_for_new_press(&mut self, button: Button) -> nb::Result<(), Infallible>;
+
+    /// Wait for the given button to be released.  Edge sensitive, meaning this returns Ok only once per button release.
+    fn wait_for_new_release(&mut self, button: Button) -> nb::Result<(), Infallible>;
+
+    /// Wait for "squeeze" event (both A + B buttons).  Edge sensitive, meaning this returns Ok only once per button squeeze.
+    fn wait_for_new_squeeze(&mut self) -> nb::Result<(), Infallible>;
+
+    /// Wait for any press event(s), and return the state.  Edge sensitive, meaning this returns Ok only once per button press.
+    fn wait_for_any_new_press(&mut self) -> nb::Result<Button, Infallible>;
+
+    /// Wait for any release event(s), and return the state.  Edge sensitive, meaning this returns Ok only once per button release.
+    fn wait_for_any_new_release(&mut self) -> nb::Result<Button, Infallible>;
+}

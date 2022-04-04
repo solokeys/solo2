@@ -4,7 +4,13 @@ use nrf52840_hal::{
 	spim,
 };
 
+use nrf52840_pac::{
+	Peripherals, CorePeripherals
+};
+
 use crate::soc::types::BoardGPIO;
+
+pub type TrussedUI = super::dummy_ui::DummyUI;
 
 pub const BOARD_NAME: &'static str = "Proto1";
 pub const KEEPALIVE_PINS: &'static [u8] = &[0x29, 0x2b, 0x2d, 0x2f];
@@ -13,6 +19,11 @@ pub const USB_PRODUCT: &'static str = "Nitrokey/PTB Prototype #1";
 pub const USB_SERIAL: &'static str = "493210be-43ea-4cc4-8d11-5bc82636c44f"; /* randomly generated */
 
 pub const USB_ID_PRODUCT: u16 = 0x42ef_u16;
+
+
+pub fn init_ui() -> TrussedUI {
+	TrussedUI::new()
+}
 
 pub fn init_pins(gpiote: &Gpiote, gpio_p0: p0::Parts, gpio_p1: p1::Parts) -> BoardGPIO {
 	/* Buttons */

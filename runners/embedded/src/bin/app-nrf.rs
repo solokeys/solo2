@@ -114,26 +114,17 @@ const APP: () = {
 		dev_rtc.clear_counter();
 		dev_rtc.enable_counter();
 
-		//let dummy_ui = ERL::soc::dummy_ui::DummyUI::new();
-
-		/*#[cfg(feature = "board_proto1")]
-		#[cfg(feature = "board_nrfdk")]
-		#[cfg(feature = "board_nk3am")]*/
-
-		let rgb = ERL::soc::board_common::RgbLed::new( 
-			board_gpio.rgb_led,
-			Some((ctx.device.PWM0, ctx.device.TIMER1)),
-			Some((ctx.device.PWM1, ctx.device.TIMER2)),
-			Some((ctx.device.PWM2, ctx.device.TIMER3)),
+		#[cfg(feature = "board-nk3am")]
+		let ui = ERL::soc::board::init_ui(board_gpio.rgb_led,
+			ctx.device.PWM0, ctx.device.TIMER1,
+			ctx.device.PWM1, ctx.device.TIMER2,
+			ctx.device.PWM2, ctx.device.TIMER3,
+			board_gpio.touch.unwrap()
 		);
 
-		let buttons = ERL::soc::board_common::HardwareButtons {
-			touch_button: board_gpio.touch.take(),
-		};
-
-		let ui = <ERL::soc::types::Soc as ERL::types::Soc>::TrussedUI::new(
-			Some(buttons), Some(rgb), true);
-
+		#[cfg(not(feature = "board-nk3am"))]
+		let ui = ERL::soc::board::init_ui();
+		
 		let platform: ERL::types::RunnerPlatform = ERL::types::RunnerPlatform::new(
 			chacha_rng, store, ui);
 

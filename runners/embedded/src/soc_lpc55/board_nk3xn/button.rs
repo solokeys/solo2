@@ -9,7 +9,7 @@ use lpc55_hal::{
 	},
 	typestates::{init_state, pin},
 };
-use crate::soc::traits::buttons::{
+use crate::traits::buttons::{
 	Button, Edge, Press, State
 };
 
@@ -59,7 +59,7 @@ where CTIMER: ctimer::Ctimer<init_state::Enabled>
 {
 
     // A minimal button implementation for Xpresso
-    fn is_pressed(&self, but: Button) -> bool {
+    fn is_pressed(&mut self, but: Button) -> bool {
         match but {
             Button::A=> {
                 self.user_button.is_low().ok().unwrap()

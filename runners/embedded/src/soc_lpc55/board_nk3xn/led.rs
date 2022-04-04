@@ -12,7 +12,7 @@ use lpc55_hal::{
     traits::wg::Pwm,
     Iocon,
 };
-use crate::soc::traits::rgb_led;
+use crate::traits::rgb_led;
 
 pub enum Color {
     Red,

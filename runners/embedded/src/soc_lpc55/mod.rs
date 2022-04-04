@@ -1,6 +1,5 @@
 pub mod clock_controller;
 pub mod nfc;
-pub mod traits;
 pub mod trussed;
 pub mod types;
 

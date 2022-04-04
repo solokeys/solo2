@@ -4,7 +4,7 @@
 use core::time::Duration;
 
 
-use super::traits::{
+use crate::traits::{
 	buttons::{Press, Button},
 	rgb_led::RgbLed,
     
