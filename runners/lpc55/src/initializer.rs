@@ -199,8 +199,9 @@ impl Initializer {
         false
     }
 
-    fn validate_cfpa(pfr: &mut Pfr<hal::Enabled>, current_version_maybe: Option<u32>, require_prince: bool) {
+    fn validate_cfpa(pfr: &mut Pfr<hal::Enabled>, current_version_maybe: Option<u32>, require_prince: bool) -> u32 {
         let mut cfpa = pfr.read_latest_cfpa().unwrap();
+        let old_version = cfpa.secure_fw_version;
         if let Some(current_version) = current_version_maybe {
             if cfpa.secure_fw_version < current_version || cfpa.ns_fw_version < current_version {
                 info!("updating cfpa from {} to {}", cfpa.secure_fw_version, current_version);
@@ -221,6 +222,8 @@ impl Initializer {
                 cfpa.key_provisioned(hal::peripherals::pfr::KeyType::PrinceRegion2)
             );
         }
+
+        old_version
     }
 
     fn try_enable_fm11nc08 <T: Ctimer<hal::Enabled>>(
@@ -379,7 +382,8 @@ impl Initializer {
         }
 
         let mut pfr = pfr.enabled(&clocks).unwrap();
-        Self::validate_cfpa(&mut pfr, self.config.secure_firmware_version, self.config.require_prince);
+        let old_firmware_version =
+            Self::validate_cfpa(&mut pfr, self.config.secure_firmware_version, self.config.require_prince);
 
         if self.config.boot_to_bootrom && three_buttons.is_some() {
             info!("bootrom request start {}", perf_timer.elapsed().0/1000);
@@ -400,6 +404,7 @@ impl Initializer {
             adc,
             three_buttons,
             rgb: Some(rgb),
+            old_firmware_version,
         }
     }
 
@@ -750,6 +755,22 @@ impl Initializer {
         trussed
     }
 
+    pub fn perform_data_migrations(&self, basic: &stages::Basic, filesystem: &stages::Filesystem) {
+        // FIDO2 attestation cert (<= 1.0.2)
+        if basic.old_firmware_version <= 4194306 {
+            debug!("data migration: updating FIDO2 attestation cert");
+            let res = trussed::store::store(
+                filesystem.store,
+                trussed::types::Location::Internal,
+                &littlefs2::path::PathBuf::from("fido/x5c/00"),
+                include_bytes!("../data/fido-cert.der"),
+            );
+            if res.is_err() {
+                error!("failed to replace attestation cert");
+            }
+        }
+    }
+
     #[inline(never)]
     pub fn initialize_all(&mut self,
         iocon: hal::Iocon<Unknown>,
@@ -824,6 +845,8 @@ impl Initializer {
             &mut filesystem_stage,
             rtc,
         );
+
+        self.perform_data_migrations(&basic_stage, &filesystem_stage);
 
         stages::All {
             trussed: trussed,

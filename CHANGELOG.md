@@ -1,4 +1,11 @@
+# Unreleased
+
+- Correct the FIDO2 attestation certificate (fixes authentication issue with Google, [#36][])
+
+[#36]: https://github.com/Nitrokey/nitrokey-3-firmware/issues/36
+
 # v1.0.2 (2022-01-26)
+
 No changes since rc.1.
 
 # v1.0.2-rc.1 (2022-01-25)

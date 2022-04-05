@@ -42,6 +42,8 @@ pub struct Basic {
     pub adc: Option<hal::Adc<hal::Enabled>>,
     pub three_buttons: Option<board::ThreeButtons>,
     pub rgb: Option<board::RgbLed>,
+
+    pub old_firmware_version: u32,
 }
 
 /// Initialized NFC Iso14443 transport
