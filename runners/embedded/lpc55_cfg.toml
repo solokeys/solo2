@@ -1,3 +1,5 @@
 [parameters]
 flash_origin = 0x00000000
 filesystem_boundary = 0x93000
+filesystem_end = 0x9D800
+
