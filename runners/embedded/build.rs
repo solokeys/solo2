@@ -5,6 +5,7 @@ use std::str;
 #[derive(serde::Deserialize)]
 struct Config {
     parameters: Parameters,
+    identifier: Identifier,
 }
 
 #[derive(serde::Deserialize)]
@@ -13,6 +14,16 @@ struct Parameters {
     filesystem_boundary: u32,
     filesystem_end: u32,
 }
+
+#[derive(serde::Deserialize)]
+struct Identifier {
+    usb_id_vendor: u16,
+    usb_id_product: u16,
+    usb_manufacturer: String,
+    usb_product: String,
+    ccid_issuer: String
+}
+
 
 #[derive(Eq, PartialEq)]
 enum SocType {
@@ -40,6 +51,11 @@ macro_rules! add_build_variable{
 
     ($file:expr, $name:literal, $value:expr, usize) => {
         writeln!($file, "pub const {}: usize = 0x{:x};", $name, $value)
+            .expect("Could not write build_constants.rs file");
+    };
+
+    ($file:expr, $name:literal, $value:expr, [u8; 13]) => {
+        writeln!($file, "pub const {}: [u8; 13] = {:?};", $name, $value)
             .expect("Could not write build_constants.rs file");
     };
 
@@ -128,6 +144,18 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     let minor: u32 = str::parse(env!("CARGO_PKG_VERSION_MINOR")).unwrap();
     let patch: u32 = str::parse(env!("CARGO_PKG_VERSION_PATCH")).unwrap();
 
+    // USB Identifiers
+    add_build_variable!(&mut f, "USB_MANUFACTURER", config.identifier.usb_manufacturer);
+    add_build_variable!(&mut f, "USB_PRODUCT", config.identifier.usb_product);
+    add_build_variable!(&mut f, "USB_ID_VENDOR", config.identifier.usb_id_vendor, u16);
+    add_build_variable!(&mut f, "USB_ID_PRODUCT", config.identifier.usb_id_product, u16);
+
+    // properly convert ccid_issuer to bytes
+    let mut ccid_bytes: [u8; 13] = [0u8; 13];
+    let raw_issuer = config.identifier.ccid_issuer.as_bytes();
+    ccid_bytes[..raw_issuer.len()].clone_from_slice(raw_issuer);
+    add_build_variable!(&mut f, "CCID_ISSUER", ccid_bytes, [u8; 13]);
+
     if major >= 1024 || minor > 9999 || patch >= 64 {
         panic!("config.firmware.product can at most be 1023.9999.63 for versions in customer data");
     } else if major >= 256 || minor >= 256 {
@@ -140,9 +168,13 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     let usb_release_version: u16 = ((major as u16) << 8) | (minor as u16);
     add_build_variable!(&mut f, "USB_RELEASE", usb_release_version, u16);
 
-    add_build_variable!(&mut f, "CONFIG_FILESYSTEM_BOUNDARY", config.parameters.filesystem_boundary, usize);
-    add_build_variable!(&mut f, "CONFIG_FLASH_BASE", config.parameters.flash_origin, usize);
-
+    add_build_variable!(&mut f, "CONFIG_FILESYSTEM_BOUNDARY", 
+        config.parameters.filesystem_boundary, usize);
+    add_build_variable!(&mut f, "CONFIG_FILESYSTEM_END", 
+        config.parameters.filesystem_end, usize);
+    add_build_variable!(&mut f, "CONFIG_FLASH_BASE", 
+        config.parameters.flash_origin, usize);
+    
     writeln!(&mut f, "}}").expect("Could not write build_constants.rs.");
 
     let (memory_x_infix, template_file) = match soc_type {

@@ -116,7 +116,7 @@ pub fn init_usb_nfc(usbbus_opt: Option<&'static usb_device::bus::UsbBusAllocator
 		let usbdev = UsbDeviceBuilder::new(usbbus, vidpid)
 			.product(config.usb_product)
 			.manufacturer(config.usb_manufacturer)
-			.serial_number(config.usb_serial)
+			/*.serial_number(config.usb_serial)  <---- don't configure serial to not be identifiable */
 			.device_release(crate::types::build_constants::USB_RELEASE)
 			.max_packet_size_0(64)
 			.composite_with_iads()

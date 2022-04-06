@@ -14,18 +14,19 @@ use trussed::types::{LfsStorage, LfsResult};
 
 pub static mut DEVICE_UUID: [u8; 16] = [0u8; 16];
 
+
 const INTERFACE_CONFIG: crate::types::Config = crate::types::Config {
-	card_issuer: b"Nitrokey/PTB\0",
-	usb_product: super::board::USB_PRODUCT,
-	usb_manufacturer: "Nitrokey/PTB",
-	usb_serial: super::board::USB_SERIAL,
-	usb_id_vendor: crate::types::USB_ID_VENDOR_NITROKEY,
-	usb_id_product: super::board::USB_ID_PRODUCT,
+	card_issuer: &crate::types::build_constants::CCID_ISSUER,
+	usb_product: crate::types::build_constants::USB_PRODUCT,
+	usb_manufacturer: crate::types::build_constants::USB_MANUFACTURER,
+	usb_serial:  "00000000-0000-0000-00000000",
+	usb_id_vendor: crate::types::build_constants::USB_ID_VENDOR,
+	usb_id_product: crate::types::build_constants::USB_ID_PRODUCT,
 };
 
 /* the base address of the internal filesystem is compile-time configurable
-   and placed into build_constants::CONFIG_FILESYSTEM_BOUNDARY */
-pub const FILESYSTEM_END: usize = 0x000E_C000;
+   and placed into build_constants::CONFIG_FILESYSTEM_END */
+pub const FILESYSTEM_END: usize = crate::types::build_constants::CONFIG_FILESYSTEM_END;
 
 #[cfg(not(feature = "extflash_qspi"))]
 const_ram_storage!(ExternalStorage, 8192);

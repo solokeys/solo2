@@ -51,9 +51,9 @@ program-nrf-$(1):
 	nrfjprog -f NRF52 -s $(1) --sectorerase --program ./nrf-runner-$(2).ihex
 	nrfjprog -f NRF52 -s $(1) --reset
 
-reset-nrf-$(1): fidokeys_lfs_e0000+c000.ihex
+reset-nrf-$(1): fidokeys_lfs_d8000+14000.ihex
 	nrfjprog -f NRF52 -s $(1) --chiperase --program ./nrf-runner-$(2).ihex
-	nrfjprog -f NRF52 -s $(1) --program fidokeys_lfs_e0000+c000.ihex
+	nrfjprog -f NRF52 -s $(1) --program fidokeys_lfs_d8000+14000.ihex
 	
 	# set APPROTECT (disable debugging port - reset with: `nrfjprog -f NRF52 --recover` or --chiperase(?)
 	#nrfjprog --memwr 0x10001208 --val 0xFFFFFF00
@@ -85,7 +85,7 @@ $(foreach s,$(SERIAL_NRFDK), $(eval $(call nrf-targets,$(s),nrfdk)) )
 $(foreach s,$(SERIAL_PROTO1), $(eval $(call nrf-targets,$(s),proto1)) )
 $(foreach s,$(SERIAL_NK3AM), $(eval $(call nrf-targets,$(s),nk3am)) )
 
-$(eval $(call fidokeys_lfs,e0000,c000))
+$(eval $(call fidokeys_lfs,d8000,14000))
 
 ifeq ($(words $(NRF_SERIAL)),0)
 DEVICES_PRESENT := $(shell nrfjprog -i)

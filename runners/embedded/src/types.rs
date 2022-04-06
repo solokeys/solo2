@@ -19,8 +19,6 @@ unsafe impl cortex_m::interrupt::InterruptNumber for IrqNr {
 	fn number(self) -> u16 { self.i }
 }
 
-pub const USB_ID_VENDOR_NITROKEY: u16 = 0x20a0_u16;
-
 pub struct Config {
 	pub card_issuer: &'static [u8; 13],
 	pub usb_product: &'static str,
@@ -168,7 +166,7 @@ impl TrussedApp for AdminApp {
     type NonPortable = ();
     fn with_client(trussed: TrussedClient, _: ()) -> Self {
         let mut buf: [u8; 16] = [0u8; 16];
-	buf.copy_from_slice(<SocT as Soc>::device_uuid());
+        buf.copy_from_slice(<SocT as Soc>::device_uuid());
         Self::new(trussed, buf, build_constants::CARGO_PKG_VERSION)
     }
 }

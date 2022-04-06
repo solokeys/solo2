@@ -33,12 +33,12 @@ type UsbPeripheral = lpc55_hal::peripherals::usbfs::EnabledUsbfsDevice;
 type UsbPeripheral = lpc55_hal::peripherals::usbhs::EnabledUsbhsDevice;
 
 const INTERFACE_CONFIG: crate::types::Config = crate::types::Config {
-	card_issuer: b"Nitrokey 3\0\0\0",
-	usb_product: "--from PFR!--", /* TODO */
-	usb_manufacturer: "Nitrokey",
+	card_issuer: &crate::types::build_constants::CCID_ISSUER,
+	usb_product: crate::types::build_constants::USB_PRODUCT, /* TODO  FROM PFR ??? what is PFR ?*/
+	usb_manufacturer: crate::types::build_constants::USB_MANUFACTURER,
 	usb_serial: "00000000-0000-0000-00000000",
-	usb_id_vendor: crate::types::USB_ID_VENDOR_NITROKEY,
-	usb_id_product: 0x42b2_u16,
+	usb_id_vendor: crate::types::build_constants::USB_ID_VENDOR,
+	usb_id_product: crate::types::build_constants::USB_ID_PRODUCT,
 };
 
 pub struct Soc {}

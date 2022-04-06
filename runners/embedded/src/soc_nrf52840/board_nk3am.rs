@@ -14,11 +14,6 @@ use nrf52840_hal::{
 pub const BOARD_NAME: &'static str = "NK3AM";
 pub const KEEPALIVE_PINS: &'static [u8] = &[0x0b, 0x0c, 0x18, 0x19, 0x25, 0x26, 0x27, 0x28];
 
-pub const USB_PRODUCT: &'static str = "Nitrokey NK3AM Meissn0rHack3d";
-pub const USB_SERIAL: &'static str = "4bb17fc5-fddd-46f0-8244-cafecafecafe"; /* randomly generated */
-
-pub const USB_ID_PRODUCT: u16 = 0x42ef_u16;
-
 
 use crate::traits::rgb_led;
 use crate::traits::rgb_led::Color;
