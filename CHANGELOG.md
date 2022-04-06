@@ -1,4 +1,4 @@
-# Unreleased
+# v1.0.3-rc.1 (2022-04-06)
 
 - Correct the FIDO2 attestation certificate (fixes authentication issue with Google, [#36][])
 
