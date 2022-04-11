@@ -1,4 +1,10 @@
-# v1.0.3-rc.1 (2022-04-06)
+# v1.0.3 (2022-04-11)
+
+This release fixes a FIDO authentication issue with Google.
+
+## v1.0.3-rc.1 (2022-04-06)
+
+### Bugfixes
 
 - Correct the FIDO2 attestation certificate (fixes authentication issue with Google, [#36][])
 
@@ -6,38 +12,38 @@
 
 # v1.0.2 (2022-01-26)
 
-No changes since rc.1.
+This release improves compatibility with Windows systems.
 
-# v1.0.2-rc.1 (2022-01-25)
+## v1.0.2-rc.1 (2022-01-25)
 
 Update to upstream release 1.0.9.
 
-## Bugfixes
+### Bugfixes
 
 - usbd-ctaphid: fix ctaphid keepalive messages - fixes "busy" issue under Windows  ([#21][]) 
-
 
 [#21]: https://github.com/Nitrokey/nitrokey-3-firmware/issues/21
 
 # v1.0.1 (2022-01-15)
 
-## Bugfixes
+This release fixes some issues with the FIDO authenticator and the admin
+application.
+
+### Bugfixes
+
 - fido-authenticator: use smaller CredentialID - fixes issues with some services FIDO usage ([fido-authenticator#8][])
 - trussed: update P256 library - fixes signing failure in some cases ([#31][])
 
 [#31]: https://github.com/Nitrokey/nitrokey-3-firmware/issues/31
 [fido-authenticator#8]: https://github.com/solokeys/fido-authenticator/pull/8
 
-# v1.0.1-rc.1 (2021-12-06)
+## v1.0.1-rc.1 (2021-12-06)
 
-This release fixes some issues with the FIDO authenticator and the admin
-application.
-
-## Features
+### Features
 
 - Change LED color and device name if provisioner app is enabled.
 
-## Bugfixes
+### Bugfixes
 
 - admin-app: Fix CTAPHID command dispatch ([#8][]).
 - admin-app: Fix CTAPHID wink command ([#9][]).
