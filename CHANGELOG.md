@@ -1,4 +1,4 @@
-# v1.0.3 (unreleased)
+# v1.0.3 (2022-04-11)
 
 This release fixes a FIDO authentication issue with Google.
 
