@@ -1,0 +1,16 @@
+
+
+#NRF_SDK_ROOT := /opt/nrf5-sdk
+
+
+all: bootloader.hex mbr.hex
+
+
+bootloader.hex: Makefile.bootloader config/sdk_config.h
+	make -f Makefile.bootloader 
+	cp build/nrf52840_xxaa.hex $@
+
+
+mbr.hex: $(NRF5_SDK_PATH)/components/softdevice/mbr/hex/mbr_nrf52_2.4.1_mbr.hex
+	cp $(NRF5_SDK_PATH)/components/softdevice/mbr/hex/mbr_nrf52_2.4.1_mbr.hex $@
+

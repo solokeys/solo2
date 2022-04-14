@@ -102,3 +102,25 @@ program: program-nrf-$(NRF_SERIAL)
 reset: reset-nrf-$(NRF_SERIAL)
 endif
 endif
+
+
+mbr.hex bootloader.hex: nrf-bootloader
+	make -C nrf-bootloader
+
+reset-nrf-bootloader: nrf-bootloader/mbr.hex nrf-bootloader/bootloader.hex 
+	nrfjprog -f NRF52 -s $(NRF_SERIAL) --recover
+	nrfjprog -f NRF52 -s $(NRF_SERIAL) --program nrf-bootloader/mbr.hex --sectorerase
+	nrfjprog -f NRF52 -s $(NRF_SERIAL) --reset
+	nrfjprog -f NRF52 -s $(NRF_SERIAL) --program nrf-bootloader/bootloader.hex --sectorerase
+	nrfjprog -f NRF52 -s $(NRF_SERIAL) --reset
+	# uicr
+	nrfjprog -f NRF52 -s $(NRF_SERIAL) --memwr 0x10001304 --val 0xfffffffc
+	nrfjprog -f NRF52 -s $(NRF_SERIAL) --memwr 0x1000120C --val 0xfffffffe
+	nrfjprog -f NRF52 -s $(NRF_SERIAL) --reset
+
+program-nrf-bootloader: mbr.hex bootloader.hex
+	nrfjprog -f NRF52 -s $(NRF_SERIAL) --program nrf-bootloader/mbr.hex --sectorerase
+	nrfjprog -f NRF52 -s $(NRF_SERIAL) --program nrf-bootloader/bootloader.hex --sectorerase
+	nrfjprog -f NRF52 -s $(NRF_SERIAL) --reset
+
+
