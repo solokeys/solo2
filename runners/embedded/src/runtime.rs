@@ -1,5 +1,6 @@
 use crate::types::*;
 use crate::soc::types::Soc as SocT;
+use crate::soc::trussed_ui::UserPresenceStatus;
 
 pub fn poll_dispatchers(apdu_dispatch: &mut ApduDispatch,
 			ctaphid_dispatch: &mut CtaphidDispatch,
@@ -66,7 +67,17 @@ pub fn ctaphid_keepalive<F, T, E>(usb_classes: &mut Option<usbnfc::UsbClasses>,
 	let usb_classes = usb_classes.as_mut().unwrap();
 
 	// TODO: need UI "waiting-for-user-presence-P" flag
-	maybe_spawn_ctaphid(usb_classes.ctaphid.send_keepalive(true), ctaphid_spawner);
+	let status = usb_classes.ctaphid.send_keepalive(
+		crate::soc::trussed_ui::UserPresenceStatus::waiting()
+	);
+	match status {
+		usbd_ctaphid::types::Status::ReceivedData(milliseconds) => {
+			maybe_spawn_ctaphid(
+				usb_classes.ctaphid.send_keepalive(true), ctaphid_spawner);
+		}
+		_ => {}
+	}
+	//maybe_spawn_ctaphid(usb_classes.ctaphid.send_keepalive(true), ctaphid_spawner);
 }
 
 pub fn nfc_keepalive<F, T, E>(contactless: &mut Option<Iso14443>, nfc_spawner: F)

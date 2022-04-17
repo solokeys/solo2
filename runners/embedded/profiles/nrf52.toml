@@ -1,3 +1,8 @@
+[platform]
+soc = "nrf52"
+boards = ["nrfdk", "proto1", "nk3am"]
+target = "thumbv7em-none-eabihf"
+
 [parameters]
 flash_origin = 0x00000000
 filesystem_boundary = 0xD8000
@@ -5,7 +10,7 @@ filesystem_end = 0xEC000
 
 [identifier]
 usb_id_vendor = 0x20A0
-usb_id_product = 0x42EF
+usb_id_product = 0x42DD
 usb_manufacturer = "Nitrokey"
-usb_product = "Nitrokey 3"
+usb_product = "Nitrokey 3 (development)"
 ccid_issuer = "Nitrokey"

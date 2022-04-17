@@ -1,3 +1,8 @@
+[platform]
+soc = "lpc55"
+boards = ["solo2", "okdoe1", "lpcxpresso55", "nk3xn"]
+target = "thumbv8m.main-none-eabi"
+
 [parameters]
 flash_origin = 0x00000000
 filesystem_boundary = 0x93000
@@ -5,7 +10,7 @@ filesystem_end = 0x9D800
 
 [identifier]
 usb_id_vendor = 0x20A0
-usb_id_product = 0x42EF
+usb_id_product = 0x42DD
 usb_manufacturer = "Nitrokey"
 usb_product = "Nitrokey 3"
 ccid_issuer = "Nitrokey"

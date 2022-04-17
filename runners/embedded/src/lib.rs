@@ -20,6 +20,7 @@ compile_error!("No SoC chosen!");
 #[cfg_attr(feature = "soc-lpc55", path = "soc_lpc55/mod.rs")]
 pub mod soc;
 
+
 pub fn banner() {
 		info!("Embedded Runner ({}:{}) using librunner {}.{}.{}",
 			<SocT as Soc>::SOC_NAME,

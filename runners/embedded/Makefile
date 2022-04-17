@@ -1,75 +1,91 @@
-### NRF52 device serial ID <-> device type mapping.
-### If present, should contain assignments like this:
-###
-### SERIAL_NRFDK := SERIAL1 SERIAL2 SERIAL3 ...
-### SERIAL_PROTO1 := SERIAL4 SERIAL5 ...
-###
-### (Do LPC55 boards expose something like this?)
--include Makefile.devices
 
-EXTRA_FEATURES ?=
+# MANUALLY SET - or derive from 'build-*-*' target
+#BOARD ?= 
+#BUILD_PROFILE ?=
+# BUILD_ID fully identifies the build
+BUILD_ID ?= $(BUILD_PROFILE)-$(BOARD)
+CFG_PATH ?= profiles/$(BUILD_PROFILE).toml
 
-RUST_TRIPLET_NRF52 := thumbv7em-none-eabihf
-GNU_TRIPLET_NRF52 := arm-none-eabi
+# also RUST_TARGET
+TARGET = $(shell python -c 'import toml; print(toml.load("$(CFG_PATH)")["platform"]["target"])')
+# also binutils-prefix
+GNU_TARGET = arm-none-eabi
 
-RUST_TRIPLET_LPC55 := thumbv8m.main-none-eabi
-GNU_TRIPLET_LPC55 := arm-none-eabi
+### @TODO: ugly deluxe ? toml bash parser? dirty grep? 
+CFG_VAL_BOARDS = $(shell python -c 'import toml; print(" ".join(toml.load("$(CFG_PATH)")["platform"]["boards"]))')
+CFG_VAL_SOC = $(shell python -c 'import toml; print(toml.load("$(CFG_PATH)")["platform"]["soc"])')
 
-BOARDS_NRF52 := nrfdk nk3am proto1
-BOARDS_LPC55 := nk3xn # nk3am solo2 okdoe1 lpcxpresso55
+# @TODO: be specific for BUILD_ID
+SRCS = $(shell find . -name "*.rs" | grep -v '/target/')
+OUT = runner-$(BUILD_ID).bin
+OUT_IHEX = $(OUT).ihex
 
-.PHONY: all clean build-all
+LOG ?= build-$(BUILD_ID).err.log
+SYMBOLS ?= symbols-$(BUILD_ID).txt
 
-build-all:
+EXTRA_FEATURES ?= 
 
-clean:
-	rm -rf target
+.PHONY: list build reset program clean clean-all check-env set-vars
 
-define board-targets
-.PHONY: build-$(1) clean-$(1)
+# default target -> just build all "shortcuts"
+all: build-nrfdk build-nk3am build-proto1 build-nk3xn
 
-build-$(1):
-	@echo "***** BUILD $(1) *****"
-	rm -f target/$(2)/release/$(4)-$(1)
-	cargo build --release --target $(2) --features board-$(1) $(EXTRA_FEATURES) \
-		--color always 2> build-$(1).err.log \
-		|| ( cat build-$(1).err.log; exit 1 )
-	cp target/$(2)/release/$(4) ./$(4)-$(1)
-	$(3)-nm ./$(4)-$(1) | grep ' [ABbDdRrTt] ' | sort | c++filt > symbols-$(1).txt
-	cat $(3)-arch-symbols.txt >> symbols-$(1).txt
-	$(3)-objcopy -O ihex ./$(4)-$(1) ./$(4)-$(1).ihex
-	$(3)-readelf -l ./$(4)-$(1) | grep LOAD
+###############################################################################
+###############################################################################
+# To build a specific 'board' & 'build_profile' combination:
+# $ make build BUILD_PROFILE=blubla BOARD=foobar
+#
+# Or build using one of the pre-defined "target shortcuts" here:
+###############################################################################
+###############################################################################
+GET_TARGET = $(shell echo $(@) | cut -d '-' -f 1)
 
-clean-$(1):
-	rm -f ./$(4)-$(1) ./$(4)-$(1).ihex symbols-$(1).txt build-$(1).err.log
-
-build-all: build-$(1)
-endef
-
-define nrf-targets
-program-nrf-$(1):
-	nrfjprog -f NRF52 -s $(1) --sectorerase --program ./nrf-runner-$(2).ihex
-	nrfjprog -f NRF52 -s $(1) --reset
-
-reset-nrf-$(1): fidokeys_lfs_d8000+14000.ihex
-	nrfjprog -f NRF52 -s $(1) --chiperase --program ./nrf-runner-$(2).ihex
-	nrfjprog -f NRF52 -s $(1) --program fidokeys_lfs_d8000+14000.ihex
+%-nrfdk:
+	$(MAKE) $(GET_TARGET) BUILD_PROFILE=nrf52 BOARD=nrfdk
+%-nk3am:
+	$(MAKE) $(GET_TARGET) BUILD_PROFILE=nrf52 BOARD=nk3am
+%-proto1:
+	$(MAKE) $(GET_TARGET) BUILD_PROFILE=nrf52 BOARD=proto1
+%-nk3xn:
+	$(MAKE) $(GET_TARGET) BUILD_PROFILE=lpc55 BOARD=nk3xn
 	
-	# set APPROTECT (disable debugging port - reset with: `nrfjprog -f NRF52 --recover` or --chiperase(?)
-	#nrfjprog --memwr 0x10001208 --val 0xFFFFFF00
-	
-	# set UICR::REGOUT0 to 3v3
-	nrfjprog -f NRF52 -s $(1) --memwr 0x10001304 --val 0xfffffffd
+ifeq ($(BUILD_ID),)
+ifneq ($(shell stat $(CFG_PATH) | head -n1),File: $(CFG_PATH))
+ $(error Configuration: $(CFG_PATH) not found!)
+ $(shell exit 1)
+endif
+endif
 
-	# set UICR::NFCPINS to disabled
-	if [ "$(2)" = "nk3am" ]; then \
-		nrfjprog -f NRF52 -s $(1) --memwr 0x1000120C --val 0xfffffffe; \
-	fi
+$(OUT): $(SRCS) build
+$(OUT_IHEX): $(OUT) 
 
-	nrfjprog -f NRF52 -s $(1) --reset
+check-var-%:
+	@if [ -z '${${*}}' ]; then echo 'FAIL: var: $* required!!!' && exit 1; fi
 
-.PHONY: program-nrf-$(1) reset-nrf-$(1)
-endef
+%-banner:
+	@echo "*******************************************************"
+	@echo "**** BUILD ENVIRONMENT:"
+	@echo "****   BOARD:   $(BOARD)"
+	@echo "****   PROFILE: $(BUILD_PROFILE)"
+	@echo "****   TARGET:  $(shell echo $(@) | cut -d '-' -f 1 | tr A-Z a-z) -> $(BUILD_ID)"
+	@echo "*******************************************************"
+
+list:
+	@echo "Available:"
+	@echo "  BOARD(s): $(shell find src/ -name 'board_*' | xargs -n1 basename | sed -E 's/board_([^.]*)(.rs)?/\1/g' | xargs)"
+	@echo "  BUILD_PROFILE(s): $(shell ls profiles -1 | sed -e 's/\.toml//g')"
+	@echo "  Makefile shortcuts: nrfdk, proto1, nk3xc, nk3am "
+	@echo ""
+	@echo "  Usage: make <target>-<something> e.g., build-nk3am, reset-proto1, ..." 
+
+clean-all: 
+	rm -f ./$(OUT) ./$(OUT_IHEX) $(SYMBOLS) $(LOG)
+	rm -f *.log runner-*-*.ihex runner-*-*.bin symbols-*-*.txt runner-*-*.ihex
+	rm -rf ./target
+	rm -f firmware.hex mbr.hex bootloader.hex
+
+###############################################################################
+###############################################################################
 
 define fidokeys_lfs
 fidokeys_lfs_$(1)+$(2).ihex:
@@ -78,49 +94,86 @@ fidokeys_lfs_$(1)+$(2).ihex:
 	cp deployment/fs.hex $$@
 endef
 
-$(foreach b,$(BOARDS_NRF52), $(eval $(call board-targets,$(b),$(RUST_TRIPLET_NRF52),$(GNU_TRIPLET_NRF52),nrf-runner)) )
-$(foreach b,$(BOARDS_LPC55), $(eval $(call board-targets,$(b),$(RUST_TRIPLET_LPC55),$(GNU_TRIPLET_LPC55),lpc-runner)) )
-
-$(foreach s,$(SERIAL_NRFDK), $(eval $(call nrf-targets,$(s),nrfdk)) )
-$(foreach s,$(SERIAL_PROTO1), $(eval $(call nrf-targets,$(s),proto1)) )
-$(foreach s,$(SERIAL_NK3AM), $(eval $(call nrf-targets,$(s),nk3am)) )
-
 $(eval $(call fidokeys_lfs,d8000,14000))
 
-ifeq ($(words $(NRF_SERIAL)),0)
-DEVICES_PRESENT := $(shell nrfjprog -i)
-ifeq ($(words $(DEVICES_PRESENT)),1)
-$(info Only one NRF device present, defaulting to $(DEVICES_PRESENT).)
-NRF_SERIAL := $(DEVICES_PRESENT)
-endif
-endif
+build: build-banner $(SRCS) check-var-BOARD check-var-BUILD_PROFILE
 
-ifeq ($(words $(NRF_SERIAL)),1)
-ifneq ($(filter $(NRF_SERIAL),$(SERIAL_NRFDK),$(SERIAL_NK3AM)),)
-program: program-nrf-$(NRF_SERIAL)
+  # @TODO: dynamic output binary filename needed, HOW?
+	rm -f target/$(TARGET)/release/nrf-runner
 
-reset: reset-nrf-$(NRF_SERIAL)
-endif
-endif
+	BUILD_PROFILE=$(BUILD_PROFILE) BOARD=$(BOARD) \
+		cargo build --release \
+		--target $(TARGET) \
+		--features board-$(BOARD) $(EXTRA_FEATURES) \
+		--color always 2> $(LOG) \
+			|| ( cat $(LOG); exit 1 )
+
+	# @TODO: how to define the output binary name ?! build.rs ?
+	cp target/$(TARGET)/release/nrf-runner ./$(OUT)
+
+	$(GNU_TARGET)-nm ./$(OUT) | grep ' [ABbDdRrTt] ' | sort | c++filt > $(SYMBOLS) 
+	
+	cat $(GNU_TARGET)-arch-symbols.txt >> $(SYMBOLS)
+
+	$(GNU_TARGET)-objcopy -O ihex ./$(OUT) ./$(OUT_IHEX)
+	$(GNU_TARGET)-readelf -l ./$(OUT) | grep LOAD
+
+clean: clean-banner check-var-BOARD check-var-BUILD_PROFILE
+	rm -f ./$(OUT) ./$(OUT_IHEX) $(SYMBOLS) $(LOG)
+
+reset: reset-banner fidokeys_lfs_d8000+14000.ihex check-var-BOARD check-var-BUILD_PROFILE $(OUT_IHEX) $(OUT) 
+	nrfjprog -f NRF52 --chiperase --program $(OUT_IHEX)
+	nrfjprog -f NRF52 --program fidokeys_lfs_d8000+14000.ihex
+	
+	# UICR
+	## UICR::REGOUT0 to 3v3
+	nrfjprog -f NRF52 --memwr 0x10001304 --val 0xfffffffd
+	## UICR::NFCPINS to disabled
+	nrfjprog -f NRF52 --memwr 0x1000120C --val 0xfffffffe
+	## UICR::APPROTECT (only --recover will revive debug-access)
+	#nrfjprog -f NRF52 --memwr 0x10001208 --val 0xFFFFFF00
+	
+	nrfjprog -f NRF52 --reset
+
+program: program-banner check-var-BOARD check-var-BUILD_PROFILE $(OUT_IHEX) $(OUT) 
+	nrfjprog -f NRF52 --program $(OUT_IHEX) --sectorerase
+	
+	nrfjprog --reset
+
+############################################
+############################################   TODO:
+
+reset-bootloader: nrf-bootloader/mbr.hex nrf-bootloader/bootloader.hex
+	nrfjprog -f NRF52 --recover
+	nrfjprog -f NRF52 --program nrf-bootloader/mbr.hex --sectorerase
+	nrfjprog -f NRF52 --program nrf-bootloader/bootloader.hex --sectorerase
+	
+	# UICR
+	## UICR::REGOUT0 to 3v3
+	nrfjprog -f NRF52 --memwr 0x10001304 --val 0xfffffffd
+	## UICR::NFCPINS to disabled
+	nrfjprog -f NRF52 --memwr 0x1000120C --val 0xfffffffe
+	## UICR::APPROTECT (only --recover will revive debug-access)
+	#nrfjprog -f NRF52 --memwr 0x10001208 --val 0xFFFFFF00
+	
+	nrfjprog -f NRF52 --reset
+
+program-bootloader:	nrf-bootloader/mbr.hex nrf-bootloader/bootloader.hex
+	nrfjprog -f NRF52 --program nrf-bootloader/mbr.hex --sectorerase
+	nrfjprog -f NRF52 --program nrf-bootloader/bootloader.hex --sectorerase
+	nrfjprog -f NRF52 --reset
 
 
-mbr.hex bootloader.hex: nrf-bootloader
-	make -C nrf-bootloader
 
-reset-nrf-bootloader: nrf-bootloader/mbr.hex nrf-bootloader/bootloader.hex 
-	nrfjprog -f NRF52 -s $(NRF_SERIAL) --recover
-	nrfjprog -f NRF52 -s $(NRF_SERIAL) --program nrf-bootloader/mbr.hex --sectorerase
-	nrfjprog -f NRF52 -s $(NRF_SERIAL) --reset
-	nrfjprog -f NRF52 -s $(NRF_SERIAL) --program nrf-bootloader/bootloader.hex --sectorerase
-	nrfjprog -f NRF52 -s $(NRF_SERIAL) --reset
-	# uicr
-	nrfjprog -f NRF52 -s $(NRF_SERIAL) --memwr 0x10001304 --val 0xfffffffc
-	nrfjprog -f NRF52 -s $(NRF_SERIAL) --memwr 0x1000120C --val 0xfffffffe
-	nrfjprog -f NRF52 -s $(NRF_SERIAL) --reset
+fw_signed_update.zip: fw-assemble-dfu
+fw_unsigned.hex: $(OUT_IHEX)
+	cp $< $@
+	
+fw-assemble-dfu: $(OUT_IHEX) $(OUT) $(SIGNING_KEY) fw_unsigned.hex
+	#bash sign.sh $(FIRMWARE_MONO_VERSION) $(SIGNING_KEY) fw_unsigned.hex fw_signed_update.zip
 
-program-nrf-bootloader: mbr.hex bootloader.hex
-	nrfjprog -f NRF52 -s $(NRF_SERIAL) --program nrf-bootloader/mbr.hex --sectorerase
-	nrfjprog -f NRF52 -s $(NRF_SERIAL) --program nrf-bootloader/bootloader.hex --sectorerase
-	nrfjprog -f NRF52 -s $(NRF_SERIAL) --reset
+fw-upload-dfu: $(OUT_IHEX) $(OUT) fw_signed_update.zip
+	#bash update.sh /dev/ttyACM1 fw_signed_update.zip
+
 
 

@@ -31,7 +31,7 @@ fn sin(x: f32) -> f32
     res
 }
 
-// Assuming there will only be one way to 
+// Assuming there will only be one way to
 // get user presence, this should be fine.
 // Used for Ctaphid.keepalive message status.
 static mut WAITING: bool = false;
