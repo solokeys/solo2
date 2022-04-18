@@ -100,12 +100,12 @@ log-rtt = []
 log-semihosting = []
 
 [[bin]]
-name = "nrf-runner"
+name = "nrf52_runner"
 path = "src/bin/app-nrf.rs"
 required-features = ["soc-nrf52840"]
 
 [[bin]]
-name = "lpc-runner"
+name = "lpc55_runner"
 path = "src/bin/app-lpc.rs"
 required-features = ["soc-lpc55"]
 

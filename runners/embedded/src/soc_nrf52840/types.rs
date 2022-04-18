@@ -77,6 +77,7 @@ impl admin_app::Reboot for Reboot {
 	fn locked() -> bool { todo!() }
 }
 
+
 //////////////////////////////////////////////////////////////////////////////
 // Lower Interface (common definitions for individual boards)
 

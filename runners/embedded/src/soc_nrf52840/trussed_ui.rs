@@ -31,19 +31,6 @@ fn sin(x: f32) -> f32
     res
 }
 
-// Assuming there will only be one way to
-// get user presence, this should be fine.
-// Used for Ctaphid.keepalive message status.
-static mut WAITING: bool = false;
-pub struct UserPresenceStatus {}
-impl UserPresenceStatus {
-    pub(crate) fn set_waiting(waiting: bool) {
-        unsafe { WAITING = waiting };
-    }
-    pub fn waiting() -> bool {
-        unsafe{ WAITING }
-    }
-}
 
 
 pub struct UserInterface<BUTTONS, RGB>
@@ -185,11 +172,6 @@ RGB: RgbLed,
     fn uptime(&mut self) -> Duration {
         let cyccnt = cortex_m::peripheral::DWT::cycle_count();
 		core::time::Duration::new((cyccnt as u64) / 32_000, (cyccnt / 32) % 1_000)
-    }
-
-    // delete this function after trussed is updated
-    fn reboot(&mut self, _to: reboot::To) -> ! {
-        panic!("this should no longer be called.");
     }
 
     fn wink(&mut self, duration: Duration) {

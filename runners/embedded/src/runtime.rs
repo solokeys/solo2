@@ -1,6 +1,27 @@
 use crate::types::*;
 use crate::soc::types::Soc as SocT;
-use crate::soc::trussed_ui::UserPresenceStatus;
+
+// Assuming there will only be one way to
+// get user presence, this should be fine.
+// Used for Ctaphid.keepalive message status.
+// ...
+// ...
+// I am pretty sure this does not belong here, 
+// anyways better than having this both UIs:
+// dummy_ui.rs, trussed_ui.rs 
+// so how about a `base_ui.rs` ? 
+// -> also the whole RGB stuff and its "ecosystem" is widely hw-independant and could fit there....
+static mut WAITING: bool = false;
+pub struct UserPresenceStatus {}
+impl UserPresenceStatus {
+    pub(crate) fn set_waiting(waiting: bool) {
+        unsafe { WAITING = waiting };
+    }
+    pub fn waiting() -> bool {
+        unsafe{ WAITING }
+    }
+}
+
 
 pub fn poll_dispatchers(apdu_dispatch: &mut ApduDispatch,
 			ctaphid_dispatch: &mut CtaphidDispatch,
@@ -66,18 +87,9 @@ pub fn ctaphid_keepalive<F, T, E>(usb_classes: &mut Option<usbnfc::UsbClasses>,
 
 	let usb_classes = usb_classes.as_mut().unwrap();
 
-	// TODO: need UI "waiting-for-user-presence-P" flag
-	let status = usb_classes.ctaphid.send_keepalive(
-		crate::soc::trussed_ui::UserPresenceStatus::waiting()
-	);
-	match status {
-		usbd_ctaphid::types::Status::ReceivedData(milliseconds) => {
-			maybe_spawn_ctaphid(
-				usb_classes.ctaphid.send_keepalive(true), ctaphid_spawner);
-		}
-		_ => {}
-	}
-	//maybe_spawn_ctaphid(usb_classes.ctaphid.send_keepalive(true), ctaphid_spawner);
+	maybe_spawn_ctaphid(usb_classes.ctaphid.send_keepalive(
+		UserPresenceStatus::waiting()), 
+		ctaphid_spawner);
 }
 
 pub fn nfc_keepalive<F, T, E>(contactless: &mut Option<Iso14443>, nfc_spawner: F)

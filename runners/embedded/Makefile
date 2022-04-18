@@ -6,6 +6,13 @@
 BUILD_ID ?= $(BUILD_PROFILE)-$(BOARD)
 CFG_PATH ?= profiles/$(BUILD_PROFILE).toml
 
+ifeq ($(filter nk3am proto1 nrfdk,$(BOARD)), )
+  SOC = lpc55
+else
+  SOC = nrf52
+endif
+
+
 # also RUST_TARGET
 TARGET = $(shell python -c 'import toml; print(toml.load("$(CFG_PATH)")["platform"]["target"])')
 # also binutils-prefix
@@ -15,10 +22,10 @@ GNU_TARGET = arm-none-eabi
 CFG_VAL_BOARDS = $(shell python -c 'import toml; print(" ".join(toml.load("$(CFG_PATH)")["platform"]["boards"]))')
 CFG_VAL_SOC = $(shell python -c 'import toml; print(toml.load("$(CFG_PATH)")["platform"]["soc"])')
 
-# @TODO: be specific for BUILD_ID
 SRCS = $(shell find . -name "*.rs" | grep -v '/target/')
 OUT = runner-$(BUILD_ID).bin
 OUT_IHEX = $(OUT).ihex
+RAW_OUT = $(SOC)_runner
 
 LOG ?= build-$(BUILD_ID).err.log
 SYMBOLS ?= symbols-$(BUILD_ID).txt
@@ -30,14 +37,17 @@ EXTRA_FEATURES ?=
 # default target -> just build all "shortcuts"
 all: build-nrfdk build-nk3am build-proto1 build-nk3xn
 
-###############################################################################
-###############################################################################
-# To build a specific 'board' & 'build_profile' combination:
-# $ make build BUILD_PROFILE=blubla BOARD=foobar
-#
-# Or build using one of the pre-defined "target shortcuts" here:
-###############################################################################
-###############################################################################
+help:
+	###############################################################################
+	###############################################################################
+	## To build a specific 'board' & 'build_profile' combination:
+	## $ make build BUILD_PROFILE=blubla BOARD=foobar
+	##
+	## Or build using one of the pre-defined "target shortcuts" (see `make list`):
+	## $ make build-proto1
+	###############################################################################
+	###############################################################################
+
 GET_TARGET = $(shell echo $(@) | cut -d '-' -f 1)
 
 %-nrfdk:
@@ -63,12 +73,12 @@ check-var-%:
 	@if [ -z '${${*}}' ]; then echo 'FAIL: var: $* required!!!' && exit 1; fi
 
 %-banner:
-	@echo "*******************************************************"
-	@echo "**** BUILD ENVIRONMENT:"
-	@echo "****   BOARD:   $(BOARD)"
-	@echo "****   PROFILE: $(BUILD_PROFILE)"
-	@echo "****   TARGET:  $(shell echo $(@) | cut -d '-' -f 1 | tr A-Z a-z) -> $(BUILD_ID)"
-	@echo "*******************************************************"
+	@echo "**********************************************************************"
+	@echo "**** MAKE EMBEDDED RUNNER:"
+	@echo "****  BOARD:   $(shell printf %18s $(BOARD)) | SOC:      $(SOC)"
+	@echo "****  PROFILE: $(shell printf %18s $(BUILD_PROFILE)) | BUILD_ID: $(BUILD_ID)"
+	@echo "****  TARGET:  $(shell printf %18s $(GET_TARGET)) | BINARY:   $(OUT)(.ihex)"
+	@echo "**********************************************************************"
 
 list:
 	@echo "Available:"
@@ -96,10 +106,9 @@ endef
 
 $(eval $(call fidokeys_lfs,d8000,14000))
 
-build: build-banner $(SRCS) check-var-BOARD check-var-BUILD_PROFILE
+build: build-banner $(SRCS) check-var-BOARD check-var-BUILD_PROFILE check-var-SOC
 
-  # @TODO: dynamic output binary filename needed, HOW?
-	rm -f target/$(TARGET)/release/nrf-runner
+	rm -f target/$(TARGET)/release/$(RAW_OUT)
 
 	BUILD_PROFILE=$(BUILD_PROFILE) BOARD=$(BOARD) \
 		cargo build --release \
@@ -108,8 +117,7 @@ build: build-banner $(SRCS) check-var-BOARD check-var-BUILD_PROFILE
 		--color always 2> $(LOG) \
 			|| ( cat $(LOG); exit 1 )
 
-	# @TODO: how to define the output binary name ?! build.rs ?
-	cp target/$(TARGET)/release/nrf-runner ./$(OUT)
+	cp target/$(TARGET)/release/$(RAW_OUT) ./$(OUT)
 
 	$(GNU_TARGET)-nm ./$(OUT) | grep ' [ABbDdRrTt] ' | sort | c++filt > $(SYMBOLS) 
 	
@@ -119,7 +127,7 @@ build: build-banner $(SRCS) check-var-BOARD check-var-BUILD_PROFILE
 	$(GNU_TARGET)-readelf -l ./$(OUT) | grep LOAD
 
 clean: clean-banner check-var-BOARD check-var-BUILD_PROFILE
-	rm -f ./$(OUT) ./$(OUT_IHEX) $(SYMBOLS) $(LOG)
+	rm -f ./$(OUT) ./$(OUT_IHEX) target/$(TARGET)/release/$(RAW_OUT) $(SYMBOLS) $(LOG)
 
 reset: reset-banner fidokeys_lfs_d8000+14000.ihex check-var-BOARD check-var-BUILD_PROFILE $(OUT_IHEX) $(OUT) 
 	nrfjprog -f NRF52 --chiperase --program $(OUT_IHEX)

@@ -10,7 +10,7 @@ filesystem_end = 0x9D800
 
 [identifier]
 usb_id_vendor = 0x20A0
-usb_id_product = 0x42DD
+usb_id_product = 0x42B2
 usb_manufacturer = "Nitrokey"
 usb_product = "Nitrokey 3"
 ccid_issuer = "Nitrokey"
