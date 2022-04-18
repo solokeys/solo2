@@ -22,6 +22,13 @@ macro_rules! add_build_variable{
             .expect("Could not write build_constants.rs file");
     };
 
+    ($file:expr, $name:literal, u16) => {
+        let value = env!($name);
+        let value: u16 = str::parse(value).expect("Version components must be able to fit in a u16.");
+        writeln!($file, "pub const {}: u16 = {};", $name, value)
+            .expect("Could not write build_constants.rs file");
+    };
+
     ($file:expr, $name:literal, $value:expr, u32) => {
         writeln!($file, "pub const {}: u32 = {};", $name, $value)
             .expect("Could not write build_constants.rs file");
@@ -113,7 +120,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
 
     writeln!(&mut f, "pub mod build_constants {{").expect("Could not write build_constants.rs.");
     add_build_variable!(&mut f, "CARGO_PKG_VERSION_MAJOR", u8);
-    add_build_variable!(&mut f, "CARGO_PKG_VERSION_MINOR", u8);
+    add_build_variable!(&mut f, "CARGO_PKG_VERSION_MINOR", u16);
     add_build_variable!(&mut f, "CARGO_PKG_VERSION_PATCH", u8);
 
     add_build_variable!(&mut f, "CARGO_PKG_HASH", hash_long);

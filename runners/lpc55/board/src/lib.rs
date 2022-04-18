@@ -2,6 +2,7 @@
 
 pub use lpc55_hal as hal;
 
+pub mod shared;
 pub mod traits;
 
 // board support package

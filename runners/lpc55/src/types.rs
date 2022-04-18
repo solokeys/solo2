@@ -1,5 +1,4 @@
 include!(concat!(env!("OUT_DIR"), "/build_constants.rs"));
-use core::convert::TryInto;
 
 use crate::hal;
 use hal::drivers::timer;
@@ -26,6 +25,8 @@ pub type FlashStorage = PrinceFilesystem;
 
 pub mod usb;
 pub use usb::{UsbClasses, EnabledUsbPeripheral, SerialClass, CcidClass, CtapHidClass};
+
+use board::shared::Reboot;
 
 // 8KB of RAM
 const_ram_storage!(
@@ -85,34 +86,16 @@ pub type ExternalInterrupt = hal::Pint<hal::typestates::init_state::Enabled>;
 pub type ApduDispatch = apdu_dispatch::dispatch::ApduDispatch;
 pub type CtaphidDispatch = ctaphid_dispatch::dispatch::Dispatch;
 
-pub struct Lpc55Reboot {}
-impl admin_app::Reboot for Lpc55Reboot {
-    fn reboot() -> ! {
-        hal::raw::SCB::sys_reset()
-    }
-    fn reboot_to_firmware_update() -> ! {
-        hal::boot_to_bootrom()
-    }
-    fn reboot_to_firmware_update_destructive() -> ! {
-        // Erasing the first flash page & rebooting will keep processor in bootrom persistently.
-        // This is however destructive, as a valid firmware will need to be flashed.
-        use hal::traits::flash::WriteErase;
-        let flash = unsafe { hal::peripherals::flash::Flash::steal() }.enabled(
-            &mut unsafe {hal::peripherals::syscon::Syscon::steal()}
-        );
-        hal::drivers::flash::FlashGordon::new(flash).erase_page(0).ok();
-        hal::raw::SCB::sys_reset()
-    }
-}
-
 #[cfg(feature = "admin-app")]
-pub type AdminApp = admin_app::App<TrussedClient, Lpc55Reboot>;
+pub type AdminApp = admin_app::App<TrussedClient, Reboot>;
 #[cfg(feature = "piv-authenticator")]
 pub type PivApp = piv_authenticator::Authenticator<TrussedClient, {apdu_dispatch::command::SIZE}>;
 #[cfg(feature = "oath-authenticator")]
 pub type OathApp = oath_authenticator::Authenticator<TrussedClient>;
 #[cfg(feature = "fido-authenticator")]
-pub type FidoApp = dispatch_fido::Fido<fido_authenticator::NonSilentAuthenticator, TrussedClient>;
+pub type FidoApp = fido_authenticator::Authenticator<fido_authenticator::Conforming, TrussedClient>;
+#[cfg(feature = "fido-authenticator")]
+pub type FidoConfig = fido_authenticator::Config;
 #[cfg(feature = "ndef-app")]
 pub type NdefApp = ndef_app::App<'static>;
 #[cfg(feature = "provisioner-app")]
@@ -193,10 +176,16 @@ impl TrussedApp for FidoApp {
     fn with_client(trussed: TrussedClient, _: ()) -> Self {
         let authnr = fido_authenticator::Authenticator::new(
             trussed,
-            fido_authenticator::NonSilentAuthenticator {},
+            fido_authenticator::Conforming {},
+            FidoConfig {
+                max_msg_size: usbd_ctaphid::constants::MESSAGE_SIZE,
+                // max_creds_in_list: ctap_types::sizes::MAX_CREDENTIAL_COUNT_IN_LIST,
+                // max_cred_id_length: ctap_types::sizes::MAX_CREDENTIAL_ID_LENGTH,
+            },
         );
 
-        Self::new(authnr)
+        // Self::new(authnr)
+        authnr
     }
 }
 
@@ -267,6 +256,7 @@ impl Apps {
         }
     }
 
+    #[inline(never)]
     pub fn apdu_dispatch<F, T>(&mut self, f: F) -> T
     where
         F: FnOnce(&mut [&mut dyn
@@ -289,6 +279,7 @@ impl Apps {
         ])
     }
 
+    #[inline(never)]
     pub fn ctaphid_dispatch<F, T>(&mut self, f: F) -> T
     where
         F: FnOnce(&mut [&mut dyn CtaphidApp ]) -> T

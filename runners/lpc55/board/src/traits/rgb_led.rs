@@ -16,6 +16,19 @@ impl From<u32> for Intensities {
     }
 }
 
+impl Intensities {
+
+    pub fn scale_by(&mut self, factor: &u8) -> Self {
+        let scale: f32 = (factor / 255).into();
+        Intensities {
+            red: self.red * scale as u8,
+            green: self.green * scale as u8,
+            blue: self.blue * scale as u8
+        }
+    }
+}
+
+
 pub trait RgbLed {
 
     /// Set all LEDs

@@ -22,3 +22,11 @@ pub use class::CtapHid;
 pub mod pipe;
 pub mod types;
 
+/// major/minor/build version bytes returned in CTAPHID_INIT
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
+pub struct Version {
+    pub major: u8,
+    pub minor: u8,
+    pub build: u8,
+}
+
