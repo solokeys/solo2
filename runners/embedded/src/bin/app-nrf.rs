@@ -127,7 +127,7 @@ mod app {
 
 		#[cfg(not(feature = "board-nk3am"))]
 		let ui = ERL::soc::board::init_ui();
-		
+
 		let platform: ERL::types::RunnerPlatform = ERL::types::RunnerPlatform::new(
 			chacha_rng, store, ui);
 
@@ -136,6 +136,10 @@ mod app {
 		let apps = ERL::init_apps(&mut trussed_service, &store, !powered_by_usb);
 
 		let rtc_mono = RtcMonotonic::new(ctx.device.RTC0);
+
+
+		//ERL::soc::types::scb = cortex_m::peripheral::SCB;
+
 
 		ui::spawn_after(RtcDuration::from_ms(2500)).ok();
 
@@ -164,14 +168,14 @@ mod app {
 		loop {
 			Delogger::flush();
 
-			let (usb_activity, _nfc_activity) = 
+			let (usb_activity, _nfc_activity) =
 				apps.lock(|apps|
 				apdu_dispatch.lock(|apdu_dispatch|
 				ctaphid_dispatch.lock(|ctaphid_dispatch|
 				ERL::runtime::poll_dispatchers(apdu_dispatch, ctaphid_dispatch, apps)
 			)));
 			if usb_activity {
-				trace!("app->usb");
+				/*trace!("app->usb");*/
 				rtic::pend(nrf52840_pac::Interrupt::USBD);
 			}
 

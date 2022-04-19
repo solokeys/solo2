@@ -6,10 +6,10 @@ use crate::soc::types::Soc as SocT;
 // Used for Ctaphid.keepalive message status.
 // ...
 // ...
-// I am pretty sure this does not belong here, 
+// I am pretty sure this does not belong here,
 // anyways better than having this both UIs:
-// dummy_ui.rs, trussed_ui.rs 
-// so how about a `base_ui.rs` ? 
+// dummy_ui.rs, trussed_ui.rs
+// so how about a `base_ui.rs` ?
 // -> also the whole RGB stuff and its "ecosystem" is widely hw-independant and could fit there....
 static mut WAITING: bool = false;
 pub struct UserPresenceStatus {}
@@ -87,7 +87,7 @@ pub fn ctaphid_keepalive<F, T, E>(usb_classes: &mut Option<usbnfc::UsbClasses>,
 	let usb_classes = usb_classes.as_mut().unwrap();
 
 	maybe_spawn_ctaphid(usb_classes.ctaphid.send_keepalive(
-		UserPresenceStatus::waiting()), 
+		UserPresenceStatus::waiting()),
 		ctaphid_spawner);
 }
 

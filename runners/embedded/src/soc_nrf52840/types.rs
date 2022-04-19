@@ -4,8 +4,11 @@ use nrf52840_hal::{
 	spim,
 	twim,
 	uarte,
+	pac,
 	usbd::{Usbd, UsbPeripheral},
 };
+use nrf52840_pac;
+
 use trussed::types::{LfsStorage, LfsResult};
 
 
@@ -66,15 +69,59 @@ impl nfc_device::traits::nfc::Device for DummyNfc {
 	fn frame_size(&self) -> usize { 0 }
 }
 
-pub struct Reboot {
+pub struct Reboot {}
+
+
+//pub static mut gpregret_handle: Option<nrf52840_pac::power::GPREGRET> = None;
+//pub static mut scb: Option<cortex_m::peripheral::SCB> = None;
+
+use crate::soc::types::pac::SCB;
+use crate::soc::types::pac::power::GPREGRET;
+/*
+pub fn switch_into_bootloader(
+		_reg: nrf52840_pac::power::GPREGRET,
+		ctrl: cortex_m::peripheral::SCB) -> ! {
+
+
 }
+*/
 
 #[cfg(feature = "admin-app")]
 impl admin_app::Reboot for Reboot {
-	fn reboot() -> ! { todo!() }
-	fn reboot_to_firmware_update() -> ! { todo!() }
-	fn reboot_to_firmware_update_destructive() -> ! { todo!() }
-	fn locked() -> bool { todo!() }
+	fn reboot() -> ! {
+		/*
+		let power = nrf52840_pac::POWER.gpregret.write(0xb1.into());
+		let power = nrf52840_pac::POWER.gpregret.write(0xb1.into());
+		power. //|w| w.);
+		power.gpregret.write(0xb1.into()) //|w| w.);
+		*/
+		/*if let Some(m) = unsafe { gpregret_handle.as_mut() } {
+			m.write(|w| unsafe { w.bits(0xb1 as u32) });
+		}*/
+
+
+		// `gpregret` is set in `mod.rs` as I see now beneficial way to
+		// get this already partly borrowed struct to this point (see static
+		// tryouts)
+		SCB::sys_reset()
+	}
+	fn reboot_to_firmware_update() -> ! {
+		/*let power = nrf52840_pac::POWER;
+		power.gpregret.write(0xb1.into()) //|w| w.);*/
+		//gpregret_handle.write(|w| w.bits(0xb1 as u32));
+		SCB::sys_reset()
+	}
+	fn reboot_to_firmware_update_destructive() -> ! {/*
+		let power = nrf52840_hal::pac::POWER;
+		power.gpregret.write(0xb1.into()) //|w| w.);*/
+		//gpregret_handle.write(|w| w.bits(0xb1 as u32));
+		SCB::sys_reset()
+	}
+	fn locked() -> bool {/*
+		let power = nrf52840_hal::pac::POWER;
+		false*/
+		false
+	}
 }
 
 
@@ -107,7 +154,7 @@ pub struct BoardGPIO {
 	pub se_pins: Option<twim::Pins>,
 	pub se_power: Option<Pin<Output<PushPull>>>,
 
-	/* External Flash & NFC (through SPIM3) */
+	/* External Flash & NFC (through SxPIM3) */
 	pub flashnfc_spi: Option<spim::Pins>,
 	pub flash_cs: Option<Pin<Output<PushPull>>>,
 	pub flash_power: Option<Pin<Output<PushPull>>>,
