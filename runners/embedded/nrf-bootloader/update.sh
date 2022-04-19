@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -euxo pipefail
 
 if [ "$#" -ne 2 ]; then
     echo "Usage: $0 update_filename serial_port"

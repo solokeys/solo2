@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
-set -e
+set -euxo pipefail
 
-if [ "$#" -ne 3 ]; then
-    echo "Usage: $0 app_version output_filename input_hex_app"
+if [ "$#" -ne 4 ]; then
+    echo "Usage: $0 app_version output_filename input_hex_app input_sign_key"
     exit 0
 fi
 
@@ -14,6 +14,8 @@ OUTPUT_FILE=$2
 APP_VERSION=$1
 
 APP_HEX_FILE=$3
+
+KEY_PATH=$4
 
 if [[ "$APP_HEX_FILE" == *".ihex"* ]]; then
 	echo "Error: input hex-file with suffix .ihex not allowed!"
@@ -30,4 +32,4 @@ HW_VERSION=52
 SD_VERSION=0x0
 
 # Create an update package signed with the private key
-nrfutil pkg generate --hw-version $HW_VERSION --application-version $APP_VERSION --application $APP_HEX_FILE --sd-req $SD_VERSION --key-file signing-key/dfu_private.key $OUTPUT_FILE
+nrfutil pkg generate --hw-version $HW_VERSION --application-version $APP_VERSION --application $APP_HEX_FILE --sd-req $SD_VERSION --key-file $KEY_PATH  $OUTPUT_FILE

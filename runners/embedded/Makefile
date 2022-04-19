@@ -62,11 +62,14 @@ GET_TARGET = $(shell echo $(@) | cut -d '-' -f 1)
 	$(MAKE) $(GET_TARGET) BUILD_PROFILE=nrf52 BOARD=nrfdk
 %-nk3am:
 	$(MAKE) $(GET_TARGET) BUILD_PROFILE=nrf52 BOARD=nk3am
+%-nk3am.bl:
+	$(MAKE) $(GET_TARGET) BUILD_PROFILE=nrf52-bootloader BOARD=nk3am FEATURES=default
 %-proto1:
 	$(MAKE) $(GET_TARGET) BUILD_PROFILE=nrf52 BOARD=proto1
 %-nk3xn:
 	$(MAKE) $(GET_TARGET) BUILD_PROFILE=lpc55 BOARD=nk3xn
-	
+
+
 ifeq ($(BUILD_ID),)
 ifneq ($(shell stat $(CFG_PATH) | head -n1),File: $(CFG_PATH))
  $(error Configuration: $(CFG_PATH) not found!)
@@ -152,10 +155,24 @@ reset: reset-banner fidokeys_lfs_d8000+14000.ihex check-var-BOARD check-var-BUIL
 program: program-banner check-var-BOARD check-var-BUILD_PROFILE $(OUT_IHEX) $(OUT) 
 	nrfjprog -f NRF52 --program $(OUT_IHEX) --sectorerase
 	
-	nrfjprog --reset
+	nrfjprog -f NRF52 --reset
+
 
 ############################################
 ############################################   TODO:
+
+lazy:
+	$(MAKE) lazy-deluxe BUILD_PROFILE=nrf52-bootloader BOARD=nk3am
+
+lazy-deluxe:
+	$(MAKE) build BUILD_PROFILE=nrf52-bootloader BOARD=nk3am
+	$(MAKE) reset-bootloader
+	$(MAKE) fw-assemble-dfu
+	nrfjprog -f NRF52 --program fidokeys_lfs_d8000+14000.ihex
+	#sleep 3
+	#sudo chmod 777 /dev/ttyACM*
+	#ls -la $(TTYDEV)
+	#$(MAKE) fw-upload-dfu TTYDEV=`ls -1rt | tail -n1`
 
 reset-bootloader: nrf-bootloader/mbr.hex nrf-bootloader/bootloader.hex
 	nrfjprog -f NRF52 --recover
@@ -178,16 +195,23 @@ program-bootloader:	nrf-bootloader/mbr.hex nrf-bootloader/bootloader.hex
 	nrfjprog -f NRF52 --reset
 
 
+.PHONY: fw-assemble-dfu fw-upload-dfu
 
-fw_signed_update.zip: fw-assemble-dfu
-fw_unsigned.hex: $(OUT_IHEX)
+FIRMWARE_VERSION = 1
+SIGNING_KEY = nrf-bootloader/signing-key/dfu_private.key
+FW_SIGNED = fw_signed_update.zip
+FW_RAW = fw_unsigned.hex
+TTYDEV = /dev/ttyACM0
+
+$(FW_SIGNED): fw-assemble-dfu
+$(FW_RAW): $(OUT_IHEX)
 	cp $< $@
 	
-fw-assemble-dfu: $(OUT_IHEX) $(OUT) $(SIGNING_KEY) fw_unsigned.hex
-	#bash sign.sh $(FIRMWARE_MONO_VERSION) $(SIGNING_KEY) fw_unsigned.hex fw_signed_update.zip
+fw-assemble-dfu: $(FW_SIGNED) $(FW_RAW) $(SIGNING_KEY)
+	bash nrf-bootloader/sign.sh $(FIRMWARE_VERSION) $(FW_SIGNED) $(FW_RAW) $(SIGNING_KEY)
 
-fw-upload-dfu: $(OUT_IHEX) $(OUT) fw_signed_update.zip
-	#bash update.sh /dev/ttyACM1 fw_signed_update.zip
+fw-upload-dfu: $(OUT_IHEX) $(OUT) $(FW_SIGNED)
+	bash nrf-bootloader/update.sh $(FW_SIGNED) $(TTYDEV)
 
 
 
