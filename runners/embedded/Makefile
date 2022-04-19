@@ -1,8 +1,5 @@
 
-# MANUALLY SET - or derive from 'build-*-*' target
-#BOARD ?= 
-#BUILD_PROFILE ?=
-# BUILD_ID fully identifies the build
+
 BUILD_ID ?= $(BUILD_PROFILE)-$(BOARD)
 CFG_PATH ?= profiles/$(BUILD_PROFILE).toml
 
@@ -11,7 +8,6 @@ ifeq ($(filter nk3am proto1 nrfdk,$(BOARD)), )
 else
   SOC = nrf52
 endif
-
 
 # also RUST_TARGET
 TARGET = $(shell python -c 'import toml; print(toml.load("$(CFG_PATH)")["platform"]["target"])')
@@ -22,15 +18,24 @@ GNU_TARGET = arm-none-eabi
 CFG_VAL_BOARDS = $(shell python -c 'import toml; print(" ".join(toml.load("$(CFG_PATH)")["platform"]["boards"]))')
 CFG_VAL_SOC = $(shell python -c 'import toml; print(toml.load("$(CFG_PATH)")["platform"]["soc"])')
 
+# input files and outputs
 SRCS = $(shell find . -name "*.rs" | grep -v '/target/')
 OUT = runner-$(BUILD_ID).bin
 OUT_IHEX = $(OUT).ihex
 RAW_OUT = $(SOC)_runner
 
+# util fn/paths
 LOG ?= build-$(BUILD_ID).err.log
 SYMBOLS ?= symbols-$(BUILD_ID).txt
 
-EXTRA_FEATURES ?= 
+# feature definition
+FEATURES ?= develop
+BUILD_FEATURES := board-$(BOARD) $(FEATURES)
+# assemble comma-seperated list to pass to `cargo build`
+delim = ,
+space := $(null) #
+COMMA_FEATURES = $(subst $(space),$(delim),$(BUILD_FEATURES))
+
 
 .PHONY: list build reset program clean clean-all check-env set-vars
 
@@ -45,6 +50,9 @@ help:
 	##
 	## Or build using one of the pre-defined "target shortcuts" (see `make list`):
 	## $ make build-proto1
+	##
+	## AND pass EXTRA_FEATURES="A B C" for build feature-variants
+	## $ make build-nk3am FEATURES=complete
 	###############################################################################
 	###############################################################################
 
@@ -74,10 +82,10 @@ check-var-%:
 
 %-banner:
 	@echo "******************************************************************************************"
-	@echo "**** MAKE EMBEDDED RUNNER:"
-	@echo "****  BOARD:   $(shell printf %18s $(BOARD)) | SOC:      $(SOC)"
-	@echo "****  PROFILE: $(shell printf %18s $(BUILD_PROFILE)) | BUILD_ID: $(BUILD_ID)"
-	@echo "****  TARGET:  $(shell printf %18s $(GET_TARGET)) | BINARY:   $(OUT)(.ihex)"
+	@echo "**** TARGET:   $(shell printf %18s $(GET_TARGET)) | BINARY:   $(OUT)(.ihex)"
+	@echo "**** BOARD:    $(shell printf %18s $(BOARD)) | SOC:      $(SOC)"
+	@echo "**** PROFILE:  $(shell printf %18s $(BUILD_PROFILE)) | BUILD_ID: $(BUILD_ID)"
+	@echo "**** FEATURES: $(BUILD_FEATURES)"
 	@echo "******************************************************************************************"
 
 list:
@@ -111,11 +119,9 @@ build: build-banner $(SRCS) check-var-BOARD check-var-BUILD_PROFILE check-var-SO
 	rm -f target/$(TARGET)/release/$(RAW_OUT)
 
 	BUILD_PROFILE=$(BUILD_PROFILE) BOARD=$(BOARD) \
-		cargo build --release \
-		--target $(TARGET) \
-		--features board-$(BOARD) $(EXTRA_FEATURES) \
-		--color always 2> $(LOG) \
-			|| ( cat $(LOG); exit 1 )
+		cargo build --release --target $(TARGET) \
+		--features $(COMMA_FEATURES) \
+		--color always 2> $(LOG) || ( cat $(LOG); exit 1 )
 
 	cp target/$(TARGET)/release/$(RAW_OUT) ./$(OUT)
 

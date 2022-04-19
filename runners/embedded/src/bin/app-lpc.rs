@@ -131,7 +131,11 @@ mod app {
 
 		/* -> initializer::initialize_filesystem() */
 		// TODO: make fs encryption configurable
+		#[cfg(feature = "no-encrypted-storage")]
+		let internal_fs = ERL::soc::types::InternalFilesystem::new(flash_gordon);
+		#[cfg(not(feature = "no-encrypted-storage"))]
 		let internal_fs = ERL::soc::types::InternalFilesystem::new(flash_gordon, prince);
+
 		let external_fs = ERL::soc::types::ExternalRAMStorage::new();
 		let store: ERL::types::RunnerStore = ERL::init_store(internal_fs, external_fs);
 		// out: { store, internal_storage_fs }

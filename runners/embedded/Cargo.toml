@@ -62,10 +62,38 @@ serde = { version = "1", features = ["derive"] }
 toml = "0.5"
 
 [features]
-default = ["admin-app", "fido-authenticator", "ndef-app", "oath-authenticator",
+complete = ["admin-app", "fido-authenticator", "ndef-app", "oath-authenticator",
 		"piv-authenticator", # "provisioner-app",
 		"fido-authenticator/disable-reset-time-window",
 		"trussed/clients-5", "log-traceP", "log-rtt"]
+
+default = ["admin-app", "fido-authenticator", "ndef-app", "oath-authenticator", "trussed/clients-4"]
+
+# develop = ["no-encrypted-storage", "no-buttons", "no-reset-time-window"]
+# develop = ["no-encrypted-storage", "no-reset-time-window"]
+# develop = ["no-encrypted-storage", "no-buttons"]
+develop = ["no-encrypted-storage", "trussed/clients-4", 
+					 "fido-authenticator/disable-reset-time-window",
+					 "log-traceP", "log-rtt"]
+
+develop-piv = ["develop", "piv-authenticator", "trussed/clients-5"]
+develop-provisioner = ["develop", "provisioner-app", "trussed/clients-5"]
+
+# Do not use encryption for the filesystem
+no-encrypted-storage = []
+
+# Check for undefined flash and write to determined value (for prince provisioning)
+write-undefined-flash = []
+
+# Use to auto-succeed every user presence check
+no-buttons = []
+
+# Allow resetting FIDO authenticator (and possibly others) even after 10s uptime
+no-reset-time-window = ["fido-authenticator/disable-reset-time-window"]
+
+# Format filesystem anyway
+format-filesystem = []
+
 
 board-nrfdk = ["soc-nrf52840", "extflash_qspi"]
 board-proto1 = ["soc-nrf52840"]
@@ -76,10 +104,8 @@ board-okdoe1 = ["soc-lpc55", "board-lpcxpresso55"]
 board-solo2 = ["soc-lpc55"]
 board-nk3xn = ["soc-lpc55"]
 
-soc-nrf52840 = ["nrf52840-hal", "nrf52840-pac", "chacha20",
-		"provisioner-app/nrf52"]
-soc-lpc55 = ["lpc55-hal", "lpc55-pac", "fm11nc08",
-		"provisioner-app/lpc55"]
+soc-nrf52840 = ["nrf52840-hal", "nrf52840-pac", "chacha20", "provisioner-app/nrf52"]
+soc-lpc55 = ["lpc55-hal", "lpc55-pac", "fm11nc08", "provisioner-app/lpc55"]
 
 extflash_qspi = []
 
