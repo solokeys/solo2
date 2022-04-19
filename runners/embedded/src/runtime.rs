@@ -84,7 +84,6 @@ pub fn ctaphid_keepalive<F, T, E>(usb_classes: &mut Option<usbnfc::UsbClasses>,
 	if usb_classes.is_none() {
 		return;
 	}
-
 	let usb_classes = usb_classes.as_mut().unwrap();
 
 	maybe_spawn_ctaphid(usb_classes.ctaphid.send_keepalive(

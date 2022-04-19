@@ -7,11 +7,13 @@ use core::time::Duration;
 use crate::traits::{
 	buttons::{Press, Button},
 	rgb_led::RgbLed,
-    
+
 };
 use trussed::platform::{
     ui, reboot, consent,
 };
+
+use crate::runtime::UserPresenceStatus;
 
 
 
@@ -72,18 +74,27 @@ RGB: RgbLed,
     fn check_user_presence(&mut self) -> consent::Level {
         match &mut self.buttons {
             Some(buttons) => {
+                let mut is_pressed = false;
+                let max_tries = 10;
+                for idx in 0..max_tries {
 
-                
-                if buttons.is_pressed(Button::A) { 
-                    consent::Level::Normal 
-                } else {
-                    consent::Level::None
+                    // (un)set global 'WAITING' state for CTAP handler during busy-loop
+                    UserPresenceStatus::set_waiting(true);
+                    is_pressed = buttons.is_pressed(Button::A);
+                    UserPresenceStatus::set_waiting(false);
+
+                    match is_pressed {
+                        true => break,
+                        _ => {}
+                    }
                 }
-                    
+                match is_pressed {
+                    true => consent::Level::Normal,
+                    false => consent::Level::None,
+                }
             }
             None => {
-                // With configured with no buttons, that means Solo is operating
-                // in passive NFC mode, which means user tapped to indicate presence.
+                // No buttons => passive NFC mode => user presence == existance
                 consent::Level::Normal
             }
         }

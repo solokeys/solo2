@@ -12,6 +12,8 @@ use nrf52840_hal::{
 
 
 pub const BOARD_NAME: &'static str = "NK3AM";
+
+// @todo: remove these, actually only needed for physical, literal, mechanical keep-alive
 pub const KEEPALIVE_PINS: &'static [u8] = &[0x0b, 0x0c, 0x18, 0x19, 0x25, 0x26, 0x27, 0x28];
 
 
@@ -52,26 +54,26 @@ pub type TrussedUI = UserInterface<HardwareButtons, RgbLed>;
 impl RgbLed {
 
     pub fn init_led<T: pwm::Instance, S: timer::Instance>(
-        led: OutPin, 
-        raw_pwm: T, 
+        led: OutPin,
+        raw_pwm: T,
 		raw_timer: S,
         channel: pwm::Channel)
         -> (Pwm<T>, Timer<S>) {
 
 		let pwm = Pwm::new(raw_pwm);
 		pwm.set_output_pin(channel, led);
-		
+
 		//pwm.set_period(500u32.hz());
 		//debug!("max duty: {:?}", pwm.max_duty());
 		//pwm.set_max_duty(255);
 		(pwm, Timer::new(raw_timer))
-        
+
     }
 
     pub fn set_led(
-        &mut self, 
-        color: Color, 
-        channel: pwm::Channel, 
+        &mut self,
+        color: Color,
+        channel: pwm::Channel,
         intensity: u8) {
 
             match color {
@@ -94,7 +96,7 @@ impl RgbLed {
 
 impl RgbLed {
     pub fn new (
-        leds: [Option<OutPin>; 3], 
+        leds: [Option<OutPin>; 3],
 		pwm_red: pac::PWM0,
 		timer_red: pac::TIMER1,
 		pwm_green: pac::PWM1,
@@ -105,14 +107,14 @@ impl RgbLed {
 
         let [mut red, mut green, mut blue] = leds;
 
-        let (red_pwm_obj, red_timer_obj) = 
+        let (red_pwm_obj, red_timer_obj) =
 			RgbLed::init_led(red.unwrap(), pwm_red, timer_red, pwm::Channel::C0);
-        let (green_pwm_obj, green_timer_obj) = 
+        let (green_pwm_obj, green_timer_obj) =
 			RgbLed::init_led(green.unwrap(), pwm_green, timer_green, pwm::Channel::C1);
-        let (blue_pwm_obj, blue_timer_obj) = 
+        let (blue_pwm_obj, blue_timer_obj) =
 			RgbLed::init_led(blue.unwrap(), pwm_blue, timer_blue, pwm::Channel::C2);
-        
-        Self { 
+
+        Self {
             pwm_red: red_pwm_obj, pwm_green: green_pwm_obj, pwm_blue: blue_pwm_obj,
 			timer_red: red_timer_obj, timer_green: green_timer_obj, timer_blue: blue_timer_obj
 
@@ -138,20 +140,20 @@ impl rgb_led::RgbLed for RgbLed {
 impl Press for HardwareButtons {
 	fn is_pressed(&mut self, but: Button) -> bool {
         match but {
-            
+
             Button::A => {
                 let mut ticks = 0;
-		
+
                 if let Some(touch) = self.touch_button.take() {
                     let floating = touch.into_floating_input();
 
-                    for idx in 0..10_000 {
+                    for idx in 0..1_000 {
                         match floating.is_low() {
                             Err(e) => { debug!("err!"); },
                             Ok(v) => match v {
-                                true => { 
-                                    ticks = idx; 
-                                    break; 
+                                true => {
+                                    ticks = idx;
+                                    break;
                                 },
                                 false => { }
                             },
@@ -164,7 +166,7 @@ impl Press for HardwareButtons {
             _ => {
                 false
             }
-        }		
+        }
 	}
 }
 
@@ -175,7 +177,7 @@ pub fn init_early(_device: &Peripherals, _core: &CorePeripherals) -> () {
 
 }
 
-pub fn init_ui(leds: [Option<OutPin>; 3], 
+pub fn init_ui(leds: [Option<OutPin>; 3],
 		pwm_red: pac::PWM0,
 		timer_red: pac::TIMER1,
 		pwm_green: pac::PWM1,
@@ -185,7 +187,7 @@ pub fn init_ui(leds: [Option<OutPin>; 3],
 	 	touch: OutPin
 	) -> TrussedUI {
 
-	let rgb = RgbLed::new( 
+	let rgb = RgbLed::new(
 		leds,
 		pwm_red, timer_red,
 		pwm_green, timer_green,
@@ -201,12 +203,12 @@ pub fn init_ui(leds: [Option<OutPin>; 3],
 
 
 pub fn init_pins(gpiote: &Gpiote, gpio_p0: p0::Parts, gpio_p1: p1::Parts) -> BoardGPIO {
-	
+
     /* touch sensor */
     let touch = gpio_p0.p0_04.into_push_pull_output(Level::High).degrade();
 	// not used, just ensure output + low
 	gpio_p0.p0_06.into_push_pull_output(Level::Low).degrade();
-	
+
 	/* irq configuration */
 
 	// gpiote.port().input_pin(&btn3).low();
@@ -220,7 +222,7 @@ pub fn init_pins(gpiote: &Gpiote, gpio_p0: p0::Parts, gpio_p1: p1::Parts) -> Boa
 	let led_r = gpio_p0.p0_09.into_push_pull_output(Level::Low).degrade();
 	let led_g = gpio_p0.p0_10.into_push_pull_output(Level::Low).degrade();
 	let led_b = gpio_p1.p1_02.into_push_pull_output(Level::Low).degrade();
-	
+
 	/* SE050 */
 	let se_pwr = gpio_p1.p1_10.into_push_pull_output(Level::Low).degrade();
 	let se_scl = gpio_p1.p1_15.into_floating_input().degrade();

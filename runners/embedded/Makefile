@@ -73,12 +73,12 @@ check-var-%:
 	@if [ -z '${${*}}' ]; then echo 'FAIL: var: $* required!!!' && exit 1; fi
 
 %-banner:
-	@echo "**********************************************************************"
+	@echo "******************************************************************************************"
 	@echo "**** MAKE EMBEDDED RUNNER:"
 	@echo "****  BOARD:   $(shell printf %18s $(BOARD)) | SOC:      $(SOC)"
 	@echo "****  PROFILE: $(shell printf %18s $(BUILD_PROFILE)) | BUILD_ID: $(BUILD_ID)"
 	@echo "****  TARGET:  $(shell printf %18s $(GET_TARGET)) | BINARY:   $(OUT)(.ihex)"
-	@echo "**********************************************************************"
+	@echo "******************************************************************************************"
 
 list:
 	@echo "Available:"
