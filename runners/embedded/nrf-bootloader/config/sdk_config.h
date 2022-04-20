@@ -46,6 +46,253 @@
 #ifdef USE_APP_CONFIG
 #include "app_config.h"
 #endif
+
+
+// favs:
+
+// nk3: idVendor=20a0, idProduct=42b2,
+
+#ifndef APP_USBD_VID
+#define APP_USBD_VID 0x20a0
+#endif
+
+#ifndef APP_USBD_PID
+#define APP_USBD_PID 0x42b0
+#endif
+
+
+// <q> NRF_BL_APP_SIGNATURE_CHECK_REQUIRED  - Perform signature check on the app. Requires the signature to be sent in the init packet.
+#ifndef NRF_BL_APP_SIGNATURE_CHECK_REQUIRED
+#define NRF_BL_APP_SIGNATURE_CHECK_REQUIRED 0
+#endif
+
+
+// <e> NRF_BL_DFU_ENTER_METHOD_BUTTON - Enter DFU mode on button press.
+#ifndef NRF_BL_DFU_ENTER_METHOD_BUTTON
+#define NRF_BL_DFU_ENTER_METHOD_BUTTON 0
+#endif
+
+
+// <q> NRF_BL_DFU_ENTER_METHOD_GPREGRET  - Enter DFU mode when bit 0 is set in the NRF_POWER_GPREGRET register.
+#ifndef NRF_BL_DFU_ENTER_METHOD_GPREGRET
+#define NRF_BL_DFU_ENTER_METHOD_GPREGRET 1
+#endif
+
+// <o> NRF_BL_DFU_INACTIVITY_TIMEOUT_MS - Timeout in ms before automatically starting a valid application due to inactivity.  <0-60000000> 
+// <i> If 0, no inactivity timer will be used. Values 1-99 are invalid.
+#ifndef NRF_BL_DFU_INACTIVITY_TIMEOUT_MS
+#define NRF_BL_DFU_INACTIVITY_TIMEOUT_MS 120000
+#endif
+
+// <q> NRF_BL_DEBUG_PORT_DISABLE  - Disable access to the chip via the debug port.
+ 
+
+// <i> Disable access to the chip via the debug port.
+// <i> This modifies the APPROTECT and DEBUGCTRL registers.
+// <i> Enable this option in production code if such
+// <i> access should be prohibited. Read about the registers
+// <i> for more details.
+
+#ifndef NRF_BL_DEBUG_PORT_DISABLE
+#define NRF_BL_DEBUG_PORT_DISABLE 0
+#endif
+
+// <o> NRF_BL_FW_COPY_PROGRESS_STORE_STEP - Number of pages copied after which progress in the settings page is updated. 
+// <i> Progress stored in the settings page allows the bootloader to resume
+// <i> copying the new firmware in case of interruption (reset).
+// <i> If the value is small, then the resume point is more accurate. However,
+// <i>  it also impacts negatively on flash wear.
+
+#ifndef NRF_BL_FW_COPY_PROGRESS_STORE_STEP
+#define NRF_BL_FW_COPY_PROGRESS_STORE_STEP 8
+#endif
+
+// <o> NRF_BL_RESET_DELAY_MS - Time to wait before resetting the bootloader. 
+// <i> Time (in ms) to wait before resetting the bootloader after DFU has been completed or aborted. This allows more time for e.g. disconnecting the BLE link or writing logs.
+
+#ifndef NRF_BL_RESET_DELAY_MS
+#define NRF_BL_RESET_DELAY_MS 0
+#endif
+
+// <q> NRF_DFU_APP_ACCEPT_SAME_VERSION  - Whether to accept application upgrades with the same version as the current application. 
+#ifndef NRF_DFU_APP_ACCEPT_SAME_VERSION
+#define NRF_DFU_APP_ACCEPT_SAME_VERSION 1
+#endif
+
+// <q> NRF_DFU_APP_DOWNGRADE_PREVENTION  - Check the firmware version and SoftDevice requirements of application (and SoftDevice) updates.
+#ifndef NRF_DFU_APP_DOWNGRADE_PREVENTION
+#define NRF_DFU_APP_DOWNGRADE_PREVENTION 1
+#endif
+
+
+// <h> DFU protocol 
+
+//==========================================================
+// <q> NRF_DFU_PROTOCOL_FW_VERSION_MSG  - Firmware version message support.
+ 
+
+// <i> Firmware version message support.
+// <i> If disabled, firmware version requests will return NRF_DFU_RES_CODE_OP_CODE_NOT_SUPPORTED.
+
+#ifndef NRF_DFU_PROTOCOL_FW_VERSION_MSG
+#define NRF_DFU_PROTOCOL_FW_VERSION_MSG 1
+#endif
+
+// <q> NRF_DFU_PROTOCOL_REDUCED  - Reduced protocol opcode selection.
+ 
+
+// <i> Only support a minimal set of opcodes; return NRF_DFU_RES_CODE_OP_CODE_NOT_SUPPORTED 
+// <i> for unsupported opcodes. The supported opcodes are:NRF_DFU_OP_OBJECT_CREATE, 
+// <i> NRF_DFU_OP_OBJECT_EXECUTE, NRF_DFU_OP_OBJECT_SELECT, NRF_DFU_OP_OBJECT_WRITE, 
+// <i> NRF_DFU_OP_CRC_GET, NRF_DFU_OP_RECEIPT_NOTIF_SET, and NRF_DFU_OP_ABORT. 
+// <i> This reduced feature set is used by the BLE transport to reduce flash usage.
+
+#ifndef NRF_DFU_PROTOCOL_REDUCED
+#define NRF_DFU_PROTOCOL_REDUCED 0
+#endif
+
+// <q> NRF_DFU_PROTOCOL_VERSION_MSG  - Protocol version message support.
+ 
+
+// <i> Protocol version message support.
+// <i> If disabled, protocol version requests will return NRF_DFU_RES_CODE_OP_CODE_NOT_SUPPORTED.
+
+#ifndef NRF_DFU_PROTOCOL_VERSION_MSG
+#define NRF_DFU_PROTOCOL_VERSION_MSG 1
+#endif
+
+
+// <q> NRF_DFU_SAVE_PROGRESS_IN_FLASH  - Save DFU progress in flash.
+ 
+
+// <i> Save DFU progress to flash so that it can be resumed if interrupted, instead of being restarted.
+// <i> Keep this setting disabled to maximize transfer speed and minimize flash wear.
+// <i> The init packet is always saved in flash, regardless of this setting.
+
+#ifndef NRF_DFU_SAVE_PROGRESS_IN_FLASH
+#define NRF_DFU_SAVE_PROGRESS_IN_FLASH 0
+#endif
+
+// <o> NRF_DFU_APP_DATA_AREA_SIZE - The size (in bytes) of the flash area reserved for application data. 
+// <i> This area is found at the end of the application area, next to the start of
+// <i> the bootloader. This area will not be erased by the bootloader during a
+// <i> firmware upgrade. The size must be a multiple of the flash page size.
+
+#ifndef NRF_DFU_APP_DATA_AREA_SIZE
+#define NRF_DFU_APP_DATA_AREA_SIZE   CODE_PAGE_SIZE*12
+#endif
+
+
+//==========================================================
+// <e> NRFX_CLOCK_ENABLED - nrfx_clock - CLOCK peripheral driver
+//==========================================================
+#ifndef NRFX_CLOCK_ENABLED
+#define NRFX_CLOCK_ENABLED 1
+#endif
+// <o> NRFX_CLOCK_CONFIG_LF_SRC  - LF Clock Source
+ 
+// <0=> RC 
+// <1=> XTAL 
+// <2=> Synth 
+// <131073=> External Low Swing 
+// <196609=> External Full Swing 
+
+#ifndef NRFX_CLOCK_CONFIG_LF_SRC
+#define NRFX_CLOCK_CONFIG_LF_SRC 1
+#endif
+
+// <o> NRFX_CLOCK_CONFIG_IRQ_PRIORITY  - Interrupt priority
+ 
+// <0=> 0 (highest) 
+// <1=> 1 
+// <2=> 2 
+// <3=> 3 
+// <4=> 4 
+// <5=> 5 
+// <6=> 6 
+// <7=> 7 
+
+#ifndef NRFX_CLOCK_CONFIG_IRQ_PRIORITY
+#define NRFX_CLOCK_CONFIG_IRQ_PRIORITY 6
+#endif
+
+
+
+
+
+
+// <h> nRF_USB_DFU 
+
+//==========================================================
+// <o> NRF_DFU_SERIAL_USB_RX_BUFFERS - nrf_dfu_serial_usb - USB DFU transport 
+// <i> Number of buffers depends on flash access vs.
+// <i> transport throughtput. If value is too low it may lead
+// <i> to received packets being dropped.
+
+#ifndef NRF_DFU_SERIAL_USB_RX_BUFFERS
+#define NRF_DFU_SERIAL_USB_RX_BUFFERS 3
+#endif
+
+// </h> 
+//==========================================================
+
+
+
+
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+//==========================================================
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // <h> nRF_Bootloader 
 
 //==========================================================
@@ -73,13 +320,7 @@
 #define NRF_BL_APP_CRC_CHECK_SKIPPED_ON_SYSTEMOFF_RESET 1
 #endif
 
-// <q> NRF_BL_APP_SIGNATURE_CHECK_REQUIRED  - Perform signature check on the app. Requires the signature to be sent in the init packet.
  
-
-#ifndef NRF_BL_APP_SIGNATURE_CHECK_REQUIRED
-#define NRF_BL_APP_SIGNATURE_CHECK_REQUIRED 0
-#endif
-
 // <q> NRF_BL_DFU_ALLOW_UPDATE_FROM_APP  - Whether to allow the app to receive firmware updates for the bootloader to activate.
  
 
@@ -96,11 +337,8 @@
 // <h> DFU mode enter method 
 
 //==========================================================
-// <e> NRF_BL_DFU_ENTER_METHOD_BUTTON - Enter DFU mode on button press.
 //==========================================================
-#ifndef NRF_BL_DFU_ENTER_METHOD_BUTTON
-#define NRF_BL_DFU_ENTER_METHOD_BUTTON 1
-#endif
+
 // <o> NRF_BL_DFU_ENTER_METHOD_BUTTON_PIN  - Button for entering DFU mode.
  
 // <0=> 0 (P0.0) 
@@ -165,12 +403,7 @@
 #define NRF_BL_DFU_ENTER_METHOD_PINRESET 0
 #endif
 
-// <q> NRF_BL_DFU_ENTER_METHOD_GPREGRET  - Enter DFU mode when bit 0 is set in the NRF_POWER_GPREGRET register.
- 
 
-#ifndef NRF_BL_DFU_ENTER_METHOD_GPREGRET
-#define NRF_BL_DFU_ENTER_METHOD_GPREGRET 1
-#endif
 
 // <q> NRF_BL_DFU_ENTER_METHOD_BUTTONLESS  - Enter DFU mode when the Boolean enter_buttonless_dfu in DFU settings is true.
  
@@ -197,14 +430,6 @@
 #define NRF_BL_DFU_CONTINUATION_TIMEOUT_MS 10000
 #endif
 
-// <o> NRF_BL_DFU_INACTIVITY_TIMEOUT_MS - Timeout in ms before automatically starting a valid application due to inactivity.  <0-60000000> 
-
-
-// <i> If 0, no inactivity timer will be used. Values 1-99 are invalid.
-
-#ifndef NRF_BL_DFU_INACTIVITY_TIMEOUT_MS
-#define NRF_BL_DFU_INACTIVITY_TIMEOUT_MS 120000
-#endif
 
 // </h> 
 //==========================================================
@@ -231,35 +456,6 @@
 // <h> Misc Bootloader settings 
 
 //==========================================================
-// <q> NRF_BL_DEBUG_PORT_DISABLE  - Disable access to the chip via the debug port.
- 
-
-// <i> Disable access to the chip via the debug port.
-// <i> This modifies the APPROTECT and DEBUGCTRL registers.
-// <i> Enable this option in production code if such
-// <i> access should be prohibited. Read about the registers
-// <i> for more details.
-
-#ifndef NRF_BL_DEBUG_PORT_DISABLE
-#define NRF_BL_DEBUG_PORT_DISABLE 0
-#endif
-
-// <o> NRF_BL_FW_COPY_PROGRESS_STORE_STEP - Number of pages copied after which progress in the settings page is updated. 
-// <i> Progress stored in the settings page allows the bootloader to resume
-// <i> copying the new firmware in case of interruption (reset).
-// <i> If the value is small, then the resume point is more accurate. However,
-// <i>  it also impacts negatively on flash wear.
-
-#ifndef NRF_BL_FW_COPY_PROGRESS_STORE_STEP
-#define NRF_BL_FW_COPY_PROGRESS_STORE_STEP 8
-#endif
-
-// <o> NRF_BL_RESET_DELAY_MS - Time to wait before resetting the bootloader. 
-// <i> Time (in ms) to wait before resetting the bootloader after DFU has been completed or aborted. This allows more time for e.g. disconnecting the BLE link or writing logs.
-
-#ifndef NRF_BL_RESET_DELAY_MS
-#define NRF_BL_RESET_DELAY_MS 0
-#endif
 
 // </h> 
 //==========================================================
@@ -1007,8 +1203,6 @@
 // <h> DFU security - nrf_dfu_validation - DFU validation
 
 //==========================================================
-// <q> NRF_DFU_APP_ACCEPT_SAME_VERSION  - Whether to accept application upgrades with the same version as the current application.
- 
 
 // <i> This applies to application updates, and possibly to SoftDevice updates.
 // <i> Bootloader upgrades always require higher versions. SoftDevice upgrades
@@ -1016,12 +1210,6 @@
 // <i> Disabling this protects against replay attacks wearing out the flash of the device.
 // <i> This config only has an effect when NRF_DFU_APP_DOWNGRADE_PREVENTION is enabled.
 
-#ifndef NRF_DFU_APP_ACCEPT_SAME_VERSION
-#define NRF_DFU_APP_ACCEPT_SAME_VERSION 1
-#endif
-
-// <q> NRF_DFU_APP_DOWNGRADE_PREVENTION  - Check the firmware version and SoftDevice requirements of application (and SoftDevice) updates.
- 
 
 // <i> Whether to check the incoming version against the version of the existing app and/or
 // <i> the incoming SoftDevice requirements against the existing SoftDevice.
@@ -1033,9 +1221,6 @@
 // <i> See @ref lib_bootloader_dfu_validation for more information.
 // <i> When signed updates are required, version checking should always be enabled.
 
-#ifndef NRF_DFU_APP_DOWNGRADE_PREVENTION
-#define NRF_DFU_APP_DOWNGRADE_PREVENTION 1
-#endif
 
 // <q> NRF_DFU_EXTERNAL_APP_VERSIONING  - Require versioning for external applications.
  
@@ -1250,59 +1435,12 @@
 // </e>
 
 // </h> 
-//==========================================================
-
-// <h> DFU protocol 
-
-//==========================================================
-// <q> NRF_DFU_PROTOCOL_FW_VERSION_MSG  - Firmware version message support.
- 
-
-// <i> Firmware version message support.
-// <i> If disabled, firmware version requests will return NRF_DFU_RES_CODE_OP_CODE_NOT_SUPPORTED.
-
-#ifndef NRF_DFU_PROTOCOL_FW_VERSION_MSG
-#define NRF_DFU_PROTOCOL_FW_VERSION_MSG 1
-#endif
-
-// <q> NRF_DFU_PROTOCOL_REDUCED  - Reduced protocol opcode selection.
- 
-
-// <i> Only support a minimal set of opcodes; return NRF_DFU_RES_CODE_OP_CODE_NOT_SUPPORTED 
-// <i> for unsupported opcodes. The supported opcodes are:NRF_DFU_OP_OBJECT_CREATE, 
-// <i> NRF_DFU_OP_OBJECT_EXECUTE, NRF_DFU_OP_OBJECT_SELECT, NRF_DFU_OP_OBJECT_WRITE, 
-// <i> NRF_DFU_OP_CRC_GET, NRF_DFU_OP_RECEIPT_NOTIF_SET, and NRF_DFU_OP_ABORT. 
-// <i> This reduced feature set is used by the BLE transport to reduce flash usage.
-
-#ifndef NRF_DFU_PROTOCOL_REDUCED
-#define NRF_DFU_PROTOCOL_REDUCED 0
-#endif
-
-// <q> NRF_DFU_PROTOCOL_VERSION_MSG  - Protocol version message support.
- 
-
-// <i> Protocol version message support.
-// <i> If disabled, protocol version requests will return NRF_DFU_RES_CODE_OP_CODE_NOT_SUPPORTED.
-
-#ifndef NRF_DFU_PROTOCOL_VERSION_MSG
-#define NRF_DFU_PROTOCOL_VERSION_MSG 1
-#endif
-
 // </h> 
 //==========================================================
 
 // <h> Misc DFU settings 
 
 //==========================================================
-// <o> NRF_DFU_APP_DATA_AREA_SIZE - The size (in bytes) of the flash area reserved for application data. 
-// <i> This area is found at the end of the application area, next to the start of
-// <i> the bootloader. This area will not be erased by the bootloader during a
-// <i> firmware upgrade. The size must be a multiple of the flash page size.
-
-#ifndef NRF_DFU_APP_DATA_AREA_SIZE
-#define NRF_DFU_APP_DATA_AREA_SIZE   CODE_PAGE_SIZE*12
-#endif
-
 // <q> NRF_DFU_IN_APP  - Specifies that this code is in the app, not the bootloader, so some settings are off-limits.
  
 
@@ -1316,16 +1454,9 @@
 #define NRF_DFU_IN_APP 0
 #endif
 
-// <q> NRF_DFU_SAVE_PROGRESS_IN_FLASH  - Save DFU progress in flash.
- 
 
-// <i> Save DFU progress to flash so that it can be resumed if interrupted, instead of being restarted.
-// <i> Keep this setting disabled to maximize transfer speed and minimize flash wear.
-// <i> The init packet is always saved in flash, regardless of this setting.
 
-#ifndef NRF_DFU_SAVE_PROGRESS_IN_FLASH
-#define NRF_DFU_SAVE_PROGRESS_IN_FLASH 0
-#endif
+
 
 // <q> NRF_DFU_SUPPORTS_EXTERNAL_APP  - [Experimental] Support for external app.
  
@@ -1352,38 +1483,7 @@
 
 // <h> nRF_Drivers 
 
-//==========================================================
-// <e> NRFX_CLOCK_ENABLED - nrfx_clock - CLOCK peripheral driver
-//==========================================================
-#ifndef NRFX_CLOCK_ENABLED
-#define NRFX_CLOCK_ENABLED 1
-#endif
-// <o> NRFX_CLOCK_CONFIG_LF_SRC  - LF Clock Source
- 
-// <0=> RC 
-// <1=> XTAL 
-// <2=> Synth 
-// <131073=> External Low Swing 
-// <196609=> External Full Swing 
 
-#ifndef NRFX_CLOCK_CONFIG_LF_SRC
-#define NRFX_CLOCK_CONFIG_LF_SRC 1
-#endif
-
-// <o> NRFX_CLOCK_CONFIG_IRQ_PRIORITY  - Interrupt priority
- 
-// <0=> 0 (highest) 
-// <1=> 1 
-// <2=> 2 
-// <3=> 3 
-// <4=> 4 
-// <5=> 5 
-// <6=> 6 
-// <7=> 7 
-
-#ifndef NRFX_CLOCK_CONFIG_IRQ_PRIORITY
-#define NRFX_CLOCK_CONFIG_IRQ_PRIORITY 6
-#endif
 
 // <e> NRFX_CLOCK_CONFIG_LOG_ENABLED - Enables logging in the module.
 //==========================================================
@@ -5897,22 +5997,6 @@
 
 // </h> 
 //==========================================================
-
-// <h> nRF_USB_DFU 
-
-//==========================================================
-// <o> NRF_DFU_SERIAL_USB_RX_BUFFERS - nrf_dfu_serial_usb - USB DFU transport 
-// <i> Number of buffers depends on flash access vs.
-// <i> transport throughtput. If value is too low it may lead
-// <i> to received packets being dropped.
-
-#ifndef NRF_DFU_SERIAL_USB_RX_BUFFERS
-#define NRF_DFU_SERIAL_USB_RX_BUFFERS 3
-#endif
-
-// </h> 
-//==========================================================
-
 // <<< end of configuration section >>>
 #endif //SDK_CONFIG_H
 
