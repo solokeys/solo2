@@ -27,6 +27,14 @@ use crate::traits::buttons::{
 pub type OutPin = Pin<Output<PushPull>>;
 
 
+use crate::soc::types::BoardGPIO;
+
+use crate::soc::trussed_ui::UserInterface;
+
+pub type TrussedUI = UserInterface<HardwareButtons, RgbLed>;
+
+
+
 pub struct RgbLed {
 	pwm_red: Pwm<pac::PWM0>,
 	pwm_green: Pwm<pac::PWM1>,
@@ -38,16 +46,43 @@ pub struct RgbLed {
 
 pub struct HardwareButtons {
     pub touch_button: Option<OutPin>,
+
 }
 
+impl Press for HardwareButtons {
 
-use crate::soc::types::BoardGPIO;
+	fn is_pressed(&mut self, but: Button) -> bool {
+		// As we do not have other buttons,
+		// we simply ignore requests for them.
+		// Like this they also don't block our time!
+		if but == Button::B || but == Button::Middle {
+			return false;
+		}
+		// @TODO: to be discussed how this is intended
 
-use crate::soc::trussed_ui::UserInterface;
-
-pub type TrussedUI = UserInterface<HardwareButtons, RgbLed>;
 
 
+		let mut ticks = 0;
+		if let Some(touch) = self.touch_button.take() {
+			let floating = touch.into_floating_input();
+
+			for idx in 0..1_000 {
+				match floating.is_low() {
+					Err(e) => { trace!("is_pressed: err!"); },
+					Ok(v) => match v {
+						true => {
+							ticks = idx;
+							break;
+						},
+						false => { }
+					},
+				}
+			}
+			self.touch_button = Some(floating.into_push_pull_output(Level::High));
+		}
+		ticks > 50
+	}
+}
 
 
 
@@ -137,39 +172,6 @@ impl rgb_led::RgbLed for RgbLed {
     }
 }
 
-impl Press for HardwareButtons {
-	fn is_pressed(&mut self, but: Button) -> bool {
-        match but {
-
-            Button::A => {
-                let mut ticks = 0;
-
-                if let Some(touch) = self.touch_button.take() {
-                    let floating = touch.into_floating_input();
-
-                    for idx in 0..1_000 {
-                        match floating.is_low() {
-                            Err(e) => { debug!("err!"); },
-                            Ok(v) => match v {
-                                true => {
-                                    ticks = idx;
-                                    break;
-                                },
-                                false => { }
-                            },
-                        }
-                    }
-                    self.touch_button = Some(floating.into_push_pull_output(Level::High));
-                }
-                ticks > 50
-            }
-            _ => {
-                false
-            }
-        }
-	}
-}
-
 
 
 
@@ -178,13 +180,15 @@ pub fn init_early(_device: &Peripherals, _core: &CorePeripherals) -> () {
 }
 
 pub fn init_ui(leds: [Option<OutPin>; 3],
+
 		pwm_red: pac::PWM0,
 		timer_red: pac::TIMER1,
 		pwm_green: pac::PWM1,
 		timer_green: pac::TIMER2,
 		pwm_blue: pac::PWM2,
 		timer_blue: pac::TIMER3,
-	 	touch: OutPin
+	 	touch: OutPin,
+		delay_timer: Timer::<nrf52840_pac::TIMER0>,
 	) -> TrussedUI {
 
 	let rgb = RgbLed::new(
@@ -197,7 +201,7 @@ pub fn init_ui(leds: [Option<OutPin>; 3],
 	let buttons = HardwareButtons {
 		touch_button: Some(touch),
 	};
-	TrussedUI::new(Some(buttons), Some(rgb), true)
+	TrussedUI::new(Some(buttons), Some(rgb), true, delay_timer)
 }
 
 

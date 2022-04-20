@@ -12,9 +12,11 @@ use crate::traits::{
 use trussed::platform::{
     ui, reboot, consent,
 };
+use nrf52840_hal::Timer;
 
 use crate::runtime::UserPresenceStatus;
 
+use nrf52840_hal::prelude::_embedded_hal_blocking_delay_DelayMs;
 
 
 // translated from https://stackoverflow.com/a/2284929/2490057
@@ -44,6 +46,7 @@ RGB: RgbLed,
     rgb: Option<RGB>,
     wink: Option<core::ops::Range<Duration>>,
     provisioner: bool,
+    delay_timer: Timer::<nrf52840_pac::TIMER0>
 }
 
 impl<BUTTONS, RGB> UserInterface<BUTTONS, RGB>
@@ -55,12 +58,13 @@ RGB: RgbLed,
         _buttons: Option<BUTTONS>,
         rgb: Option<RGB>,
         provisioner: bool,
+        delay_timer: Timer::<nrf52840_pac::TIMER0>
     ) -> Self {
         let wink = None;
         #[cfg(not(feature = "no-buttons"))]
-        let ui = Self { buttons: _buttons, rgb, wink, provisioner };
+        let ui = Self { buttons: _buttons, rgb, wink, provisioner, delay_timer };
         #[cfg(feature = "no-buttons")]
-        let ui = Self { buttons: None, rgb, wink, provisioner };
+        let ui = Self { buttons: None, rgb, wink, provisioner, delay_timer};
 
         ui
     }
@@ -72,31 +76,44 @@ BUTTONS: Press,
 RGB: RgbLed,
 {
     fn check_user_presence(&mut self) -> consent::Level {
-        match &mut self.buttons {
-            Some(buttons) => {
-                let mut is_pressed = false;
-                let max_tries = 10;
-                for idx in 0..max_tries {
+        // essentially a blocking call for up to ~30secs
+        // this outer loop accumulates *presses* from the
+        // inner loop & maintains (loading) delays.
 
-                    // (un)set global 'WAITING' state for CTAP handler during busy-loop
-                    UserPresenceStatus::set_waiting(true);
-                    is_pressed = buttons.is_pressed(Button::A);
-                    UserPresenceStatus::set_waiting(false);
+        let mut counter: u8 = 0;
+        let mut is_pressed = false;
+        let max_tries: u8 = 100;
+        const threshold: u8 = 3;
 
-                    match is_pressed {
-                        true => break,
-                        _ => {}
-                    }
-                }
-                match is_pressed {
-                    true => consent::Level::Normal,
-                    false => consent::Level::None,
-                }
+        for idx in 0..max_tries {
+
+            self.delay_timer.delay_ms(25u32);
+
+            if let Some(mut button) = self.buttons.as_mut() {
+                UserPresenceStatus::set_waiting(true);
+                is_pressed = button.is_pressed(Button::A);
+                UserPresenceStatus::set_waiting(false);
             }
-            None => {
-                // No buttons => passive NFC mode => user presence == existance
-                consent::Level::Normal
+
+            if is_pressed {
+                counter += 1;
+
+            } else {
+                // w/o press -> delay to worst-case 30secs (timeout)
+                self.delay_timer.delay_ms(300u32);
             }
+
+            if counter >= threshold {
+                break;
+            }
+        }
+
+        // @todo: when and how a "strong" consent?
+        // consent::Level::Strong
+        if counter >= threshold {
+            consent::Level::Normal
+        } else {
+            consent::Level::None
         }
     }
 
@@ -171,6 +188,8 @@ RGB: RgbLed,
                 // Use green if no button is pressed.
                 0x00_00_01 | (amplitude << 8)
             };
+            let color = 0x00_00_01 ;
+
             // use logging::hex::*;
             // use logging::hex;
             // crate::logger::info!("time: {}", time).ok();

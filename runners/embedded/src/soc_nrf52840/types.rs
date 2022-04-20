@@ -72,54 +72,26 @@ impl nfc_device::traits::nfc::Device for DummyNfc {
 pub struct Reboot {}
 
 
-//pub static mut gpregret_handle: Option<nrf52840_pac::power::GPREGRET> = None;
-//pub static mut scb: Option<cortex_m::peripheral::SCB> = None;
-
 use crate::soc::types::pac::SCB;
 use crate::soc::types::pac::power::GPREGRET;
-/*
-pub fn switch_into_bootloader(
-		_reg: nrf52840_pac::power::GPREGRET,
-		ctrl: cortex_m::peripheral::SCB) -> ! {
 
-
-}
-*/
 
 #[cfg(feature = "admin-app")]
 impl admin_app::Reboot for Reboot {
 	fn reboot() -> ! {
-		/*
-		let power = nrf52840_pac::POWER.gpregret.write(0xb1.into());
-		let power = nrf52840_pac::POWER.gpregret.write(0xb1.into());
-		power. //|w| w.);
-		power.gpregret.write(0xb1.into()) //|w| w.);
-		*/
-		/*if let Some(m) = unsafe { gpregret_handle.as_mut() } {
-			m.write(|w| unsafe { w.bits(0xb1 as u32) });
-		}*/
-
-
-		// `gpregret` is set in `mod.rs` as I see now beneficial way to
-		// get this already partly borrowed struct to this point (see static
-		// tryouts)
+		// @TODO: regular reboot (means we need GPREGRET here!)
 		SCB::sys_reset()
 	}
 	fn reboot_to_firmware_update() -> ! {
-		/*let power = nrf52840_pac::POWER;
-		power.gpregret.write(0xb1.into()) //|w| w.);*/
-		//gpregret_handle.write(|w| w.bits(0xb1 as u32));
+		// regular bootloader switch
 		SCB::sys_reset()
 	}
-	fn reboot_to_firmware_update_destructive() -> ! {/*
-		let power = nrf52840_hal::pac::POWER;
-		power.gpregret.write(0xb1.into()) //|w| w.);*/
-		//gpregret_handle.write(|w| w.bits(0xb1 as u32));
+	fn reboot_to_firmware_update_destructive() -> ! {
+		// @TODO: come up with an idea how to
+		// factory reset, and apply!
 		SCB::sys_reset()
 	}
-	fn locked() -> bool {/*
-		let power = nrf52840_hal::pac::POWER;
-		false*/
+	fn locked() -> bool {
 		false
 	}
 }

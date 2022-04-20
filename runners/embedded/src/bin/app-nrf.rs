@@ -122,7 +122,7 @@ mod app {
 			ctx.device.PWM0, ctx.device.TIMER1,
 			ctx.device.PWM1, ctx.device.TIMER2,
 			ctx.device.PWM2, ctx.device.TIMER3,
-			board_gpio.touch.unwrap()
+			board_gpio.touch.unwrap(), delay_timer
 		);
 
 		#[cfg(not(feature = "board-nk3am"))]
@@ -136,10 +136,6 @@ mod app {
 		let apps = ERL::init_apps(&mut trussed_service, &store, !powered_by_usb);
 
 		let rtc_mono = RtcMonotonic::new(ctx.device.RTC0);
-
-
-		//ERL::soc::types::scb = cortex_m::peripheral::SCB;
-
 
 		ui::spawn_after(RtcDuration::from_ms(2500)).ok();
 
@@ -208,8 +204,8 @@ mod app {
 		trace!("irq GPIOTE");
 	}
 
-        #[task(priority = 3, binds = USBD, shared = [usb_classes])]
-        fn task_usb(ctx: task_usb::Context) {
+	#[task(priority = 3, binds = USBD, shared = [usb_classes])]
+	fn task_usb(ctx: task_usb::Context) {
 		// trace!("irq USB");
 		let mut usb_classes = ctx.shared.usb_classes;
 
@@ -248,8 +244,8 @@ mod app {
 		});
 	}
 
-        #[task(priority = 5, binds = POWER_CLOCK, local = [power])]
-        fn power_handler(ctx: power_handler::Context) {
+	#[task(priority = 5, binds = POWER_CLOCK, local = [power])]
+	fn power_handler(ctx: power_handler::Context) {
 		let mut power = ctx.local.power;
 
 		trace!("irq PWR {:x} {:x} {:x}",
