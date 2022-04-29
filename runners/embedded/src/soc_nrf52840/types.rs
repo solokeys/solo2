@@ -79,11 +79,12 @@ use crate::soc::types::pac::power::GPREGRET;
 #[cfg(feature = "admin-app")]
 impl admin_app::Reboot for Reboot {
 	fn reboot() -> ! {
-		// @TODO: regular reboot (means we need GPREGRET here!)
 		SCB::sys_reset()
 	}
 	fn reboot_to_firmware_update() -> ! {
-		// regular bootloader switch
+		let pac = unsafe { nrf52840_pac::Peripherals::steal() };
+		pac.POWER.gpregret.write(|w| unsafe { w.bits(0xb1 as u32) });
+
 		SCB::sys_reset()
 	}
 	fn reboot_to_firmware_update_destructive() -> ! {

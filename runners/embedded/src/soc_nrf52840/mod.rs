@@ -53,8 +53,6 @@ pub fn init_bootup(ficr: &nrf52840_pac::FICR, uicr: &nrf52840_pac::UICR, power: 
 		error!("REGOUT0 is not at 3.3V - external flash will fail!");
 	}
 
-	power.gpregret.write(|w| unsafe { w.bits(0xb1 as u32) });
-
 }
 
 pub fn init_internal_flash(nvmc: nrf52840_pac::NVMC) -> flash::FlashStorage {

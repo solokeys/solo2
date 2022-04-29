@@ -201,7 +201,7 @@ $(FW_SIGNED): $(FW_RAW) $(SIGN_SH) # $(SIGNING_KEY)
 
 fw-upload: $(FW_SIGNED) $(UPLOAD_SH) 
 	-if which nitropy; then \
-		nitropy nk3 reboot; \
+		nitropy nk3 reboot --bootloader; \
 	fi
 	bash $(UPLOAD_SH) $(FW_SIGNED) $(TTYDEV)
 
