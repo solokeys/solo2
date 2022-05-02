@@ -110,7 +110,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     let out_dir = env::var("OUT_DIR").expect("$OUT_DIR unset");
     let profile = env::var("BUILD_PROFILE").expect("$BUILD_PROFILE env var unset");
     
-    let config_fn = &format!("profiles/{}.toml", profile);
+    let config_fn = "cfg.toml";
 
     println!("cargo:rerun-if-changed={}", config_fn);
 

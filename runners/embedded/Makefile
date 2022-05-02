@@ -83,7 +83,7 @@ endif
 endif
 
 $(OUT): $(SRCS) build
-$(OUT_IHEX): $(OUT) 
+$(OUT_IHEX): $(OUT)
 
 check-var-%:
 	@if [ -z '${${*}}' ]; then echo 'FAIL: var: $* required!!!' && exit 1; fi
@@ -124,6 +124,7 @@ $(eval $(call fidokeys_lfs,d8000,14000))
 
 build: build-banner $(SRCS) check-var-BOARD check-var-BUILD_PROFILE check-var-SOC
 
+	cp -f $(CFG_PATH) cfg.toml
 	rm -f target/$(TARGET)/release/$(RAW_OUT)
 
 	BUILD_PROFILE=$(BUILD_PROFILE) BOARD=$(BOARD) \
