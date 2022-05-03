@@ -51,8 +51,8 @@ mod app {
 	#[monotonic(binds = RTC0, default = true)]
 	type RtcMonotonic = ERL::soc::rtic_monotonic::RtcMonotonic;
 
-        #[init()]
-        fn init(mut ctx: init::Context) -> (SharedResources, LocalResources, init::Monotonics) {
+	#[init()]
+	fn init(mut ctx: init::Context) -> (SharedResources, LocalResources, init::Monotonics) {
 		ctx.core.DCB.enable_trace();
 		ctx.core.DWT.enable_cycle_counter();
 
@@ -122,7 +122,7 @@ mod app {
 			ctx.device.PWM0, ctx.device.TIMER1,
 			ctx.device.PWM1, ctx.device.TIMER2,
 			ctx.device.PWM2, ctx.device.TIMER3,
-			board_gpio.touch.unwrap(), delay_timer
+			board_gpio.touch.unwrap()
 		);
 
 		#[cfg(not(feature = "board-nk3am"))]
@@ -267,9 +267,22 @@ mod app {
 		}
 	}
 
+
 	#[task(priority = 1)]
 	fn ui(_ctx: ui::Context) {
 		trace!("UI");
 		ui::spawn_after(RtcDuration::from_ms(2500)).ok();
 	}
+
+	#[task(priority = 1, shared = [trussed])]
+	fn task_ui(ctx: task_ui::Context) {
+		let mut trussed = ctx.shared.trussed;
+
+		info!("update ui");
+		trussed.lock(|trussed| {
+			trussed.update_ui();
+		});
+	}
+
+
 }

@@ -11,6 +11,8 @@ use nrf52840_pac;
 
 use trussed::types::{LfsStorage, LfsResult};
 
+use crate::soc::types::pac::SCB;
+
 
 //////////////////////////////////////////////////////////////////////////////
 // Upper Interface (definitions towards ERL Core)
@@ -70,11 +72,6 @@ impl nfc_device::traits::nfc::Device for DummyNfc {
 }
 
 pub struct Reboot {}
-
-
-use crate::soc::types::pac::SCB;
-use crate::soc::types::pac::power::GPREGRET;
-
 
 #[cfg(feature = "admin-app")]
 impl admin_app::Reboot for Reboot {

@@ -35,7 +35,10 @@ fn sin(x: f32) -> f32
     res
 }
 
-
+use rtic::Monotonic;
+use embedded_time::duration::*;
+type RtcMonotonic = crate::soc::rtic_monotonic::RtcMonotonic;
+type RtcInstant = crate::soc::rtic_monotonic::RtcInstant;
 
 pub struct UserInterface<BUTTONS, RGB>
 where
@@ -46,7 +49,7 @@ RGB: RgbLed,
     rgb: Option<RGB>,
     wink: Option<core::ops::Range<Duration>>,
     provisioner: bool,
-    delay_timer: Timer::<nrf52840_pac::TIMER0>
+    rtc_mono: RtcMonotonic,
 }
 
 impl<BUTTONS, RGB> UserInterface<BUTTONS, RGB>
@@ -57,14 +60,16 @@ RGB: RgbLed,
     pub fn new(
         _buttons: Option<BUTTONS>,
         rgb: Option<RGB>,
-        provisioner: bool,
-        delay_timer: Timer::<nrf52840_pac::TIMER0>
+        provisioner: bool
     ) -> Self {
         let wink = None;
+        let pac = unsafe { nrf52840_pac::Peripherals::steal() };
+        let rtc_mono = RtcMonotonic::new(pac.RTC0);
+
         #[cfg(not(feature = "no-buttons"))]
-        let ui = Self { buttons: _buttons, rgb, wink, provisioner, delay_timer };
+        let ui = Self { buttons: _buttons, rgb, wink, provisioner, rtc_mono };
         #[cfg(feature = "no-buttons")]
-        let ui = Self { buttons: None, rgb, wink, provisioner, delay_timer};
+        let ui = Self { buttons: None, rgb, wink, provisioner, rtc_mono };
 
         ui
     }
@@ -82,12 +87,23 @@ RGB: RgbLed,
 
         let mut counter: u8 = 0;
         let mut is_pressed = false;
-        let max_tries: u8 = 100;
         const threshold: u8 = 3;
 
-        for idx in 0..max_tries {
+        let start_time = self.uptime().as_millis();
+        let timeout_at = start_time + 28_000u128;
+        let mut next_check = start_time + 25u128;
 
-            self.delay_timer.delay_ms(25u32);
+        loop {
+            let cur_time = self.uptime().as_millis();
+
+            // timeout reached
+            if cur_time > timeout_at {
+                break;
+            }
+            // loop until next check shall be done
+            if cur_time < next_check {
+                continue;
+            }
 
             if let Some(mut button) = self.buttons.as_mut() {
                 UserPresenceStatus::set_waiting(true);
@@ -97,10 +113,11 @@ RGB: RgbLed,
 
             if is_pressed {
                 counter += 1;
-
+                // with press -> delay 25ms
+                next_check = cur_time + 25;
             } else {
-                // w/o press -> delay to worst-case 30secs (timeout)
-                self.delay_timer.delay_ms(300u32);
+                // w/o press -> delay 100ms
+                next_check = cur_time + 100;
             }
 
             if counter >= threshold {
@@ -200,8 +217,8 @@ RGB: RgbLed,
     }
 
     fn uptime(&mut self) -> Duration {
-        let cyccnt = cortex_m::peripheral::DWT::cycle_count();
-		core::time::Duration::new((cyccnt as u64) / 32_000, (cyccnt / 32) % 1_000)
+        let ms: embedded_time::duration::units::Milliseconds = self.rtc_mono.now().into();
+        core::time::Duration::from_millis(ms.integer().into())
     }
 
     fn wink(&mut self, duration: Duration) {

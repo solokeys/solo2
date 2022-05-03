@@ -66,7 +66,7 @@ impl Press for HardwareButtons {
 		if let Some(touch) = self.touch_button.take() {
 			let floating = touch.into_floating_input();
 
-			for idx in 0..1_000 {
+			for idx in 0..50_000 {
 				match floating.is_low() {
 					Err(e) => { trace!("is_pressed: err!"); },
 					Ok(v) => match v {
@@ -80,7 +80,7 @@ impl Press for HardwareButtons {
 			}
 			self.touch_button = Some(floating.into_push_pull_output(Level::High));
 		}
-		ticks > 50
+		ticks > 100
 	}
 }
 
@@ -187,8 +187,7 @@ pub fn init_ui(leds: [Option<OutPin>; 3],
 		timer_green: pac::TIMER2,
 		pwm_blue: pac::PWM2,
 		timer_blue: pac::TIMER3,
-	 	touch: OutPin,
-		delay_timer: Timer::<nrf52840_pac::TIMER0>,
+	 	touch: OutPin
 	) -> TrussedUI {
 
 	let rgb = RgbLed::new(
@@ -201,7 +200,7 @@ pub fn init_ui(leds: [Option<OutPin>; 3],
 	let buttons = HardwareButtons {
 		touch_button: Some(touch),
 	};
-	TrussedUI::new(Some(buttons), Some(rgb), true, delay_timer)
+	TrussedUI::new(Some(buttons), Some(rgb), true)
 }
 
 
