@@ -57,8 +57,69 @@
 #endif
 
 #ifndef APP_USBD_PID
-#define APP_USBD_PID 0x42b0
+#define APP_USBD_PID 0x42b2
 #endif
+
+// <i> Setting ID to 0 disables the string.
+//==========================================================
+#ifndef APP_USBD_STRING_ID_MANUFACTURER
+#define APP_USBD_STRING_ID_MANUFACTURER 1
+#endif
+
+#ifndef APP_USBD_STRINGS_MANUFACTURER
+#define APP_USBD_STRINGS_MANUFACTURER APP_USBD_STRING_DESC("Nitrokey")
+#endif
+// <i> Setting ID to 0 disables the string.
+//==========================================================
+#ifndef APP_USBD_STRING_ID_PRODUCT
+#define APP_USBD_STRING_ID_PRODUCT 2
+#endif
+// </e>
+#ifndef APP_USBD_STRINGS_PRODUCT
+#define APP_USBD_STRINGS_PRODUCT APP_USBD_STRING_DESC("Nitrokey 3 Bootloader")
+#endif
+#ifndef APP_USBD_STRING_ID_SERIAL
+#define APP_USBD_STRING_ID_SERIAL 3
+#endif
+
+
+
+
+
+
+
+// <e> APP_USBD_STRING_ID_SERIAL - Define serial number string ID.
+
+// <i> Setting ID to 0 disables the string.
+//==========================================================
+
+// <q> APP_USBD_STRING_SERIAL_EXTERN  - Define whether @ref APP_USBD_STRING_SERIAL is created by macro or declared as a global variable.
+ 
+
+#ifndef APP_USBD_STRING_SERIAL_EXTERN
+#define APP_USBD_STRING_SERIAL_EXTERN 1
+#endif
+
+// <s> APP_USBD_STRING_SERIAL - String descriptor for the serial number.
+
+// <i> Note: This value is not editable in Configuration Wizard.
+// <i> Serial number that is defined the same way like in @ref APP_USBD_STRINGS_MANUFACTURER.
+#ifndef APP_USBD_STRING_SERIAL
+#define APP_USBD_STRING_SERIAL g_extern_serial_number
+#endif
+
+// </e>
+
+
+
+
+
+
+
+
+
+
+
 
 
 // <q> NRF_BL_APP_SIGNATURE_CHECK_REQUIRED  - Perform signature check on the app. Requires the signature to be sent in the init packet.
@@ -2415,11 +2476,6 @@
 
 // <e> APP_USBD_STRING_ID_MANUFACTURER - Define manufacturer string ID.
 
-// <i> Setting ID to 0 disables the string.
-//==========================================================
-#ifndef APP_USBD_STRING_ID_MANUFACTURER
-#define APP_USBD_STRING_ID_MANUFACTURER 1
-#endif
 // <q> APP_USBD_STRINGS_MANUFACTURER_EXTERN  - Define whether @ref APP_USBD_STRINGS_MANUFACTURER is created by macro or declared as a global variable.
  
 
@@ -2437,21 +2493,7 @@
 // <i> Alternatively, configure the macro to point to any internal variable pointer that already contains the descriptor.
 // <i> Setting string to NULL disables that string.
 // <i> The order of manufacturer names must be the same like in @ref APP_USBD_STRINGS_LANGIDS.
-#ifndef APP_USBD_STRINGS_MANUFACTURER
-#define APP_USBD_STRINGS_MANUFACTURER APP_USBD_STRING_DESC("Nordic Semiconductor")
-#endif
 
-// </e>
-
-// <e> APP_USBD_STRING_ID_PRODUCT - Define product string ID.
-
-// <i> Setting ID to 0 disables the string.
-//==========================================================
-#ifndef APP_USBD_STRING_ID_PRODUCT
-#define APP_USBD_STRING_ID_PRODUCT 2
-#endif
-// <q> APP_USBD_STRINGS_PRODUCT_EXTERN  - Define whether @ref APP_USBD_STRINGS_PRODUCT is created by macro or declared as a global variable.
- 
 
 #ifndef APP_USBD_STRINGS_PRODUCT_EXTERN
 #define APP_USBD_STRINGS_PRODUCT_EXTERN 0
@@ -2461,33 +2503,7 @@
 
 // <i> Note: This value is not editable in Configuration Wizard.
 // <i> List of product names that is defined the same way like in @ref APP_USBD_STRINGS_MANUFACTURER.
-#ifndef APP_USBD_STRINGS_PRODUCT
-#define APP_USBD_STRINGS_PRODUCT APP_USBD_STRING_DESC("Secure DFU Bootloader")
-#endif
 
-// </e>
-
-// <e> APP_USBD_STRING_ID_SERIAL - Define serial number string ID.
-
-// <i> Setting ID to 0 disables the string.
-//==========================================================
-#ifndef APP_USBD_STRING_ID_SERIAL
-#define APP_USBD_STRING_ID_SERIAL 3
-#endif
-// <q> APP_USBD_STRING_SERIAL_EXTERN  - Define whether @ref APP_USBD_STRING_SERIAL is created by macro or declared as a global variable.
- 
-
-#ifndef APP_USBD_STRING_SERIAL_EXTERN
-#define APP_USBD_STRING_SERIAL_EXTERN 1
-#endif
-
-// <s> APP_USBD_STRING_SERIAL - String descriptor for the serial number.
-
-// <i> Note: This value is not editable in Configuration Wizard.
-// <i> Serial number that is defined the same way like in @ref APP_USBD_STRINGS_MANUFACTURER.
-#ifndef APP_USBD_STRING_SERIAL
-#define APP_USBD_STRING_SERIAL g_extern_serial_number
-#endif
 
 // </e>
 
