@@ -190,7 +190,7 @@ UPLOAD_SH = nrf-bootloader/upload.sh
 
 FW_SIGNED = fw_signed_update.zip
 FW_RAW = fw_unsigned.hex
-TTYDEV = /dev/ttyACM1
+TTYDEV = /dev/ttyACM0
 
 fw-assemble-dfu: $(FW_SIGNED)
 

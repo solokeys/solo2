@@ -100,7 +100,7 @@ impl RgbLed {
 
 		//pwm.set_period(500u32.hz());
 		//debug!("max duty: {:?}", pwm.max_duty());
-		//pwm.set_max_duty(255);
+		pwm.set_max_duty(255);
 		(pwm, Timer::new(raw_timer))
 
     }

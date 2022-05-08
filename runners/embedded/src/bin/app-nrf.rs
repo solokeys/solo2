@@ -268,21 +268,29 @@ mod app {
 	}
 
 
-	#[task(priority = 1)]
-	fn ui(_ctx: ui::Context) {
-		trace!("UI");
-		ui::spawn_after(RtcDuration::from_ms(2500)).ok();
-	}
-
 	#[task(priority = 1, shared = [trussed])]
-	fn task_ui(ctx: task_ui::Context) {
+	fn ui(ctx: ui::Context) {
+		//trace!("UI");
 		let mut trussed = ctx.shared.trussed;
 
-		info!("update ui");
+		//trace!("update ui");
 		trussed.lock(|trussed| {
 			trussed.update_ui();
 		});
+		ui::spawn_after(RtcDuration::from_ms(125)).ok();
 	}
+
+	/*#[task(priority = 1, shared = [trussed])]
+	fn task_ui(ctx: task_ui::Context) {
+		let mut trussed = ctx.shared.trussed;
+
+		trace!("update ui");
+		trussed.lock(|trussed| {
+			trussed.update_ui();
+		});
+		task_ui::spawn_after(RtcDuration::from_ms(2000)).ok();
+
+	}*/
 
 
 }

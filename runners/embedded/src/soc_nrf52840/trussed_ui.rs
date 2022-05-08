@@ -93,6 +93,8 @@ RGB: RgbLed,
         let timeout_at = start_time + 28_000u128;
         let mut next_check = start_time + 25u128;
 
+        self.set_status(ui::Status::WaitingForUserPresence);
+
         loop {
             let cur_time = self.uptime().as_millis();
 
