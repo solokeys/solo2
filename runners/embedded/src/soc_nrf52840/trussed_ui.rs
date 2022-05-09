@@ -85,6 +85,11 @@ RGB: RgbLed,
         // this outer loop accumulates *presses* from the
         // inner loop & maintains (loading) delays.
 
+        // no buttons configured -> always consent
+        if self.buttons.is_none() {
+            return consent::Level::Normal;
+        }
+
         let mut counter: u8 = 0;
         let mut is_pressed = false;
         const threshold: u8 = 3;
