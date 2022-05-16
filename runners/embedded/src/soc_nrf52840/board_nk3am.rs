@@ -200,7 +200,14 @@ pub fn init_ui(leds: [Option<OutPin>; 3],
 	let buttons = HardwareButtons {
 		touch_button: Some(touch),
 	};
-	TrussedUI::new(Some(buttons), Some(rgb), true)
+
+	#[cfg(feature = "provisioner")]
+	let ui = TrussedUI::new(Some(buttons), Some(rgb), true);
+
+	#[cfg(not(feature = "provisioner"))]
+	let ui = TrussedUI::new(Some(buttons), Some(rgb), false);
+
+	ui
 }
 
 
