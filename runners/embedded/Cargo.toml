@@ -67,17 +67,24 @@ complete = ["admin-app", "fido-authenticator", "ndef-app", "oath-authenticator",
 		"fido-authenticator/disable-reset-time-window",
 		"trussed/clients-5", "log-traceP", "log-rtt"]
 
-default = ["admin-app", "fido-authenticator", "ndef-app", "oath-authenticator", "trussed/clients-4"]
+#default = ["admin-app", "fido-authenticator", "ndef-app", "oath-authenticator", "trussed/clients-4"]
+
+default = ["admin-app", "fido-authenticator", "ndef-app", "trussed/clients-2"]
 
 # develop = ["no-encrypted-storage", "no-buttons", "no-reset-time-window"]
 # develop = ["no-encrypted-storage", "no-reset-time-window"]
 # develop = ["no-encrypted-storage", "no-buttons"]
-develop = ["no-encrypted-storage", "trussed/clients-4", 
+develop = ["fido-authenticator", "ndef-app", "oath-authenticator",
+           "no-encrypted-storage", "trussed/clients-4",
 					 "fido-authenticator/disable-reset-time-window",
-					 "log-traceP", "log-rtt"]
+				   "log-traceP", "log-rtt"]
 
 develop-piv = ["develop", "piv-authenticator", "trussed/clients-5"]
-develop-provisioner = ["develop", "provisioner-app", "trussed/clients-5"]
+#develop-provisioner = ["develop", "provisioner-app", "trussed/clients-5"]
+
+provisioner = ["log-all", "log-rtt", "provisioner-app/log-all",
+               "write-undefined-flash", "no-buttons",
+			   "no-reset-time-window", "provisioner-app", "trussed/clients-3"]
 
 # Do not use encryption for the filesystem
 no-encrypted-storage = []

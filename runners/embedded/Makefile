@@ -55,24 +55,25 @@ help:
 	## Or build using one of the pre-defined "target shortcuts" (see `make list`):
 	## $ make build-proto1
 	##
-	## AND pass EXTRA_FEATURES="A B C" for build feature-variants
+	## AND pass FEATURES as build feature-variants
 	## $ make build-nk3am FEATURES=complete
 	###############################################################################
 	###############################################################################
 
 GET_TARGET = $(shell echo $(@) | cut -d '-' -f 1)
 
+# shortcut targets
 %-nrfdk: $(ARTIFACTS)
-	$(MAKE) $(GET_TARGET) BUILD_PROFILE=nrf52 BOARD=nrfdk
+	$(MAKE) $(GET_TARGET) BUILD_PROFILE=nrf52 BOARD=nrfdk FEATURES=$(FEATURES)
 %-nk3am: $(ARTIFACTS)
-	$(MAKE) $(GET_TARGET) BUILD_PROFILE=nrf52 BOARD=nk3am
+	$(MAKE) $(GET_TARGET) BUILD_PROFILE=nrf52 BOARD=nk3am FEATURES=$(FEATURES)
 %-nk3am.bl: $(ARTIFACTS)
-	$(MAKE) $(GET_TARGET) BUILD_PROFILE=nrf52-bootloader BOARD=nk3am FEATURES=develop
-	$(MAKE) fw-upload BUILD_PROFILE=nrf52-bootloader BOARD=nk3am FEATURES=develop
+	$(MAKE) $(GET_TARGET) BUILD_PROFILE=nrf52-bootloader BOARD=nk3am FEATURES=$(FEATURES)
+	$(MAKE) fw-upload BUILD_PROFILE=nrf52-bootloader BOARD=nk3am FEATURES=$(FEATURES)
 %-proto1: $(ARTIFACTS)
-	$(MAKE) $(GET_TARGET) BUILD_PROFILE=nrf52 BOARD=proto1
+	$(MAKE) $(GET_TARGET) BUILD_PROFILE=nrf52 BOARD=proto1 FEATURES=$(FEATURES)
 %-nk3xn: $(ARTIFACTS)
-	$(MAKE) $(GET_TARGET) BUILD_PROFILE=lpc55 BOARD=nk3xn
+	$(MAKE) $(GET_TARGET) BUILD_PROFILE=lpc55 BOARD=nk3xn FEATURES=$(FEATURES)
 
 
 ifeq ($(BUILD_ID),)
@@ -100,7 +101,7 @@ list:
 	@echo "Available:"
 	@echo "  BOARD(s): $(shell find src/ -name 'board_*' | xargs -n1 basename | sed -E 's/board_([^.]*)(.rs)?/\1/g' | xargs)"
 	@echo "  BUILD_PROFILE(s): $(shell ls profiles -1 | sed -e 's/\.toml//g')"
-	@echo "  Makefile shortcuts: nrfdk, proto1, nk3xc, nk3am "
+	@echo "  Makefile shortcuts: nrfdk, proto1, nk3xc, nk3am, nk3am.bl"
 	@echo ""
 	@echo "  Usage: make <target>-<something> e.g., build-nk3am, reset-proto1, ..." 
 
@@ -190,7 +191,7 @@ UPLOAD_SH = nrf-bootloader/upload.sh
 
 FW_SIGNED = fw_signed_update.zip
 FW_RAW = fw_unsigned.hex
-TTYDEV = /dev/ttyACM0
+TTYDEV = /dev/ttyACM1
 
 fw-assemble-dfu: $(FW_SIGNED)
 
