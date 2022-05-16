@@ -63,10 +63,11 @@ impl Press for HardwareButtons {
 
 
 		let mut ticks = 0;
+		let need_ticks = 100;
 		if let Some(touch) = self.touch_button.take() {
 			let floating = touch.into_floating_input();
 
-			for idx in 0..50_000 {
+			for idx in 0..need_ticks+1 {
 				match floating.is_low() {
 					Err(e) => { trace!("is_pressed: err!"); },
 					Ok(v) => match v {
@@ -74,13 +75,18 @@ impl Press for HardwareButtons {
 							ticks = idx;
 							break;
 						},
-						false => { }
+						false => {
+							if idx >= need_ticks {
+								ticks = idx;
+								break
+							}
+						}
 					},
 				}
 			}
 			self.touch_button = Some(floating.into_push_pull_output(Level::High));
 		}
-		ticks > 100
+		ticks >= need_ticks
 	}
 }
 
