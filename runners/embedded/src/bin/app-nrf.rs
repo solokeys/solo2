@@ -119,9 +119,9 @@ mod app {
 
 		#[cfg(feature = "board-nk3am")]
 		let ui = ERL::soc::board::init_ui(board_gpio.rgb_led,
-			ctx.device.PWM0, ctx.device.TIMER1,
-			ctx.device.PWM1, ctx.device.TIMER2,
-			ctx.device.PWM2, ctx.device.TIMER3,
+			ctx.device.PWM0,
+			ctx.device.PWM1,
+			ctx.device.PWM2,
 			board_gpio.touch.unwrap()
 		);
 
@@ -246,7 +246,7 @@ mod app {
 
 	#[task(priority = 5, binds = POWER_CLOCK, local = [power])]
 	fn power_handler(ctx: power_handler::Context) {
-		let mut power = ctx.local.power;
+		let power = ctx.local.power;
 
 		trace!("irq PWR {:x} {:x} {:x}",
 			power.mainregstatus.read().bits(),

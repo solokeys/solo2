@@ -1,13 +1,9 @@
-use nrf52840_pac::{
-	Peripherals, CorePeripherals
-};
 use nrf52840_hal::{
 	gpio::{p0, p1, Level, Pin, Output, PushPull},
 	gpiote::Gpiote,
-    prelude::{OutputPin, InputPin},
+    prelude::InputPin,
     pwm::Pwm,
-    timer::Timer,
-    pac, pwm, timer, spim,
+    pac, pwm, spim,
 };
 
 pub const BOARD_NAME: &'static str = "NK3AM";
@@ -33,9 +29,6 @@ pub struct RgbLed {
 	pwm_red: Pwm<pac::PWM0>,
 	pwm_green: Pwm<pac::PWM1>,
 	pwm_blue: Pwm<pac::PWM2>,
-	timer_red: Timer<pac::TIMER1>,
-	timer_green: Timer<pac::TIMER2>,
-	timer_blue: Timer<pac::TIMER3>,
 }
 
 pub struct HardwareButtons {
@@ -63,7 +56,7 @@ impl Press for HardwareButtons {
 
 			for idx in 0..need_ticks+1 {
 				match floating.is_low() {
-					Err(e) => { trace!("is_pressed: err!"); },
+					Err(_e) => { trace!("is_pressed: err!"); },
 					Ok(v) => match v {
 						true => {
 							ticks = idx;
@@ -86,12 +79,11 @@ impl Press for HardwareButtons {
 
 impl RgbLed {
 
-    pub fn init_led<T: pwm::Instance, S: timer::Instance>(
+    pub fn init_led<T: pwm::Instance>(
         led: OutPin,
         raw_pwm: T,
-		raw_timer: S,
         channel: pwm::Channel)
-        -> (Pwm<T>, Timer<S>) {
+        -> Pwm<T> {
 
 		let pwm = Pwm::new(raw_pwm);
 		pwm.set_output_pin(channel, led);
@@ -99,7 +91,7 @@ impl RgbLed {
 		//pwm.set_period(500u32.hz());
 		//debug!("max duty: {:?}", pwm.max_duty());
 		pwm.set_max_duty(255);
-		(pwm, Timer::new(raw_timer))
+		pwm
 
     }
 
@@ -107,8 +99,8 @@ impl RgbLed {
         &mut self,
         color: Color,
         channel: pwm::Channel,
-        intensity: u8) {
-
+        intensity: u8
+	) {
             match color {
                 Color::Red =>   {
                     let duty: u16 = ((intensity as f32 / 255.0) * self.pwm_red.max_duty() as f32) as u16;
@@ -123,7 +115,6 @@ impl RgbLed {
                     self.pwm_blue.set_duty_on(channel, duty as u16);
                 },
             }
-        //}
     }
 }
 
@@ -131,26 +122,21 @@ impl RgbLed {
     pub fn new (
         leds: [Option<OutPin>; 3],
 		pwm_red: pac::PWM0,
-		timer_red: pac::TIMER1,
 		pwm_green: pac::PWM1,
-		timer_green: pac::TIMER2,
 		pwm_blue: pac::PWM2,
-		timer_blue: pac::TIMER3,
     ) -> RgbLed {
 
-        let [mut red, mut green, mut blue] = leds;
+        let [red, green, blue] = leds;
 
-        let (red_pwm_obj, red_timer_obj) =
-			RgbLed::init_led(red.unwrap(), pwm_red, timer_red, pwm::Channel::C0);
-        let (green_pwm_obj, green_timer_obj) =
-			RgbLed::init_led(green.unwrap(), pwm_green, timer_green, pwm::Channel::C1);
-        let (blue_pwm_obj, blue_timer_obj) =
-			RgbLed::init_led(blue.unwrap(), pwm_blue, timer_blue, pwm::Channel::C2);
+        let red_pwm_obj =
+			RgbLed::init_led(red.unwrap(), pwm_red, pwm::Channel::C0);
+        let green_pwm_obj =
+			RgbLed::init_led(green.unwrap(), pwm_green, pwm::Channel::C1);
+        let blue_pwm_obj =
+			RgbLed::init_led(blue.unwrap(), pwm_blue, pwm::Channel::C2);
 
         Self {
-            pwm_red: red_pwm_obj, pwm_green: green_pwm_obj, pwm_blue: blue_pwm_obj,
-			timer_red: red_timer_obj, timer_green: green_timer_obj, timer_blue: blue_timer_obj
-
+            pwm_red: red_pwm_obj, pwm_green: green_pwm_obj, pwm_blue: blue_pwm_obj
         }
 
     }
@@ -173,20 +159,12 @@ impl rgb_led::RgbLed for RgbLed {
 pub fn init_ui(leds: [Option<OutPin>; 3],
 
 		pwm_red: pac::PWM0,
-		timer_red: pac::TIMER1,
 		pwm_green: pac::PWM1,
-		timer_green: pac::TIMER2,
 		pwm_blue: pac::PWM2,
-		timer_blue: pac::TIMER3,
 	 	touch: OutPin
 	) -> TrussedUI {
 
-	let rgb = RgbLed::new(
-		leds,
-		pwm_red, timer_red,
-		pwm_green, timer_green,
-		pwm_blue, timer_blue,
-	);
+	let rgb = RgbLed::new(leds, pwm_red, pwm_green, pwm_blue);
 
 	let buttons = HardwareButtons {
 		touch_button: Some(touch),
@@ -201,7 +179,7 @@ pub fn init_ui(leds: [Option<OutPin>; 3],
 	ui
 }
 
-pub fn init_pins(gpiote: &Gpiote, gpio_p0: p0::Parts, gpio_p1: p1::Parts) -> BoardGPIO {
+pub fn init_pins(_gpiote: &Gpiote, gpio_p0: p0::Parts, gpio_p1: p1::Parts) -> BoardGPIO {
 
     /* touch sensor */
     let touch = gpio_p0.p0_04.into_push_pull_output(Level::High).degrade();

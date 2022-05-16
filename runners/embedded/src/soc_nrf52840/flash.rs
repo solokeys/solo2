@@ -35,18 +35,18 @@ impl littlefs2::driver::Storage for FlashStorage {
 	}
 
 	fn erase(&mut self, off: usize, len: usize) -> Result<usize, littlefs2::io::Error> {
-		const real_block_size: u32 = 4096;
+		const REAL_BLOCK_SIZE: u32 = 4096;
 		trace!("IFe {:x} {:x}", off, len);
 
-		let real_off_remainer: u32 = (off as u32) % real_block_size;
-		let real_off: u32 = ((off as u32) - real_off_remainer);
-		let mut buf: [u8; real_block_size as usize] = [0x00; real_block_size as usize];
+		let real_off_remainer: u32 = (off as u32) % REAL_BLOCK_SIZE;
+		let real_off: u32 = (off as u32) - real_off_remainer;
+		let mut buf: [u8; REAL_BLOCK_SIZE as usize] = [0x00; REAL_BLOCK_SIZE as usize];
 		self.nvmc.read(real_off as u32, &mut buf);
 
 		/* nrf52840_hal has nvmc.erase(from, to) */
 		//let res = self.nvmc.erase(off as u32, (off+len) as u32);
 
-		let res = self.nvmc.erase(real_off as u32, (real_off + real_block_size) as u32);
+		let res = self.nvmc.erase(real_off as u32, (real_off + REAL_BLOCK_SIZE) as u32);
 
 		trace!("IFex {:x} {:x} {:x}", real_off, (off - (real_off as usize)), ((real_off_remainer as usize) + len) );
 		self.nvmc.write(real_off as u32, &buf[0..(off - (real_off as usize))]);

@@ -13,13 +13,10 @@ use crate::traits::{
 
 };
 use trussed::platform::{
-    ui, reboot, consent,
+    ui, consent,
 };
-use nrf52840_hal::Timer;
 
 use crate::runtime::UserPresenceStatus;
-
-use nrf52840_hal::prelude::_embedded_hal_blocking_delay_DelayMs;
 
 
 // translated from https://stackoverflow.com/a/2284929/2490057
@@ -95,7 +92,7 @@ RGB: RgbLed,
 
         let mut counter: u8 = 0;
         let mut is_pressed = false;
-        const threshold: u8 = 3;
+        let threshold: u8 = 1;
 
         let start_time = self.uptime().as_millis();
         let timeout_at = start_time + 28_000u128;
@@ -115,7 +112,7 @@ RGB: RgbLed,
                 continue;
             }
 
-            if let Some(mut button) = self.buttons.as_mut() {
+            if let Some(button) = self.buttons.as_mut() {
                 UserPresenceStatus::set_waiting(true);
                 is_pressed = button.is_pressed(Button::A);
                 UserPresenceStatus::set_waiting(false);

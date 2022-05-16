@@ -1,4 +1,3 @@
-use littlefs2::const_ram_storage;
 use nrf52840_hal::{
 	gpio::{Pin, Input, Output, PushPull, PullDown, PullUp},
 	spim,
@@ -8,9 +7,6 @@ use nrf52840_hal::{
 	usbd::{Usbd, UsbPeripheral},
 };
 use nrf52840_pac;
-
-use trussed::types::{LfsStorage, LfsResult};
-
 use crate::soc::types::pac::SCB;
 
 
