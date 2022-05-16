@@ -91,15 +91,15 @@ fn generate_memory_x(outpath: &Path, template: &str, config: &Config) {
 "#;
 
     let template = std::fs::read_to_string(template).expect("cannot read memory.x template file");
-    let template = template.replace("##FLASH_LENGTH##", &format!("{}", 
+    let template = template.replace("##FLASH_LENGTH##", &format!("{}",
         (config.parameters.filesystem_boundary - config.parameters.flash_origin) >> 10));
-    
-    let template = template.replace("##FS_LENGTH##", &format!("{}", 
+
+    let template = template.replace("##FS_LENGTH##", &format!("{}",
         (config.parameters.filesystem_end - config.parameters.filesystem_boundary) >> 10));
 
-    let template = template.replace("##FS_BASE##", &format!("{:x}", 
+    let template = template.replace("##FS_BASE##", &format!("{:x}",
         config.parameters.filesystem_boundary));
-    let template = template.replace("##FLASH_BASE##", &format!("{:x}", 
+    let template = template.replace("##FLASH_BASE##", &format!("{:x}",
         config.parameters.flash_origin));
 
     std::fs::write(outpath, [buildrs_caveat, &template].join("")).expect("cannot write memory.x");
@@ -108,8 +108,8 @@ fn generate_memory_x(outpath: &Path, template: &str, config: &Config) {
 fn main() -> Result<(), Box<dyn error::Error>> {
 
     let out_dir = env::var("OUT_DIR").expect("$OUT_DIR unset");
-    let profile = env::var("BUILD_PROFILE").expect("$BUILD_PROFILE env var unset");
-    
+    let _profile = env::var("BUILD_PROFILE").expect("$BUILD_PROFILE env var unset");
+
     let config_fn = "cfg.toml";
 
     println!("cargo:rerun-if-changed={}", config_fn);
@@ -177,13 +177,13 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     let usb_release_version: u16 = ((major as u16) << 8) | (minor as u16);
     add_build_variable!(&mut f, "USB_RELEASE", usb_release_version, u16);
 
-    add_build_variable!(&mut f, "CONFIG_FILESYSTEM_BOUNDARY", 
+    add_build_variable!(&mut f, "CONFIG_FILESYSTEM_BOUNDARY",
         config.parameters.filesystem_boundary, usize);
-    add_build_variable!(&mut f, "CONFIG_FILESYSTEM_END", 
+    add_build_variable!(&mut f, "CONFIG_FILESYSTEM_END",
         config.parameters.filesystem_end, usize);
-    add_build_variable!(&mut f, "CONFIG_FLASH_BASE", 
+    add_build_variable!(&mut f, "CONFIG_FLASH_BASE",
         config.parameters.flash_origin, usize);
-    
+
     writeln!(&mut f, "}}").expect("Could not write build_constants.rs.");
 
     // @todo: move this decision into 'profile.cfg'
