@@ -10,12 +10,10 @@ use nrf52840_hal::{
     pac, pwm, timer, spim,
 };
 
-
 pub const BOARD_NAME: &'static str = "NK3AM";
 
 // @todo: remove these, actually only needed for physical, literal, mechanical keep-alive
 pub const KEEPALIVE_PINS: &'static [u8] = &[0x0b, 0x0c, 0x18, 0x19, 0x25, 0x26, 0x27, 0x28];
-
 
 use crate::traits::rgb_led;
 use crate::traits::rgb_led::Color;
@@ -23,17 +21,13 @@ use crate::traits::buttons::{
 	Button, Press
 };
 
-
 pub type OutPin = Pin<Output<PushPull>>;
-
 
 use crate::soc::types::BoardGPIO;
 
 use crate::soc::trussed_ui::UserInterface;
 
 pub type TrussedUI = UserInterface<HardwareButtons, RgbLed>;
-
-
 
 pub struct RgbLed {
 	pwm_red: Pwm<pac::PWM0>,
@@ -89,8 +83,6 @@ impl Press for HardwareButtons {
 		ticks >= need_ticks
 	}
 }
-
-
 
 impl RgbLed {
 
@@ -178,13 +170,6 @@ impl rgb_led::RgbLed for RgbLed {
     }
 }
 
-
-
-
-pub fn init_early(_device: &Peripherals, _core: &CorePeripherals) -> () {
-
-}
-
 pub fn init_ui(leds: [Option<OutPin>; 3],
 
 		pwm_red: pac::PWM0,
@@ -215,8 +200,6 @@ pub fn init_ui(leds: [Option<OutPin>; 3],
 
 	ui
 }
-
-
 
 pub fn init_pins(gpiote: &Gpiote, gpio_p0: p0::Parts, gpio_p1: p1::Parts) -> BoardGPIO {
 

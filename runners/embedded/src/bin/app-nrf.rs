@@ -280,17 +280,4 @@ mod app {
 		ui::spawn_after(RtcDuration::from_ms(125)).ok();
 	}
 
-	/*#[task(priority = 1, shared = [trussed])]
-	fn task_ui(ctx: task_ui::Context) {
-		let mut trussed = ctx.shared.trussed;
-
-		trace!("update ui");
-		trussed.lock(|trussed| {
-			trussed.update_ui();
-		});
-		task_ui::spawn_after(RtcDuration::from_ms(2000)).ok();
-
-	}*/
-
-
 }
