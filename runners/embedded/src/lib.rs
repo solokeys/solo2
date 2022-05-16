@@ -48,6 +48,10 @@ pub fn init_store(int_flash: <SocT as Soc>::InternalFlashStorage, ext_flash: <So
 	let vfs_alloc = transcend!(types::VOLATILE_FS_ALLOC, Filesystem::allocate());
 
 	/* Step 2: try mounting each FS in turn */
+	if !littlefs2::fs::Filesystem::is_mountable(ifs_storage) {
+		let fmt_ext = littlefs2::fs::Filesystem::format(ifs_storage);
+		error!("IFS Mount Error, Reformat {:?}", fmt_ext);
+	};
 	let ifs = match littlefs2::fs::Filesystem::mount(ifs_alloc, ifs_storage) {
 		Ok(ifs_) => { transcend!(types::INTERNAL_FS, ifs_) }
 		Err(e) => {
@@ -55,6 +59,7 @@ pub fn init_store(int_flash: <SocT as Soc>::InternalFlashStorage, ext_flash: <So
 			panic!("store");
 		}
 	};
+
 	if !littlefs2::fs::Filesystem::is_mountable(efs_storage) {
 		let fmt_ext = littlefs2::fs::Filesystem::format(efs_storage);
 		error!("EFS Mount Error, Reformat {:?}", fmt_ext);
@@ -66,6 +71,7 @@ pub fn init_store(int_flash: <SocT as Soc>::InternalFlashStorage, ext_flash: <So
 			panic!("store");
 		}
 	};
+
 	if !littlefs2::fs::Filesystem::is_mountable(vfs_storage) {
 		littlefs2::fs::Filesystem::format(vfs_storage).ok();
 	}
