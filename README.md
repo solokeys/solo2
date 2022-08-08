@@ -48,8 +48,7 @@ Please **do not** send PRs to expand on getting started generalities, just edit 
 
 ### Boards
 
-Head to [runnners/lpc55/board](runners/lpc55/board) for an overview on the possible embedded platforms the firmware
-currently supports.
+Head to [runnners/lpc55/board](runners/lpc55/board) for an overview on the possible embedded platforms the firmware currently supports.
 
 ### Compiling
 
