@@ -367,7 +367,7 @@ where
 
         // check for overflow
         if (fifo_irq & (1 << 2)) != 0 {
-            info!("!OF! {} @{}", self.read_reg(Register::FifoCount), hal::get_cycle_count()/96_00);
+            // info!("!OF! {} @{}", self.read_reg(Register::FifoCount), hal::get_cycle_count()/96_00);
             info!("{} {} {}",
                     main_irq,
                     fifo_irq,
