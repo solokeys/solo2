@@ -179,6 +179,7 @@ impl TrussedApp for FidoApp {
                 max_msg_size: usbd_ctaphid::constants::MESSAGE_SIZE,
                 // max_creds_in_list: ctap_types::sizes::MAX_CREDENTIAL_COUNT_IN_LIST,
                 // max_cred_id_length: ctap_types::sizes::MAX_CREDENTIAL_ID_LENGTH,
+                skip_up_timeout: None,
             },
         );
 
