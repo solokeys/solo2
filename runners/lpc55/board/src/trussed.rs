@@ -44,13 +44,18 @@ where
 BUTTONS: Press + Edge,
 RGB: RgbLed,
 {
-    pub fn new(rtc: Rtc<init_state::Enabled>, buttons: Option<BUTTONS>, rgb: Option<RGB>) -> Self {
+    pub fn new(rtc: Rtc<init_state::Enabled>, _buttons: Option<BUTTONS>, rgb: Option<RGB>) -> Self {
         #[allow(unused_mut)]
-        let mut buttons = buttons;
-        #[cfg(feature = "no-buttons")]
-        {
-            buttons = None;
-        }
+        let mut buttons = {
+            #[cfg(not(feature = "no-buttons"))]
+            {
+                _buttons
+            }
+            #[cfg(feature = "no-buttons")]
+            {
+                None
+            }
+        };
         Self {
             rtc, buttons, rgb,
             status: ui::Status::Idle,
