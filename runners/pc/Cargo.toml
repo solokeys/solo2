@@ -16,7 +16,7 @@ admin-app = "0.1"
 apdu-dispatch = "0.1"
 ctap-types = "0.1"
 ctaphid-dispatch = "0.1"
-fido-authenticator = { version = "0.1", features = ["dispatch"], optional = true }
+fido-authenticator = { version = "0.1.1", features = ["dispatch"], optional = true }
 piv-authenticator = { git = "https://github.com/solokeys/piv-authenticator" }
 trussed = { version = "0.1", features = ["clients-3"] }
 
