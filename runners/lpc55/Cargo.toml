@@ -17,7 +17,7 @@ lpc55-rtic = "0.5.7"
 cortex-m-semihosting = {version = "0.3.5", optional = true }
 delog = "0.1.1"
 heapless = "0.6"
-interchange = "0.2.0"
+interchange = "0.2.2"
 nb = "1"
 rtt-target = { version = "0.3", optional = true, features = ["cortex-m"] }
 usb-device = "0.2.3"
@@ -25,8 +25,8 @@ usb-device = "0.2.3"
 usbd-serial = "0.1.0"
 
 admin-app = { version = "0.1", optional = true }
-apdu-dispatch = "0.1"
-ctaphid-dispatch = "0.1"
+apdu-dispatch = "0.1.1"
+ctaphid-dispatch = "0.1.1"
 ctap-types = "0.1"
 fido-authenticator = { version = "0.1.1", features = ["dispatch"], optional = true }
 oath-authenticator = { version = "0.1", features = ["apdu-dispatch"], optional = true }

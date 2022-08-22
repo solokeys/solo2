@@ -375,7 +375,7 @@ where
         if self.outbox.is_some() { panic!(); }
 
         // if let Some(message) = self.interchange.response() {
-            let message: &mut Vec<u8, N> = unsafe { self.interchange.interchange.rp_mut() };
+            let message: &mut Vec<u8, N> = unsafe { (&mut *self.interchange.interchange.get()).rp_mut() };
 
             let chunk_size = core::cmp::min(PACKET_SIZE - 10, message.len() - self.sent);
             let chunk = &message[self.sent..][..chunk_size];
