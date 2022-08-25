@@ -67,9 +67,9 @@ RGB: RgbLed,
 // color codes Conor picked
 const BLACK: Intensities = Intensities { red: 0, green: 0, blue: 0 };
 const RED: Intensities = Intensities { red: u8::MAX, green: 0, blue: 0 };
-const GREEN: Intensities = Intensities { red: 0, green: u8::MAX, blue: 0x02 };
-const BLUE: Intensities = Intensities { red: 0, green: 0, blue: u8::MAX };
-// const TEAL: Intensities = Intensities { red: 0, green: u8::MAX, blue: 0x5a };
+const GREEN: Intensities = Intensities { red: 0, green: 15, blue: 0x02 };
+const BLUE: Intensities = Intensities { red: 0, green: 0, blue: 55 };
+const TEAL: Intensities = Intensities { red: 0, green: 55, blue: 20 };
 #[allow(dead_code)]
 const ORANGE: Intensities = Intensities { red: u8::MAX, green: 0x7e, blue: 0 };
 #[allow(dead_code)]
@@ -116,10 +116,10 @@ RGB: RgbLed,
         // self.refresh runs periodically and would overwrite this
         if let Some(rgb) = &mut self.rgb {
             rgb.set(match status {
-                // ui::Status::Idle => GREEN,
-                ui::Status::Idle => RED,
-                // ui::Status::Processing => TEAL,
-                ui::Status::Processing => GREEN,
+                ui::Status::Idle => GREEN,
+                // ui::Status::Idle => RED,
+                ui::Status::Processing => TEAL,
+                // ui::Status::Processing => GREEN,
                 // ui::Status::WaitingForUserPresence => ORANGE,
                 ui::Status::WaitingForUserPresence => BLUE,
                 ui::Status::Error => RED,
@@ -148,7 +148,7 @@ RGB: RgbLed,
 
                 // breathe fast, in blue
 
-                let amplitude = calculate_amplitude(uptime, 2, 4, 128);
+                let amplitude = calculate_amplitude(uptime, 2, 4, 75);
                 Intensities { red: 0, green: 0, blue: amplitude }
 
             } else if processing {
@@ -170,8 +170,8 @@ RGB: RgbLed,
 
                 if !any_button {
                     // Use green if no button is pressed.
-                    // Intensities { red: 0, green: amplitude, blue: 0 }
-                    Intensities { red: amplitude, green: 0, blue: 0 }
+                    Intensities { red: 0, green: amplitude, blue: 0 }
+                    // Intensities { red: amplitude, green: 0, blue: 0 }
                 } else {
                     // Use blue if button is pressed.
                     Intensities { red: 0, green: 0, blue: amplitude }
