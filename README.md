@@ -18,7 +18,7 @@ For **product / crowdfunding questions and discussions**: https://github.com/sol
 For general discussion:
 
 - visit our Keybase chat: https://keybase.io/team/solokeys.public
-- visit one of our Matrix rooms: https://matrix.to/#/+solokeys:matrix.org
+- visit one of our Matrix rooms: https://matrix.to/#/#solokeys-space:matrix.org
 
 
 
