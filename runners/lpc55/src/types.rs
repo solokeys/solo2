@@ -2,7 +2,6 @@ include!(concat!(env!("OUT_DIR"), "/build_constants.rs"));
 
 use crate::hal;
 use hal::drivers::timer;
-use interchange::Interchange;
 use littlefs2::{const_ram_storage, consts};
 use trussed::types::{LfsResult, LfsStorage};
 use trussed::{platform, store};
@@ -117,21 +116,9 @@ pub trait TrussedApp: Sized {
     fn with_client(trussed: TrussedClient, non_portable: Self::NonPortable) -> Self;
 
     fn with(trussed: &mut trussed::Service<crate::Board>, non_portable: Self::NonPortable) -> Self {
-        let (trussed_requester, trussed_responder) = trussed::pipe::TrussedInterchange::claim()
-            .expect("could not setup TrussedInterchange");
-
-        let mut client_id = littlefs2::path::PathBuf::new();
-        client_id.push(Self::CLIENT_ID.try_into().unwrap());
-        assert!(trussed.add_endpoint(trussed_responder, client_id).is_ok());
-
-        let syscaller = Syscall::default();
-        let trussed_client = TrussedClient::new(
-            trussed_requester,
-            syscaller,
-        );
-
-        let app = Self::with_client(trussed_client, non_portable);
-        app
+        let client_id = core::str::from_utf8(Self::CLIENT_ID).unwrap();
+        let client = trussed.try_new_client(client_id, Syscall::default()).unwrap();
+        Self::with_client(client, non_portable)
     }
 }
 
