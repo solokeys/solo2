@@ -1624,7 +1624,9 @@ checksum = "1f6cc3adc849b5292b4075fc0d5fdcf2f24866e88e336dd27a8943090a520508"
 
 [[package]]
 name = "usbd-ccid"
-version = "0.0.0-unreleased"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e2bbc1b6619517411ddd8f94a84c093f710d740895644bdafd70c0fe90b31839"
 dependencies = [
  "delog",
  "embedded-time",
@@ -1636,7 +1638,9 @@ dependencies = [
 
 [[package]]
 name = "usbd-ctaphid"
-version = "0.0.0-unreleased"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ddb69f660f962236eb21565780c433412ad0ba35e5106f53191cdf443c1d03d2"
 dependencies = [
  "ctap-types",
  "ctaphid-dispatch",

@@ -21,8 +21,8 @@ piv-authenticator = { git = "https://github.com/solokeys/piv-authenticator" }
 trussed = { version = "0.1", features = ["clients-3"] }
 
 # components
-usbd-ccid = { path = "../../components/usbd-ccid" }
-usbd-ctaphid = { path = "../../components/usbd-ctaphid" }
+usbd-ccid = "0.1.0"
+usbd-ctaphid = "0.1.0"
 nfc-device = {path = "./../../components/nfc-device"}
 ndef-app = {path = "./../../components/ndef-app"}
 
