@@ -4,8 +4,9 @@
 ; git-subrepo command. See https://github.com/git-commands/git-subrepo#readme
 ;
 [subrepo]
-	remote = none
-	branch = master
-	commit = 
+	remote = git@github.com:trussed-dev/usbd-ccid.git
+	branch = main
+	commit = c1f81e9ec0dc4fbf2d5fef2d1821f616c12fb56f
 	method = merge
 	cmdver = 0.4.3
+	parent = ec175b41d64b12e2fc99570fc0550c4c44739e13
