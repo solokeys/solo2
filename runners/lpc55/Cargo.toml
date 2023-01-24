@@ -3,7 +3,7 @@ name = "runner"
 version = "2.964.0"
 authors = ["Nicolas Stalder <n@stalder.io>", "Conor Patrick <conor@solokeys.com>"]
 edition = "2021"
-rust-version = "1.59.0"
+rust-version = "1.62.0"
 
 [lib]
 name = "runner"
@@ -42,8 +42,8 @@ ndef-app = { path = "../../components/ndef-app", optional = true }
 provisioner-app = { path = "../../components/provisioner-app", optional = true }
 fm11nc08 = {path = "../../components/fm11nc08"}
 nfc-device = {path = "../../components/nfc-device"}
-usbd-ccid = { path = "../../components/usbd-ccid" }
-usbd-ctaphid = { path = "../../components/usbd-ctaphid" }
+usbd-ccid = "0.1.0"
+usbd-ctaphid = "0.1.0"
 
 
 # panic
