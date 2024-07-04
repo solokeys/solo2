@@ -1,35 +1,24 @@
-## 🐝
+## 🐝 SoloKeys Solo 2 monorepo.
 
-[![Documentation][docs-image]][docs-link]
+This repository contains the "runner" for the firmware on Solo 2 devices.
 
-SoloKeys Solo 2 monorepo.
+Please note that many components have been contributed to the [Trussed GitHub Organization][trussed-dev]:
 
-**WARNING WARNING WARNING**
-- **EARLY PRERELEASE.**
-- **NOT FOR PUBLIC USE.**
-- **PULL REQUESTS / ISSUES ONLY AFTER INITIAL CONSULTATION WITH THE TEAM.**
+- Framework: https://github.com/trussed-dev/trussed
+- FIDO Authenticator: https://github.com/trussed-dev/fido-authenticator
+- PIV Authenticator: https://github.com/trussed-dev/piv-authenticator
 
+Such code is co-maintained with Nitrokey, who have contributed extensions and other improvements.
 
+We plan to release a new version of the firmware, incorporating these changes.
 
-For **technical questions and discussions**: https://github.com/solokeys/solo2/discussions
+[trussed-dev]: https://github.com/trussed-dev
 
-For **product / crowdfunding questions and discussions**: https://github.com/solokeys/kickstarter2021/discussions
+## Support
 
-For general discussion:
+For support with purchased devices, please reach out to hello@solokeys.com.
 
-- visit our Keybase chat: https://keybase.io/team/solokeys.public
-- visit one of our Matrix rooms: https://matrix.to/#/#solokeys-space:matrix.org
-
-
-
-To repeat: Please **do not** open issues/PRs that are not technical issues / firmware bugs
-
-
-
-To make pcsclite on Linux work with the Bee, on Debian copy `Info.plist` to `/etc/libccid_Info.plist`.
-
-[docs-image]: https://img.shields.io/badge/docs-book-green?style=flat-square
-[docs-link]: https://solo-bee.netlify.com
+To repeat: Please **do not** open issues/PRs that are not technical issues / firmware bugs.
 
 ## Getting Started
 
