@@ -26,7 +26,7 @@ To repeat: Please **do not** open issues/PRs that are not technical issues / fir
 
 - Install [Rust and Cargo](https://www.rust-lang.org/tools/install) for your system.
 
-- Install dependencies such as clang, llvm, arm-none-eabi-gdb, flip-link
+- Install dependencies such as clang, llvm, probe-rs, flip-link
 
 - Get and prepare hardware
 - Run `make build-dev`.
