@@ -1,5 +1,5 @@
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
-runner = "arm-none-eabi-gdb -q -x jlink.gdb"
+runner = "probe-rs run --chip LPC55S69JBD100"
 rustflags = [
   "-C", "linker=flip-link",
   "-C", "link-arg=-Tlink.x",
