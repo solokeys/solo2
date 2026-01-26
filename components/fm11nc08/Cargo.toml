@@ -14,9 +14,10 @@ nb = "1"
 nfc-device = {path = "../nfc-device"}
 
 [features]
-log-all = []
 log-none = []
+log-error = []
+log-warn = []
 log-info = []
 log-debug = []
-log-warn = []
-log-error = []
+log-trace = []
+log-all = []
