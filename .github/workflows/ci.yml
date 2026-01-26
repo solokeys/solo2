@@ -66,7 +66,7 @@ jobs:
           cargo objcopy --release --features ${{ matrix.board }} -- -O binary firmware-${{ matrix.board }}.bin
           sudo cp *.bin /
       - name: Upload Firmware
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         continue-on-error: true
         with:
           name: Firmware
@@ -75,7 +75,7 @@ jobs:
         run: |
           cargo build --release --features ${{ matrix.board }},provisioner-app,admin-app,trussed/clients-2,provisioner-app/test-attestation
       - name: Upload Provisioner
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         continue-on-error: true
         with:
           name: Provisioner
@@ -117,4 +117,3 @@ jobs:
           override: true
       - name: Build
         run: cargo build --release
-
