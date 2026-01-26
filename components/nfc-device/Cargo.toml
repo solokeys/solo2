@@ -17,9 +17,10 @@ interchange = "0.2.1"
 [features]
 default = []
 
-log-all = []
 log-none = []
+log-error = []
+log-warn = []
 log-info = []
 log-debug = []
-log-warn = []
-log-error = []
+log-trace = []
+log-all = []
