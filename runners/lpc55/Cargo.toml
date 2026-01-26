@@ -98,12 +98,13 @@ no-clock-controller = ["board/no-clock-controller"]
 enable-clock-controller-signal-pin = ["board/enable-clock-controller-signal-pin"]
 # very-twitchy-mouse = ["usbd-hid"]
 
-log-all = []
 log-none = []
+log-error = []
+log-warn = []
 log-info = []
 log-debug = []
-log-warn = []
-log-error = []
+log-trace = []
+log-all = []
 
 # patch dependencies like so to test local changes
 
