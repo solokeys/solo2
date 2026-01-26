@@ -55,7 +55,7 @@ MEMORY
 {{
     FLASH : ORIGIN = 0x00000000, LENGTH = {}K
 
-    FILESYSTEM: ORIGIN = 0x{:08X}, LENGTH = {}K
+    FILESYSTEM : ORIGIN = 0x{:08X}, LENGTH = {}K
 
     /* for use with standard link.x */
     RAM : ORIGIN = 0x20000000, LENGTH = 256K
