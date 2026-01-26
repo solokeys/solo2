@@ -20,6 +20,7 @@ heapless = "0.6"
 interchange = "0.2.2"
 nb = "1"
 rtt-target = { version = "0.3", optional = true, features = ["cortex-m"] }
+static_cell = "2.1.1"
 usb-device = "0.2.3"
 # usbd-hid = { version = "0.4.5", optional = true }
 usbd-serial = "0.1.0"

@@ -19,6 +19,7 @@ use hal::peripherals::{
 };
 use hal::peripherals::pfr::Pfr;
 use hal::typestates::init_state::Unknown;
+use static_cell::StaticCell;
 use usb_device::device::{UsbDeviceBuilder, UsbVidPid};
 
 use interchange::Interchange;
@@ -73,13 +74,12 @@ pub struct Initializer {
 }
 
 fn get_serial_number() -> &'static str {
-    static mut SERIAL_NUMBER: heapless::String<heapless::consts::U36> = heapless::String(heapless::i::String::new());
+    static SERIAL_NUMBER: StaticCell<heapless::String<heapless::consts::U36>> = StaticCell::new();
+    let serial_number = SERIAL_NUMBER.init(heapless::String(heapless::i::String::new()));
+    let uuid = crate::hal::uuid();
     use core::fmt::Write;
-    unsafe {
-        let uuid = crate::hal::uuid();
-        SERIAL_NUMBER.write_fmt(format_args!("{}", hexstr!(&uuid))).unwrap();
-        &SERIAL_NUMBER
-    }
+    serial_number.write_fmt(format_args!("{}", hexstr!(&uuid))).unwrap();
+    serial_number
 }
 
 // SoloKeys stores a product string in the first 64 bytes of CMPA.
