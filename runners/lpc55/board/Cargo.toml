@@ -23,12 +23,13 @@ no-buttons = []
 no-clock-controller = []
 enable-clock-controller-signal-pin = []
 
-log-all = []
 log-none = []
+log-error = []
+log-warn = []
 log-info = []
 log-debug = []
-log-warn = []
-log-error = []
+log-trace = []
+log-all = []
 
 [profile.release]
 codegen-units = 1
@@ -36,4 +37,3 @@ codegen-units = 1
 # opt-level = "s"
 incremental = false
 debug = true
-
