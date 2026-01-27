@@ -50,7 +50,7 @@ static FLUSHER: Flusher = Flusher {};
 // TODO: move board-specifics to BSPs
 pub fn init_board(
     device_peripherals: hal::raw::Peripherals,
-    core_peripherals: rtic::Peripherals,
+    _core_peripherals: rtic::Peripherals,
 ) -> (
     // types::Authenticator,
     types::ApduDispatch,
@@ -76,7 +76,6 @@ pub fn init_board(
         build_constants::CARGO_PKG_VERSION_MAJOR,
         build_constants::CARGO_PKG_VERSION_MINOR,
         build_constants::CARGO_PKG_VERSION_PATCH);
-    let hal = hal::Peripherals::from((device_peripherals, core_peripherals));
 
     #[cfg(not(feature = "no-encrypted-storage"))]
     let require_prince = true;
@@ -95,31 +94,31 @@ pub fn init_board(
         })
     };
 
-    let mut initializer = initializer::Initializer::new(config, hal.syscon, hal.pmc, hal.anactrl);
+    let mut initializer = initializer::Initializer::new(config, hal::Syscon::from(device_peripherals.SYSCON), hal::Pmc::from(device_peripherals.PMC), hal::Anactrl::from(device_peripherals.ANACTRL));
     info_now!("got initializer");
 
     let mut everything = initializer.initialize_all(
-        hal.iocon,
-        hal.gpio,
-        hal.adc,
-        hal.dma,
-        hal.ctimer.0,
-        hal.ctimer.1,
-        hal.ctimer.2,
-        hal.ctimer.3,
-        hal.ctimer.4,
-        hal.pfr,
-        hal.flexcomm.0,
-        hal.inputmux,
-        hal.pint,
-        hal.usbhs,
-        hal.usbfs,
-        hal.rng,
-        hal.prince,
-        hal.flash,
+        hal::Iocon::from(device_peripherals.IOCON),
+        hal::Gpio::from(device_peripherals.GPIO),
+        hal::Adc::from(device_peripherals.ADC0),
+        hal::Dma::from(device_peripherals.DMA0),
+        hal::peripherals::ctimer::Ctimer0::from(device_peripherals.CTIMER0),
+        hal::peripherals::ctimer::Ctimer1::from(device_peripherals.CTIMER1),
+        hal::peripherals::ctimer::Ctimer2::from(device_peripherals.CTIMER2),
+        hal::peripherals::ctimer::Ctimer3::from(device_peripherals.CTIMER3),
+        hal::peripherals::ctimer::Ctimer4::from(device_peripherals.CTIMER4),
+        hal::Pfr::new(),
+        hal::peripherals::flexcomm::Flexcomm0::from((device_peripherals.FLEXCOMM0, device_peripherals.I2C0, device_peripherals.I2S0, device_peripherals.SPI0, device_peripherals.USART0)),
+        hal::InputMux::from(device_peripherals.INPUTMUX),
+        hal::Pint::from(device_peripherals.PINT),
+        hal::Usbhs::from((device_peripherals.USBPHY, device_peripherals.USB1, device_peripherals.USBHSH)),
+        hal::Usbfs::from((device_peripherals.USB0, device_peripherals.USBFSH)),
+        hal::Rng::from(device_peripherals.RNG),
+        hal::Prince::from(device_peripherals.PRINCE),
+        hal::Flash::from(device_peripherals.FLASH),
 
 
-        hal.rtc,
+        hal::Rtc::from(device_peripherals.RTC),
     );
 
     let _is_passive_mode = initializer.is_in_passive_operation(&everything.clock);
