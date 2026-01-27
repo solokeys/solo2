@@ -22,6 +22,7 @@ extern crate delog;
 generate_macros!();
 
 use core::arch::asm;
+use core::sync::atomic::AtomicU32;
 
 #[inline]
 pub fn msp() -> u32 {
@@ -348,7 +349,8 @@ const APP: () = {
     #[task(resources = [trussed], schedule = [update_ui], priority = 1)]
     fn update_ui(mut c: update_ui::Context) {
 
-        static mut UPDATES: u32 = 1;
+        // FIXME: Make this a local on updating
+        static UPDATES: AtomicU32 = AtomicU32::new(1);
         // debug_now!("update UI: remaining stack size: {} bytes", msp() - 0x2000_0000);
 
         // let wait_periods = c.resources.trussed.lock(|trussed| trussed.update_ui());
@@ -356,7 +358,7 @@ const APP: () = {
         // c.schedule.update_ui(Instant::now() + wait_periods * PERIOD.cycles()).unwrap();
         c.schedule.update_ui(<board::Monotonic as rtic::Monotonic>::now() + REFRESH_MILLISECS).ok();
 
-        *UPDATES = UPDATES.wrapping_add(1);
+        UPDATES.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     }
 
 
