@@ -123,3 +123,8 @@ opt-level = 2
 # TODO: see which if any settings are best for p256-cortex-m4
 # [profile.release.package.nisty]
 # opt-level = 2
+
+# Littlefs2 needs to be patched to deal with a bug in the lookahead buffer.
+# This can be undone once we can move away from littlefs2 0.3.2
+[patch.crates-io]
+littlefs2 = {path = "vendor/littlefs2"}

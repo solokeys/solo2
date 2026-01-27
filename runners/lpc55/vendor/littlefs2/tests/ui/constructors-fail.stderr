@@ -1,0 +1,8 @@
+error[E0308]: mismatched types
+  --> $DIR/constructors-fail.rs:64:27
+   |
+64 |     fs.create_dir("/tmp", &mut other_storage).unwrap();
+   |                           ^^^^^^^^^^^^^^^^^^ expected struct `RamStorage`, found struct `OtherRamStorage`
+   |
+   = note: expected type `&mut RamStorage<'_>`
+              found type `&mut OtherRamStorage<'_>`
