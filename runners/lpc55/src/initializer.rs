@@ -504,10 +504,8 @@ impl Initializer {
             usbd.disable_high_speed();
             let _: types::EnabledUsbPeripheral = usbd;
 
-            // ugh, what's the nice way?
-            static mut USB_BUS: Option<usb_device::bus::UsbBusAllocator<UsbBus<types::EnabledUsbPeripheral>>> = None;
-            unsafe { USB_BUS.replace(hal::drivers::UsbBus::new(usbd, usb0_vbus_pin)); }
-            let usb_bus = unsafe { USB_BUS.as_ref().unwrap() };
+            static USB_BUS: StaticCell<usb_device::bus::UsbBusAllocator<UsbBus<types::EnabledUsbPeripheral>>> = StaticCell::new();
+            let usb_bus = USB_BUS.init(hal::drivers::UsbBus::new(usbd, usb0_vbus_pin));
 
             // our USB classes (must be allocated in order that they're passed in `.poll(...)` later!)
             //
@@ -877,6 +875,3 @@ impl Initializer {
     }
 
 }
-
-
-
