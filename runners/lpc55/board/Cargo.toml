@@ -2,7 +2,7 @@
 name = "board"
 version = "0.1.0-unreleased"
 authors = ["Conor Patrick <conor@solokeys.com>"]
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 admin-app = "0.1"
