@@ -1,5 +1,6 @@
 #![cfg_attr(not(test), no_std)]
-
+// Allow unused since we don't use the entirety of the functionality from this crate.
+#![allow(unused)]
 /*!
 
 [littlefs](https://github.com/ARMmbed/littlefs) is a filesystem for microcontrollers
