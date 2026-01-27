@@ -8,7 +8,7 @@ edition = "2024"
 admin-app = "0.1"
 delog = "0.1"
 fm11nc08 = {path = "../../../components/fm11nc08"}
-lpc55-hal = { version = "0.3", features = ["littlefs", "rtic-peripherals"] }
+lpc55-hal = { version = "0.3", features = ["littlefs"] }
 lpc55-rtic = "0.5.7"
 micromath = "2"
 nb = "1"
