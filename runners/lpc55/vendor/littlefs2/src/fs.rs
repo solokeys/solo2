@@ -61,7 +61,7 @@ impl<Storage: driver::Storage> Allocation<Storage> {
         let block_size: u32 = Storage::BLOCK_SIZE as _;
         let cache_size: u32 = <Storage as driver::Storage>::CACHE_SIZE::U32;
         let lookahead_size: u32 =
-            32 * <Storage as driver::Storage>::LOOKAHEADWORDS_SIZE::U32;
+            4 * <Storage as driver::Storage>::LOOKAHEADWORDS_SIZE::U32;
         let block_cycles: i32 = Storage::BLOCK_CYCLES as _;
         let block_count: u32 = Storage::BLOCK_COUNT as _;
 
