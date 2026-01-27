@@ -2,7 +2,7 @@
 name = "fm11nc08"
 version = "0.1.0"
 authors = ["Conor Patrick <conor@solokeys.com>", "Nicolas Stalder <n@stalder.io>"]
-edition = "2018"
+edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
