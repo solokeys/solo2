@@ -75,7 +75,7 @@ pub struct Flash {
 /// Initialized filesystem.
 pub struct Filesystem {
     pub store: types::Store,
-    pub internal_storage_fs: &'static mut Option<types::FlashStorage>,
+    pub internal_storage_fs: *mut types::FlashStorage,
 }
 
 /// Initialized everything that is needed, minus unecessary intermediates
@@ -89,5 +89,3 @@ pub struct All
     pub basic: Basic,
     pub clock: Clock,
 }
-
-

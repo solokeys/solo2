@@ -139,7 +139,7 @@ pub fn init_board(
         {
             types::ProvisionerNonPortable {
                 store,
-                stolen_filesystem: internal_fs.as_mut().unwrap(),
+                stolen_filesystem: unsafe {&mut *internal_fs},
                 nfc_powered: _is_passive_mode,
             }
         }
