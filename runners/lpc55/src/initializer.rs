@@ -642,40 +642,46 @@ impl Initializer {
                 .reconfigure(clock_stage.clocks, pmc, syscon) };
         }
         info_now!("mount start {} ms", basic_stage.perf_timer.elapsed().0/1000);
-        static mut INTERNAL_STORAGE: Option<types::FlashStorage> = None;
-        unsafe { INTERNAL_STORAGE.replace(filesystem); }
-        static mut INTERNAL_FS_ALLOC: Option<Allocation<types::FlashStorage>> = None;
-        unsafe { INTERNAL_FS_ALLOC = Some(Filesystem::allocate()); }
+        static INTERNAL_STORAGE: StaticCell<types::FlashStorage> = StaticCell::new();
+        let internal_storage = INTERNAL_STORAGE.init(filesystem);
+        static INTERNAL_FS_ALLOC: StaticCell<Allocation<types::FlashStorage>> = StaticCell::new();
+        let internal_fs_alloc = INTERNAL_FS_ALLOC.init(Filesystem::allocate());
 
 
-        static mut EXTERNAL_STORAGE: ExternalStorage = ExternalStorage::new();
-        static mut EXTERNAL_FS_ALLOC: Option<Allocation<ExternalStorage>> = None;
-        unsafe { EXTERNAL_FS_ALLOC = Some(Filesystem::allocate()); }
+        static EXTERNAL_STORAGE: StaticCell<ExternalStorage> = StaticCell::new();
+        let external_storage = EXTERNAL_STORAGE.init(ExternalStorage::new());
+        static EXTERNAL_FS_ALLOC: StaticCell<Allocation<ExternalStorage>> = StaticCell::new();
+        let external_fs_alloc = EXTERNAL_FS_ALLOC.init(Filesystem::allocate());
 
-        static mut VOLATILE_STORAGE: VolatileStorage = VolatileStorage::new();
-        static mut VOLATILE_FS_ALLOC: Option<Allocation<VolatileStorage>> = None;
-        unsafe { VOLATILE_FS_ALLOC = Some(Filesystem::allocate()); }
+        static VOLATILE_STORAGE: StaticCell<VolatileStorage> = StaticCell::new();
+        let volatile_storage: &mut VolatileStorage = VOLATILE_STORAGE.init(VolatileStorage::new());
+        static VOLATILE_FS_ALLOC: StaticCell<Allocation<VolatileStorage>> = StaticCell::new();
+        let volatile_fs_alloc = VOLATILE_FS_ALLOC.init(Filesystem::allocate());
 
         let store = types::Store::claim().unwrap();
 
         if let Some(iso14443) = &mut nfc_stage.iso14443 { iso14443.poll(); }
 
-        unsafe {
+        // We need to be able to recreate mutable references when retrying the mount with a format
+        // For this, we first convert all existing references to pointers, and then derive new mutable
+        // references from these pointers. As the references of a failed store.mount are not used
+        // after return of that function, this is still sound to do.
 
-            INTERNAL_FS_ALLOC.as_mut().unwrap();
-            INTERNAL_STORAGE.as_mut().unwrap();
-            EXTERNAL_FS_ALLOC.as_mut().unwrap();
-            VOLATILE_FS_ALLOC.as_mut().unwrap();
-        }
+        let internal_fs_alloc = internal_fs_alloc as *mut _;
+        let internal_storage = internal_storage as *mut _;
+        let external_fs_alloc = external_fs_alloc as *mut _;
+        let external_storage = external_storage as *mut _;
+        let volatile_fs_alloc = volatile_fs_alloc as *mut _;
+        let volatile_storage = volatile_storage as *mut _;
 
         let result = store.mount(
-            unsafe { INTERNAL_FS_ALLOC.as_mut().unwrap() },
+            unsafe { &mut *internal_fs_alloc},
             // unsafe { &mut INTERNAL_STORAGE },
-            unsafe { INTERNAL_STORAGE.as_mut().unwrap() },
-            unsafe { EXTERNAL_FS_ALLOC.as_mut().unwrap() },
-            unsafe { &mut EXTERNAL_STORAGE },
-            unsafe { VOLATILE_FS_ALLOC.as_mut().unwrap() },
-            unsafe { &mut VOLATILE_STORAGE },
+            unsafe { &mut *internal_storage},
+            unsafe { &mut *external_fs_alloc},
+            unsafe { &mut *external_storage},
+            unsafe { &mut *volatile_fs_alloc},
+            unsafe { &mut *volatile_storage},
             // to trash existing data, set to true
             false,
         );
@@ -691,13 +697,13 @@ impl Initializer {
 
             info!("Not yet formatted!  Formatting..");
             store.mount(
-                unsafe { INTERNAL_FS_ALLOC.as_mut().unwrap() },
+                unsafe { &mut *internal_fs_alloc},
                 // unsafe { &mut INTERNAL_STORAGE },
-                unsafe { INTERNAL_STORAGE.as_mut().unwrap() },
-                unsafe { EXTERNAL_FS_ALLOC.as_mut().unwrap() },
-                unsafe { &mut EXTERNAL_STORAGE },
-                unsafe { VOLATILE_FS_ALLOC.as_mut().unwrap() },
-                unsafe { &mut VOLATILE_STORAGE },
+                unsafe { &mut *internal_storage},
+                unsafe { &mut *external_fs_alloc},
+                unsafe { &mut *external_storage},
+                unsafe { &mut *volatile_fs_alloc},
+                unsafe { &mut *volatile_storage},
                 // to trash existing data, set to true
                 true,
             ).unwrap();
@@ -719,7 +725,7 @@ impl Initializer {
 
         stages::Filesystem {
             store,
-            internal_storage_fs: unsafe { &mut INTERNAL_STORAGE },
+            internal_storage_fs: internal_storage,
         }
     }
 
