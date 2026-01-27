@@ -21,11 +21,12 @@ version = "0.1.0-alpha.5"
 features = ["asn1-der", "cose"]
 
 [features]
-log-all = []
 log-none = []
+log-error = []
+log-warn = []
 log-info = []
 log-debug = []
-log-warn = []
-log-error = []
+log-trace = []
+log-all = []
 
 test-attestation = []
