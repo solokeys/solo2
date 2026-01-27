@@ -2,7 +2,7 @@
 name = "nfc-device"
 version = "0.0.1"
 authors = ["Conor Patrick <conor@solokeys.com>"]
-edition = "2018"
+edition = "2024"
 
 [dependencies]
 delog = "0.1.0"
