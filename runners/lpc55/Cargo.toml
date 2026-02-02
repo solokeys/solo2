@@ -24,7 +24,7 @@ delog = "0.1.1"
 heapless = "0.9"
 interchange = "0.2.2"
 nb = "1"
-rtt-target = { version = "0.3", optional = true, features = ["cortex-m"] }
+rtt-target = { version = "0.6.2", optional = true }
 static_cell = "2.1.1"
 usb-device = "0.2.3"
 # usbd-hid = { version = "0.4.5", optional = true }
@@ -53,7 +53,7 @@ usbd-ctaphid = "0.1.0"
 
 
 # panic
-panic-halt = "0.2.0"
+panic-halt = "1.0.0"
 # panic-semihosting = "0.5.6"
 
 # storage
