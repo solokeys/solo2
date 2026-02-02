@@ -5,7 +5,7 @@ authors = ["Conor Patrick <conor@solokeys.com>"]
 edition = "2024"
 
 [dependencies]
-delog = "0.1.0"
+defmt = "1.0.1"
 embedded-time = "0.12"
 heapless = "0.7"
 nb = "1"
@@ -13,14 +13,3 @@ nb = "1"
 apdu-dispatch = "0.1"
 iso7816 = "0.1"
 interchange = "0.2.1"
-
-[features]
-default = []
-
-log-none = []
-log-error = []
-log-warn = []
-log-info = []
-log-debug = []
-log-trace = []
-log-all = []

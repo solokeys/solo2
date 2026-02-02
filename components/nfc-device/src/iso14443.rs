@@ -1,6 +1,7 @@
 use core::mem::MaybeUninit;
 
 use apdu_dispatch::interchanges;
+use defmt::{info, debug};
 use embedded_time::duration::Milliseconds;
 use heapless::Vec;
 use interchange::Requester;
@@ -349,7 +350,7 @@ where
         self.handle_block(&packet[.. packet_len as usize])?;
 
         debug!(">>");
-        debug!("{}", hex_str!(&self.buffer, sep:""));
+        debug!("{=[u8]:x}", &self.buffer);
         // logging::dump_hex(packet, l as usize);
 
         let command = interchanges::Data::from_slice(&self.buffer);
@@ -467,7 +468,7 @@ where
         }
 
         debug!("<{}< ",buffer.len());
-        if buffer.len() > 0 { debug!("{}", hex_str!(&buffer, sep:"")); }
+        if buffer.len() > 0 { debug!("{=[u8]:x}", &buffer); }
 
         Ok(())
     }
