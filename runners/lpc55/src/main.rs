@@ -11,13 +11,7 @@
 #![allow(static_mut_refs)]
 #![allow(non_local_definitions)]
 
-use runner::hal;
-use hal::traits::wg::timer::Cancel;
-use hal::traits::wg::timer::CountDown;
-use hal::drivers::timer::Elapsed;
-use hal::time::{DurationExtensions, Microseconds};
-
-const REFRESH_MILLISECS: i32 = 50;
+const REFRESH_MILLISECS: u64 = 50;
 
 const USB_INTERRUPT: board::hal::raw::Interrupt = board::hal::raw::Interrupt::USB1;
 const NFC_INTERRUPT: board::hal::raw::Interrupt = board::hal::raw::Interrupt::PIN_INT0;
@@ -27,34 +21,56 @@ extern crate delog;
 generate_macros!();
 
 use core::arch::asm;
-use core::sync::atomic::AtomicU32;
 
 #[inline]
 pub fn msp() -> u32 {
-  let r;
-  unsafe { asm!("mrs {}, MSP", out(reg) r, options(nomem, nostack, preserves_flags)) };
-  r
+    let r;
+    unsafe { asm!("mrs {}, MSP", out(reg) r, options(nomem, nostack, preserves_flags)) };
+    r
 }
 
-#[rtic::app(device = runner::hal::raw, peripherals = true, monotonic = board::Monotonic)]
-const APP: () = {
+#[rtic::app(device = runner::hal::raw, peripherals = true, dispatchers = [PLU, PIN_INT5, PIN_INT7])]
+mod app {
+    use core::sync::atomic::AtomicU32;
 
-    struct Resources {
+    use hal::drivers::timer::Elapsed;
+    use hal::time::{DurationExtensions, Microseconds};
+    use hal::traits::wg::timer::Cancel;
+    use hal::traits::wg::timer::CountDown;
+    use runner::hal;
+
+    use systick_monotonic::fugit::TimerDurationU64;
+    use systick_monotonic::Systick;
+
+    use crate::{NFC_INTERRUPT, REFRESH_MILLISECS, USB_INTERRUPT};
+
+    #[monotonic(binds = SysTick, default = true)]
+    type MyMono = Systick<1000>;
+
+    #[local]
+    struct LocalResources {}
+
+    #[shared]
+    struct SharedResources {
         /// Dispatches APDUs from contact+contactless interface to apps.
+        #[lock_free]
         apdu_dispatch: runner::types::ApduDispatch,
 
         /// Dispatches CTAPHID messages to apps.
+        #[lock_free]
         ctaphid_dispatch: runner::types::CtaphidDispatch,
 
         /// The Trussed service, used by all applications.
         trussed: runner::types::Trussed,
 
         /// All the applications that the device serves.
+        #[lock_free]
         apps: runner::types::Apps,
 
         /// The USB driver classes
         usb_classes: Option<runner::types::UsbClasses>,
         /// The NFC driver
+        #[lock_free]
         contactless: Option<runner::types::Iso14443>,
 
         /// This timer is used while developing NFC, to time how long things took,
@@ -68,6 +84,7 @@ const APP: () = {
         ///
         /// In principle, we could just run at 12MHz constantly, and then
         /// there would be no need for a system-speed independent wait extender.
+        #[lock_free]
         clock_ctrl: Option<runner::types::DynamicClockController>,
 
         /// Applications must respond to NFC requests within a certain time frame (~40ms)
@@ -84,69 +101,59 @@ const APP: () = {
         /// NB: CCID + CTAPHID also have a sort of "wait extension" implemented, however
         /// since the system runs at constant speed when powered over USB, there is no
         /// need for such an independent timer.
+        #[lock_free]
         wait_extender: runner::types::NfcWaitExtender,
     }
 
-    #[init(schedule = [update_ui])]
-    fn init(c: init::Context) -> init::LateResources {
-
+    #[init]
+    fn init(c: init::Context) -> (SharedResources, LocalResources, init::Monotonics) {
         let (
             apdu_dispatch,
             ctaphid_dispatch,
             trussed,
-
             apps,
-
             usb_classes,
             contactless,
-
             perf_timer,
             clock_ctrl,
             wait_extender,
+            monotonic,
         ) = runner::init_board(c.device, c.core);
 
         // don't toggle LED in passive mode
         if usb_classes.is_some() {
             hal::enable_cycle_counter();
             // c.schedule.update_ui(Instant::now() + PERIOD.cycles()).unwrap();
-            c.schedule.update_ui(<board::Monotonic as rtic::Monotonic>::now() + REFRESH_MILLISECS).unwrap();
+            update_ui::spawn_after(TimerDurationU64::millis(REFRESH_MILLISECS)).unwrap();
         }
 
-        init::LateResources {
-            apdu_dispatch,
-            ctaphid_dispatch,
-            trussed,
+        (
+            SharedResources {
+                apdu_dispatch,
+                ctaphid_dispatch,
+                trussed,
 
-            apps,
+                apps,
 
-            usb_classes,
-            contactless,
+                usb_classes,
+                contactless,
 
-            perf_timer,
+                perf_timer,
 
-            clock_ctrl,
-            wait_extender,
-        }
+                clock_ctrl,
+                wait_extender,
+            },
+            LocalResources {},
+            init::Monotonics(monotonic),
+        )
     }
 
-    #[idle(resources = [apdu_dispatch, ctaphid_dispatch, apps, perf_timer, usb_classes], schedule = [ccid_wait_extension, ctaphid_keepalive])]
-    fn idle(c: idle::Context) -> ! {
-        let idle::Resources {
-            apdu_dispatch,
-            ctaphid_dispatch,
-            apps,
-            mut perf_timer,
-            mut usb_classes,
-        }
-            = c.resources;
-
-        let schedule = c.schedule;
-
+    #[idle(shared = [apdu_dispatch, ctaphid_dispatch, apps, perf_timer, usb_classes])]
+    fn idle(mut c: idle::Context) -> ! {
         info_now!("inside IDLE, initial SP = {:08X}", msp());
         loop {
-
             let mut time = 0;
-            perf_timer.lock(|perf_timer|{
+            c.shared.perf_timer.lock(|perf_timer| {
                 time = perf_timer.elapsed().0;
                 if time == 60_000_000 {
                     perf_timer.start(60_000_000.microseconds());
@@ -156,8 +163,11 @@ const APP: () = {
                 runner::Delogger::flush();
             }
 
-            match apps.apdu_dispatch(|apps| apdu_dispatch.poll(apps)) {
-
+            match c
+                .shared
+                .apps
+                .apdu_dispatch(|apps| c.shared.apdu_dispatch.poll(apps))
+            {
                 Some(apdu_dispatch::dispatch::Interface::Contact) => {
                     rtic::pend(USB_INTERRUPT);
                 }
@@ -167,90 +177,91 @@ const APP: () = {
                 _ => {}
             }
 
-            if apps.ctaphid_dispatch(|apps| ctaphid_dispatch.poll(apps)) {
+            if c.shared
+                .apps
+                .ctaphid_dispatch(|apps| c.shared.ctaphid_dispatch.poll(apps))
+            {
                 rtic::pend(USB_INTERRUPT);
             }
 
-            usb_classes.lock(|usb_classes_maybe|{
+            c.shared.usb_classes.lock(|usb_classes_maybe| {
                 if usb_classes_maybe.is_some() {
-
                     let usb_classes = usb_classes_maybe.as_mut().unwrap();
 
-                    usb_classes.ctaphid.check_timeout(time/1000);
+                    usb_classes.ctaphid.check_timeout(time / 1000);
                     usb_classes.poll();
 
                     match usb_classes.ccid.did_start_processing() {
                         usbd_ccid::types::Status::ReceivedData(milliseconds) => {
-                            schedule.ccid_wait_extension(
-                                // Instant::now() + (CLOCK_FREQ/1_000 * milliseconds.0).cycles()
-                                <board::Monotonic as rtic::Monotonic>::now() + milliseconds.0 as i32
-                            ).ok();
+                            ccid_wait_extension::spawn_after(TimerDurationU64::millis(
+                                milliseconds.0.into(),
+                            ))
+                            .ok();
                         }
                         _ => {}
                     }
 
                     match usb_classes.ctaphid.did_start_processing() {
                         usbd_ctaphid::types::Status::ReceivedData(milliseconds) => {
-                            schedule.ctaphid_keepalive(
-                                // Instant::now() + (CLOCK_FREQ/1_000 * milliseconds.0).cycles()
-                                <board::Monotonic as rtic::Monotonic>::now() + milliseconds.0 as i32
-                            ).ok();
+                            ctaphid_keepalive::spawn_after(TimerDurationU64::millis(
+                                milliseconds.0.into(),
+                            ))
+                            .ok();
                         }
                         _ => {}
                     }
                 }
             });
-
         }
     }
 
-    #[task(binds = USB1_NEEDCLK, resources = [], schedule = [], priority=6)]
+    #[task(binds = USB1_NEEDCLK, priority=6)]
     fn usb1_needclk(_c: usb1_needclk::Context) {
         // Behavior is same as in USB1 handler
         rtic::pend(USB_INTERRUPT);
     }
 
     /// Manages all traffic on the USB bus.
-    #[task(binds = USB1, resources = [usb_classes], schedule = [ccid_wait_extension, ctaphid_keepalive], priority=6)]
-    fn usb(c: usb::Context) {
+    #[task(binds = USB1, shared = [usb_classes], priority=6)]
+    fn usb(mut c: usb::Context) {
         // let remaining = msp() - 0x2000_0000;
         // if remaining < 100_000 {
         //     debug_now!("USB interrupt: remaining stack size: {} bytes", remaining);
         // }
-        let usb = unsafe { hal::raw::Peripherals::steal().USB1 } ;
+        let usb = unsafe { hal::raw::Peripherals::steal().USB1 };
         // let before = Instant::now();
-        let usb_classes = c.resources.usb_classes.as_mut().unwrap();
+        c.shared.usb_classes.lock(|usb_classes_maybe| {
+            let usb_classes = usb_classes_maybe.as_mut().unwrap();
 
-        //////////////
-        // if remaining < 60_000 {
-        //     debug_now!("polling usb classes");
-        // }
-        usb_classes.poll();
+            //////////////
+            // if remaining < 60_000 {
+            //     debug_now!("polling usb classes");
+            // }
+            usb_classes.poll();
 
-        match usb_classes.ccid.did_start_processing() {
-            usbd_ccid::types::Status::ReceivedData(milliseconds) => {
-                // if remaining < 60_000 {
-                //     debug_now!("scheduling CCID wait extension");
-                // }
-                c.schedule.ccid_wait_extension(
-                    // Instant::now() + (CLOCK_FREQ/1_000 * milliseconds.0).cycles()
-                    <board::Monotonic as rtic::Monotonic>::now() + milliseconds.0 as i32
-                ).ok();
+            match usb_classes.ccid.did_start_processing() {
+                usbd_ccid::types::Status::ReceivedData(milliseconds) => {
+                    // if remaining < 60_000 {
+                    //     debug_now!("scheduling CCID wait extension");
+                    // }
+                    ccid_wait_extension::spawn_after(TimerDurationU64::millis(
+                        milliseconds.0.into(),
+                    ))
+                    .ok();
+                }
+                _ => {}
             }
-            _ => {}
-        }
-        match usb_classes.ctaphid.did_start_processing() {
-            usbd_ctaphid::types::Status::ReceivedData(milliseconds) => {
-                // if remaining < 60_000 {
-                //     debug_now!("scheduling CTAPHID wait extension");
-                // }
-                c.schedule.ctaphid_keepalive(
-                    // Instant::now() + (CLOCK_FREQ/1_000 * milliseconds.0).cycles()
-                    <board::Monotonic as rtic::Monotonic>::now() + milliseconds.0 as i32
-                ).ok();
+            match usb_classes.ctaphid.did_start_processing() {
+                usbd_ctaphid::types::Status::ReceivedData(milliseconds) => {
+                    // if remaining < 60_000 {
+                    //     debug_now!("scheduling CTAPHID wait extension");
+                    // }
+                    ctaphid_keepalive::spawn_after(TimerDurationU64::millis(milliseconds.0.into()))
+                        .ok();
+                }
+                _ => {}
             }
-            _ => {}
-        }
+        });
         //////////////
 
         // let after = Instant::now();
@@ -263,66 +274,70 @@ const APP: () = {
         let mask = inten & intstat;
         if mask != 0 {
             for i in 0..5 {
-                if mask & (1 << 2*i) != 0 {
+                if mask & (1 << 2 * i) != 0 {
                     // debug!("EP{}OUT", i);
                 }
-                if mask & (1 << (2*i + 1)) != 0 {
+                if mask & (1 << (2 * i + 1)) != 0 {
                     // debug!("EP{}IN", i);
                 }
             }
             // Serial sends a stray 0x70 ("p") to CDC-ACM "data" OUT endpoint (3)
             // Need to fix that at the management, for now just clear that interrupt.
-            usb.intstat.write(|w| unsafe{ w.bits(64) });
+            usb.intstat.write(|w| unsafe { w.bits(64) });
             // usb.intstat.write(|w| unsafe{ w.bits( usb.intstat.read().bits() ) });
         }
 
         // if remaining < 60_000 {
         //     debug_now!("USB interrupt done: {} bytes", remaining);
         // }
-
-
     }
 
     /// Whenever we start waiting for an application to reply to CCID, this must be scheduled.
     /// In case the application takes too long, this will periodically send wait extensions
     /// until the application replied.
-    #[task(resources = [usb_classes], schedule = [ccid_wait_extension], priority = 6)]
-    fn ccid_wait_extension(c: ccid_wait_extension::Context) {
+    #[task(shared = [usb_classes], priority = 6)]
+    fn ccid_wait_extension(mut c: ccid_wait_extension::Context) {
         debug_now!("CCID WAIT EXTENSION");
         debug_now!("remaining stack size: {} bytes", msp() - 0x2000_0000);
-        let status = c.resources.usb_classes.as_mut().unwrap().ccid.send_wait_extension();
+        let status = c.shared.usb_classes.lock(|usb_classes_maybe| {
+            usb_classes_maybe
+                .as_mut()
+                .unwrap()
+                .ccid
+                .send_wait_extension()
+        });
         match status {
             usbd_ccid::types::Status::ReceivedData(milliseconds) => {
-                c.schedule.ccid_wait_extension(
-                    // Instant::now() + (CLOCK_FREQ/1_000 * milliseconds.0).cycles()
-                    <board::Monotonic as rtic::Monotonic>::now() + milliseconds.0 as i32
-                ).ok();
+                ccid_wait_extension::spawn_after(TimerDurationU64::millis(milliseconds.0.into()))
+                    .ok();
             }
             _ => {}
         }
     }
 
     /// Same as with CCID, but sending ctaphid keepalive statuses.
-    #[task(resources = [usb_classes], schedule = [ctaphid_keepalive], priority = 6)]
-    fn ctaphid_keepalive(c: ctaphid_keepalive::Context) {
+    #[task(shared = [usb_classes], priority = 6)]
+    fn ctaphid_keepalive(mut c: ctaphid_keepalive::Context) {
         debug_now!("CTAPHID keepalive");
         debug_now!("remaining stack size: {} bytes", msp() - 0x2000_0000);
-        let status = c.resources.usb_classes.as_mut().unwrap().ctaphid.send_keepalive(
-            board::trussed::UserPresenceStatus::waiting()
-        );
+        let status = c.shared.usb_classes.lock(|usb_classes_maybe| {
+            usb_classes_maybe
+                .as_mut()
+                .unwrap()
+                .ctaphid
+                .send_keepalive(board::trussed::UserPresenceStatus::waiting())
+        });
         match status {
             usbd_ctaphid::types::Status::ReceivedData(milliseconds) => {
-                c.schedule.ctaphid_keepalive(
-                    // Instant::now() + (CLOCK_FREQ/1_000 * milliseconds.0).cycles()
-                    <board::Monotonic as rtic::Monotonic>::now() + milliseconds.0 as i32
-                ).ok();
+                ctaphid_keepalive::spawn_after(TimerDurationU64::millis(milliseconds.0.into()))
+                    .ok();
             }
             _ => {}
         }
     }
 
-    #[task(binds = MAILBOX, resources = [usb_classes], priority = 5)]
-    #[allow(unused_mut,unused_variables)]
+    #[task(binds = MAILBOX, shared = [usb_classes], priority = 5)]
+    #[allow(unused_mut, unused_variables)]
     fn mailbox(mut c: mailbox::Context) {
         // debug_now!("mailbox: remaining stack size: {} bytes", msp() - 0x2000_0000);
         #[cfg(feature = "log-serial")]
@@ -333,7 +348,7 @@ const APP: () = {
                     usb_classes.serial.write(b"dummy test string\n").ok();
                     // app::drain_log_to_serial(&mut usb_classes.serial);
                 }
-                _=>{}
+                _ => {}
             }
         });
         // // let usb_classes = c.resources.usb_classes.as_mut().unwrap();
@@ -345,98 +360,75 @@ const APP: () = {
         // // }
     }
 
-    #[task(binds = OS_EVENT, resources = [trussed], priority = 5)]
-    fn os_event(c: os_event::Context) {
+    #[task(binds = OS_EVENT, shared = [trussed], priority = 5)]
+    fn os_event(mut c: os_event::Context) {
         // debug_now!("os event: remaining stack size: {} bytes", msp() - 0x2000_0000);
-        c.resources.trussed.process();
+        c.shared.trussed.lock(|trussed| trussed.process());
     }
 
-    #[task(resources = [trussed], schedule = [update_ui], priority = 1)]
+    #[task(shared = [trussed], priority = 1)]
     fn update_ui(mut c: update_ui::Context) {
-
         // FIXME: Make this a local on updating
         static UPDATES: AtomicU32 = AtomicU32::new(1);
         // debug_now!("update UI: remaining stack size: {} bytes", msp() - 0x2000_0000);
 
         // let wait_periods = c.resources.trussed.lock(|trussed| trussed.update_ui());
-        c.resources.trussed.lock(|trussed| trussed.update_ui());
+        c.shared.trussed.lock(|trussed| trussed.update_ui());
         // c.schedule.update_ui(Instant::now() + wait_periods * PERIOD.cycles()).unwrap();
-        c.schedule.update_ui(<board::Monotonic as rtic::Monotonic>::now() + REFRESH_MILLISECS).ok();
+        update_ui::spawn_after(TimerDurationU64::millis(REFRESH_MILLISECS)).ok();
 
         UPDATES.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     }
 
-
-
-    #[task(binds = CTIMER0, resources = [contactless, perf_timer, wait_extender], priority = 7)]
+    #[task(binds = CTIMER0, shared = [contactless, perf_timer, wait_extender], priority = 7)]
     fn nfc_wait_extension(c: nfc_wait_extension::Context) {
-        let nfc_wait_extension::Resources {
-            contactless,
-            perf_timer: _perf_timer,
-            wait_extender,
-        }
-            = c.resources;
-        if let Some(contactless) = contactless.as_mut() {
-
+        if let Some(contactless) = c.shared.contactless.as_mut() {
             // clear the interrupt
-            wait_extender.cancel().ok();
+            c.shared.wait_extender.cancel().ok();
 
-            info!("<{}", _perf_timer.elapsed().0/100);
+            info!("<{}", _perf_timer.elapsed().0 / 100);
             let status = contactless.poll_wait_extensions();
             match status {
                 nfc_device::Iso14443Status::Idle => {}
                 nfc_device::Iso14443Status::ReceivedData(milliseconds) => {
-                    wait_extender.start(Microseconds::try_from(milliseconds).unwrap());
+                    c.shared
+                        .wait_extender
+                        .start(Microseconds::try_from(milliseconds).unwrap());
                 }
             }
-            info!(" {}>", _perf_timer.elapsed().0/100);
+            info!(" {}>", _perf_timer.elapsed().0 / 100);
         }
     }
 
-    #[task(binds = PIN_INT0, resources = [
+    #[task(binds = PIN_INT0, shared = [
             contactless, perf_timer, wait_extender,
         ], priority = 7,
     )]
-    fn nfc_irq(c: nfc_irq::Context) {
+    fn nfc_irq(mut c: nfc_irq::Context) {
+        c.shared.perf_timer.lock(|perf_timer| {
+            let contactless = c.shared.contactless.as_mut().unwrap();
+            let _starttime = perf_timer.elapsed().0 / 100;
 
-        let nfc_irq::Resources {
-            contactless,
-            perf_timer,
-            wait_extender,
+            info!("[");
+            let status = contactless.poll();
+            match status {
+                nfc_device::Iso14443Status::Idle => {}
+                nfc_device::Iso14443Status::ReceivedData(milliseconds) => {
+                    c.shared.wait_extender.cancel().ok();
+                    c.shared
+                        .wait_extender
+                        .start(Microseconds::try_from(milliseconds).unwrap());
+                }
             }
-            = c.resources;
-        let contactless = contactless.as_mut().unwrap();
-        let _starttime = perf_timer.elapsed().0/100;
+            info!("{}-{}]", _starttime, perf_timer.elapsed().0 / 100);
 
-        info!("[");
-        let status = contactless.poll();
-        match status {
-            nfc_device::Iso14443Status::Idle => {}
-            nfc_device::Iso14443Status::ReceivedData(milliseconds) => {
-                wait_extender.cancel().ok();
-                wait_extender.start(Microseconds::try_from(milliseconds).unwrap());
-            }
-        }
-        info!("{}-{}]", _starttime, perf_timer.elapsed().0/100);
-
-        perf_timer.cancel().ok();
-        perf_timer.start(60_000_000.microseconds());
+            perf_timer.cancel().ok();
+            perf_timer.start(60_000_000.microseconds());
+        })
     }
 
-    #[task(binds = ADC0, resources = [clock_ctrl], priority = 8)]
+    #[task(binds = ADC0, shared = [clock_ctrl], priority = 8)]
     fn adc_int(c: adc_int::Context) {
-        let adc_int::Resources {
-            clock_ctrl,
-        } = c.resources;
-        clock_ctrl.as_mut().unwrap().handle();
+        c.shared.clock_ctrl.as_mut().unwrap().handle();
     }
-
-
-    // something to dispatch software tasks from
-    extern "C" {
-        fn PLU();
-        fn PIN_INT5();
-        fn PIN_INT7();
-    }
-
-};
+}

@@ -24,7 +24,7 @@ pub mod solo2;
 pub use solo2 as specifics;
 
 pub use shared::{
-    Monotonic,
+    CLOCK_FREQ,
     Reboot,
 };
 
