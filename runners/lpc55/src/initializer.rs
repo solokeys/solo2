@@ -1,3 +1,5 @@
+use defmt::info;
+
 use crate::hal;
 use hal::drivers::timer::Elapsed;
 use hal::drivers::{clocks::Clocks, flash::FlashGordon, pins, pins::direction, Pwm, Timer, UsbBus};
@@ -67,8 +69,9 @@ fn get_serial_number() -> &'static str {
     let serial_number = SERIAL_NUMBER.init(heapless::String::new());
     let uuid = crate::hal::uuid();
     use core::fmt::Write;
+    // FIXME: figure out a different way to get a hex string here.
     serial_number
-        .write_fmt(format_args!("{}", hexstr!(&uuid)))
+        .write_fmt(format_args!("{}", delog::hexstr!(&uuid)))
         .unwrap();
     serial_number
 }
@@ -117,7 +120,7 @@ fn initialize_fs_flash(
 
         // But if it's zero, then that means the data is undefined and it doesn't bother.
         if page_data == [0u8; 512] {
-            info_now!("resetting page {}", page);
+            info!("resetting page {}", page);
             // So we should write nonzero data to initialize flash.
             // We write it as encrypted, so it is in a known state when decrypted by the filesystem layer.
             page_data[0] = 1;
@@ -141,7 +144,7 @@ fn initialize_fs_flash(
 impl Initializer {
     pub fn new(config: Config, syscon: hal::Syscon, pmc: hal::Pmc, anactrl: hal::Anactrl) -> Self {
         let is_nfc_passive = false;
-        info_now!("making initializer");
+        info!("making initializer");
         Self {
             is_nfc_passive,
 
@@ -598,7 +601,7 @@ impl Initializer {
         nfc_stage: &mut stages::Nfc,
         usb_stage: &mut stages::Usb,
     ) -> stages::Interfaces {
-        info_now!("making interfaces");
+        info!("making interfaces");
         let apdu_dispatch = types::ApduDispatch::new(
             usb_stage.contact_responder.take().unwrap(),
             nfc_stage.contactless_responder.take().unwrap(),
@@ -618,7 +621,7 @@ impl Initializer {
         prince: hal::peripherals::prince::Prince<Unknown>,
         flash: hal::peripherals::flash::Flash<Unknown>,
     ) -> stages::Flash {
-        info_now!("making flash");
+        info!("making flash");
         let syscon = &mut self.syscon;
 
         #[allow(unused_mut)]
@@ -648,7 +651,7 @@ impl Initializer {
 
         let syscon = &mut self.syscon;
         let pmc = &mut self.pmc;
-        info_now!("making fs");
+        info!("making fs");
 
         #[allow(unused_mut)]
         let mut flash_gordon = flash_stage.flash_gordon.take().unwrap();
@@ -675,7 +678,7 @@ impl Initializer {
                     .reconfigure(clock_stage.clocks, pmc, syscon)
             };
         }
-        info_now!(
+        info!(
             "mount start {} ms",
             basic_stage.perf_timer.elapsed().0 / 1000
         );

@@ -8,16 +8,14 @@ use panic_halt as _;
 
 use board::clock_controller;
 pub use board::hal;
+use defmt::info;
+use delog::delog;
 use usb_device::device::UsbVidPid; // re-export for convenience
 
 #[allow(unused_imports)]
 use hal::drivers::timer::Elapsed;
 
 use types::Board;
-
-#[macro_use]
-extern crate delog;
-generate_macros!();
 
 pub mod initializer;
 pub mod types;
@@ -57,7 +55,7 @@ pub fn init_board(
     #[cfg(any(feature = "log-defmt"))]
     Delogger::init_default(delog::LevelFilter::Debug, &FLUSHER).ok();
 
-    info_now!(
+    info!(
         "entering init_board {}.{}.{}",
         build_constants::CARGO_PKG_VERSION_MAJOR,
         build_constants::CARGO_PKG_VERSION_MINOR,
@@ -87,7 +85,7 @@ pub fn init_board(
         hal::Pmc::from(device_peripherals.PMC),
         hal::Anactrl::from(device_peripherals.ANACTRL),
     );
-    info_now!("got initializer");
+    info!("got initializer");
 
     let mut everything = initializer.initialize_all(
         hal::Iocon::from(device_peripherals.IOCON),

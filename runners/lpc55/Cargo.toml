@@ -61,7 +61,7 @@ littlefs2 = { version = "0.3.2", features = ["c-stubs"] }
 
 [features]
 # ndef-app is an annoyance on some mobile platforms
-default = ["admin-app", "fido-authenticator", "ndef-app", "oath-authenticator", "trussed/clients-4"]
+default = ["admin-app", "fido-authenticator", "ndef-app", "oath-authenticator", "trussed/clients-4", "board-lpcxpresso55"]
 
 # develop = ["no-encrypted-storage", "no-buttons", "no-reset-time-window"]
 # develop = ["no-encrypted-storage", "no-reset-time-window"]
@@ -101,14 +101,6 @@ reconfigure-nfc = []
 no-clock-controller = ["board/no-clock-controller"]
 enable-clock-controller-signal-pin = ["board/enable-clock-controller-signal-pin"]
 # very-twitchy-mouse = ["usbd-hid"]
-
-log-none = []
-log-error = []
-log-warn = []
-log-info = []
-log-debug = []
-log-trace = []
-log-all = []
 
 # patch dependencies like so to test local changes
 

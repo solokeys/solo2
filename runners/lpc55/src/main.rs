@@ -11,10 +11,6 @@ const REFRESH_MILLISECS: u32 = 50;
 const USB_INTERRUPT: board::hal::raw::Interrupt = board::hal::raw::Interrupt::USB1;
 const NFC_INTERRUPT: board::hal::raw::Interrupt = board::hal::raw::Interrupt::PIN_INT0;
 
-#[macro_use]
-extern crate delog;
-generate_macros!();
-
 use defmt_rtt as _;
 
 use core::arch::asm;
@@ -35,6 +31,7 @@ mod app {
     use super::msp;
     use board::hal::time::Milliseconds;
     use board::CLOCK_FREQ;
+    use defmt::{debug, info};
     use hal::drivers::timer::Elapsed;
     use hal::time::{DurationExtensions, Microseconds};
     use hal::traits::wg::timer::Cancel;
@@ -177,7 +174,7 @@ mod app {
 
     #[idle(shared = [apdu_dispatch, ctaphid_dispatch, apps, perf_timer, usb_classes, ccid_wait_extension_sender, ctaphid_keep_alive_sender])]
     fn idle(mut c: idle::Context) -> ! {
-        info_now!("inside IDLE, initial SP = {:08X}", msp());
+        info!("inside IDLE, initial SP = {:08X}", msp());
         loop {
             let mut time = 0;
             c.shared.perf_timer.lock(|perf_timer| {
@@ -337,8 +334,8 @@ mod app {
         loop {
             let milliseconds = c.local.ccid_wait_extension_receiver.recv().await.unwrap();
             Mono::delay(milliseconds.0.millis()).await;
-            debug_now!("CCID WAIT EXTENSION");
-            debug_now!("remaining stack size: {} bytes", msp() - 0x2000_0000);
+            debug!("CCID WAIT EXTENSION");
+            debug!("remaining stack size: {} bytes", msp() - 0x2000_0000);
             let status = c.shared.usb_classes.lock(|usb_classes_maybe| {
                 usb_classes_maybe
                     .as_mut()
@@ -366,8 +363,8 @@ mod app {
         loop {
             let milliseconds = c.local.ctaphid_keep_alive_receiver.recv().await.unwrap();
             Mono::delay(milliseconds.0.millis()).await;
-            debug_now!("CTAPHID keepalive");
-            debug_now!("remaining stack size: {} bytes", msp() - 0x2000_0000);
+            debug!("CTAPHID keepalive");
+            debug!("remaining stack size: {} bytes", msp() - 0x2000_0000);
             let status = c.shared.usb_classes.lock(|usb_classes_maybe| {
                 usb_classes_maybe
                     .as_mut()
