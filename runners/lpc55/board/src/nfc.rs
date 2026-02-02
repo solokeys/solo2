@@ -16,6 +16,8 @@ use crate::hal::{
     },
 };
 
+use defmt::info;
+
 use fm11nc08::{
     FM11NC08, Configuration, Register,
 };
@@ -145,4 +147,3 @@ pub fn try_setup(
 
     Some(fm)
 }
-

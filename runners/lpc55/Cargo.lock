@@ -176,7 +176,7 @@ name = "board"
 version = "0.1.0-unreleased"
 dependencies = [
  "admin-app",
- "delog",
+ "defmt",
  "fm11nc08",
  "lpc55-hal 0.4.1",
  "micromath",
