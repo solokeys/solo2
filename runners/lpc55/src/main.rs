@@ -26,6 +26,7 @@ pub fn msp() -> u32 {
 
 #[rtic::app(device = runner::hal::raw, peripherals = true, dispatchers = [PLU, PIN_INT5, PIN_INT7])]
 mod app {
+    use super::msp;
     use board::hal::time::Milliseconds;
     use board::CLOCK_FREQ;
     use hal::drivers::timer::Elapsed;
@@ -427,23 +428,25 @@ mod app {
     }
 
     #[task(binds = CTIMER0, shared = [contactless, perf_timer, wait_extender], priority = 7)]
-    fn nfc_wait_extension(c: nfc_wait_extension::Context) {
-        if let Some(contactless) = c.shared.contactless.as_mut() {
-            // clear the interrupt
-            c.shared.wait_extender.cancel().ok();
+    fn nfc_wait_extension(mut c: nfc_wait_extension::Context) {
+        c.shared.perf_timer.lock(|_perf_timer| {
+            if let Some(contactless) = c.shared.contactless.as_mut() {
+                // clear the interrupt
+                c.shared.wait_extender.cancel().ok();
 
-            info!("<{}", _perf_timer.elapsed().0 / 100);
-            let status = contactless.poll_wait_extensions();
-            match status {
-                nfc_device::Iso14443Status::Idle => {}
-                nfc_device::Iso14443Status::ReceivedData(milliseconds) => {
-                    c.shared
-                        .wait_extender
-                        .start(Microseconds::try_from(milliseconds).unwrap());
+                info!("<{}", _perf_timer.elapsed().0 / 100);
+                let status = contactless.poll_wait_extensions();
+                match status {
+                    nfc_device::Iso14443Status::Idle => {}
+                    nfc_device::Iso14443Status::ReceivedData(milliseconds) => {
+                        c.shared
+                            .wait_extender
+                            .start(Microseconds::try_from(milliseconds).unwrap());
+                    }
                 }
+                info!(" {}>", _perf_timer.elapsed().0 / 100);
             }
-            info!(" {}>", _perf_timer.elapsed().0 / 100);
-        }
+        });
     }
 
     #[task(binds = PIN_INT0, shared = [
