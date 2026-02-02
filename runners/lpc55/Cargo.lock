@@ -1212,7 +1212,7 @@ name = "nfc-device"
 version = "0.0.1"
 dependencies = [
  "apdu-dispatch",
- "delog",
+ "defmt",
  "embedded-time",
  "heapless 0.7.17",
  "interchange",
