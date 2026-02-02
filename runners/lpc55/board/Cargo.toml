@@ -6,7 +6,7 @@ edition = "2024"
 
 [dependencies]
 admin-app = "0.1"
-delog = "0.1"
+defmt = "1.0.1"
 fm11nc08 = {path = "../../../components/fm11nc08"}
 lpc55-hal = "0.4.1"
 rtic = { version = "2.0.0", features = ["thumbv8main-backend"] }
@@ -22,14 +22,6 @@ solo2 = []
 no-buttons = []
 no-clock-controller = []
 enable-clock-controller-signal-pin = []
-
-log-none = []
-log-error = []
-log-warn = []
-log-info = []
-log-debug = []
-log-trace = []
-log-all = []
 
 [profile.release]
 codegen-units = 1

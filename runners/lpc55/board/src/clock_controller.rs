@@ -12,6 +12,8 @@ use crate::hal::{
     typestates::pin::{state, gpio:: direction},
 };
 
+use defmt::info;
+
 pub type SignalPin = pins::Pio0_23;
 pub type SignalButton = Pin<SignalPin, state::Gpio<direction::Output>>;
 
@@ -137,7 +139,7 @@ impl DynamicClockController {
 
     /// Used for debugging to tune the ADC points
     pub fn evaluate(&mut self){
-        info_now!("status = {:02X}", self.adc.stat.read().bits());
+        info!("status = {:02X}", self.adc.stat.read().bits());
         self.adc.cmdh1.modify(|_,w| unsafe { w
                                     .cmpen().bits(0)
                                 } );
@@ -148,7 +150,7 @@ impl DynamicClockController {
             }
             let result = self.adc.resfifo[0].read().bits();
             let _sample = (result & 0xffff) as u16;
-            info_now!("Vref bias = {}", _sample);
+            info!("Vref bias = {}", _sample);
         }
         self.adc.cmdh1.modify(|_,w| unsafe { w
                                     .cmpen().bits(0b11)
