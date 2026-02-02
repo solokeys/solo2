@@ -3,6 +3,8 @@ use nb::block;
 use embedded_time::duration::{Extensions, Microseconds};
 use embedded_hal as hal;
 
+use defmt::info;
+
 use hal::{
     spi::FullDuplex,
     digital::v2::{InputPin, OutputPin},
@@ -398,7 +400,7 @@ where
 
             if self.offset <= 2 {
                 // too few bytes, ignore..
-                info!("RxDone read too few ({})", hex_str!(&buf[.. self.offset]));
+                info!("RxDone read too few ({=[u8]:x})", &buf[.. self.offset]);
                 self.offset = 0;
             }
             else {
@@ -422,7 +424,7 @@ where
             let count = self.read_reg(Register::FifoCount);
             info!("WL {}", count);
             self.read_fifo(count);
-            info!("{}", hex_str!(&self.packet[self.offset ..][..count as usize]));
+            info!("{=[u8]:x}", &self.packet[self.offset ..][..count as usize]);
             self.offset += count as usize;
             if count == 32 {
                 info!("warning: potential ovflw");
@@ -798,4 +800,3 @@ where
         }
     }
 }
-
