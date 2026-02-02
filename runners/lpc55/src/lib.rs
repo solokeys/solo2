@@ -28,26 +28,15 @@ pub struct Flusher {}
 
 impl delog::Flusher for Flusher {
     fn flush(&self, _logs: &str) {
-        #[cfg(feature = "log-rtt")]
-        rtt_target::rprint!(_logs);
-
-        #[cfg(feature = "log-semihosting")]
-        cortex_m_semihosting::hprint!(_logs).ok();
-
-        #[cfg(feature = "log-serial")]
-        // see https://git.io/JLARR for the plan on how to improve this once we switch to RTIC 0.6
-        rtic::pend(hal::raw::Interrupt::MAILBOX);
+        #[cfg(feature = "log-defmt")]
+        defmt::println!("Forwarded delog logs:\n{}", _logs);
     }
 }
 
 // delog!(Delogger, 16*1024, 3*1024, Flusher);
 delog!(Delogger, 1, 2048, Flusher);
 
-#[cfg(any(
-    feature = "log-semihosting",
-    feature = "log-serial",
-    feature = "log-rtt"
-))]
+#[cfg(any(feature = "log-defmt"))]
 static FLUSHER: Flusher = Flusher {};
 
 // TODO: move board-specifics to BSPs
@@ -65,14 +54,7 @@ pub fn init_board(
     Option<clock_controller::DynamicClockController>,
     types::NfcWaitExtender,
 ) {
-    #[cfg(feature = "log-rtt")]
-    rtt_target::rtt_init_print!();
-
-    #[cfg(any(
-        feature = "log-semihosting",
-        feature = "log-serial",
-        feature = "log-rtt"
-    ))]
+    #[cfg(any(feature = "log-defmt"))]
     Delogger::init_default(delog::LevelFilter::Debug, &FLUSHER).ok();
 
     info_now!(
