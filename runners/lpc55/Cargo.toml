@@ -19,12 +19,12 @@ rtic-sync = "1.4.0"
 # FIXME: get rid of critical-section-single-core feature once old versions of critical-section are no longer needed.
 cortex-m = { version = "0.7.0", features = ["critical-section-single-core"] }
 systick-monotonic = "1.0.1"
-cortex-m-semihosting = {version = "0.3.5", optional = true }
+defmt = "1.0.1"
+defmt-rtt = "1.1.0"
 delog = "0.1.1"
 heapless = "0.9"
 interchange = "0.2.2"
 nb = "1"
-rtt-target = { version = "0.6.2", optional = true }
 static_cell = "2.1.1"
 usb-device = "0.2.3"
 # usbd-hid = { version = "0.4.5", optional = true }
@@ -91,9 +91,7 @@ board-lpcxpresso55 = ["board/lpcxpresso55"]
 board-okdoe1 = ["board/okdoe1", "usbfs-peripheral"]
 board-solo2 = ["board/solo2"]
 
-log-rtt = ["rtt-target"]
-log-semihosting = ["cortex-m-semihosting"]
-log-serial = []
+log-defmt = []
 
 highspeed = []
 usbfs-peripheral = []
