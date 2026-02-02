@@ -31,8 +31,6 @@ pub fn msp() -> u32 {
 
 #[rtic::app(device = runner::hal::raw, peripherals = true, dispatchers = [PLU, PIN_INT5, PIN_INT7])]
 mod app {
-    use core::sync::atomic::AtomicU32;
-
     use hal::drivers::timer::Elapsed;
     use hal::time::{DurationExtensions, Microseconds};
     use hal::traits::wg::timer::Cancel;
@@ -48,7 +46,9 @@ mod app {
     type MyMono = Systick<1000>;
 
     #[local]
-    struct LocalResources {}
+    struct LocalResources {
+        updates: u32,
+    }
 
     #[shared]
     struct SharedResources {
@@ -143,7 +143,7 @@ mod app {
                 clock_ctrl,
                 wait_extender,
             },
-            LocalResources {},
+            LocalResources { updates: 1, },
             init::Monotonics(monotonic),
         )
     }
@@ -366,10 +366,8 @@ mod app {
         c.shared.trussed.lock(|trussed| trussed.process());
     }
 
-    #[task(shared = [trussed], priority = 1)]
+    #[task(shared = [trussed], local = [updates], priority = 1)]
     fn update_ui(mut c: update_ui::Context) {
-        // FIXME: Make this a local on updating
-        static UPDATES: AtomicU32 = AtomicU32::new(1);
         // debug_now!("update UI: remaining stack size: {} bytes", msp() - 0x2000_0000);
 
         // let wait_periods = c.resources.trussed.lock(|trussed| trussed.update_ui());
@@ -377,7 +375,7 @@ mod app {
         // c.schedule.update_ui(Instant::now() + wait_periods * PERIOD.cycles()).unwrap();
         update_ui::spawn_after(TimerDurationU64::millis(REFRESH_MILLISECS)).ok();
 
-        UPDATES.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+        *c.local.updates += 1;
     }
 
     #[task(binds = CTIMER0, shared = [contactless, perf_timer, wait_extender], priority = 7)]
