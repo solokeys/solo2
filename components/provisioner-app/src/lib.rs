@@ -10,14 +10,11 @@
 //! See `solo2-cli` for usage.
 #![no_std]
 
-#[macro_use]
-extern crate delog;
-generate_macros!();
-
 use core::convert::TryFrom;
 
 use trussed::types::LfsStorage;
 
+use defmt::info;
 use littlefs2::path::{PathBuf};
 use trussed::store::{self, Store};
 use trussed::{
@@ -272,7 +269,7 @@ where S: Store,
 
                         GenerateX255Key => {
 
-                            info_now!("GenerateX255Key");
+                            info!("GenerateX255Key");
                             let mut seed = [0u8; 32];
                             seed.copy_from_slice(
                                 &syscall!(self.trussed.random_bytes(32)).bytes.as_slice()

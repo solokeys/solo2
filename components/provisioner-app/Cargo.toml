@@ -8,7 +8,7 @@ edition = "2024"
 
 [dependencies]
 apdu-dispatch = "0.1"
-delog = "0.1"
+defmt = "1.0.1"
 heapless = "0.7"
 heapless-bytes = "0.3"
 lpc55-hal = { version = "0.3", features = ["littlefs", "rtic-peripherals"] }
@@ -21,12 +21,4 @@ version = "0.1.0-alpha.5"
 features = ["asn1-der", "cose"]
 
 [features]
-log-none = []
-log-error = []
-log-warn = []
-log-info = []
-log-debug = []
-log-trace = []
-log-all = []
-
 test-attestation = []

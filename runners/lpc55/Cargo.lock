@@ -1500,7 +1500,7 @@ name = "provisioner-app"
 version = "0.1.0"
 dependencies = [
  "apdu-dispatch",
- "delog",
+ "defmt",
  "heapless 0.7.17",
  "heapless-bytes 0.3.0",
  "littlefs2 0.3.2",
