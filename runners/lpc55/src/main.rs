@@ -26,6 +26,7 @@ pub fn msp() -> u32 {
 
 #[rtic::app(device = runner::hal::raw, peripherals = true, dispatchers = [PLU, PIN_INT5, PIN_INT7])]
 mod app {
+    #[allow(unused, reason="Actual calls are only generated when logging is enabled.")]
     use super::msp;
     use board::hal::time::Milliseconds;
     use board::CLOCK_FREQ;
