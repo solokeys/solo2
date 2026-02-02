@@ -6,9 +6,8 @@ include!(concat!(env!("OUT_DIR"), "/build_constants.rs"));
 use panic_halt as _;
 // use panic_semihosting as _;
 
+use board::clock_controller;
 pub use board::hal;
-use board::{clock_controller, CLOCK_FREQ};
-use systick_monotonic::Systick;
 use usb_device::device::UsbVidPid; // re-export for convenience
 
 #[allow(unused_imports)]
@@ -54,7 +53,6 @@ static FLUSHER: Flusher = Flusher {};
 // TODO: move board-specifics to BSPs
 pub fn init_board(
     device_peripherals: hal::raw::Peripherals,
-    core_peripherals: cortex_m::Peripherals,
 ) -> (
     // types::Authenticator,
     types::ApduDispatch,
@@ -66,7 +64,6 @@ pub fn init_board(
     types::PerformanceTimer,
     Option<clock_controller::DynamicClockController>,
     types::NfcWaitExtender,
-    Systick<1000>,
 ) {
     #[cfg(feature = "log-rtt")]
     rtt_target::rtt_init_print!();
@@ -179,6 +176,5 @@ pub fn init_board(
         everything.basic.perf_timer,
         clock_controller,
         everything.basic.delay_timer,
-        Systick::new(core_peripherals.SYST, CLOCK_FREQ),
     )
 }

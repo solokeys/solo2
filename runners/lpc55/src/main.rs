@@ -6,7 +6,7 @@
 #![no_main]
 // #![deny(warnings)]
 
-const REFRESH_MILLISECS: u64 = 50;
+const REFRESH_MILLISECS: u32 = 50;
 
 const USB_INTERRUPT: board::hal::raw::Interrupt = board::hal::raw::Interrupt::USB1;
 const NFC_INTERRUPT: board::hal::raw::Interrupt = board::hal::raw::Interrupt::PIN_INT0;
@@ -26,23 +26,27 @@ pub fn msp() -> u32 {
 
 #[rtic::app(device = runner::hal::raw, peripherals = true, dispatchers = [PLU, PIN_INT5, PIN_INT7])]
 mod app {
+    use board::hal::time::Milliseconds;
+    use board::CLOCK_FREQ;
     use hal::drivers::timer::Elapsed;
     use hal::time::{DurationExtensions, Microseconds};
     use hal::traits::wg::timer::Cancel;
     use hal::traits::wg::timer::CountDown;
+    use rtic_sync::channel::{Receiver, Sender};
+    use rtic_sync::make_channel;
     use runner::hal;
 
-    use systick_monotonic::fugit::TimerDurationU64;
-    use systick_monotonic::Systick;
+    use rtic_monotonics::systick::prelude::*;
 
     use crate::{NFC_INTERRUPT, REFRESH_MILLISECS, USB_INTERRUPT};
 
-    #[monotonic(binds = SysTick, default = true)]
-    type MyMono = Systick<1000>;
+    systick_monotonic!(Mono, 1000);
 
     #[local]
     struct LocalResources {
         updates: u32,
+        ccid_wait_extension_receiver: Receiver<'static, Milliseconds, 1>,
+        ctaphid_keep_alive_receiver: Receiver<'static, Milliseconds, 1>,
     }
 
     #[shared]
@@ -98,10 +102,16 @@ mod app {
         /// need for such an independent timer.
         #[lock_free]
         wait_extender: runner::types::NfcWaitExtender,
+
+        /// Used for scheduling sending of ccid wait extensions.
+        ccid_wait_extension_sender: Sender<'static, Milliseconds, 1>,
+
+        /// Used for scheduling ctaphid keep alive messages.
+        ctaphid_keep_alive_sender: Sender<'static, Milliseconds, 1>,
     }
 
     #[init]
-    fn init(c: init::Context) -> (SharedResources, LocalResources, init::Monotonics) {
+    fn init(c: init::Context) -> (SharedResources, LocalResources) {
         let (
             apdu_dispatch,
             ctaphid_dispatch,
@@ -112,15 +122,24 @@ mod app {
             perf_timer,
             clock_ctrl,
             wait_extender,
-            monotonic,
-        ) = runner::init_board(c.device, c.core);
+        ) = runner::init_board(c.device);
+
+        Mono::start(c.core.SYST, CLOCK_FREQ);
+
+        ccid_wait_extension::spawn().unwrap();
+        ctaphid_keepalive::spawn().unwrap();
 
         // don't toggle LED in passive mode
         if usb_classes.is_some() {
             hal::enable_cycle_counter();
             // c.schedule.update_ui(Instant::now() + PERIOD.cycles()).unwrap();
-            update_ui::spawn_after(TimerDurationU64::millis(REFRESH_MILLISECS)).unwrap();
+            update_ui::spawn().unwrap();
         }
+
+        let (ccid_wait_extension_sender, ccid_wait_extension_receiver) =
+            make_channel!(Milliseconds, 1);
+        let (ctaphid_keep_alive_sender, ctaphid_keep_alive_receiver) =
+            make_channel!(Milliseconds, 1);
 
         (
             SharedResources {
@@ -137,13 +156,19 @@ mod app {
 
                 clock_ctrl,
                 wait_extender,
+
+                ccid_wait_extension_sender,
+                ctaphid_keep_alive_sender,
             },
-            LocalResources { updates: 1, },
-            init::Monotonics(monotonic),
+            LocalResources {
+                updates: 1,
+                ccid_wait_extension_receiver,
+                ctaphid_keep_alive_receiver,
+            },
         )
     }
 
-    #[idle(shared = [apdu_dispatch, ctaphid_dispatch, apps, perf_timer, usb_classes])]
+    #[idle(shared = [apdu_dispatch, ctaphid_dispatch, apps, perf_timer, usb_classes, ccid_wait_extension_sender, ctaphid_keep_alive_sender])]
     fn idle(mut c: idle::Context) -> ! {
         info_now!("inside IDLE, initial SP = {:08X}", msp());
         loop {
@@ -188,20 +213,24 @@ mod app {
 
                     match usb_classes.ccid.did_start_processing() {
                         usbd_ccid::types::Status::ReceivedData(milliseconds) => {
-                            ccid_wait_extension::spawn_after(TimerDurationU64::millis(
-                                milliseconds.0.into(),
-                            ))
-                            .ok();
+                            c.shared
+                                .ccid_wait_extension_sender
+                                .lock(|ccid_wait_extension_sender| {
+                                    ccid_wait_extension_sender.try_send(milliseconds)
+                                })
+                                .ok();
                         }
                         _ => {}
                     }
 
                     match usb_classes.ctaphid.did_start_processing() {
                         usbd_ctaphid::types::Status::ReceivedData(milliseconds) => {
-                            ctaphid_keepalive::spawn_after(TimerDurationU64::millis(
-                                milliseconds.0.into(),
-                            ))
-                            .ok();
+                            c.shared
+                                .ctaphid_keep_alive_sender
+                                .lock(|ctaphid_keep_alive_sender| {
+                                    ctaphid_keep_alive_sender.try_send(milliseconds)
+                                })
+                                .ok();
                         }
                         _ => {}
                     }
@@ -217,7 +246,7 @@ mod app {
     }
 
     /// Manages all traffic on the USB bus.
-    #[task(binds = USB1, shared = [usb_classes], priority=6)]
+    #[task(binds = USB1, shared = [usb_classes, ccid_wait_extension_sender, ctaphid_keep_alive_sender], priority=6)]
     fn usb(mut c: usb::Context) {
         // let remaining = msp() - 0x2000_0000;
         // if remaining < 100_000 {
@@ -239,10 +268,12 @@ mod app {
                     // if remaining < 60_000 {
                     //     debug_now!("scheduling CCID wait extension");
                     // }
-                    ccid_wait_extension::spawn_after(TimerDurationU64::millis(
-                        milliseconds.0.into(),
-                    ))
-                    .ok();
+                    c.shared
+                        .ccid_wait_extension_sender
+                        .lock(|ccid_wait_extension_sender| {
+                            ccid_wait_extension_sender.try_send(milliseconds)
+                        })
+                        .ok();
                 }
                 _ => {}
             }
@@ -251,7 +282,11 @@ mod app {
                     // if remaining < 60_000 {
                     //     debug_now!("scheduling CTAPHID wait extension");
                     // }
-                    ctaphid_keepalive::spawn_after(TimerDurationU64::millis(milliseconds.0.into()))
+                    c.shared
+                        .ctaphid_keep_alive_sender
+                        .lock(|ctaphid_keep_alive_sender| {
+                            ctaphid_keep_alive_sender.try_send(milliseconds)
+                        })
                         .ok();
                 }
                 _ => {}
@@ -290,44 +325,60 @@ mod app {
     /// Whenever we start waiting for an application to reply to CCID, this must be scheduled.
     /// In case the application takes too long, this will periodically send wait extensions
     /// until the application replied.
-    #[task(shared = [usb_classes], priority = 6)]
-    fn ccid_wait_extension(mut c: ccid_wait_extension::Context) {
-        debug_now!("CCID WAIT EXTENSION");
-        debug_now!("remaining stack size: {} bytes", msp() - 0x2000_0000);
-        let status = c.shared.usb_classes.lock(|usb_classes_maybe| {
-            usb_classes_maybe
-                .as_mut()
-                .unwrap()
-                .ccid
-                .send_wait_extension()
-        });
-        match status {
-            usbd_ccid::types::Status::ReceivedData(milliseconds) => {
-                ccid_wait_extension::spawn_after(TimerDurationU64::millis(milliseconds.0.into()))
-                    .ok();
-            }
-            _ => {}
+    #[task(shared = [usb_classes, ccid_wait_extension_sender], local = [ccid_wait_extension_receiver], priority = 6)]
+    async fn ccid_wait_extension(mut c: ccid_wait_extension::Context) {
+        loop {
+            let milliseconds = c.local.ccid_wait_extension_receiver.recv().await.unwrap();
+            Mono::delay(milliseconds.0.millis()).await;
+            debug_now!("CCID WAIT EXTENSION");
+            debug_now!("remaining stack size: {} bytes", msp() - 0x2000_0000);
+            let status = c.shared.usb_classes.lock(|usb_classes_maybe| {
+                usb_classes_maybe
+                    .as_mut()
+                    .unwrap()
+                    .ccid
+                    .send_wait_extension()
+            });
+            c.shared
+                .ccid_wait_extension_sender
+                .lock(|ccid_wait_extension_sender| {
+                    c.local.ccid_wait_extension_receiver.try_recv().ok();
+                    match status {
+                        usbd_ccid::types::Status::ReceivedData(milliseconds) => {
+                            ccid_wait_extension_sender.try_send(milliseconds).ok();
+                        }
+                        _ => {}
+                    }
+                });
         }
     }
 
     /// Same as with CCID, but sending ctaphid keepalive statuses.
-    #[task(shared = [usb_classes], priority = 6)]
-    fn ctaphid_keepalive(mut c: ctaphid_keepalive::Context) {
-        debug_now!("CTAPHID keepalive");
-        debug_now!("remaining stack size: {} bytes", msp() - 0x2000_0000);
-        let status = c.shared.usb_classes.lock(|usb_classes_maybe| {
-            usb_classes_maybe
-                .as_mut()
-                .unwrap()
-                .ctaphid
-                .send_keepalive(board::trussed::UserPresenceStatus::waiting())
-        });
-        match status {
-            usbd_ctaphid::types::Status::ReceivedData(milliseconds) => {
-                ctaphid_keepalive::spawn_after(TimerDurationU64::millis(milliseconds.0.into()))
-                    .ok();
-            }
-            _ => {}
+    #[task(shared = [usb_classes, ctaphid_keep_alive_sender], local = [ctaphid_keep_alive_receiver], priority = 6)]
+    async fn ctaphid_keepalive(mut c: ctaphid_keepalive::Context) {
+        loop {
+            let milliseconds = c.local.ctaphid_keep_alive_receiver.recv().await.unwrap();
+            Mono::delay(milliseconds.0.millis()).await;
+            debug_now!("CTAPHID keepalive");
+            debug_now!("remaining stack size: {} bytes", msp() - 0x2000_0000);
+            let status = c.shared.usb_classes.lock(|usb_classes_maybe| {
+                usb_classes_maybe
+                    .as_mut()
+                    .unwrap()
+                    .ctaphid
+                    .send_keepalive(board::trussed::UserPresenceStatus::waiting())
+            });
+            c.shared
+                .ctaphid_keep_alive_sender
+                .lock(|ctaphid_keep_alive_sender| {
+                    c.local.ctaphid_keep_alive_receiver.try_recv().ok();
+                    match status {
+                        usbd_ctaphid::types::Status::ReceivedData(milliseconds) => {
+                            ctaphid_keep_alive_sender.try_send(milliseconds).ok();
+                        }
+                        _ => {}
+                    }
+                });
         }
     }
 
@@ -362,15 +413,17 @@ mod app {
     }
 
     #[task(shared = [trussed], local = [updates], priority = 1)]
-    fn update_ui(mut c: update_ui::Context) {
-        // debug_now!("update UI: remaining stack size: {} bytes", msp() - 0x2000_0000);
+    async fn update_ui(mut c: update_ui::Context) {
+        loop {
+            Mono::delay(REFRESH_MILLISECS.millis()).await;
+            // debug_now!("update UI: remaining stack size: {} bytes", msp() - 0x2000_0000);
 
-        // let wait_periods = c.resources.trussed.lock(|trussed| trussed.update_ui());
-        c.shared.trussed.lock(|trussed| trussed.update_ui());
-        // c.schedule.update_ui(Instant::now() + wait_periods * PERIOD.cycles()).unwrap();
-        update_ui::spawn_after(TimerDurationU64::millis(REFRESH_MILLISECS)).ok();
+            // let wait_periods = c.resources.trussed.lock(|trussed| trussed.update_ui());
+            c.shared.trussed.lock(|trussed| trussed.update_ui());
+            // c.schedule.update_ui(Instant::now() + wait_periods * PERIOD.cycles()).unwrap();
 
-        *c.local.updates += 1;
+            *c.local.updates += 1;
+        }
     }
 
     #[task(binds = CTIMER0, shared = [contactless, perf_timer, wait_extender], priority = 7)]
