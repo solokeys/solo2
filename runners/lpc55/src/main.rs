@@ -6,11 +6,6 @@
 #![no_main]
 // #![deny(warnings)]
 
-// FIXME: Disable these once rtic is updated, as these originate there.
-#![allow(unexpected_cfgs)]
-#![allow(static_mut_refs)]
-#![allow(non_local_definitions)]
-
 const REFRESH_MILLISECS: u64 = 50;
 
 const USB_INTERRUPT: board::hal::raw::Interrupt = board::hal::raw::Interrupt::USB1;
