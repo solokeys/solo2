@@ -7,17 +7,8 @@ edition = "2024"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-delog = "0.1.0"
+defmt = "1.0.1"
 embedded-time = "0.12"
 embedded-hal = { version = "0.2.5", features = ["unproven"] }
 nb = "1"
 nfc-device = {path = "../nfc-device"}
-
-[features]
-log-none = []
-log-error = []
-log-warn = []
-log-info = []
-log-debug = []
-log-trace = []
-log-all = []
