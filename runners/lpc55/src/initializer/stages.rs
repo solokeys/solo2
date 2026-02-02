@@ -1,26 +1,19 @@
 //! # Initialization stages for LPC55.
-//! 
+//!
 //! The structs here contain the items that get initialized.
 //! Each struct is initialized sequentially, one after the other.
 //! Each stage consumed the previous as a prerequisite.
-//! 
+//!
 //! If a peripheral is needed, it is included in the initialization process as late as possible.
 //! - If a problem occurs, it is easier to recover the further into initialization it is (e.g. boot to bootloader).
 //! - Other setups that do not need the full initialization can be more lean.
-//! 
+//!
 use crate::hal;
-use hal::drivers::{
-    clocks::Clocks,
-    flash::FlashGordon,
-    pins::direction,
-    Timer
-};
-use hal::typestates::pin::state::Gpio;
-use hal::peripherals::{
-    prince::Prince,
-};
-use hal::peripherals::pfr::Pfr;
 use crate::types;
+use hal::drivers::{clocks::Clocks, flash::FlashGordon, pins::direction, Timer};
+use hal::peripherals::pfr::Pfr;
+use hal::peripherals::prince::Prince;
+use hal::typestates::pin::state::Gpio;
 
 /// Initialized clocks, Nfc interrupt pin, Iocon, Gpio.
 pub struct Clock {
@@ -48,7 +41,8 @@ pub struct Basic {
 pub struct Nfc {
     pub iso14443: Option<nfc_device::Iso14443<board::nfc::NfcChip>>,
 
-    pub contactless_responder: Option<interchange::Responder<apdu_dispatch::interchanges::Contactless>>,
+    pub contactless_responder:
+        Option<interchange::Responder<apdu_dispatch::interchanges::Contactless>>,
 }
 
 /// Initialized USB device + USB classes, Dynamic Clock controller.
@@ -79,8 +73,7 @@ pub struct Filesystem {
 }
 
 /// Initialized everything that is needed, minus unecessary intermediates
-pub struct All
-{
+pub struct All {
     pub trussed: types::Trussed,
     pub filesystem: Filesystem,
     pub usb: Usb,

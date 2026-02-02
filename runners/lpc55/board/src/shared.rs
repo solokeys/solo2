@@ -1,27 +1,8 @@
 use crate::hal;
 
-pub struct Monotonic;
 pub struct Reboot;
 
-const CLOCK_FREQ: u32 = 96_000_000;
-
-impl crate::traits::Monotonic for Monotonic {
-    // intended to be: milliseconds
-    type Instant = i32;//core::time::Duration;
-    unsafe fn reset() {}
-    fn ratio() -> rtic::Fraction {
-        rtic::Fraction { numerator: CLOCK_FREQ/1000, denominator: 1 }
-    }
-    fn now() -> Self::Instant {
-        let rtc = unsafe { crate::hal::raw::Peripherals::steal() }.RTC;
-        let secs = rtc.count.read().bits() as i32;
-        let ticks_32k = rtc.subsec.read().bits() as i32;
-        secs*1000 + ((ticks_32k * 61)/2000)
-    }
-    fn zero() -> Self::Instant {
-        Self::Instant::default()
-    }
-}
+pub const CLOCK_FREQ: u32 = 96_000_000;
 
 impl crate::traits::Reboot for Reboot {
     fn reboot() -> ! {
@@ -45,4 +26,3 @@ impl crate::traits::Reboot for Reboot {
         seal.iter().any(|word| word.read().bits() != 0)
     }
 }
-

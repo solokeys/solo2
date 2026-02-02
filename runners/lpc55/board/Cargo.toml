@@ -9,7 +9,7 @@ admin-app = "0.1"
 delog = "0.1"
 fm11nc08 = {path = "../../../components/fm11nc08"}
 lpc55-hal = { version = "0.3", features = ["littlefs"] }
-lpc55-rtic = "0.5.7"
+cortex-m-rtic = "1.0.0"
 micromath = "2"
 nb = "1"
 trussed = "0.1"
