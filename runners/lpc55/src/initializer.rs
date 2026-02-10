@@ -63,8 +63,8 @@ pub struct Initializer {
 }
 
 fn get_serial_number() -> &'static str {
-    static SERIAL_NUMBER: StaticCell<heapless::String<heapless::consts::U36>> = StaticCell::new();
-    let serial_number = SERIAL_NUMBER.init(heapless::String(heapless::i::String::new()));
+    static SERIAL_NUMBER: StaticCell<heapless::String<36>> = StaticCell::new();
+    let serial_number = SERIAL_NUMBER.init(heapless::String::new());
     let uuid = crate::hal::uuid();
     use core::fmt::Write;
     serial_number
