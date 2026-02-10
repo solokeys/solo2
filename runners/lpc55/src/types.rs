@@ -2,10 +2,10 @@ include!(concat!(env!("OUT_DIR"), "/build_constants.rs"));
 
 use crate::hal;
 use hal::drivers::timer;
+use hal::peripherals::ctimer;
 use littlefs2::{const_ram_storage, consts};
 use trussed::types::{LfsResult, LfsStorage};
 use trussed::{platform, store};
-use hal::peripherals::ctimer;
 
 #[cfg(feature = "no-encrypted-storage")]
 use hal::littlefs2_filesystem;
@@ -23,7 +23,7 @@ pub type FlashStorage = PlainFilesystem;
 pub type FlashStorage = PrinceFilesystem;
 
 pub mod usb;
-pub use usb::{UsbClasses, EnabledUsbPeripheral, SerialClass, CcidClass, CtapHidClass};
+pub use usb::{CcidClass, CtapHidClass, EnabledUsbPeripheral, SerialClass, UsbClasses};
 
 // 8KB of RAM
 const_ram_storage!(
@@ -86,7 +86,7 @@ pub type CtaphidDispatch = ctaphid_dispatch::dispatch::Dispatch;
 #[cfg(feature = "admin-app")]
 pub type AdminApp = admin_app::App<TrussedClient, board::Reboot>;
 #[cfg(feature = "piv-authenticator")]
-pub type PivApp = piv_authenticator::Authenticator<TrussedClient, {apdu_dispatch::command::SIZE}>;
+pub type PivApp = piv_authenticator::Authenticator<TrussedClient, { apdu_dispatch::command::SIZE }>;
 #[cfg(feature = "oath-authenticator")]
 pub type OathApp = oath_authenticator::Authenticator<TrussedClient>;
 #[cfg(feature = "fido-authenticator")]
@@ -98,15 +98,14 @@ pub type NdefApp = ndef_app::App<'static>;
 #[cfg(feature = "provisioner-app")]
 pub type ProvisionerApp = provisioner_app::Provisioner<Store, FlashStorage, TrussedClient>;
 
-use apdu_dispatch::{App as ApduApp, command::SIZE as CommandSize, response::SIZE as ResponseSize};
-use ctaphid_dispatch::app::{App as CtaphidApp};
+use apdu_dispatch::{command::SIZE as CommandSize, response::SIZE as ResponseSize, App as ApduApp};
+use ctaphid_dispatch::app::App as CtaphidApp;
 
 pub type DynamicClockController = board::clock_controller::DynamicClockController;
 pub type NfcWaitExtender = timer::Timer<ctimer::Ctimer0<hal::typestates::init_state::Enabled>>;
 pub type PerformanceTimer = timer::Timer<ctimer::Ctimer4<hal::typestates::init_state::Enabled>>;
 
 pub trait TrussedApp: Sized {
-
     /// non-portable resources needed by this Trussed app
     type NonPortable;
 
@@ -117,7 +116,9 @@ pub trait TrussedApp: Sized {
 
     fn with(trussed: &mut trussed::Service<crate::Board>, non_portable: Self::NonPortable) -> Self {
         let client_id = core::str::from_utf8(Self::CLIENT_ID).unwrap();
-        let client = trussed.try_new_client(client_id, Syscall::default()).unwrap();
+        let client = trussed
+            .try_new_client(client_id, Syscall::default())
+            .unwrap();
         Self::with_client(client, non_portable)
     }
 }
@@ -186,10 +187,16 @@ impl TrussedApp for ProvisionerApp {
     const CLIENT_ID: &'static [u8] = b"attn\0";
 
     type NonPortable = ProvisionerNonPortable;
-    fn with_client(trussed: TrussedClient, ProvisionerNonPortable { store, stolen_filesystem, nfc_powered }: Self::NonPortable) -> Self {
+    fn with_client(
+        trussed: TrussedClient,
+        ProvisionerNonPortable {
+            store,
+            stolen_filesystem,
+            nfc_powered,
+        }: Self::NonPortable,
+    ) -> Self {
         Self::new(trussed, store, stolen_filesystem, nfc_powered)
     }
-
 }
 
 pub struct Apps {
@@ -210,8 +217,7 @@ pub struct Apps {
 impl Apps {
     pub fn new(
         trussed: &mut trussed::Service<crate::Board>,
-        #[cfg(feature = "provisioner-app")]
-        provisioner: ProvisionerNonPortable
+        #[cfg(feature = "provisioner-app")] provisioner: ProvisionerNonPortable,
     ) -> Self {
         #[cfg(feature = "admin-app")]
         let admin = AdminApp::with(trussed, ());
@@ -245,9 +251,7 @@ impl Apps {
     #[inline(never)]
     pub fn apdu_dispatch<F, T>(&mut self, f: F) -> T
     where
-        F: FnOnce(&mut [&mut dyn
-                ApduApp<CommandSize, ResponseSize>
-            ]) -> T
+        F: FnOnce(&mut [&mut dyn ApduApp<CommandSize, ResponseSize>]) -> T,
     {
         f(&mut [
             #[cfg(feature = "ndef-app")]
@@ -268,7 +272,7 @@ impl Apps {
     #[inline(never)]
     pub fn ctaphid_dispatch<F, T>(&mut self, f: F) -> T
     where
-        F: FnOnce(&mut [&mut dyn CtaphidApp ]) -> T
+        F: FnOnce(&mut [&mut dyn CtaphidApp]) -> T,
     {
         f(&mut [
             #[cfg(feature = "fido-authenticator")]

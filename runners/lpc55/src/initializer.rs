@@ -1,24 +1,13 @@
 use crate::hal;
+use hal::drivers::timer::Elapsed;
+use hal::drivers::{clocks::Clocks, flash::FlashGordon, pins, pins::direction, Pwm, Timer, UsbBus};
+use hal::peripherals::pfr::Pfr;
+use hal::peripherals::{ctimer, ctimer::Ctimer};
 use hal::prelude::*;
 use hal::traits::wg::digital::v2::InputPin;
 use hal::traits::wg::timer::Cancel;
-use hal::drivers::timer::Elapsed;
-use hal::drivers::{
-    clocks::Clocks,
-    flash::FlashGordon,
-    pins::direction,
-    pins,
-    UsbBus,
-    Pwm,
-    Timer
-};
-use hal::typestates::pin::state::Gpio;
-use hal::peripherals::{
-    ctimer,
-    ctimer::Ctimer,
-};
-use hal::peripherals::pfr::Pfr;
 use hal::typestates::init_state::Unknown;
+use hal::typestates::pin::state::Gpio;
 use static_cell::StaticCell;
 use usb_device::device::{UsbDeviceBuilder, UsbVidPid};
 
@@ -29,7 +18,7 @@ use board::traits::buttons;
 use board::traits::buttons::Press;
 use board::traits::rgb_led::RgbLed;
 
-use crate::{types, clock_controller, build_constants};
+use crate::{build_constants, clock_controller, types};
 
 pub mod stages;
 
@@ -78,7 +67,9 @@ fn get_serial_number() -> &'static str {
     let serial_number = SERIAL_NUMBER.init(heapless::String(heapless::i::String::new()));
     let uuid = crate::hal::uuid();
     use core::fmt::Write;
-    serial_number.write_fmt(format_args!("{}", hexstr!(&uuid))).unwrap();
+    serial_number
+        .write_fmt(format_args!("{}", hexstr!(&uuid)))
+        .unwrap();
     serial_number
 }
 
@@ -88,9 +79,9 @@ fn get_product_string(pfr: &mut Pfr<hal::typestates::init_state::Enabled>) -> &'
 
     // check the first 64 bytes of customer data for a string
     if data[0] != 0 {
-        for i in 1 .. 64 {
+        for i in 1..64 {
             if data[i] == 0 {
-                let str_maybe = core::str::from_utf8(&data[0 .. i]);
+                let str_maybe = core::str::from_utf8(&data[0..i]);
                 if let Ok(string) = str_maybe {
                     return string;
                 }
@@ -110,14 +101,19 @@ fn get_product_string(pfr: &mut Pfr<hal::typestates::init_state::Enabled>) -> &'
 /// after it was first provisioned.  In this case, there can be an exception
 /// reading from undefined flash.  To fix, we run a pass over all filesystem
 /// flash and set it to a defined value.
-fn initialize_fs_flash(flash_gordon: &mut FlashGordon, prince: &mut hal::Prince<hal::typestates::init_state::Enabled>) {
+fn initialize_fs_flash(
+    flash_gordon: &mut FlashGordon,
+    prince: &mut hal::Prince<hal::typestates::init_state::Enabled>,
+) {
     let page_count = ((631 * 1024 + 512) - build_constants::CONFIG_FILESYSTEM_BOUNDARY) / 512;
 
     let mut page_data = [0u8; 512];
-    for page in 0 .. page_count {
-
+    for page in 0..page_count {
         // With prince turned off, this should read as encrypted bytes.
-        flash_gordon.read(build_constants::CONFIG_FILESYSTEM_BOUNDARY + page * 512, &mut page_data);
+        flash_gordon.read(
+            build_constants::CONFIG_FILESYSTEM_BOUNDARY + page * 512,
+            &mut page_data,
+        );
 
         // But if it's zero, then that means the data is undefined and it doesn't bother.
         if page_data == [0u8; 512] {
@@ -125,10 +121,17 @@ fn initialize_fs_flash(flash_gordon: &mut FlashGordon, prince: &mut hal::Prince<
             // So we should write nonzero data to initialize flash.
             // We write it as encrypted, so it is in a known state when decrypted by the filesystem layer.
             page_data[0] = 1;
-            flash_gordon.erase_page(build_constants::CONFIG_FILESYSTEM_BOUNDARY / 512 + page).ok();
+            flash_gordon
+                .erase_page(build_constants::CONFIG_FILESYSTEM_BOUNDARY / 512 + page)
+                .ok();
             prince.write_encrypted(|prince| {
-                prince.enable_region_2_for(||{
-                    flash_gordon.write(build_constants::CONFIG_FILESYSTEM_BOUNDARY + page * 512, &page_data).unwrap();
+                prince.enable_region_2_for(|| {
+                    flash_gordon
+                        .write(
+                            build_constants::CONFIG_FILESYSTEM_BOUNDARY + page * 512,
+                            &page_data,
+                        )
+                        .unwrap();
                 })
             });
         }
@@ -136,12 +139,7 @@ fn initialize_fs_flash(flash_gordon: &mut FlashGordon, prince: &mut hal::Prince<
 }
 
 impl Initializer {
-    pub fn new(
-        config: Config,
-        syscon: hal::Syscon,
-        pmc: hal::Pmc,
-        anactrl: hal::Anactrl,
-    ) -> Self {
+    pub fn new(config: Config, syscon: hal::Syscon, pmc: hal::Pmc, anactrl: hal::Anactrl) -> Self {
         let is_nfc_passive = false;
         info_now!("making initializer");
         Self {
@@ -155,13 +153,21 @@ impl Initializer {
         }
     }
 
-    fn enable_low_speed_for_passive_nfc(&mut self, mut iocon: hal::Iocon<hal::Enabled>, gpio: &mut hal::Gpio<hal::Enabled>)
-        -> (hal::Iocon<hal::Enabled>, hal::Pin<board::nfc::NfcIrqPin, Gpio<direction::Input>>)
-    {
-        let nfc_irq = board::nfc::NfcIrqPin::take().unwrap().into_gpio_pin(&mut iocon, gpio).into_input();
+    fn enable_low_speed_for_passive_nfc(
+        &mut self,
+        mut iocon: hal::Iocon<hal::Enabled>,
+        gpio: &mut hal::Gpio<hal::Enabled>,
+    ) -> (
+        hal::Iocon<hal::Enabled>,
+        hal::Pin<board::nfc::NfcIrqPin, Gpio<direction::Input>>,
+    ) {
+        let nfc_irq = board::nfc::NfcIrqPin::take()
+            .unwrap()
+            .into_gpio_pin(&mut iocon, gpio)
+            .into_input();
         // Need to enable pullup for NFC IRQ input.
         let iocon = iocon.release();
-        iocon.pio0_19.modify(|_,w| { w.mode().pull_up() } );
+        iocon.pio0_19.modify(|_, w| w.mode().pull_up());
         let iocon = hal::Iocon::from(iocon).enabled(&mut self.syscon);
         let is_passive_mode = nfc_irq.is_low().ok().unwrap();
 
@@ -189,12 +195,17 @@ impl Initializer {
         }
     }
 
-    fn is_bootrom_requested<T: Ctimer<hal::Enabled>>(&mut self, three_buttons: &board::ThreeButtons, timer: &mut Timer<T>) -> bool {
+    fn is_bootrom_requested<T: Ctimer<hal::Enabled>>(
+        &mut self,
+        three_buttons: &board::ThreeButtons,
+        timer: &mut Timer<T>,
+    ) -> bool {
         // Boot to bootrom if buttons are all held for 5s
         timer.start(5_000_000.microseconds());
-        while three_buttons.is_pressed(buttons::Button::A) &&
-              three_buttons.is_pressed(buttons::Button::B) &&
-              three_buttons.is_pressed(buttons::Button::Middle) {
+        while three_buttons.is_pressed(buttons::Button::A)
+            && three_buttons.is_pressed(buttons::Button::B)
+            && three_buttons.is_pressed(buttons::Button::Middle)
+        {
             // info!("3 buttons pressed..");
             if timer.wait().is_ok() {
                 return true;
@@ -205,11 +216,18 @@ impl Initializer {
         false
     }
 
-    fn validate_cfpa(pfr: &mut Pfr<hal::Enabled>, current_version_maybe: Option<u32>, require_prince: bool) {
+    fn validate_cfpa(
+        pfr: &mut Pfr<hal::Enabled>,
+        current_version_maybe: Option<u32>,
+        require_prince: bool,
+    ) {
         let mut cfpa = pfr.read_latest_cfpa().unwrap();
         if let Some(current_version) = current_version_maybe {
             if cfpa.secure_fw_version < current_version || cfpa.ns_fw_version < current_version {
-                info!("updating cfpa from {} to {}", cfpa.secure_fw_version, current_version);
+                info!(
+                    "updating cfpa from {} to {}",
+                    cfpa.secure_fw_version, current_version
+                );
 
                 // All of these are monotonic counters.
                 cfpa.version += 1;
@@ -217,19 +235,20 @@ impl Initializer {
                 cfpa.ns_fw_version = current_version;
                 pfr.write_cfpa(&cfpa).unwrap();
             } else {
-                info!("do not need to update cfpa version {}", cfpa.secure_fw_version);
+                info!(
+                    "do not need to update cfpa version {}",
+                    cfpa.secure_fw_version
+                );
             }
         }
 
         if require_prince {
             #[cfg(not(feature = "no-encrypted-storage"))]
-            assert!(
-                cfpa.key_provisioned(hal::peripherals::pfr::KeyType::PrinceRegion2)
-            );
+            assert!(cfpa.key_provisioned(hal::peripherals::pfr::KeyType::PrinceRegion2));
         }
     }
 
-    fn try_enable_fm11nc08 <T: Ctimer<hal::Enabled>>(
+    fn try_enable_fm11nc08<T: Ctimer<hal::Enabled>>(
         &mut self,
         clocks: &Clocks,
         iocon: &mut hal::Iocon<hal::Enabled>,
@@ -248,27 +267,24 @@ impl Initializer {
         // TODO save these so they can be released later
         let mut mux = inputmux.enabled(syscon);
         let mut pint = pint.enabled(syscon);
-        pint.enable_interrupt(&mut mux, &nfc_irq, hal::peripherals::pint::Slot::Slot0, hal::peripherals::pint::Mode::ActiveLow);
+        pint.enable_interrupt(
+            &mut mux,
+            &nfc_irq,
+            hal::peripherals::pint::Slot::Slot0,
+            hal::peripherals::pint::Mode::ActiveLow,
+        );
         mux.disabled(syscon);
 
         let force_nfc_reconfig = cfg!(feature = "reconfigure-nfc");
 
-        board::nfc::try_setup(
-            spi,
-            gpio,
-            iocon,
-            nfc_irq,
-            delay_timer,
-            force_nfc_reconfig,
-        )
-
+        board::nfc::try_setup(spi, gpio, iocon, nfc_irq, delay_timer, force_nfc_reconfig)
     }
 
-    pub fn initialize_clocks(&mut self,
+    pub fn initialize_clocks(
+        &mut self,
         iocon: hal::Iocon<Unknown>,
         gpio: hal::Gpio<Unknown>,
     ) -> stages::Clock {
-
         let syscon = &mut self.syscon;
 
         let mut iocon = iocon.enabled(syscon);
@@ -291,10 +307,10 @@ impl Initializer {
             gpio,
             _clock: (),
         }
-
     }
 
-    pub fn initialize_basic(&mut self,
+    pub fn initialize_basic(
+        &mut self,
         clock_stage: &mut stages::Clock,
         adc: hal::Adc<Unknown>,
         _dma: hal::Dma<Unknown>,
@@ -305,7 +321,6 @@ impl Initializer {
         perf_timer: ctimer::Ctimer4,
         pfr: Pfr<Unknown>,
     ) -> stages::Basic {
-
         let clocks = clock_stage.clocks;
 
         let pmc = &mut self.pmc;
@@ -319,12 +334,13 @@ impl Initializer {
                 .configure(board::clock_controller::DynamicClockController::adc_configuration())
                 .enabled(pmc, syscon)
         } else {
-            hal::Adc::from(adc)
-                .enabled(pmc, syscon)
+            hal::Adc::from(adc).enabled(pmc, syscon)
         });
 
-        let mut delay_timer = Timer::new(delay_timer.enabled(syscon, clocks.support_1mhz_fro_token().unwrap()));
-        let mut perf_timer = Timer::new(perf_timer.enabled(syscon, clocks.support_1mhz_fro_token().unwrap()));
+        let mut delay_timer =
+            Timer::new(delay_timer.enabled(syscon, clocks.support_1mhz_fro_token().unwrap()));
+        let mut perf_timer =
+            Timer::new(perf_timer.enabled(syscon, clocks.support_1mhz_fro_token().unwrap()));
         perf_timer.start(60_000_000.microseconds());
 
         let iocon = &mut clock_stage.iocon;
@@ -361,7 +377,7 @@ impl Initializer {
                 // TODO this should get saved somewhere to be released later.
                 let mut dma = hal::Dma::from(_dma).enabled(syscon);
 
-                board::ThreeButtons::new (
+                board::ThreeButtons::new(
                     adc.take().unwrap(),
                     ctimer1.enabled(syscon, clocks.support_1mhz_fro_token().unwrap()),
                     ctimer2.enabled(syscon, clocks.support_1mhz_fro_token().unwrap()),
@@ -378,17 +394,24 @@ impl Initializer {
         };
 
         let mut pfr = pfr.enabled(&clocks).unwrap();
-        Self::validate_cfpa(&mut pfr, self.config.secure_firmware_version, self.config.require_prince);
+        Self::validate_cfpa(
+            &mut pfr,
+            self.config.secure_firmware_version,
+            self.config.require_prince,
+        );
 
         if self.config.boot_to_bootrom {
             if let Some(three_buttons) = three_buttons.as_mut() {
-                info!("bootrom request start {}", perf_timer.elapsed().0/1000);
+                info!("bootrom request start {}", perf_timer.elapsed().0 / 1000);
                 if self.is_bootrom_requested(three_buttons, &mut delay_timer) {
                     if let Some(mut rgb) = rgb {
                         // Give a small red blink show success
-                        rgb.red(200); rgb.green(200); rgb.blue(0);
+                        rgb.red(200);
+                        rgb.green(200);
+                        rgb.blue(0);
                     }
-                    delay_timer.start(100_000.microseconds()); nb::block!(delay_timer.wait()).ok();
+                    delay_timer.start(100_000.microseconds());
+                    nb::block!(delay_timer.wait()).ok();
 
                     hal::boot_to_bootrom()
                 }
@@ -406,14 +429,14 @@ impl Initializer {
         }
     }
 
-    pub fn initialize_nfc(&mut self,
+    pub fn initialize_nfc(
+        &mut self,
         clock_stage: &mut stages::Clock,
         basic_stage: &mut stages::Basic,
         flexcomm0: hal::peripherals::flexcomm::Flexcomm0<Unknown>,
         mux: hal::peripherals::inputmux::InputMux<Unknown>,
         pint: hal::peripherals::pint::Pint<Unknown>,
     ) -> stages::Nfc {
-
         let nfc_chip = if self.config.nfc_enabled {
             self.try_enable_fm11nc08(
                 &clock_stage.clocks,
@@ -431,29 +454,35 @@ impl Initializer {
 
         let mut iso14443: Option<nfc_device::Iso14443<board::nfc::NfcChip>> = None;
 
-        let (contactless_requester, contactless_responder) = apdu_dispatch::interchanges::Contactless::claim()
-            .expect("could not setup iso14443 ApduInterchange");
+        let (contactless_requester, contactless_responder) =
+            apdu_dispatch::interchanges::Contactless::claim()
+                .expect("could not setup iso14443 ApduInterchange");
 
         if nfc_chip.is_some() {
             iso14443 = Some(nfc_device::Iso14443::new(
-                nfc_chip.unwrap(), contactless_requester)
-            )
+                nfc_chip.unwrap(),
+                contactless_requester,
+            ))
         } else if self.is_nfc_passive {
             info!("Shouldn't get passive signal when there's no chip!");
         }
 
-        if let Some(iso14443) = &mut iso14443 { iso14443.poll(); }
+        if let Some(iso14443) = &mut iso14443 {
+            iso14443.poll();
+        }
         if self.is_nfc_passive {
             // Give a small delay to charge up capacitors
-            basic_stage.delay_timer.start(5_000.microseconds()); nb::block!(basic_stage.delay_timer.wait()).ok();
+            basic_stage.delay_timer.start(5_000.microseconds());
+            nb::block!(basic_stage.delay_timer.wait()).ok();
         }
-        if let Some(iso14443) = &mut iso14443 { iso14443.poll(); }
+        if let Some(iso14443) = &mut iso14443 {
+            iso14443.poll();
+        }
 
         stages::Nfc {
             iso14443,
             contactless_responder: Some(contactless_responder),
         }
-
     }
 
     pub fn initialize_usb(
@@ -470,10 +499,14 @@ impl Initializer {
         let (contact_requester, contact_responder) = apdu_dispatch::interchanges::Contact::claim()
             .expect("could not setup ccid ApduInterchange");
 
-        let (ctaphid_requester, ctaphid_responder) = ctaphid_dispatch::types::HidInterchange::claim()
-            .expect("could not setup HidInterchange");
+        let (ctaphid_requester, ctaphid_responder) =
+            ctaphid_dispatch::types::HidInterchange::claim()
+                .expect("could not setup HidInterchange");
 
-        info!("usb class start {} ms", basic_stage.perf_timer.elapsed().0/1000);
+        info!(
+            "usb class start {} ms",
+            basic_stage.perf_timer.elapsed().0 / 1000
+        );
 
         let mut usb_classes: Option<types::UsbClasses> = None;
 
@@ -482,8 +515,7 @@ impl Initializer {
 
             let usb_config = self.config.usb_config.take().unwrap();
 
-            let usb0_vbus_pin = pins::Pio0_22::take().unwrap()
-                .into_usb0_vbus_pin(iocon);
+            let usb0_vbus_pin = pins::Pio0_22::take().unwrap().into_usb0_vbus_pin(iocon);
 
             #[cfg(not(feature = "usbfs-peripheral"))]
             let mut usbd = _usbhs.enabled_as_device(
@@ -504,7 +536,9 @@ impl Initializer {
             usbd.disable_high_speed();
             let _: types::EnabledUsbPeripheral = usbd;
 
-            static USB_BUS: StaticCell<usb_device::bus::UsbBusAllocator<UsbBus<types::EnabledUsbPeripheral>>> = StaticCell::new();
+            static USB_BUS: StaticCell<
+                usb_device::bus::UsbBusAllocator<UsbBus<types::EnabledUsbPeripheral>>,
+            > = StaticCell::new();
             let usb_bus = USB_BUS.init(hal::drivers::UsbBus::new(usbd, usb0_vbus_pin));
 
             // our USB classes (must be allocated in order that they're passed in `.poll(...)` later!)
@@ -512,7 +546,7 @@ impl Initializer {
             // NB: Card issuer's data can be at most 13 bytes (otherwise the constructor panics).
             // So for instance "Hacker Solo 2" would work, but "Solo 2 (custom)" would not.
             let ccid = usbd_ccid::Ccid::new(usb_bus, contact_requester, Some(b"Solo 2"));
-            let current_time = basic_stage.perf_timer.elapsed().0/1000;
+            let current_time = basic_stage.perf_timer.elapsed().0 / 1000;
             let mut ctaphid = usbd_ctaphid::CtapHid::new(usb_bus, ctaphid_requester, current_time)
                 .implements_ctap1()
                 .implements_ctap2()
@@ -527,9 +561,8 @@ impl Initializer {
             // let serial = usbd_serial::SerialPort::new(usb_bus);
 
             // Only 16 bits, so take the upper bits of our semver
-            let device_release =
-                ((build_constants::CARGO_PKG_VERSION_MAJOR as u16) << 8) |
-                (build_constants::CARGO_PKG_VERSION_MINOR as u16);
+            let device_release = ((build_constants::CARGO_PKG_VERSION_MAJOR as u16) << 8)
+                | (build_constants::CARGO_PKG_VERSION_MINOR as u16);
 
             // our composite USB device
             let product_string = match usb_config.product_name {
@@ -547,8 +580,7 @@ impl Initializer {
                 .composite_with_iads()
                 .build();
 
-            usb_classes = Some(types::UsbClasses::new(usbd, ccid, ctaphid));//, /*keyboard,*/ serial));
-
+            usb_classes = Some(types::UsbClasses::new(usbd, ccid, ctaphid)); //, /*keyboard,*/ serial));
         }
 
         // Cancel any possible outstanding use in delay timing
@@ -561,16 +593,18 @@ impl Initializer {
         }
     }
 
-    pub fn initialize_interfaces(&mut self, nfc_stage: &mut stages::Nfc, usb_stage: &mut stages::Usb) -> stages::Interfaces {
-
+    pub fn initialize_interfaces(
+        &mut self,
+        nfc_stage: &mut stages::Nfc,
+        usb_stage: &mut stages::Usb,
+    ) -> stages::Interfaces {
         info_now!("making interfaces");
         let apdu_dispatch = types::ApduDispatch::new(
             usb_stage.contact_responder.take().unwrap(),
             nfc_stage.contactless_responder.take().unwrap(),
         );
-        let ctaphid_dispatch = types::CtaphidDispatch::new(
-            usb_stage.ctaphid_responder.take().unwrap()
-        );
+        let ctaphid_dispatch =
+            types::CtaphidDispatch::new(usb_stage.ctaphid_responder.take().unwrap());
 
         stages::Interfaces {
             apdu_dispatch,
@@ -602,7 +636,8 @@ impl Initializer {
         }
     }
 
-    pub fn initialize_filesystem(&mut self,
+    pub fn initialize_filesystem(
+        &mut self,
         clock_stage: &mut stages::Clock,
         basic_stage: &mut stages::Basic,
         nfc_stage: &mut stages::Nfc,
@@ -626,10 +661,7 @@ impl Initializer {
             #[cfg(feature = "write-undefined-flash")]
             initialize_fs_flash(&mut flash_gordon, &mut prince);
 
-            types::PrinceFilesystem::new(
-                flash_gordon,
-                prince,
-            )
+            types::PrinceFilesystem::new(flash_gordon, prince)
         };
 
         #[cfg(feature = "no-encrypted-storage")]
@@ -637,16 +669,20 @@ impl Initializer {
 
         // temporarily increase clock for the storage mounting or else it takes a long time.
         if self.is_nfc_passive {
-            clock_stage.clocks = unsafe { hal::ClockRequirements::default()
-                .system_frequency(48.MHz())
-                .reconfigure(clock_stage.clocks, pmc, syscon) };
+            clock_stage.clocks = unsafe {
+                hal::ClockRequirements::default()
+                    .system_frequency(48.MHz())
+                    .reconfigure(clock_stage.clocks, pmc, syscon)
+            };
         }
-        info_now!("mount start {} ms", basic_stage.perf_timer.elapsed().0/1000);
+        info_now!(
+            "mount start {} ms",
+            basic_stage.perf_timer.elapsed().0 / 1000
+        );
         static INTERNAL_STORAGE: StaticCell<types::FlashStorage> = StaticCell::new();
         let internal_storage = INTERNAL_STORAGE.init(filesystem);
         static INTERNAL_FS_ALLOC: StaticCell<Allocation<types::FlashStorage>> = StaticCell::new();
         let internal_fs_alloc = INTERNAL_FS_ALLOC.init(Filesystem::allocate());
-
 
         static EXTERNAL_STORAGE: StaticCell<ExternalStorage> = StaticCell::new();
         let external_storage = EXTERNAL_STORAGE.init(ExternalStorage::new());
@@ -660,7 +696,9 @@ impl Initializer {
 
         let store = types::Store::claim().unwrap();
 
-        if let Some(iso14443) = &mut nfc_stage.iso14443 { iso14443.poll(); }
+        if let Some(iso14443) = &mut nfc_stage.iso14443 {
+            iso14443.poll();
+        }
 
         // We need to be able to recreate mutable references when retrying the mount with a format
         // For this, we first convert all existing references to pointers, and then derive new mutable
@@ -675,17 +713,16 @@ impl Initializer {
         let volatile_storage = volatile_storage as *mut _;
 
         let result = store.mount(
-            unsafe { &mut *internal_fs_alloc},
+            unsafe { &mut *internal_fs_alloc },
             // unsafe { &mut INTERNAL_STORAGE },
-            unsafe { &mut *internal_storage},
-            unsafe { &mut *external_fs_alloc},
-            unsafe { &mut *external_storage},
-            unsafe { &mut *volatile_fs_alloc},
-            unsafe { &mut *volatile_storage},
+            unsafe { &mut *internal_storage },
+            unsafe { &mut *external_fs_alloc },
+            unsafe { &mut *external_storage },
+            unsafe { &mut *volatile_fs_alloc },
+            unsafe { &mut *volatile_storage },
             // to trash existing data, set to true
             false,
         );
-
 
         if result.is_err() || cfg!(feature = "format-filesystem") {
             let rgb = basic_stage.rgb.as_mut().unwrap();
@@ -696,29 +733,35 @@ impl Initializer {
             nb::block!(basic_stage.delay_timer.wait()).ok();
 
             info!("Not yet formatted!  Formatting..");
-            store.mount(
-                unsafe { &mut *internal_fs_alloc},
-                // unsafe { &mut INTERNAL_STORAGE },
-                unsafe { &mut *internal_storage},
-                unsafe { &mut *external_fs_alloc},
-                unsafe { &mut *external_storage},
-                unsafe { &mut *volatile_fs_alloc},
-                unsafe { &mut *volatile_storage},
-                // to trash existing data, set to true
-                true,
-            ).unwrap();
+            store
+                .mount(
+                    unsafe { &mut *internal_fs_alloc },
+                    // unsafe { &mut INTERNAL_STORAGE },
+                    unsafe { &mut *internal_storage },
+                    unsafe { &mut *external_fs_alloc },
+                    unsafe { &mut *external_storage },
+                    unsafe { &mut *volatile_fs_alloc },
+                    unsafe { &mut *volatile_storage },
+                    // to trash existing data, set to true
+                    true,
+                )
+                .unwrap();
             rgb.turn_off();
         }
-        info!("mount end {} ms",basic_stage.perf_timer.elapsed().0/1000);
+        info!("mount end {} ms", basic_stage.perf_timer.elapsed().0 / 1000);
 
         // return to slow freq
         if self.is_nfc_passive {
-            clock_stage.clocks = unsafe { hal::ClockRequirements::default()
-                .system_frequency(12.MHz())
-                .reconfigure(clock_stage.clocks, pmc, syscon) };
+            clock_stage.clocks = unsafe {
+                hal::ClockRequirements::default()
+                    .system_frequency(12.MHz())
+                    .reconfigure(clock_stage.clocks, pmc, syscon)
+            };
         }
 
-        if let Some(iso14443) = &mut nfc_stage.iso14443 { iso14443.poll(); }
+        if let Some(iso14443) = &mut nfc_stage.iso14443 {
+            iso14443.poll();
+        }
 
         // Cancel any possible outstanding use in delay timer
         basic_stage.delay_timer.cancel().ok();
@@ -764,7 +807,8 @@ impl Initializer {
     }
 
     #[inline(never)]
-    pub fn initialize_all(&mut self,
+    pub fn initialize_all(
+        &mut self,
         iocon: hal::Iocon<Unknown>,
         gpio: hal::Gpio<Unknown>,
 
@@ -790,8 +834,7 @@ impl Initializer {
 
         rtc: hal::peripherals::rtc::Rtc<Unknown>,
     ) -> stages::All {
-
-        let mut clock_stage = self.initialize_clocks(iocon, gpio,);
+        let mut clock_stage = self.initialize_clocks(iocon, gpio);
         let mut basic_stage = self.initialize_basic(
             &mut clock_stage,
             adc,
@@ -803,26 +846,12 @@ impl Initializer {
             perf_timer,
             pfr,
         );
-        let mut nfc_stage = self.initialize_nfc(
-            &mut clock_stage,
-            &mut basic_stage,
-            flexcomm0,
-            mux,
-            pint
-        );
+        let mut nfc_stage =
+            self.initialize_nfc(&mut clock_stage, &mut basic_stage, flexcomm0, mux, pint);
 
-        let mut usb_stage = self.initialize_usb(
-            &mut clock_stage,
-            &mut basic_stage,
-            usbhs,
-            usbfs
-        );
+        let mut usb_stage = self.initialize_usb(&mut clock_stage, &mut basic_stage, usbhs, usbfs);
         let interfaces_stage = self.initialize_interfaces(&mut nfc_stage, &mut usb_stage);
-        let mut flash_stage = self.initialize_flash(
-            rng,
-            prince,
-            flash,
-        );
+        let mut flash_stage = self.initialize_flash(rng, prince, flash);
         let mut filesystem_stage = self.initialize_filesystem(
             &mut clock_stage,
             &mut basic_stage,
@@ -847,14 +876,15 @@ impl Initializer {
             basic: basic_stage,
             clock: clock_stage,
         }
-
     }
 
     /// Consumes the initializer -- must be done last.
-    pub fn get_dynamic_clock_control(self, clock_stage: &mut stages::Clock, basic_stage: &mut stages::Basic)
-    -> Option<clock_controller::DynamicClockController> {
+    pub fn get_dynamic_clock_control(
+        self,
+        clock_stage: &mut stages::Clock,
+        basic_stage: &mut stages::Basic,
+    ) -> Option<clock_controller::DynamicClockController> {
         if self.is_nfc_passive {
-
             let adc = basic_stage.adc.take();
             let clocks = clock_stage.clocks;
 
@@ -864,8 +894,14 @@ impl Initializer {
             let gpio = &mut clock_stage.gpio;
             let iocon = &mut clock_stage.iocon;
 
-            let mut new_clock_controller = clock_controller::DynamicClockController::new(adc.unwrap(),
-                clocks, pmc, syscon, gpio, iocon);
+            let mut new_clock_controller = clock_controller::DynamicClockController::new(
+                adc.unwrap(),
+                clocks,
+                pmc,
+                syscon,
+                gpio,
+                iocon,
+            );
             new_clock_controller.start_high_voltage_compare();
 
             Some(new_clock_controller)
@@ -875,9 +911,7 @@ impl Initializer {
     }
 
     /// See if LPC55 will be in NFC passive operation.  Requires first initialization stage have been done.
-    pub fn is_in_passive_operation(&self, _clock_stage: &stages::Clock)
-    -> bool {
+    pub fn is_in_passive_operation(&self, _clock_stage: &stages::Clock) -> bool {
         return self.is_nfc_passive;
     }
-
 }
