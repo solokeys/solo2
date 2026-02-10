@@ -8,7 +8,7 @@ edition = "2024"
 admin-app = "0.1"
 delog = "0.1"
 fm11nc08 = {path = "../../../components/fm11nc08"}
-lpc55-hal = { version = "=0.3.0", features = ["littlefs"] }
+lpc55-hal = "0.4.1"
 rtic = { version = "2.0.0", features = ["thumbv8main-backend"] }
 micromath = "2"
 nb = "1"

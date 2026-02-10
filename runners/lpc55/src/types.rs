@@ -7,18 +7,172 @@ use littlefs2::{const_ram_storage, consts};
 use trussed::types::{LfsResult, LfsStorage};
 use trussed::{platform, store};
 
-#[cfg(feature = "no-encrypted-storage")]
-use hal::littlefs2_filesystem;
-#[cfg(not(feature = "no-encrypted-storage"))]
-use hal::littlefs2_prince_filesystem;
+// Compile time assertion that build_constants::CONFIG_FILESYSTEM_BOUNDARY is 512 byte aligned.
+const _FILESYSTEM_ALIGNED_CHECK: usize = ((core::mem::size_of::<
+    [u8; build_constants::CONFIG_FILESYSTEM_BOUNDARY % 512],
+>() == 0) as usize)
+    - 1;
+// Compile time check that the flashregion does NOT spill over the 631.5KB boundary.
+const _FILESYSTEM_WITHIN_FLASH_CHECK: usize = ((core::mem::size_of::<
+    [u8; ((build_constants::CONFIG_FILESYSTEM_BOUNDARY) <= (631 * 1024 + 512)) as usize],
+>() == 1) as usize)
+    - 1;
+
+pub mod littlefs_params {
+    use crate::hal;
+    pub const READ_SIZE: usize = 16;
+    pub const WRITE_SIZE: usize = 512;
+    pub const BLOCK_SIZE: usize = 512;
+
+    // no wear-leveling for now
+    pub const BLOCK_CYCLES: isize = -1;
+
+    #[allow(non_camel_case_types, reason = "These are type-level constants")]
+    pub type CACHE_SIZE = hal::drivers::flash::U512;
+    #[allow(non_camel_case_types, reason = "These are type-level constants")]
+    pub type LOOKAHEADWORDS_SIZE = hal::drivers::flash::U16;
+}
 
 #[cfg(feature = "no-encrypted-storage")]
-littlefs2_filesystem!(PlainFilesystem: (build_constants::CONFIG_FILESYSTEM_BOUNDARY));
-#[cfg(not(feature = "no-encrypted-storage"))]
-littlefs2_prince_filesystem!(PrinceFilesystem: (build_constants::CONFIG_FILESYSTEM_BOUNDARY));
+mod littlefs2_filesystem {
+    use super::*;
 
+    pub struct PlainFilesystem {
+        flash_gordon: hal::drivers::flash::FlashGordon,
+    }
+
+    impl PlainFilesystem {
+        const BASE_OFFSET: usize = build_constants::CONFIG_FILESYSTEM_BOUNDARY;
+
+        pub fn new(flash_gordon: hal::drivers::flash::FlashGordon) -> Self {
+            Self { flash_gordon }
+        }
+    }
+
+    impl littlefs2::driver::Storage for PlainFilesystem {
+        const READ_SIZE: usize = super::littlefs_params::READ_SIZE;
+        const WRITE_SIZE: usize = super::littlefs_params::WRITE_SIZE;
+        const BLOCK_SIZE: usize = super::littlefs_params::BLOCK_SIZE;
+
+        const BLOCK_COUNT: usize =
+            ((631 * 1024 + 512) - build_constants::CONFIG_FILESYSTEM_BOUNDARY) / 512;
+        const BLOCK_CYCLES: isize = super::littlefs_params::BLOCK_CYCLES;
+
+        type CACHE_SIZE = super::littlefs_params::CACHE_SIZE;
+        type LOOKAHEADWORDS_SIZE = super::littlefs_params::LOOKAHEADWORDS_SIZE;
+
+        fn read(&self, off: usize, buf: &mut [u8]) -> LfsResult<usize> {
+            <hal::drivers::flash::FlashGordon as hal::traits::flash::Read<
+                hal::drivers::flash::U16,
+            >>::read(&self.flash_gordon, Self::BASE_OFFSET + off, buf);
+            Ok(buf.len())
+        }
+
+        fn write(&mut self, off: usize, data: &[u8]) -> LfsResult<usize> {
+            let ret = <hal::drivers::flash::FlashGordon as hal::traits::flash::WriteErase<
+                hal::drivers::flash::U512,
+                hal::drivers::flash::U512,
+            >>::write(&mut self.flash_gordon, Self::BASE_OFFSET + off, data);
+            ret.map(|_| data.len())
+                .map_err(|_| littlefs2::io::Error::Io)
+        }
+
+        fn erase(&mut self, off: usize, len: usize) -> LfsResult<usize> {
+            let first_page = (Self::BASE_OFFSET + off) / 512;
+            let pages = len / 512;
+            for i in 0..pages {
+                <hal::drivers::flash::FlashGordon as hal::traits::flash::WriteErase<
+                    hal::drivers::flash::U512,
+                    hal::drivers::flash::U512,
+                >>::erase_page(&mut self.flash_gordon, first_page + i)
+                .map_err(|_| littlefs2::io::Error::Io)?;
+            }
+            Ok(512 * len)
+        }
+    }
+}
+
+#[cfg(not(feature = "no-encrypted-storage"))]
+mod littlefs2_prince_filesystem {
+    use super::*;
+
+    pub struct PrinceFilesystem {
+        flash_gordon: hal::drivers::flash::FlashGordon,
+        prince: hal::peripherals::prince::Prince<hal::typestates::init_state::Enabled>,
+    }
+
+    impl PrinceFilesystem {
+        const BASE_OFFSET: usize = build_constants::CONFIG_FILESYSTEM_BOUNDARY;
+
+        pub fn new(
+            flash_gordon: hal::drivers::flash::FlashGordon,
+            prince: hal::peripherals::prince::Prince<hal::typestates::init_state::Enabled>,
+        ) -> Self {
+            Self {
+                flash_gordon,
+                prince,
+            }
+        }
+    }
+
+    impl littlefs2::driver::Storage for PrinceFilesystem {
+        const READ_SIZE: usize = super::littlefs_params::READ_SIZE;
+        const WRITE_SIZE: usize = super::littlefs_params::WRITE_SIZE;
+        const BLOCK_SIZE: usize = super::littlefs_params::BLOCK_SIZE;
+
+        const BLOCK_COUNT: usize =
+            ((631 * 1024 + 512) - build_constants::CONFIG_FILESYSTEM_BOUNDARY) / 512;
+        const BLOCK_CYCLES: isize = super::littlefs_params::BLOCK_CYCLES;
+
+        type CACHE_SIZE = super::littlefs_params::CACHE_SIZE;
+        type LOOKAHEADWORDS_SIZE = super::littlefs_params::LOOKAHEADWORDS_SIZE;
+
+        fn read(&self, off: usize, buf: &mut [u8]) -> LfsResult<usize> {
+            self.prince.enable_region_2_for(|| {
+                let flash: *const u8 = (Self::BASE_OFFSET + off) as *const u8;
+                for i in 0..buf.len() {
+                    buf[i] = unsafe { *flash.offset(i as isize) };
+                }
+            });
+            Ok(buf.len())
+        }
+
+        fn write(&mut self, off: usize, data: &[u8]) -> LfsResult<usize> {
+            let prince = &mut self.prince;
+            let flash_gordon = &mut self.flash_gordon;
+            let ret = prince.write_encrypted(|prince| {
+                prince.enable_region_2_for(|| {
+                    <hal::drivers::flash::FlashGordon as hal::traits::flash::WriteErase<
+                        hal::drivers::flash::U512,
+                        hal::drivers::flash::U512,
+                    >>::write(flash_gordon, Self::BASE_OFFSET + off, data)
+                })
+            });
+            ret.map(|_| data.len())
+                .map_err(|_| littlefs2::io::Error::Io)
+        }
+
+        fn erase(&mut self, off: usize, len: usize) -> LfsResult<usize> {
+            let first_page = (Self::BASE_OFFSET + off) / 512;
+            let pages = len / 512;
+            for i in 0..pages {
+                <hal::drivers::flash::FlashGordon as hal::traits::flash::WriteErase<
+                    hal::drivers::flash::U512,
+                    hal::drivers::flash::U512,
+                >>::erase_page(&mut self.flash_gordon, first_page + i)
+                .map_err(|_| littlefs2::io::Error::Io)?;
+            }
+            Ok(512 * len)
+        }
+    }
+}
+
+#[cfg(feature = "no-encrypted-storage")]
+pub use littlefs2_filesystem::PlainFilesystem;
 #[cfg(feature = "no-encrypted-storage")]
 pub type FlashStorage = PlainFilesystem;
+#[cfg(not(feature = "no-encrypted-storage"))]
+pub use littlefs2_prince_filesystem::PrinceFilesystem;
 #[cfg(not(feature = "no-encrypted-storage"))]
 pub type FlashStorage = PrinceFilesystem;
 
