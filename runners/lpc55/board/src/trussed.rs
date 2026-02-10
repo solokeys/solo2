@@ -9,6 +9,7 @@ use crate::hal::{
 };
 use crate::traits::buttons::{Press, Edge};
 use crate::traits::rgb_led::{Intensities, RgbLed};
+use defmt::debug;
 use micromath::F32;
 use trussed::platform::{consent, ui};
 
@@ -111,7 +112,7 @@ RGB: RgbLed,
     fn set_status(&mut self, status: ui::Status) {
 
         self.status = status;
-        debug_now!("status set to {:?}", status);
+        debug!("status set to {:?}", defmt::Debug2Format(&status));
 
         // self.refresh runs periodically and would overwrite this
         if let Some(rgb) = &mut self.rgb {
@@ -192,7 +193,7 @@ RGB: RgbLed,
     }
 
     fn wink(&mut self, duration: Duration) {
-        debug_now!("winking for {:?}", duration);
+        debug!("winking for {:?}", duration);
         self.wink_until = self.uptime() + duration;
     }
 

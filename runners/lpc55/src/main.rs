@@ -11,9 +11,7 @@ const REFRESH_MILLISECS: u32 = 50;
 const USB_INTERRUPT: board::hal::raw::Interrupt = board::hal::raw::Interrupt::USB1;
 const NFC_INTERRUPT: board::hal::raw::Interrupt = board::hal::raw::Interrupt::PIN_INT0;
 
-#[macro_use]
-extern crate delog;
-generate_macros!();
+use defmt_rtt as _;
 
 use core::arch::asm;
 
@@ -26,10 +24,14 @@ pub fn msp() -> u32 {
 
 #[rtic::app(device = runner::hal::raw, peripherals = true, dispatchers = [PLU, PIN_INT5, PIN_INT7])]
 mod app {
-    #[allow(unused, reason="Actual calls are only generated when logging is enabled.")]
+    #[allow(
+        unused,
+        reason = "Actual calls are only generated when logging is enabled."
+    )]
     use super::msp;
     use board::hal::time::Milliseconds;
     use board::CLOCK_FREQ;
+    use defmt::{debug, info};
     use hal::drivers::timer::Elapsed;
     use hal::time::{DurationExtensions, Microseconds};
     use hal::traits::wg::timer::Cancel;
@@ -172,7 +174,7 @@ mod app {
 
     #[idle(shared = [apdu_dispatch, ctaphid_dispatch, apps, perf_timer, usb_classes, ccid_wait_extension_sender, ctaphid_keep_alive_sender])]
     fn idle(mut c: idle::Context) -> ! {
-        info_now!("inside IDLE, initial SP = {:08X}", msp());
+        info!("inside IDLE, initial SP = {:08X}", msp());
         loop {
             let mut time = 0;
             c.shared.perf_timer.lock(|perf_timer| {
@@ -332,8 +334,8 @@ mod app {
         loop {
             let milliseconds = c.local.ccid_wait_extension_receiver.recv().await.unwrap();
             Mono::delay(milliseconds.0.millis()).await;
-            debug_now!("CCID WAIT EXTENSION");
-            debug_now!("remaining stack size: {} bytes", msp() - 0x2000_0000);
+            debug!("CCID WAIT EXTENSION");
+            debug!("remaining stack size: {} bytes", msp() - 0x2000_0000);
             let status = c.shared.usb_classes.lock(|usb_classes_maybe| {
                 usb_classes_maybe
                     .as_mut()
@@ -361,8 +363,8 @@ mod app {
         loop {
             let milliseconds = c.local.ctaphid_keep_alive_receiver.recv().await.unwrap();
             Mono::delay(milliseconds.0.millis()).await;
-            debug_now!("CTAPHID keepalive");
-            debug_now!("remaining stack size: {} bytes", msp() - 0x2000_0000);
+            debug!("CTAPHID keepalive");
+            debug!("remaining stack size: {} bytes", msp() - 0x2000_0000);
             let status = c.shared.usb_classes.lock(|usb_classes_maybe| {
                 usb_classes_maybe
                     .as_mut()
@@ -382,30 +384,6 @@ mod app {
                     }
                 });
         }
-    }
-
-    #[task(binds = MAILBOX, shared = [usb_classes], priority = 5)]
-    #[allow(unused_mut, unused_variables)]
-    fn mailbox(mut c: mailbox::Context) {
-        // debug_now!("mailbox: remaining stack size: {} bytes", msp() - 0x2000_0000);
-        #[cfg(feature = "log-serial")]
-        c.resources.usb_classes.lock(|usb_classes_maybe| {
-            match usb_classes_maybe.as_mut() {
-                Some(usb_classes) => {
-                    // usb_classes.serial.write(logs.as_bytes()).ok();
-                    usb_classes.serial.write(b"dummy test string\n").ok();
-                    // app::drain_log_to_serial(&mut usb_classes.serial);
-                }
-                _ => {}
-            }
-        });
-        // // let usb_classes = c.resources.usb_classes.as_mut().unwrap();
-
-        // let mailbox::Resources { usb_classes } = c.resources;
-        // let x: () = usb_classes;
-        // // if let Some(usb_classes) = usb_classes.as_mut() {
-        // //     usb_classes.serial.write(b"dummy test string\n").ok();
-        // // }
     }
 
     #[task(binds = OS_EVENT, shared = [trussed], priority = 5)]

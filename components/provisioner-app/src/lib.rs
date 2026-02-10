@@ -10,14 +10,11 @@
 //! See `solo2-cli` for usage.
 #![no_std]
 
-#[macro_use]
-extern crate delog;
-generate_macros!();
-
 use core::convert::TryFrom;
 
 use trussed::types::LfsStorage;
 
+use defmt::info;
 use littlefs2::path::{PathBuf};
 use trussed::store::{self, Store};
 use trussed::{
@@ -272,7 +269,7 @@ where S: Store,
 
                         GenerateX255Key => {
 
-                            info_now!("GenerateX255Key");
+                            info!("GenerateX255Key");
                             let mut seed = [0u8; 32];
                             seed.copy_from_slice(
                                 &syscall!(self.trussed.random_bytes(32)).bytes.as_slice()
@@ -461,7 +458,7 @@ where S: Store,
                                         platform_pk_bytes[i] = command.data()[i]
                                     }
 
-                                    info_now!("1");
+                                    info!("1");
 
                                     let platform_kak = syscall!(self.trussed.deserialize_key(
                                         Mechanism::X255,
@@ -470,21 +467,21 @@ where S: Store,
                                         KeySerialization::Raw,
                                         StorageAttributes::new().set_persistence(Location::Volatile)
                                     )).key;
-                                    info_now!("3");
+                                    info!("3");
 
                                     let shared_secret = syscall!(self.trussed.agree_x255(
                                         KeyId::from_special(3),
                                         platform_kak,
                                         Location::Volatile
                                     )).shared_secret;
-                                    info_now!("4");
+                                    info!("4");
 
                                     let sig = syscall!(self.trussed.sign_hmacsha256(
                                         shared_secret,
                                         &challenge,
                                     )).signature;
 
-                                    info_now!("5");
+                                    info!("5");
                                     reply.extend_from_slice(&challenge).unwrap();
                                     reply.extend_from_slice(&sig).unwrap();
                                     Ok(())

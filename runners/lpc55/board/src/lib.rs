@@ -9,10 +9,6 @@ pub mod traits;
 #[cfg(not(any(feature = "lpcxpresso55", feature = "solo2")))]
 compile_error!("Please select one of the board features.");
 
-#[macro_use]
-extern crate delog;
-generate_macros!();
-
 #[cfg(feature = "lpcxpresso55")]
 pub mod lpcxpresso55;
 #[cfg(feature = "lpcxpresso55")]
