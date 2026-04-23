@@ -1,13 +1,3 @@
-[target.x86_64-unknown-linux-gnu]
-runner = "lldb"
-
-[target.x86_64-apple-darwin]
-runner = "lldb"
-rustflags = [
-]
-
-# flip-link currently results in a broken program
-# "-C", "linker=flip-link"
-
-# [build]
-# target = "x86_64-apple-darwin"
+# Do not set `target.*.runner` here: wrapping `cargo test` (e.g. lldb) breaks normal test runs.
+#
+# For debugging: `lldb target/debug/deps/<test-binary> -- <filter>`

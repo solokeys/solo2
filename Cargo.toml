@@ -60,18 +60,27 @@ nb          = "1"
 interchange = "0.3"
 static_cell = "2.1.1"
 ref-swap    = "0.1"
+generic-array = "0.14.3"
+rand        = "0.8"
+rand_core   = "0.6"
+serde       = { version = "1", features = ["derive"] }
+paste       = "1"
+hex         = "0.4"
+serde_bytes = "0.11"
 
 # ── USB ───────────────────────────────────────────────────────────────────────
 usb-device   = "0.2.3"
 usbd-serial  = "0.1.0"
 usbd-ccid    = "0.4"
 usbd-ctaphid = { version = "0.4", features = ["log-info"] }
+chacha20     = { version = "0.7", features = ["rng"] }
 
 # ── APDU / ISO 7816 stack ─────────────────────────────────────────────────────
 apdu-dispatch    = "0.4"
 ctaphid-dispatch = "0.4"
 ctap-types       = "0.5"
 iso7816          = "0.2"
+serde_cbor       = { version = "0.11", default-features = false, features = ["std"] }
 
 # ── Storage ───────────────────────────────────────────────────────────────────
 littlefs2 = { version = "0.7", features = ["c-stubs"] }
@@ -95,9 +104,20 @@ trussed-auth-backend     = { git = "https://github.com/trussed-dev/trussed-auth"
 admin-app          = "0.1"
 fido-authenticator = { version = "0.3", features = ["dispatch"] }
 oath-authenticator = { version = "0.1", features = ["apdu-dispatch"] }
+salty              = "0.3"
 secrets-app        = { git = "https://github.com/leetronics/trussed-secrets-app", branch = "fix-pin-protection-isolation", features = ["apdu-dispatch", "ctaphid", "log-all"] }
 piv-authenticator  = { git = "https://github.com/trussed-dev/piv-authenticator", tag = "v0.6.0", features = ["apdu-dispatch"] }
 opcard             = { git = "https://github.com/Nitrokey/opcard-rs", tag = "v1.7.0", features = ["apdu-dispatch", "delog"] }
+
+# ── PC test-only dependencies ─────────────────────────────────────────────────
+serial_test = "3"
+hidapi      = "2"
+aes         = "0.8"
+cbc         = "0.1"
+sha2        = "0.10"
+hmac        = "0.12"
+cosey       = "0.4"
+p256        = { version = "0.13", features = ["ecdh"] }
 
 # ── Release profile ───────────────────────────────────────────────────────────
 [profile.release]

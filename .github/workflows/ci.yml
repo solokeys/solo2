@@ -10,6 +10,8 @@ on:
 env:
   CARGO_INCREMENTAL: 0
   # do not set RUSTFLAGES, would overrides .cargo/config (linker script, flip-link)
+  UBUNTU_BASE_DEPS: llvm libclang-dev build-essential clang pkg-config libudev-dev
+  UBUNTU_LPC55_EXTRA_DEPS: libc6-dev-i386 git
 
 jobs:
   build-lpc55:
@@ -31,7 +33,7 @@ jobs:
         shell: bash
         run: |
           apt-get update && apt-get install sudo
-          env && pwd && sudo apt-get update -y -qq && sudo apt-get install -y -qq llvm libc6-dev-i386 libclang-dev clang git
+          env && pwd && sudo apt-get update -y -qq && sudo apt-get install -y -qq $UBUNTU_BASE_DEPS $UBUNTU_LPC55_EXTRA_DEPS
       - uses: fiam/arm-none-eabi-gcc@v1.0.4
         with:
           release: "9-2020-q2"
@@ -102,7 +104,7 @@ jobs:
         shell: bash
         run: |
           apt-get update && apt-get install sudo
-          sudo apt update -y -qq && sudo apt install -y -qq llvm libclang-dev build-essential clang
+          sudo apt update -y -qq && sudo apt install -y -qq $UBUNTU_BASE_DEPS
 
       # this is already installed
       # - name: Install macOS build dependencies
@@ -118,6 +120,26 @@ jobs:
       - name: Build
         run: cargo build --release
 
+  test-pc:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: runners/pc
+    steps:
+      - uses: actions/checkout@v1
+      - name: Install Linux build dependencies
+        shell: bash
+        run: |
+          apt-get update && apt-get install sudo
+          sudo apt update -y -qq && sudo apt install -y -qq $UBUNTU_BASE_DEPS
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: "1.94"
+          override: true
+      - name: Run tests (solo-pc, all targets)
+        run: cargo test
+
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -126,7 +148,7 @@ jobs:
         shell: bash
         run: |
           apt-get update && apt-get install sudo
-          sudo apt update -y -qq && sudo apt install -y -qq llvm libc6-dev-i386 libclang-dev build-essential clang
+          sudo apt update -y -qq && sudo apt install -y -qq $UBUNTU_BASE_DEPS $UBUNTU_LPC55_EXTRA_DEPS
       - uses: fiam/arm-none-eabi-gcc@v1.0.4
         with:
           release: "9-2020-q2"
@@ -137,16 +159,5 @@ jobs:
           target: thumbv8m.main-none-eabi
           override: true
           components: rustfmt, clippy
-      - name: cargo fmt --check
-        run: cargo fmt --all --check
-      - name: cargo clippy (host)
-        run: cargo clippy --all-targets -- -D warnings
-      - name: cargo clippy (lpc55, board-lpcxpresso55)
-        working-directory: runners/lpc55
-        run: cargo clippy --release --features board-lpcxpresso55
-      - name: cargo clippy (lpc55, board-solo2)
-        working-directory: runners/lpc55
-        run: cargo clippy --release --features board-solo2
-      - name: cargo clippy (lpc55, provisioner)
-        working-directory: runners/lpc55
-        run: cargo clippy --release --features board-lpcxpresso55,provisioner-app,admin-app,provisioner-app/test-attestation
+      - name: make check
+        run: make check

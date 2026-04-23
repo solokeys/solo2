@@ -13,7 +13,7 @@ lpc55-hal     .workspace = true
 littlefs2     .workspace = true
 trussed       .workspace = true
 p256  = { version = "0.9", default-features = false, features = ["arithmetic"] }
-salty = "0.3"
+salty         .workspace = true
 
 [features]
 test-attestation = []

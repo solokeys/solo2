@@ -4,11 +4,19 @@ version.workspace = true
 authors.workspace = true
 edition.workspace = true
 
+[lib]
+name = "solo_pc"
+path = "src/lib.rs"
+
+[[bin]]
+name = "solo-pc"
+path = "src/bin/main.rs"
+
 [dependencies]
-chacha20 = { version = "0.7", features = ["rng"] }
-delog = "0.1.0"
-embedded-hal = { version = "0.2", features = ["unproven"] }
-generic-array = "0.14.3"
+chacha20.workspace = true
+delog.workspace = true
+embedded-hal.workspace = true
+generic-array.workspace = true
 interchange.workspace = true
 nb.workspace = true
 
@@ -30,11 +38,60 @@ ndef-app.workspace = true
 # storage
 littlefs2.workspace = true
 
-[features]
-default = []
+[dev-dependencies]
+fido-authenticator = { workspace = true }
+ctap-types.workspace = true
+ctaphid-dispatch.workspace = true
+heapless = { workspace = true }
+rand.workspace = true
+serde.workspace = true
+serde_cbor.workspace = true
+serial_test.workspace = true
+paste.workspace = true
+hex.workspace = true
+# for CTAPHID transport tests against a real device
+hidapi.workspace = true
+# for PIN encryption helpers
+aes.workspace = true
+cbc.workspace = true
+sha2.workspace = true
+hmac.workspace = true
+p256.workspace = true
+rand_core.workspace = true
+cosey.workspace = true
+serde_bytes.workspace = true
+# extension backends that fido-authenticator 0.3 requires on the Trussed client
+trussed-staging = { workspace = true }
+trussed-fs-info.workspace = true
+trussed-hkdf.workspace = true
+trussed-chunked.workspace = true
+trussed-manage.workspace = true
+trussed-hpke.workspace = true
+trussed-wrap-key-to-file.workspace = true
+trussed-auth.workspace = true
+trussed-auth-backend.workspace = true
 
-# Use to auto-succeed every user presence check
-no-buttons = []
+[features]
+# Default: simulated buttons + faster wall-clock for Trussed's UP timeout (see `test-fast-up-clock`).
+default = ["test-buttons", "test-fast-up-clock"]
+
+# Simulated `Press` + `Edge` (`solo_pc::buttons::TestThreeButtons`): `check_user_presence` polls
+# `wait_for_any_new_press` and returns Normal / Strong / None like on-device. FIDO2 tests drive
+# approve/deny via `solo_pc::buttons` / `tests/support/up` — UP is still required by the stack.
+test-buttons = []
+
+# Scales `UserInterface::uptime()` so Trussed's `RequestUserConsent` reaches fido-authenticator's
+# 30 s timeout in ~300 ms real time. Does **not** skip consent or auto-approve; it only speeds the
+# platform clock used for that timeout comparison (busy-poll loop stays correct).
+test-fast-up-clock = []
+
+# **Not** the default: no `buttons` module; `check_user_presence` always returns `Normal` without
+# consulting hardware or test doubles — you **cannot** test denied UP / timeout behaviour, and
+# nothing records "UP was requested". Use only for a minimal PC binary that does not run FIDO2 UP tests.
+no-test-ui = []
+
+# Alias for `no-test-ui` (same name as the board crate; meaning here is PC-only).
+no-buttons = ["no-test-ui"]
 
 # Reconfigure the NFC chip in any case
 reconfigure-nfc = []
