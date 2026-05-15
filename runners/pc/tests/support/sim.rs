@@ -243,6 +243,11 @@ where
     let syscall = Syscall { tx: syscall_tx };
 
     let store = solo_pc::mount_filesystems();
+    // Plant the U2F batch-attestation key/cert so CTAP1 REGISTER (and ctap1
+    // interop tests) don't bail with `KeyReferenceNotFound` (0x6A88). The
+    // in-process sim filesystem is RAM-backed, so the cert/key has to be
+    // planted on every test start.
+    solo_pc::provision_fido_attestation(&store);
     let rng = <chacha20::ChaCha8Rng as rand_core::SeedableRng>::from_seed([0u8; 32]);
     let platform = solo_pc::Board::new(rng, store, solo_pc::UserInterface::default());
 

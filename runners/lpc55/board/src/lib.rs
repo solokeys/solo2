@@ -24,6 +24,7 @@ pub use shared::{Reboot, CLOCK_FREQ};
 pub use specifics::{button::ThreeButtons, led::RgbLed};
 
 pub mod clock_controller;
+pub mod flash;
 pub mod nfc;
 pub mod trussed;
 

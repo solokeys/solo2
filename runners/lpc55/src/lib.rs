@@ -133,6 +133,18 @@ pub fn init_board(
     #[cfg(feature = "provisioner-app")]
     let internal_fs = everything.filesystem.internal_storage_fs;
 
+    // Run migrations on persistent state before any app touches the filesystem.
+    // Idempotent: safe to call on every boot, no-op on already-migrated state
+    // (and on fresh devices where the relevant directories do not exist yet).
+    #[cfg(feature = "fido-authenticator")]
+    {
+        use trussed::store::Store as _;
+        let _ = fido_authenticator::state::migrate::migrate_no_rp_dir(
+            everything.filesystem.store.ifs(),
+            littlefs2::path!("fido/dat"),
+        );
+    }
+
     let apps = types::Apps::new(
         &mut everything.trussed,
         #[cfg(feature = "provisioner-app")]

@@ -5,14 +5,18 @@ authors.workspace = true
 edition.workspace = true
 
 [dependencies]
-admin-app .workspace = true
-defmt     .workspace = true
-fm11nc08  .workspace = true
-lpc55-hal .workspace = true
-rtic      = { workspace = true, features = ["thumbv8main-backend"] }
-micromath .workspace = true
-nb        .workspace = true
-trussed   .workspace = true
+admin-app     .workspace = true
+defmt         .workspace = true
+embedded-hal  .workspace = true
+fm11nc08      .workspace = true
+generic-array .workspace = true
+littlefs2     .workspace = true
+lpc55-hal     .workspace = true
+rtic          = { workspace = true, features = ["thumbv8main-backend"] }
+micromath     .workspace = true
+nb            .workspace = true
+spi-memory    .workspace = true
+trussed       .workspace = true
 
 [features]
 lpcxpresso55 = []
@@ -22,3 +26,9 @@ solo2 = []
 no-buttons = []
 no-clock-controller = []
 enable-clock-controller-signal-pin = []
+
+# Replaces button-driven user presence with a probe-rs-writable static
+# (`UP_CONTROL`). The integration tests in `runners/pc/tests` use this to
+# drive `approve`/`deny`/etc. via `probe-rs write` against the device's
+# SRAM. Off by default; firmware shipped to users should NEVER have this on.
+test-up-control = []

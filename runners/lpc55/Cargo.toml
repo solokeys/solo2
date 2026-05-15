@@ -44,7 +44,6 @@ apdu-dispatch      .workspace = true
 ctaphid-dispatch   .workspace = true
 ctap-types         .workspace = true
 fido-authenticator  = { workspace = true, optional = true }
-oath-authenticator  = { workspace = true, optional = true }
 # OATH/TOTP/HOTP support via trussed-secrets-app (Nitrokey's implementation, Yubico OATH AID)
 # Using fork with PIN protection key isolation fix backported to v0.14
 secrets-app        = { workspace = true, optional = true }
@@ -73,14 +72,14 @@ littlefs2.workspace = true
 
 [features]
 # ndef-app is an annoyance on some mobile platforms
-default = ["admin-app", "fido-authenticator", "ndef-app", "oath", "piv-authenticator", "opcard"]
+default = ["admin-app", "fido-authenticator", "ndef-app", "oath", "opcard", "piv-authenticator"]
 # OATH/TOTP/HOTP via secrets-app (replaces incompatible oath-authenticator 0.1)
 oath = ["dep:secrets-app"]
 
 # develop = ["no-encrypted-storage", "no-buttons", "no-reset-time-window"]
 # develop = ["no-encrypted-storage", "no-reset-time-window"]
 # develop = ["no-encrypted-storage", "no-buttons"]
-develop = ["no-encrypted-storage", "log-defmt"]
+develop = ["no-encrypted-storage", "log-defmt", "no-buttons", "no-reset-time-window"]
 
 develop-provisioner = ["develop", "provisioner-app"]
 develop-secrets     = ["develop", "oath"]
@@ -102,10 +101,21 @@ no-reset-time-window = ["fido-authenticator/disable-reset-time-window"]
 # Format filesystem anyway
 format-filesystem = []
 
+mldsa44 = [
+    "fido-authenticator/mldsa44",
+    "trussed/mldsa44",
+    "trussed-core/mldsa44",
+    "ctap-types/mldsa44",
+    # Only activates if piv-authenticator is also enabled.
+    "piv-authenticator?/mldsa44",
+]
+
 # TODO: get rid of these (depends on moving "initialize_basic" &friends into `board`
 board-lpcxpresso55 = ["board/lpcxpresso55"]
 board-okdoe1       = ["board/okdoe1", "usbfs-peripheral"]
 board-solo2        = ["board/solo2"]
+
+test-up-control    = ["board/test-up-control"]
 
 log-defmt = []
 

@@ -59,7 +59,12 @@ MEMORY
     FILESYSTEM : ORIGIN = 0x{:08X}, LENGTH = {}K
 
     /* for use with standard link.x */
-    RAM : ORIGIN = 0x20000000, LENGTH = 256K
+    /* SRAM0-3 (4×64K = 256K) contiguous with SRAM4 (16K @ 0x20040000),
+     * so 272K is one continuous region for stack/bss/heap. ML-DSA-44
+     * sign path on this firmware peaks near the limit; the extra 16K
+     * is the difference between wedging and not wedging on the
+     * `ctap23_pubkey_cred_params_picks_first_supported_alg` test. */
+    RAM : ORIGIN = 0x20000000, LENGTH = 272K
 
     /* would be used with proper link.x */
     /* needs changes to r0 (initialization code) */

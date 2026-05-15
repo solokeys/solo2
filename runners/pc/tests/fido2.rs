@@ -118,6 +118,14 @@ macro_rules! with_authenticator {
                         max_resident_credential_count: None,
                         large_blobs: None,
                         nfc_transport: false,
+                        ccid_transport: false,
+                        firmware_version: Some(0.into()),
+                        // Exercise the AES-256-GCM (V2) credential-id format.
+                        credential_id_version: Some(
+                            fido_authenticator::credential::CredentialIdVersion::V2,
+                        ),
+                        long_touch_for_reset: true,
+                        fido2_up_timeout: None,
                     },
                 );
                 let $authn: &mut dyn TestAuthenticator = &mut sim;
@@ -308,31 +316,75 @@ fn make_credential(authn: &mut dyn TestAuthenticator) -> Vec<u8> {
 // --- Device reset helper ---
 
 /// Reboot the device (device mode only) so CTAP2 Reset is within the 10s window.
+///
+/// Uses JLinkExe rather than `probe-rs reset` because probe-rs's
+/// auto-recovery on the nRF52840 IC rev D+ family triggers an ERASEALL
+/// when the chip looks "locked," which wipes UICR.APPROTECT back to
+/// 0xFFFFFFFF (= HwEnabled under the new semantics) and re-locks the
+/// chip from subsequent probe-rs operations. JLinkExe just does a
+/// clean AIRCR.SYSRESETREQ via its own debug sequence.
 fn device_reboot() {
     if !transport::is_device_mode() {
         return;
     }
+    if std::env::var("SKIP_DEVICE_REBOOT").is_ok() {
+        eprintln!("device_reboot: SKIP_DEVICE_REBOOT set — skipping reset");
+        return;
+    }
     let chip = std::env::var("PROBE_RS_CHIP").unwrap_or("LPC55S69JBD100".into());
-    let protocol = std::env::var("PROBE_RS_PROTOCOL").ok();
-    let speed = std::env::var("PROBE_RS_SPEED").ok();
-    let mut cmd = std::process::Command::new("probe-rs");
-    cmd.args(["reset", "--chip", &chip]);
-    if let Some(p) = protocol.as_deref() {
-        cmd.args(["--protocol", p]);
+    // `PROBE_RS_PROBE` is VID:PID:SerialNumber. JLinkExe wants only the SN.
+    let probe_sn = std::env::var("PROBE_RS_PROBE")
+        .ok()
+        .and_then(|s| s.rsplit(':').next().map(|x| x.to_string()));
+    let device = match chip.as_str() {
+        "LPC55S69JBD100" => "LPC55S69",
+        other => other,
+    };
+    let script_path = "/tmp/device-reset.jlink";
+    let _ = std::fs::write(script_path, "r\ng\nq\n");
+    let mut cmd = std::process::Command::new("JLinkExe");
+    if let Some(sn) = probe_sn.as_deref() {
+        cmd.args(["-SelectEmuBySN", sn]);
     }
-    if let Some(s) = speed.as_deref() {
-        cmd.args(["--speed", s]);
-    }
+    cmd.args([
+        "-device",
+        device,
+        "-if",
+        "SWD",
+        "-speed",
+        "4000",
+        "-autoconnect",
+        "1",
+        "-CommanderScript",
+        script_path,
+    ]);
     let _ = cmd.status();
-    std::thread::sleep(std::time::Duration::from_secs(1));
+    std::thread::sleep(std::time::Duration::from_secs(2));
 }
 
 /// Reset the authenticator to a clean state (no credentials, no PIN).
-/// Reboots the device (device mode), reconnects, then sends CTAP2 Reset.
+///
+/// Sends CTAP2 Reset gated by `consent::Level::Strong` (CTAP 2.3 §7.7
+/// long-touch reset). The long-touch path drops the legacy 10-second
+/// boot-window restriction, so no chip reboot is required — much
+/// faster than the old `probe-rs reset` flow and doesn't churn the
+/// host USB bus (important on VMs/hypervisors that don't auto-rebind
+/// on re-enumeration).
+///
+/// Set `RESET_AUTHENTICATOR_REBOOT=1` to fall back to the historical
+/// reboot-then-Reset flow (CTAP 2.0/2.1, pre-long-touch firmware).
+/// Set `SKIP_RESET_AUTHENTICATOR=1` to skip cleanup entirely (for
+/// tests that don't need a clean store).
 fn reset_authenticator(authn: &mut dyn TestAuthenticator) {
-    device_reboot();
-    authn.reconnect();
-    up::approve();
+    if std::env::var("SKIP_RESET_AUTHENTICATOR").is_ok() {
+        eprintln!("reset_authenticator: SKIP_RESET_AUTHENTICATOR set — skipping");
+        return;
+    }
+    if std::env::var("RESET_AUTHENTICATOR_REBOOT").is_ok() {
+        device_reboot();
+        authn.reconnect();
+    }
+    up::approve_strong();
     let _ = authn.call_ctap2(&Request::Reset);
 }
 
@@ -370,3 +422,42 @@ mod cred_protect;
 
 #[path = "fido2/hmac_secret.rs"]
 mod hmac_secret;
+
+#[path = "fido2/ctap_2_2.rs"]
+mod ctap_2_2;
+
+#[path = "fido2/ctap_2_3.rs"]
+mod ctap_2_3;
+
+#[path = "fido2/u2f.rs"]
+mod u2f;
+
+#[path = "fido2/ctap1_interop.rs"]
+mod ctap1_interop;
+
+#[path = "fido2/authenticator_config.rs"]
+mod authenticator_config;
+
+#[path = "fido2/ext_cred_blob.rs"]
+mod ext_cred_blob;
+
+#[path = "fido2/ext_min_pin_length.rs"]
+mod ext_min_pin_length;
+
+#[path = "fido2/ext_third_party_payment.rs"]
+mod ext_third_party_payment;
+
+#[path = "fido2/ext_pin_complexity.rs"]
+mod ext_pin_complexity;
+
+#[path = "fido2/large_blobs.rs"]
+mod large_blobs;
+
+#[path = "fido2/ext_large_blob.rs"]
+mod ext_large_blob;
+
+#[path = "fido2/ext_large_blob_key.rs"]
+mod ext_large_blob_key;
+
+#[path = "fido2/ctaphid_transport.rs"]
+mod ctaphid_transport;

@@ -19,7 +19,7 @@ default-members = [
 resolver = "2"
 
 [workspace.package]
-version = "2.2281.0"
+version = "2.2362.0"
 edition = "2021"
 authors = [
     "Nicolas Stalder <n@stalder.io>",
@@ -47,6 +47,7 @@ lpc55-hal     = "0.5.0"
 micromath     = "2"
 embedded-time = "0.12"
 embedded-hal  = { version = "0.2.5", features = ["unproven"] }
+spi-memory    = "0.2"
 
 # ── Logging / debug ───────────────────────────────────────────────────────────
 defmt      = "1.0.1"
@@ -78,7 +79,7 @@ chacha20     = { version = "0.7", features = ["rng"] }
 # ── APDU / ISO 7816 stack ─────────────────────────────────────────────────────
 apdu-dispatch    = "0.4"
 ctaphid-dispatch = "0.4"
-ctap-types       = "0.5"
+ctap-types       = "=0.6.0-rc.4"
 iso7816          = "0.2"
 serde_cbor       = { version = "0.11", default-features = false, features = ["std"] }
 
@@ -86,8 +87,8 @@ serde_cbor       = { version = "0.11", default-features = false, features = ["st
 littlefs2 = { version = "0.7", features = ["c-stubs"] }
 
 # ── Trussed core ─────────────────────────────────────────────────────────────
-trussed      = "0.1"
-trussed-core = "0.2"
+trussed      = { version = "0.1", features = ["aes256-gcm"] }
+trussed-core = { version = "0.2", features = ["aes256-gcm"] }
 
 # ── Trussed extensions ────────────────────────────────────────────────────────
 trussed-staging          = { git = "https://github.com/trussed-dev/trussed-staging.git", tag = "v0.4.0", features = ["hkdf", "fs-info", "manage", "chunked", "hpke", "wrap-key-to-file"] }
@@ -102,11 +103,10 @@ trussed-auth-backend     = { git = "https://github.com/trussed-dev/trussed-auth"
 
 # ── Applications ─────────────────────────────────────────────────────────────
 admin-app          = "0.1"
-fido-authenticator = { version = "0.3", features = ["dispatch"] }
-oath-authenticator = { version = "0.1", features = ["apdu-dispatch"] }
+fido-authenticator = { version = "=0.4.0-rc.3", features = ["dispatch", "chunked", "credential-id-format-v2"] }
 salty              = "0.3"
 secrets-app        = { git = "https://github.com/leetronics/trussed-secrets-app", branch = "fix-pin-protection-isolation", features = ["apdu-dispatch", "ctaphid", "log-all"] }
-piv-authenticator  = { git = "https://github.com/trussed-dev/piv-authenticator", tag = "v0.6.0", features = ["apdu-dispatch"] }
+piv-authenticator  = { git = "https://github.com/0x0ece/piv-authenticator", rev = "cd93aee", features = ["apdu-dispatch"] }
 opcard             = { git = "https://github.com/Nitrokey/opcard-rs", tag = "v1.7.0", features = ["apdu-dispatch", "delog"] }
 
 # ── PC test-only dependencies ─────────────────────────────────────────────────
@@ -132,7 +132,10 @@ opt-level = 2
 
 # ── Patches ───────────────────────────────────────────────────────────────────
 [patch.crates-io]
-trussed = { git = "https://github.com/trussed-dev/trussed.git", rev = "0f8df68be879acdde1f8cf428c11e5d29692a47b" }
+ctap-types         = { git = "https://github.com/0x0ece/ctap-types",         rev = "1056c78b06fddc1010afebf549434ac097a6db42" }
+trussed            = { git = "https://github.com/0x0ece/trussed",            rev = "a1b33c46eb16ef7fa5f6324f7c099ff339fe21e7" }
+trussed-core       = { git = "https://github.com/0x0ece/trussed",            rev = "a1b33c46eb16ef7fa5f6324f7c099ff339fe21e7" }
+fido-authenticator = { git = "https://github.com/0x0ece/fido-authenticator", rev = "015c310541eb2e977e6efa6167a149f3c3b295da" }
 admin-app = { git = "https://github.com/Nitrokey/admin-app.git", tag = "v0.1.0-nitrokey.21" }
 # Force all crates to use littlefs2-core 0.1.2 which has heapless-bytes05 support
 littlefs2-core = { git = "https://github.com/trussed-dev/littlefs2.git", tag = "core-0.1.2" }

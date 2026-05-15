@@ -158,8 +158,24 @@ impl trussed::platform::UserInterface for UserInterface {
     fn check_user_presence(&mut self) -> consent::Level {
         #[cfg(feature = "test-buttons")]
         {
+            // Single-path UI backed by `buttons::test_three_buttons()`.
+            // Tests (and anything else that wants to influence consent)
+            // control it through `buttons::approve` / `approve_sticky` /
+            // `deny` / `reset`.
             use crate::buttons::{self, Edge, Press};
             USER_PRESENCE_POLLS.fetch_add(1, Ordering::Relaxed);
+
+            // Optional "don't grant before this instant" deadline,
+            // armed by callers that need processing to last long enough
+            // for usbd-ctaphid's 250 ms keepalive timer to fire — see
+            // `buttons::set_up_grant_deadline` for the full rationale.
+            if let Some(deadline) = buttons::up_grant_deadline() {
+                if std::time::Instant::now() < deadline {
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                    return consent::Level::None;
+                }
+            }
+
             let (state, press_result) = {
                 let mut buttons = buttons::test_three_buttons().lock().unwrap();
                 let state = buttons.state();
@@ -173,29 +189,62 @@ impl trussed::platform::UserInterface for UserInterface {
                     consent::Level::Normal
                 }
             } else {
-                // Do not hold `test_three_buttons` mutex across sleep: the test thread may need
-                // the lock for `up::approve()` / `reset()` on the next operation.
+                // Do not hold `test_three_buttons` mutex across sleep:
+                // another thread may need the lock for `approve()` /
+                // `reset()` on the next operation.
                 std::thread::sleep(std::time::Duration::from_millis(50));
                 consent::Level::None
             }
         }
 
-        #[cfg(all(feature = "no-test-ui", not(feature = "test-buttons")))]
+        #[cfg(not(feature = "test-buttons"))]
         {
+            // No test-buttons module compiled in — `--no-default-features`
+            // build. Auto-approve so a non-interactive binary still works;
+            // tests opt into the simulated-buttons UI by enabling
+            // `test-buttons` (the default).
             consent::Level::Normal
-        }
-
-        #[cfg(not(any(feature = "test-buttons", feature = "no-test-ui")))]
-        {
-            compile_error!(
-                "solo-pc: enable the default `test-buttons` feature (simulated hardware UP for tests) \
-                 or opt into `no-test-ui` for a non-interactive UI only (`--no-default-features --features no-test-ui`)."
-            )
         }
     }
 
     fn set_status(&mut self, status: ui::Status) {
         println!("Set status: {:?}", status);
+        // Hook the trussed UP-poll lifecycle. trussed calls
+        // `set_status(WaitingForUserPresence)` immediately before its poll
+        // loop and `set_status(<previous>)` after the loop exits. We use
+        // that boundary to apply the test-queued mode (tap / do_not_tap /
+        // long_tap) for the duration of exactly ONE UP request. That way
+        // `device.up_set_mode("tap")` is a single-shot instruction with
+        // no cleanup call required from tests.
+        //
+        // Only the queued-test-mode branches mutate `up_response`. The
+        // default (no test queue) and non-UP statuses are no-ops: the
+        // daemon's startup already installs the desired default
+        // (approve_sticky), and in-process tests drive `up_response`
+        // directly via `solo_pc::buttons::approve` / `deny` / `reset` —
+        // clobbering it from set_status would race the test. The 350 ms
+        // grant-deadline armed by the daemon's rx CBOR handler is also
+        // left alone here; trussed fires Processing/Idle repeatedly during
+        // a single request, and clearing it on every transition would wipe
+        // the deadline before WaitingForUserPresence could read it.
+        #[cfg(feature = "test-buttons")]
+        if matches!(status, ui::Status::WaitingForUserPresence) {
+            use crate::buttons;
+            let guard = buttons::test_three_buttons().lock().unwrap();
+            match buttons::take_queued_up_mode() {
+                buttons::UP_MODE_TAP | buttons::UP_MODE_LONG_TAP => {
+                    guard.approve();
+                    buttons::set_up_grant_deadline(None);
+                }
+                buttons::UP_MODE_DO_NOT_TAP => {
+                    guard.deny();
+                    buttons::set_up_grant_deadline(None);
+                }
+                _ => {}
+            }
+        }
+        #[cfg(not(feature = "test-buttons"))]
+        let _ = status;
     }
 
     fn refresh(&mut self) {}
@@ -207,7 +256,18 @@ impl trussed::platform::UserInterface for UserInterface {
             // fido-authenticator uses a 30 s UP window; Trussed busy-polls `check_user_presence`
             // until that **uptime delta** elapses. Scaling time shortens denied-UP wall time without
             // changing whether consent is granted (still driven by `buttons` / `up::`).
-            const SCALE: u32 = 100;
+            //
+            // SCALE picked to give comfortable margin from the grant-deadline path:
+            //   - approve_sticky default: deadline = 300 ms wall (see `set_status`)
+            //   - SCALE=30 → scaled 30 s UP timeout = 1.0 s wall, so the grant
+            //     fires ~700 ms before the timeout. SCALE=100 used to put the
+            //     timeout at 300 ms wall — exactly tied with the deadline, and
+            //     clock jitter from `thread::sleep(50ms)` accumulation routinely
+            //     pushed trussed over the line first, producing UserActionTimeout
+            //     instead of the intended approval (broke test_keep_alive).
+            //   - do_not_tap test (`Timeout(2.0)` on the python side) still
+            //     completes well within budget at 1.0 s daemon-side wall.
+            const SCALE: u32 = 30;
             elapsed.saturating_mul(SCALE)
         }
         #[cfg(not(feature = "test-fast-up-clock"))]
@@ -267,4 +327,28 @@ pub fn mount_filesystems() -> RunnerStore {
         efs: external_fs,
         vfs: volatile_fs,
     }
+}
+
+/// Plant a FIDO U2F batch-attestation key+certificate in the freshly-mounted
+/// internal filesystem.
+///
+/// `fido-authenticator` looks up the attestation key at trussed path
+/// `fido/sec/00` and the X.509 cert at `fido/x5c/00`. Real hardware writes
+/// these via the `provisioner-app` during factory provisioning; the host
+/// daemon has no such step and otherwise reports
+/// `KeyReferenceNotFound` (0x6A88) when CTAP1 `Register` runs. The cert
+/// and key bytes come from the Nitrokey FIDO test PKI bundled with
+/// `fido-authenticator`'s own integration tests, copied into
+/// `runners/pc/data/`.
+pub fn provision_fido_attestation(store: &RunnerStore) {
+    use trussed::store::Store as _;
+
+    const ATTESTATION_CERT: &[u8] = include_bytes!("../data/fido-cert.der");
+    const ATTESTATION_KEY: &[u8] = include_bytes!("../data/fido-key.trussed");
+
+    let ifs = store.ifs();
+    let _ = ifs.create_dir_all(littlefs2::path!("fido/x5c"));
+    let _ = ifs.create_dir_all(littlefs2::path!("fido/sec"));
+    let _ = ifs.write(littlefs2::path!("fido/x5c/00"), ATTESTATION_CERT);
+    let _ = ifs.write(littlefs2::path!("fido/sec/00"), ATTESTATION_KEY);
 }

@@ -116,6 +116,20 @@ mod app {
 
     #[init]
     fn init(c: init::Context) -> (SharedResources, LocalResources) {
+        // Bootloop trap: if the previous reset came from the watchdog, jump
+        // to MBoot before running init_board so the device stays recoverable.
+        // The wdtreset bit (PMC.aoreg1) only auto-clears on POR/BOD, so we
+        // clear it eagerly — a single MBoot recovery flash returns the next
+        // reset to normal operation.
+        //
+        // This build does not arm WWDT, but we keep the trap defensively: a
+        // prior firmware on the same device might have armed it and fired.
+        let wdt_caused_reset = c.device.PMC.aoreg1.read().wdtreset().bit();
+        if wdt_caused_reset {
+            c.device.PMC.aoreg1.modify(|_, w| w.wdtreset().clear_bit());
+            runner::hal::boot_to_bootrom();
+        }
+
         let (
             apdu_dispatch,
             ctaphid_dispatch,

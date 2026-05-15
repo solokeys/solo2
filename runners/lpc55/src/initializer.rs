@@ -449,9 +449,27 @@ impl Initializer {
         clock_stage: &mut stages::Clock,
         basic_stage: &mut stages::Basic,
         flexcomm0: hal::peripherals::flexcomm::Flexcomm0<Unknown>,
-        mux: hal::peripherals::inputmux::InputMux<Unknown>,
-        pint: hal::peripherals::pint::Pint<Unknown>,
+        #[allow(unused_variables)] mux: hal::peripherals::inputmux::InputMux<Unknown>,
+        #[allow(unused_variables)] pint: hal::peripherals::pint::Pint<Unknown>,
     ) -> stages::Nfc {
+        let (contactless_requester, contactless_responder) = NFC_APDU_CHANNEL
+            .split()
+            .expect("could not setup iso14443 ApduInterchange");
+
+        {
+            if !self.is_nfc_passive {
+                let _ = mux;
+                let _ = pint;
+                let token = clock_stage.clocks.support_flexcomm_token().unwrap();
+                let spi = flexcomm0.enabled_as_spi(&mut self.syscon, &token);
+                return stages::Nfc {
+                    iso14443: None,
+                    contactless_responder: Some(contactless_responder),
+                    flash_spi: Some(spi),
+                };
+            }
+        }
+
         let nfc_chip = if self.config.nfc_enabled {
             self.try_enable_fm11nc08(
                 &clock_stage.clocks,
@@ -468,10 +486,6 @@ impl Initializer {
         };
 
         let mut iso14443: Option<types::Iso14443> = None;
-
-        let (contactless_requester, contactless_responder) = NFC_APDU_CHANNEL
-            .split()
-            .expect("could not setup iso14443 ApduInterchange");
 
         if let Some(chip) = nfc_chip {
             iso14443 = Some(nfc_device::Iso14443::new(chip, contactless_requester))
@@ -494,6 +508,7 @@ impl Initializer {
         stages::Nfc {
             iso14443,
             contactless_responder: Some(contactless_responder),
+            flash_spi: None,
         }
     }
 
@@ -708,13 +723,6 @@ impl Initializer {
         let internal_fs_alloc =
             INTERNAL_FS_ALLOC.init(Filesystem::allocate()) as *mut Allocation<types::FlashStorage>;
 
-        static EXTERNAL_STORAGE: StaticCell<ExternalStorage> = StaticCell::new();
-        let external_storage =
-            EXTERNAL_STORAGE.init(ExternalStorage::new()) as *mut ExternalStorage;
-        static EXTERNAL_FS_ALLOC: StaticCell<Allocation<ExternalStorage>> = StaticCell::new();
-        let external_fs_alloc =
-            EXTERNAL_FS_ALLOC.init(Filesystem::allocate()) as *mut Allocation<ExternalStorage>;
-
         static VOLATILE_STORAGE: StaticCell<VolatileStorage> = StaticCell::new();
         let volatile_storage =
             VOLATILE_STORAGE.init(VolatileStorage::new()) as *mut VolatileStorage;
@@ -732,8 +740,9 @@ impl Initializer {
             &mut *internal_storage
         })
         .is_err();
+        let needs_format = needs_format || cfg!(feature = "format-filesystem");
 
-        if needs_format || cfg!(feature = "format-filesystem") {
+        if needs_format {
             if let Some(rgb) = basic_stage.rgb.as_mut() {
                 rgb.blue(200);
                 rgb.red(200);
@@ -743,7 +752,6 @@ impl Initializer {
 
             info!("Not yet formatted!  Formatting..");
             Filesystem::format(unsafe { &mut *internal_storage }).unwrap();
-            Filesystem::format(unsafe { &mut *external_storage }).unwrap();
             Filesystem::format(unsafe { &mut *volatile_storage }).unwrap();
 
             if let Some(rgb) = basic_stage.rgb.as_mut() {
@@ -762,21 +770,86 @@ impl Initializer {
             .unwrap(),
         );
 
-        static EXTERNAL_FS: StaticCell<Filesystem<'static, ExternalStorage>> = StaticCell::new();
-        let external_fs: &'static mut Filesystem<'static, ExternalStorage> = EXTERNAL_FS.init({
-            match Filesystem::mount(unsafe { &mut *external_fs_alloc }, unsafe {
-                &mut *external_storage
-            }) {
-                Ok(fs) => fs,
-                Err(_) => {
-                    Filesystem::format(unsafe { &mut *external_storage }).unwrap();
-                    Filesystem::mount(unsafe { &mut *external_fs_alloc }, unsafe {
-                        &mut *external_storage
-                    })
-                    .unwrap()
+        // Probe the GD25Q16 at runtime. If present,
+        // mount it as the external FS. If absent (EVK without the chip,
+        // dead chip, missing `flash_spi`), fall back to a RAM-backed
+        // stand-in so the device still enumerates and is reachable —
+        // never panics, never bricks the device.
+        let external_fs: &'static dyn trussed::store::DynFilesystem = {
+            use types::ExternalFallbackStorage;
+
+            static EXT_CHIP_STORAGE: StaticCell<ExternalStorage> = StaticCell::new();
+            static EXT_CHIP_ALLOC: StaticCell<Allocation<ExternalStorage>> = StaticCell::new();
+            static EXT_CHIP_FS: StaticCell<Filesystem<'static, ExternalStorage>> =
+                StaticCell::new();
+            static EXT_RAM_STORAGE: StaticCell<ExternalFallbackStorage> = StaticCell::new();
+            static EXT_RAM_ALLOC: StaticCell<Allocation<ExternalFallbackStorage>> =
+                StaticCell::new();
+            static EXT_RAM_FS: StaticCell<Filesystem<'static, ExternalFallbackStorage>> =
+                StaticCell::new();
+
+            let (chip, _selftest) = match nfc_stage.flash_spi.take() {
+                Some(spi) => board::flash::try_setup(
+                    spi,
+                    &mut clock_stage.gpio,
+                    &mut clock_stage.iocon,
+                    &mut basic_stage.delay_timer,
+                ),
+                None => (None, board::flash::SelftestResult::ZERO),
+            };
+
+            match chip {
+                Some(chip) => {
+                    info!("external flash: GD25Q16 detected, using chip");
+                    let storage = EXT_CHIP_STORAGE.init(chip) as *mut ExternalStorage;
+                    let alloc = EXT_CHIP_ALLOC.init(Filesystem::allocate())
+                        as *mut Allocation<ExternalStorage>;
+                    if needs_format {
+                        info!("wiping external FS (internal reformat or format-filesystem)");
+                        Filesystem::format(unsafe { &mut *storage }).unwrap();
+                    }
+                    let f =
+                        match Filesystem::mount(unsafe { &mut *alloc }, unsafe { &mut *storage }) {
+                            Ok(fs) => fs,
+                            Err(_) => {
+                                Filesystem::format(unsafe { &mut *storage }).unwrap();
+                                Filesystem::mount(unsafe { &mut *alloc }, unsafe { &mut *storage })
+                                    .unwrap()
+                            }
+                        };
+                    EXT_CHIP_FS.init(f) as &'static dyn trussed::store::DynFilesystem
+                }
+                None => {
+                    defmt::warn!("external flash absent / JEDEC mismatch — RAM fallback");
+                    // Brief red flash so a developer watching a sealed
+                    // Solo 2 (no JTAG / no serial) can tell the chip was
+                    // not detected. Trussed's UI loop overwrites this
+                    // with breathing-green idle shortly after.
+                    if let Some(rgb) = basic_stage.rgb.as_mut() {
+                        rgb.red(200);
+                        rgb.green(0);
+                        rgb.blue(0);
+                        basic_stage.delay_timer.start(250_000.microseconds());
+                        let _ = nb::block!(basic_stage.delay_timer.wait());
+                        rgb.turn_off();
+                    }
+                    let storage = EXT_RAM_STORAGE.init(ExternalFallbackStorage::new())
+                        as *mut ExternalFallbackStorage;
+                    let alloc = EXT_RAM_ALLOC.init(Filesystem::allocate())
+                        as *mut Allocation<ExternalFallbackStorage>;
+                    let f =
+                        match Filesystem::mount(unsafe { &mut *alloc }, unsafe { &mut *storage }) {
+                            Ok(fs) => fs,
+                            Err(_) => {
+                                Filesystem::format(unsafe { &mut *storage }).unwrap();
+                                Filesystem::mount(unsafe { &mut *alloc }, unsafe { &mut *storage })
+                                    .unwrap()
+                            }
+                        };
+                    EXT_RAM_FS.init(f) as &'static dyn trussed::store::DynFilesystem
                 }
             }
-        });
+        };
 
         static VOLATILE_FS: StaticCell<Filesystem<'static, VolatileStorage>> = StaticCell::new();
         let volatile_fs: &'static mut Filesystem<'static, VolatileStorage> = VOLATILE_FS.init({
@@ -813,6 +886,29 @@ impl Initializer {
         basic_stage.delay_timer.cancel().ok();
 
         let store = types::RunnerStore::new(internal_fs, external_fs, volatile_fs);
+
+        // Test-only FIDO2 attestation provisioning. Mirrors the DK runner's
+        // boot-time provisioning: bakes the public Nitrokey FIDO test PKI
+        // into the binary and writes it to LFS on first boot. Without
+        // this, CTAP1 `Register` and CTAP2 `MakeCredential` return
+        // `KeyReferenceNotFound (0x6A88)` and the `tests/fido2::u2f::*`
+        // suite fails. Gated by `test-up-control` so production builds
+        // never include the test key.
+        #[cfg(feature = "test-up-control")]
+        {
+            use trussed::store::Store as _;
+            const ATTESTATION_CERT: &[u8] = include_bytes!("../../pc/data/fido-cert.der");
+            const ATTESTATION_KEY: &[u8] = include_bytes!("../../pc/data/fido-key.trussed");
+            let ifs = store.ifs();
+            if !ifs.exists(littlefs2::path!("fido/x5c/00"))
+                || !ifs.exists(littlefs2::path!("fido/sec/00"))
+            {
+                let _ = ifs.create_dir_all(littlefs2::path!("fido/x5c"));
+                let _ = ifs.create_dir_all(littlefs2::path!("fido/sec"));
+                let _ = ifs.write(littlefs2::path!("fido/x5c/00"), ATTESTATION_CERT);
+                let _ = ifs.write(littlefs2::path!("fido/sec/00"), ATTESTATION_KEY);
+            }
+        }
 
         stages::Filesystem {
             store,

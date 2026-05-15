@@ -15,6 +15,7 @@ const CONT_DATA_SIZE: usize = PACKET_SIZE - 5; // 59
 const BROADCAST_CID: [u8; 4] = [0xFF, 0xFF, 0xFF, 0xFF];
 
 const CMD_INIT: u8 = 0x06 | 0x80;
+const CMD_MSG: u8 = 0x03 | 0x80;
 const CMD_CBOR: u8 = 0x10 | 0x80;
 const CMD_KEEPALIVE: u8 = 0x3B | 0x80;
 const CMD_ERROR: u8 = 0x3F | 0x80;
@@ -64,12 +65,75 @@ impl CtapHidClient {
     }
 
     /// Open a real FIDO2 USB HID device.
+    ///
+    /// Match strategy (in order):
+    ///   1. First device with `usage_page == 0xF1D0` (CTAPHID) — works for
+    ///      real FIDO keys on platforms where hidapi parses the descriptor.
+    ///   2. `FIDO2_HID_VID_PID` env override (`hex_vid:hex_pid`).
+    ///   3. Hardcoded fallback: VID `0x1209` (pid.codes) + any of the known
+    ///      Solo / Nitrokey / solo2-nrf port PIDs.
+    ///
+    /// The fallback is needed because hidapi-rs's `usage_page()` returns 0
+    /// on some Linux builds when the device exposes a vendor-specific
+    /// CTAPHID interface — the report descriptor is fine, hidapi just
+    /// doesn't surface the usage page from sysfs.
     pub fn open_hid() -> Self {
         let api = hidapi::HidApi::new().expect("Failed to init HID API");
-        let device = api
-            .device_list()
-            .find(|d| d.usage_page() == FIDO_USAGE_PAGE)
-            .unwrap_or_else(|| panic!("No FIDO2 HID device found"))
+        let list: Vec<_> = api.device_list().collect();
+
+        eprintln!("[ctaphid] hidapi sees {} HID device(s):", list.len());
+        for d in &list {
+            eprintln!(
+                "[ctaphid]   {:04x}:{:04x} usage_page=0x{:04x} usage=0x{:04x} \
+                 product={:?} path={:?}",
+                d.vendor_id(),
+                d.product_id(),
+                d.usage_page(),
+                d.usage(),
+                d.product_string().unwrap_or("?"),
+                d.path(),
+            );
+        }
+
+        let env_vid_pid = std::env::var("FIDO2_HID_VID_PID").ok().and_then(|s| {
+            let mut parts = s.split(':');
+            let vid = u16::from_str_radix(parts.next()?.trim_start_matches("0x"), 16).ok()?;
+            let pid = u16::from_str_radix(parts.next()?.trim_start_matches("0x"), 16).ok()?;
+            Some((vid, pid))
+        });
+
+        let by_usage = list.iter().find(|d| d.usage_page() == FIDO_USAGE_PAGE);
+        let by_env = env_vid_pid.and_then(|(vid, pid)| {
+            list.iter()
+                .find(|d| d.vendor_id() == vid && d.product_id() == pid)
+        });
+        // pid.codes' 0x1209: known Solo/Nitrokey/solo2-port PIDs.
+        let by_pid_codes = list.iter().find(|d| {
+            d.vendor_id() == 0x1209
+                && matches!(d.product_id(), 0xbeee | 0xc0ca | 0x8472 | 0x42b0 | 0x42b3)
+        });
+
+        // `FIDO2_HID_VID_PID` (if set) is authoritative — it lets the
+        // user pin a specific device when several FIDO-USAGE-PAGE devices
+        // are present on the bus (e.g. a Pi hub with DK + LPC55 both
+        // attached). Otherwise fall back to usage-page detection, then
+        // the hardcoded pid.codes Solo PIDs.
+        let info = by_env.or(by_usage).or(by_pid_codes).unwrap_or_else(|| {
+            panic!(
+                "No FIDO2 HID device found (no usage_page=0xF1D0 match and no \
+                 known pid.codes Solo PID in the enumerated list — set \
+                 FIDO2_HID_VID_PID=vid:pid to force a specific device)"
+            )
+        });
+
+        eprintln!(
+            "[ctaphid] opening {:04x}:{:04x} ({:?})",
+            info.vendor_id(),
+            info.product_id(),
+            info.product_string().unwrap_or("?"),
+        );
+
+        let device = info
             .open_device(&api)
             .expect("Failed to open FIDO2 HID device");
         device.set_blocking_mode(true).unwrap();
@@ -104,6 +168,22 @@ impl CtapHidClient {
             return Err("Empty CBOR response".into());
         }
         Ok((response[0], response[1..].to_vec()))
+    }
+
+    /// Send a CTAP1/U2F APDU via CTAPHID `MSG` (0x83). Response is the
+    /// raw APDU body (last 2 bytes = SW1 SW2). Returns
+    /// `(u16::from_be_bytes([sw1, sw2]), payload)`.
+    pub fn ctap1(&mut self, apdu: &[u8], timeout: Duration) -> Result<(u16, Vec<u8>), String> {
+        let response = self.transact(CMD_MSG, apdu, timeout)?;
+        if response.len() < 2 {
+            return Err(format!(
+                "CTAP1 response too short: {} bytes",
+                response.len()
+            ));
+        }
+        let n = response.len();
+        let sw = u16::from_be_bytes([response[n - 2], response[n - 1]]);
+        Ok((sw, response[..n - 2].to_vec()))
     }
 
     fn transact(&mut self, cmd: u8, data: &[u8], timeout: Duration) -> Result<Vec<u8>, String> {

@@ -91,12 +91,49 @@ pub fn approve() {
     match backend() {
         Backend::Socket => socket_write(1),
         Backend::InProcess => solo_pc::buttons::approve(),
+        // probe-rs is slow (each call hits SWD), and a one-shot value
+        // (1) would get overwritten back to 0 on first UP poll —
+        // leaving subsequent CTAP calls in the test waiting on a tap
+        // that never comes. Sticky-normal (129) survives until the
+        // test explicitly changes it. The "one-shot vs sticky"
+        // distinction is unobservable on device without firmware
+        // instrumentation anyway.
         Backend::ProbeRs {
             addr,
             chip,
             protocol,
             speed,
-        } => probe_rs_write(&addr, &chip, protocol.as_deref(), speed.as_deref(), 1),
+        } => probe_rs_write(&addr, &chip, protocol.as_deref(), speed.as_deref(), 129),
+    }
+}
+
+/// Approve the next user presence check with `consent::Level::Strong` — the
+/// test analogue of "user held the touch ≥5 s", required by CTAP 2.3
+/// long-touch reset (`UserPresence::user_present_strong`).
+pub fn approve_strong() {
+    match backend() {
+        Backend::Socket => socket_write(2),
+        Backend::InProcess => {
+            // Hold both A and B *before* the press so `check_user_presence`
+            // observes `state.a && state.b == true` and routes to
+            // `consent::Level::Strong` (see `runners/pc/src/lib.rs`).
+            let buttons = solo_pc::buttons::test_three_buttons();
+            let guard = buttons.lock().unwrap();
+            guard.set_held(solo_pc::buttons::State {
+                a: true,
+                b: true,
+                middle: false,
+            });
+            guard.approve();
+            drop(guard);
+        }
+        // 130 = sticky-strong (see comment on approve()).
+        Backend::ProbeRs {
+            addr,
+            chip,
+            protocol,
+            speed,
+        } => probe_rs_write(&addr, &chip, protocol.as_deref(), speed.as_deref(), 130),
     }
 }
 

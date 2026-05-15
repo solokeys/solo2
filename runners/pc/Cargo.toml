@@ -12,10 +12,20 @@ path = "src/lib.rs"
 name = "solo-pc"
 path = "src/bin/main.rs"
 
+# Integration tests reach into `solo_pc::buttons` to drive simulated UP
+# (`up::approve()` / `deny()`), so the suite requires the `test-buttons`
+# feature. With `--no-default-features` cargo skips this test target
+# entirely.
+[[test]]
+name = "fido2"
+path = "tests/fido2.rs"
+required-features = ["test-buttons"]
+
 [dependencies]
 chacha20.workspace = true
 delog.workspace = true
 embedded-hal.workspace = true
+embedded-time.workspace = true
 generic-array.workspace = true
 interchange.workspace = true
 nb.workspace = true
@@ -24,14 +34,15 @@ admin-app.workspace = true
 apdu-dispatch.workspace = true
 ctap-types.workspace = true
 ctaphid-dispatch.workspace = true
-fido-authenticator = { workspace = true, optional = true }
+fido-authenticator = { workspace = true, optional = true, features = ["mldsa44"] }
 piv-authenticator.workspace = true
-trussed.workspace = true
-trussed-core.workspace = true
+trussed = { workspace = true, features = ["mldsa44"] }
+trussed-core = { workspace = true, features = ["mldsa44"] }
 
 # components
 usbd-ccid.workspace = true
 usbd-ctaphid.workspace = true
+usb-device.workspace = true
 nfc-device.workspace = true
 ndef-app.workspace = true
 
@@ -39,9 +50,15 @@ ndef-app.workspace = true
 littlefs2.workspace = true
 
 [dev-dependencies]
-fido-authenticator = { workspace = true }
-ctap-types.workspace = true
+fido-authenticator = { workspace = true, features = ["mldsa44"] }
+# `test-client` adds Serialize impls on CTAP2 Request types and Deserialize
+# on Response types — needed by the host-side test harness (we're the
+# client). Chip-side builds (above, in [dependencies]) don't enable this.
+ctap-types = { workspace = true, features = ["platform-serde"] }
 ctaphid-dispatch.workspace = true
+# Host-side CTAP Request → CBOR + Response ← CBOR for the Device backend.
+# Same crate ctap-types uses internally to serialize responses.
+cbor-smol = "0.5"
 heapless = { workspace = true }
 rand.workspace = true
 serde.workspace = true
@@ -84,14 +101,6 @@ test-buttons = []
 # 30 s timeout in ~300 ms real time. Does **not** skip consent or auto-approve; it only speeds the
 # platform clock used for that timeout comparison (busy-poll loop stays correct).
 test-fast-up-clock = []
-
-# **Not** the default: no `buttons` module; `check_user_presence` always returns `Normal` without
-# consulting hardware or test doubles — you **cannot** test denied UP / timeout behaviour, and
-# nothing records "UP was requested". Use only for a minimal PC binary that does not run FIDO2 UP tests.
-no-test-ui = []
-
-# Alias for `no-test-ui` (same name as the board crate; meaning here is PC-only).
-no-buttons = ["no-test-ui"]
 
 # Reconfigure the NFC chip in any case
 reconfigure-nfc = []

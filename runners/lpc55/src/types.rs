@@ -5,8 +5,9 @@ use hal::drivers::timer;
 use hal::peripherals::ctimer;
 use littlefs2::{const_ram_storage, consts};
 use trussed::backend::BackendId;
+use trussed::client::{ClientTag, CurrentTagCell, MultiplexedClient, SharedRequesterCell};
 use trussed::interrupt::InterruptFlag;
-use trussed::pipe::{ServiceEndpoint, TrussedChannel};
+use trussed::pipe::{MultiplexedEndpoint, TrussedChannel};
 use trussed::platform;
 use trussed::serde_extensions::{ExtensionDispatch, ExtensionId, ExtensionImpl};
 use trussed::store::DynFilesystem;
@@ -210,18 +211,9 @@ const_ram_storage!(
     path_max_plus_one_ty = consts::U256,
 );
 
-// minimum: 2 blocks
-// TODO: make this optional
-// piv-authenticator hardcodes Location::External for PUK_USER_KEY_BACKUP in init_pins,
-// and opcard defaults to Location::External for its persistent state + ADMIN_USER_KEY_BACKUP.
-// Both write to ExternalStorage during init_pins; the write fails on a 2-block filesystem
-// (zero data blocks) → syscall!() panic → panic_halt → firmware freeze.
-// Anything writing to External needs at least 3 blocks (2 metadata + 1 data).
-// We keep 8192 bytes (16 blocks) whenever either app is enabled.
-#[cfg(not(any(feature = "piv-authenticator", feature = "opcard")))]
-const_ram_storage!(ExternalStorage, 1024);
-#[cfg(any(feature = "piv-authenticator", feature = "opcard"))]
-const_ram_storage!(ExternalStorage, 8192);
+pub type ExternalStorage = board::flash::Solo2ExtFlash;
+
+const_ram_storage!(ExternalFallbackStorage, 4096);
 
 /// Store implementation using three mounted littlefs2 filesystems.
 #[derive(Clone, Copy)]
@@ -469,10 +461,13 @@ impl trussed::client::Syscall for Syscall {
     }
 }
 
-/// Service endpoint type for our Dispatch.
-pub type TrussedEndpoint = ServiceEndpoint<'static, BackendIds, RunnerContext>;
-/// Client type for apps — parameterized with Dispatch to get extension support.
-pub type TrussedClient = trussed::ClientImplementation<'static, Syscall, Dispatch>;
+/// Multiplexed service endpoint: one shared responder, per-client contexts
+/// keyed by `ClientTag`.
+pub type TrussedEndpoint = MultiplexedEndpoint<'static, BackendIds, RunnerContext>;
+/// Client type for apps — all apps share the SHARED_TRUSSED_CHANNEL and are
+/// distinguished by a per-app `ClientTag` so the service can route requests
+/// to the matching context.
+pub type TrussedClient = MultiplexedClient<Syscall, Dispatch>;
 
 /// Backends for most apps: StagingBackend (FsInfo, Hkdf, Manage) + Core.
 /// BackendId::Core must be present or all standard crypto/filesystem calls return
@@ -506,28 +501,41 @@ static OPCARD_BACKENDS: [BackendId<BackendIds>; 3] = [
     BackendId::Core,
 ];
 
-/// Wrapper around the trussed Service that also holds the service endpoints.
+/// Wrapper around the trussed Service that owns the multiplexed endpoint.
 /// `process()` and `update_ui()` are called from the RTIC OS_EVENT handler and
 /// the periodic UI task respectively.
 pub struct Trussed {
     service: trussed::Service<Board, Dispatch>,
-    endpoints: heapless::Vec<TrussedEndpoint, 8>,
+    endpoint: TrussedEndpoint,
 }
 
 impl Trussed {
     pub fn new(service: trussed::Service<Board, Dispatch>) -> Self {
+        let (req, resp) = SHARED_TRUSSED_CHANNEL
+            .split()
+            .expect("shared trussed channel already split");
+        SHARED_REQUESTER.init(req);
         Self {
             service,
-            endpoints: heapless::Vec::new(),
+            endpoint: MultiplexedEndpoint::new(resp),
         }
     }
 
-    pub fn add_endpoint(&mut self, ep: TrussedEndpoint) {
-        self.endpoints.push(ep).ok();
+    pub fn register_client(
+        &mut self,
+        tag: ClientTag,
+        context: trussed::types::Context<RunnerContext>,
+        backends: &'static [BackendId<BackendIds>],
+    ) {
+        self.endpoint
+            .register((tag, context, backends))
+            .map_err(|_| ())
+            .expect("MultiplexedEndpoint full");
     }
 
     pub fn process(&mut self) {
-        self.service.process(&mut self.endpoints);
+        self.service
+            .process_multiplexed(&mut self.endpoint, &CURRENT_TAG);
     }
 
     pub fn update_ui(&mut self) {
@@ -573,8 +581,6 @@ pub type AdminApp = admin_app::App<TrussedClient, board::Reboot, AdminStatus>;
 pub type PivApp = piv_authenticator::Authenticator<TrussedClient>;
 #[cfg(feature = "opcard")]
 pub type OpcardApp = opcard::Card<TrussedClient>;
-#[cfg(feature = "oath-authenticator")]
-pub type OathApp = oath_authenticator::Authenticator<TrussedClient>;
 #[cfg(feature = "oath")]
 pub type SecretsApp = secrets_app::Authenticator<TrussedClient>;
 #[cfg(feature = "fido-authenticator")]
@@ -593,56 +599,62 @@ pub type DynamicClockController = board::clock_controller::DynamicClockControlle
 pub type NfcWaitExtender = timer::Timer<ctimer::Ctimer0<hal::typestates::init_state::Enabled>>;
 pub type PerformanceTimer = timer::Timer<ctimer::Ctimer4<hal::typestates::init_state::Enabled>>;
 
-// Static trussed channels — one per app. Channels are split during Apps::new().
-#[cfg(feature = "admin-app")]
-static ADMIN_TRUSSED_CHANNEL: TrussedChannel = TrussedChannel::new();
+/// Single channel shared across every app. The requester half is stashed in
+/// `SHARED_REQUESTER` so all `MultiplexedClient`s can submit requests through
+/// it; the responder half is owned by the `MultiplexedEndpoint` inside
+/// `Trussed` and pumped by `Service::process_multiplexed`.
+static SHARED_TRUSSED_CHANNEL: TrussedChannel = TrussedChannel::new();
+static SHARED_REQUESTER: SharedRequesterCell = SharedRequesterCell::new();
+/// Set by whichever client most recently submitted a request; read by the
+/// service to find the matching context.
+static CURRENT_TAG: CurrentTagCell = CurrentTagCell::new();
+
+/// Per-app ClientTag (1..=N; 0 reserved as "no client"). Each value must be
+/// distinct so `process_multiplexed` can route requests to the right context.
+#[allow(dead_code)]
+mod client_tag {
+    use super::ClientTag;
+    pub const ADMIN: ClientTag = 1;
+    pub const FIDO: ClientTag = 2;
+    pub const SECRETS: ClientTag = 4;
+    pub const PIV: ClientTag = 5;
+    pub const OPCARD: ClientTag = 6;
+    pub const PROVISIONER: ClientTag = 7;
+}
+
 #[cfg(feature = "admin-app")]
 static ADMIN_INTERRUPT: InterruptFlag = InterruptFlag::new();
-
-#[cfg(feature = "fido-authenticator")]
-static FIDO_TRUSSED_CHANNEL: TrussedChannel = TrussedChannel::new();
 #[cfg(feature = "fido-authenticator")]
 static FIDO_INTERRUPT: InterruptFlag = InterruptFlag::new();
-
-#[cfg(feature = "oath-authenticator")]
-static OATH_TRUSSED_CHANNEL: TrussedChannel = TrussedChannel::new();
-#[cfg(feature = "oath-authenticator")]
-static OATH_INTERRUPT: InterruptFlag = InterruptFlag::new();
-
-#[cfg(feature = "piv-authenticator")]
-static PIV_TRUSSED_CHANNEL: TrussedChannel = TrussedChannel::new();
 #[cfg(feature = "piv-authenticator")]
 static PIV_INTERRUPT: InterruptFlag = InterruptFlag::new();
-
-#[cfg(feature = "opcard")]
-static OPCARD_TRUSSED_CHANNEL: TrussedChannel = TrussedChannel::new();
 #[cfg(feature = "opcard")]
 static OPCARD_INTERRUPT: InterruptFlag = InterruptFlag::new();
-
-#[cfg(feature = "provisioner-app")]
-static PROVISIONER_TRUSSED_CHANNEL: TrussedChannel = TrussedChannel::new();
 #[cfg(feature = "provisioner-app")]
 static PROVISIONER_INTERRUPT: InterruptFlag = InterruptFlag::new();
-
-#[cfg(feature = "oath")]
-static SECRETS_TRUSSED_CHANNEL: TrussedChannel = TrussedChannel::new();
 #[cfg(feature = "oath")]
 static SECRETS_INTERRUPT: InterruptFlag = InterruptFlag::new();
 
-/// Helper: split a static channel, register the service endpoint with `trussed`,
-/// and return the client end.
+/// Register a multiplexed client with the shared trussed service and return
+/// the corresponding `MultiplexedClient`. The runner contributes the
+/// per-app `tag`, `client_id` directory, optional `interrupt`, and the
+/// backends list used to route extension calls.
 fn make_client(
-    channel: &'static TrussedChannel,
+    tag: ClientTag,
     client_id: &'static littlefs2::path::Path,
     trussed: &mut Trussed,
     interrupt: Option<&'static InterruptFlag>,
     backends: &'static [BackendId<BackendIds>],
 ) -> TrussedClient {
-    let (req, resp) = channel.split().expect("channel already split");
     let context = CoreContext::with_interrupt(littlefs2::path::PathBuf::from(client_id), interrupt);
-    let ep = ServiceEndpoint::new(resp, context, backends);
-    trussed.add_endpoint(ep);
-    TrussedClient::new(req, Syscall::default(), interrupt)
+    trussed.register_client(tag, context.into(), backends);
+    MultiplexedClient::new(
+        &SHARED_REQUESTER,
+        &CURRENT_TAG,
+        tag,
+        Syscall::default(),
+        interrupt,
+    )
 }
 
 pub struct ProvisionerNonPortable {
@@ -656,8 +668,6 @@ pub struct Apps {
     pub admin: AdminApp,
     #[cfg(feature = "fido-authenticator")]
     pub fido: FidoApp,
-    #[cfg(feature = "oath-authenticator")]
-    pub oath: OathApp,
     #[cfg(feature = "oath")]
     pub secrets: SecretsApp,
     #[cfg(feature = "ndef-app")]
@@ -678,7 +688,7 @@ impl Apps {
         #[cfg(feature = "admin-app")]
         let admin = {
             let client = make_client(
-                &ADMIN_TRUSSED_CHANNEL,
+                client_tag::ADMIN,
                 littlefs2::path!("admin"),
                 trussed,
                 Some(&ADMIN_INTERRUPT),
@@ -697,7 +707,7 @@ impl Apps {
         #[cfg(feature = "fido-authenticator")]
         let fido = {
             let client = make_client(
-                &FIDO_TRUSSED_CHANNEL,
+                client_tag::FIDO,
                 littlefs2::path!("fido"),
                 trussed,
                 Some(&FIDO_INTERRUPT),
@@ -710,58 +720,52 @@ impl Apps {
                     max_msg_size: ctaphid_dispatch::DEFAULT_MESSAGE_SIZE,
                     skip_up_timeout: None,
                     max_resident_credential_count: Some(50),
-                    large_blobs: None,
-                    nfc_transport: false,
+                    // CTAP 2.1 §6.10: minimum array size is 1024.
+                    large_blobs: Some(fido_authenticator::LargeBlobsConfig {
+                        location: trussed::types::Location::External,
+                        max_size: 1024,
+                    }),
+                    nfc_transport: true,
+                    ccid_transport: false,
+                    firmware_version: Some((build_constants::CARGO_PKG_VERSION as usize).into()),
+                    // V2 credential-id format: AES-256-GCM. Applied on a clean
+                    // state / after factory reset; existing V1 credentials persist.
+                    credential_id_version: Some(
+                        fido_authenticator::credential::CredentialIdVersion::V2,
+                    ),
+                    long_touch_for_reset: true,
+                    fido2_up_timeout: None,
                 },
             )
-        };
-
-        #[cfg(feature = "oath-authenticator")]
-        let oath = {
-            let client = make_client(
-                &OATH_TRUSSED_CHANNEL,
-                littlefs2::path!("oath"),
-                trussed,
-                Some(&OATH_INTERRUPT),
-                &STAGING_BACKENDS,
-            );
-            OathApp::new(client)
         };
 
         #[cfg(feature = "piv-authenticator")]
         let piv = {
             let client = make_client(
-                &PIV_TRUSSED_CHANNEL,
+                client_tag::PIV,
                 littlefs2::path!("piv"),
                 trussed,
                 Some(&PIV_INTERRUPT),
                 &PIV_BACKENDS,
             );
-            // Use Internal storage: External is only 1024 bytes (too small for PIV key material).
-            // PIV needs Auth backend for PIN management (has_pin/set_pin/get_pin_key) and
-            // StagingBackend for Chunked/Hpke/WrapKeyToFile extensions.
             PivApp::new(
                 client,
-                piv_authenticator::Options::default().storage(trussed::types::Location::Internal),
+                piv_authenticator::Options::default().storage(trussed::types::Location::External),
             )
         };
 
         #[cfg(feature = "opcard")]
         let opcard = {
             let client = make_client(
-                &OPCARD_TRUSSED_CHANNEL,
+                client_tag::OPCARD,
                 littlefs2::path!("opcard"),
                 trussed,
                 Some(&OPCARD_INTERRUPT),
                 &OPCARD_BACKENDS,
             );
-            // Use Internal storage so card state (PINs, keys) persists across reboots.
-            // opcard::Options::default() uses Location::External (volatile RAM) which would
-            // lose all card state on every reboot and cause init_pins to write
-            // ADMIN_USER_KEY_BACKUP to ExternalStorage — same failure mode as PIV.
             {
                 let mut opts = opcard::Options::default();
-                opts.storage = trussed::types::Location::Internal;
+                opts.storage = trussed::types::Location::External;
                 OpcardApp::new(client, opts)
             }
         };
@@ -769,7 +773,7 @@ impl Apps {
         #[cfg(feature = "oath")]
         let secrets = {
             let client = make_client(
-                &SECRETS_TRUSSED_CHANNEL,
+                client_tag::SECRETS,
                 littlefs2::path!("secrets"),
                 trussed,
                 Some(&SECRETS_INTERRUPT),
@@ -779,7 +783,7 @@ impl Apps {
             SecretsApp::new(
                 client,
                 secrets_app::Options::new(
-                    trussed::types::Location::Internal,
+                    trussed::types::Location::External,
                     0, // custom_status_reverse_hotp_success
                     1, // custom_status_reverse_hotp_error
                     [uuid[0], uuid[1], uuid[2], uuid[3]],
@@ -794,7 +798,7 @@ impl Apps {
         #[cfg(feature = "provisioner-app")]
         let provisioner = {
             let client = make_client(
-                &PROVISIONER_TRUSSED_CHANNEL,
+                client_tag::PROVISIONER,
                 littlefs2::path!("attn"),
                 trussed,
                 Some(&PROVISIONER_INTERRUPT),
@@ -813,8 +817,6 @@ impl Apps {
             admin,
             #[cfg(feature = "fido-authenticator")]
             fido,
-            #[cfg(feature = "oath-authenticator")]
-            oath,
             #[cfg(feature = "oath")]
             secrets,
             #[cfg(feature = "ndef-app")]
@@ -840,8 +842,6 @@ impl Apps {
             &mut self.piv,
             #[cfg(feature = "opcard")]
             &mut self.opcard,
-            #[cfg(feature = "oath-authenticator")]
-            &mut self.oath,
             #[cfg(feature = "oath")]
             &mut self.secrets,
             #[cfg(feature = "fido-authenticator")]

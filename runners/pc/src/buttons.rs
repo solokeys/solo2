@@ -129,7 +129,7 @@ impl TestThreeButtons {
     fn take_press_token(&self) -> bool {
         let val = self.up_response.load(Ordering::SeqCst);
         let grant = matches!(val, AUTO_APPROVE | APPROVE_ONCE | APPROVE_STICKY);
-        if val > 0 && val < 128 {
+        if val == APPROVE_ONCE {
             let _ = self.up_response.compare_exchange(
                 val,
                 AUTO_APPROVE,
@@ -191,6 +191,75 @@ pub fn approve() {
 
 pub fn approve_sticky() {
     test_three_buttons().lock().unwrap().approve_sticky();
+}
+
+// --- Single-shot UP-mode queue (vctaphid test driver) ---------------------
+//
+// Tests call `device.up_set_mode("tap" | "do_not_tap" | "long_tap")` which
+// (on vctaphid) writes a magic packet. The daemon stores the requested
+// mode here, *queued* — it doesn't take effect immediately because the
+// surrounding test workflow can issue non-UP-needing requests between
+// the mode-set and the request that actually needs UP. Instead, the
+// `solo_pc::UserInterface::set_status(WaitingForUserPresence)` hook
+// consumes the queued mode and arms the corresponding `buttons` state
+// for the duration of *that one* UP wait, then resets back to
+// approve_sticky so subsequent (non-UP-related) traffic isn't affected.
+
+/// 0 = nothing queued (fall through to the default approve_sticky).
+pub const UP_MODE_NONE: u8 = 0;
+/// One tap: APPROVE_ONCE for the next UP poll loop.
+pub const UP_MODE_TAP: u8 = 1;
+/// Don't tap: DENY_STICKY for the next UP poll loop (trussed sees no
+/// consent, times out, returns `UserActionTimeout`).
+pub const UP_MODE_DO_NOT_TAP: u8 = 2;
+/// Long-press: same `buttons` state as `UP_MODE_TAP` on vctaphid since
+/// our held state is always (a:true, b:true), so any granted token
+/// yields `Level::Strong`. Distinguished from `tap` only for the
+/// human-facing prompt and for future runners that *can* tell short
+/// from long presses apart.
+pub const UP_MODE_LONG_TAP: u8 = 3;
+
+static QUEUED_UP_MODE: AtomicU8 = AtomicU8::new(UP_MODE_NONE);
+
+pub fn queue_up_mode(mode: u8) {
+    QUEUED_UP_MODE.store(mode, Ordering::SeqCst);
+}
+
+/// Atomically take the queued mode (returning it) and reset the queue
+/// back to `UP_MODE_NONE`. Called by the platform UI when trussed
+/// signals it's entering a UP-poll loop.
+pub fn take_queued_up_mode() -> u8 {
+    QUEUED_UP_MODE.swap(UP_MODE_NONE, Ordering::SeqCst)
+}
+
+// --- "Don't grant before this instant" deadline -------------------------
+//
+// On real hardware UP costs the user a noticeable button press (~500 ms
+// human reaction). usbd-ctaphid's keepalive timer relies on that —
+// `did_start_processing` schedules the first KEEPALIVE 250 ms after a
+// CBOR command starts, on the assumption that the authenticator is
+// still inside its UP-poll loop by then. Our buttons-based UI grants
+// instantly, so we never cross the 250 ms threshold and
+// `test_keep_alive` sees no keepalives.
+//
+// To match the LPC55 wire behaviour we slow the *default* UP path
+// (i.e. no test-queued mode) to artificially take ~300 ms. The
+// `solo_pc::UserInterface::check_user_presence` hook reads this
+// deadline before consulting the button state; if `Instant::now() <
+// deadline`, it returns `None` (re-poll) regardless. Test-queued modes
+// (`tap` / `do_not_tap` / `long_tap`) bypass the deadline because
+// they're explicit "the human just acted" signals.
+
+use std::time::Instant;
+
+static UP_GRANT_NOT_BEFORE: Mutex<Option<Instant>> = Mutex::new(None);
+
+pub fn set_up_grant_deadline(deadline: Option<Instant>) {
+    *UP_GRANT_NOT_BEFORE.lock().unwrap() = deadline;
+}
+
+pub fn up_grant_deadline() -> Option<Instant> {
+    *UP_GRANT_NOT_BEFORE.lock().unwrap()
 }
 
 pub fn deny() {

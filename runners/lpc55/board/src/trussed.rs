@@ -14,6 +14,25 @@ use trussed::platform::{consent, ui};
 // get user presence, this should be fine.
 // Used for Ctaphid.keepalive message status.
 static mut WAITING: bool = false;
+
+/// Probe-rs-writable user-presence override for automated tests.
+///
+/// Value semantics (see the match in `check_user_presence` below):
+///   1   = approve once (Normal), consumed after one read
+///   2   = approve once (Strong), consumed after one read
+///   129 = approve sticky (Normal) until reset to 0
+///   130 = approve sticky (Strong) until reset to 0
+///   0 / any other value (incl. uninitialized) = no override; falls
+///         through to real button polling. A host "deny" is expressed
+///         this way (no tap within the window = timeout).
+///
+/// Placed in `.uninit` with `no_mangle` so its address is stable and
+/// discoverable via the ELF symbol table.
+#[cfg(feature = "test-up-control")]
+#[unsafe(link_section = ".uninit")]
+#[unsafe(no_mangle)]
+pub static mut UP_CONTROL: u8 = 0;
+
 pub struct UserPresenceStatus {}
 impl UserPresenceStatus {
     pub(crate) fn set_waiting(waiting: bool) {
@@ -108,14 +127,44 @@ where
     RGB: RgbLed,
 {
     fn check_user_presence(&mut self) -> consent::Level {
+        // Probe-rs UP override: write `UP_CONTROL` from the host (via
+        // probe-rs) to drive automated tests. See the static's docs above
+        // for the value mapping. One-shot values (1, 2) are consumed.
+        // The JTAG override is additive: it can only *grant* user presence.
+        // Any value that is not a recognized approve marker (including 0 and
+        // uninitialized garbage) falls through to real button polling, so the
+        // physical buttons always work.
+        #[cfg(feature = "test-up-control")]
+        {
+            let val = unsafe { core::ptr::read_volatile(&raw const UP_CONTROL) };
+            match val {
+                1 => {
+                    unsafe { core::ptr::write_volatile(&raw mut UP_CONTROL, 0) };
+                    return consent::Level::Normal;
+                }
+                2 => {
+                    unsafe { core::ptr::write_volatile(&raw mut UP_CONTROL, 0) };
+                    return consent::Level::Strong;
+                }
+                129 => return consent::Level::Normal,
+                // Strong sticky — required to drive CTAP 2.3 long-touch
+                // Reset from a host that can't pulse the UP byte per
+                // call (the only consent level that satisfies both
+                // `user_present` and `user_present_strong`).
+                130 => return consent::Level::Strong,
+                // 0 / unknown / uninitialized: fall through to real buttons.
+                _ => {}
+            }
+        }
+
         match &mut self.buttons {
             Some(buttons) => {
                 // important to read state before checking for edge,
                 // since reading an edge could clear the state.
                 let state = buttons.state();
-                UserPresenceStatus::set_waiting(true);
+                // WAITING is driven by set_status() so the periodic keepalive
+                // task observes UP_NEEDED for the full UP-wait window.
                 let press_result = buttons.wait_for_any_new_press();
-                UserPresenceStatus::set_waiting(false);
                 if press_result.is_ok() {
                     if state.a && state.b {
                         consent::Level::Strong
@@ -127,15 +176,20 @@ where
                 }
             }
             None => {
-                // With configured with no buttons, that means Solo is operating
-                // in passive NFC mode, which means user tapped to indicate presence.
-                consent::Level::Normal
+                // no-buttons builds (auto-approve UP for tests + NFC mode).
+                // Return Strong so it satisfies both Normal-gated ops and the
+                // Strong-gated Reset; Normal would block Reset entirely.
+                consent::Level::Strong
             }
         }
     }
 
     fn set_status(&mut self, status: ui::Status) {
         self.status = status;
+        // Drive the static WAITING flag from the trussed status so the
+        // periodic CTAPHID keepalive task emits STATUS_UPNEEDED for the
+        // entire UP-wait window (CTAP §11.2.9.1.2).
+        UserPresenceStatus::set_waiting(matches!(status, ui::Status::WaitingForUserPresence));
         debug!("status set to {:?}", defmt::Debug2Format(&status));
 
         // self.refresh runs periodically and would overwrite this

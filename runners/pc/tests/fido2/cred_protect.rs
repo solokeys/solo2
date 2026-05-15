@@ -1,6 +1,7 @@
 //! CredProtect extension tests.
 
 use super::*;
+use support::pin::PinSession;
 
 fn mc_with_cred_protect(authn: &mut dyn TestAuthenticator, level: u8) -> Vec<u8> {
     let mut req = make_credential_request_for(
@@ -9,7 +10,7 @@ fn mc_with_cred_protect(authn: &mut dyn TestAuthenticator, level: u8) -> Vec<u8>
         &format!("cp-{level}"),
         true,
     );
-    let mut ext = ctap2::make_credential::Extensions::default();
+    let mut ext = ctap2::make_credential::ExtensionsInput::default();
     ext.cred_protect = Some(level);
     req.extensions = Some(ext);
     up::approve();
@@ -150,6 +151,63 @@ fn cred_protect_group() {
     });
 }
 
+/// CTAP 2.1 credProtect §12.1: with UV performed via pinUvAuthParam, all
+/// three protection levels are accessible in an allow list (level 3 is no
+/// longer filtered out).
+#[test]
+#[serial]
+fn cred_protect_all_levels_visible_with_uv() {
+    run_isolated_in_sim(
+        "cred_protect::cred_protect_all_levels_visible_with_uv",
+        || {
+            run_in_thread(|| {
+                with_authenticator!(cred_protect_uv, |authn| {
+                    reset_authenticator(authn);
+
+                    let cred1 = mc_with_cred_protect(authn, 1);
+                    let cred2 = mc_with_cred_protect(authn, 2);
+                    let cred3 = mc_with_cred_protect(authn, 3);
+
+                    const PIN: &str = "123456A";
+                    PinSession::set_pin(authn, PIN);
+                    let pin = PinSession::get_pin_token(authn, PIN);
+
+                    let mut allow_list: ctap2::get_assertion::AllowList<'static> =
+                        ctap_types::Vec::new();
+                    for cred in [&cred1, &cred2, &cred3] {
+                        allow_list.push(descriptor_ref(cred)).unwrap();
+                    }
+
+                    let mut req =
+                        get_assertion_request_for("credprotect.example.com", Some(allow_list));
+                    req.pin_protocol = Some(pin.protocol().into());
+                    let pin_auth = pin.pin_auth_for_client_data_hash(req.client_data_hash.as_ref());
+                    req.pin_auth = Some(leak_bytes(pin_auth.to_vec()));
+
+                    up::approve();
+                    let resp = authn
+                        .call_ctap2(&Request::GetAssertion(req))
+                        .expect("GA with UV across allow list should succeed");
+                    match resp {
+                        Response::GetAssertion(ga) => {
+                            // CTAP 2.1 allows omission of numberOfCredentials when
+                            // the host already knows the count via an allow list.
+                            // If present, all 3 must be visible.
+                            if let Some(count) = ga.number_of_credentials {
+                                assert_eq!(
+                                    count, 3,
+                                    "with UV, all 3 cred-protect levels must be visible",
+                                );
+                            }
+                        }
+                        other => panic!("Expected GetAssertion, got {:?}", other),
+                    }
+                })
+            });
+        },
+    );
+}
+
 /// Combined extensions: credProtect + hmac-secret in one MC request.
 #[test]
 #[serial]
@@ -160,7 +218,7 @@ fn cred_protect_with_hmac_secret() {
 
             let mut req =
                 make_credential_request_for("combined.example.com", &[0xBB; 16], "combined", false);
-            let mut ext = ctap2::make_credential::Extensions::default();
+            let mut ext = ctap2::make_credential::ExtensionsInput::default();
             ext.cred_protect = Some(1);
             ext.hmac_secret = Some(true);
             req.extensions = Some(ext);

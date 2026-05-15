@@ -1,8 +1,4 @@
 //! PIN / key-agreement helpers for FIDO2 tests.
-//!
-//! Uses the local `ctap-types` (patched in workspace `Cargo.toml`) which adds
-//! `ctap2::client_pin::Request::new(..)`; all optional fields are set via
-//! direct field assignment.
 
 use aes::Aes256;
 use cbc::cipher::{block_padding::NoPadding, BlockDecryptMut, BlockEncryptMut, KeyIvInit};

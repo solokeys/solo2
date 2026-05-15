@@ -35,11 +35,19 @@ pub struct Basic {
     pub rgb: Option<board::RgbLed>,
 }
 
-/// Initialized NFC Iso14443 transport
+/// Initialized NFC Iso14443 transport.
+///
+/// The FM11NC08 is not brought up when the device is USB-powered (SPI0 is
+/// consumed by the GD25Q16 flash instead). In that case `iso14443` is `None` and
+/// `flash_spi` carries an enabled `Spi0` into the filesystem stage so
+/// the actual chip bring-up happens *after* USB has enumerated, keeping
+/// the device reachable even if JEDEC probe later fails.
 pub struct Nfc {
     pub iso14443: Option<nfc_device::Iso14443<'static, board::nfc::NfcChip>>,
 
     pub contactless_responder: Option<apdu_dispatch::interchanges::Responder<'static>>,
+
+    pub flash_spi: Option<hal::peripherals::flexcomm::Spi0<hal::Enabled>>,
 }
 
 /// Initialized USB device + USB classes, Dynamic Clock controller.

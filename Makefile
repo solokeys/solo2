@@ -40,3 +40,4 @@ check-clippy:
 	cd runners/lpc55 && cargo clippy --release --features board-lpcxpresso55 -- -D warnings
 	cd runners/lpc55 && cargo clippy --release --features board-solo2 -- -D warnings
 	cd runners/lpc55 && cargo clippy --release --features board-lpcxpresso55,provisioner-app,admin-app,provisioner-app/test-attestation -- -D warnings
+

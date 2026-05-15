@@ -34,4 +34,8 @@ impl<'a, A: App<'a>> TestAuthenticator for DispatchTransport<'a, A> {
     ) -> Result<(u8, Vec<u8>), ctap2::Error> {
         unimplemented!("DispatchTransport: stubbed")
     }
+
+    fn call_ctap1_apdu(&mut self, _apdu: &[u8]) -> Result<(u16, Vec<u8>), ctap2::Error> {
+        unimplemented!("DispatchTransport: stubbed")
+    }
 }
