@@ -1681,6 +1681,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "oath-export"
+version = "0.1.0"
+dependencies = [
+ "apdu-dispatch",
+ "defmt",
+ "heapless 0.9.2",
+ "iso7816",
+ "littlefs2",
+ "postcard",
+ "serde",
+ "trussed",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2231,6 +2245,7 @@ dependencies = [
  "nb 1.1.0",
  "ndef-app",
  "nfc-device",
+ "oath-export",
  "opcard",
  "panic-halt",
  "piv-authenticator",

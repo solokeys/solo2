@@ -1,0 +1,37 @@
+[package]
+name = "oath-export"
+version = "0.1.0"
+authors.workspace = true
+edition = "2021"
+license = "Apache-2.0 OR MIT"
+description = "One-shot migration app: read oath-authenticator 0.1 credentials, export them as paged otpauth:// lines, then delete them to reclaim space"
+
+# This is NOT a port of oath-authenticator. It is a small new Trussed app that
+# only knows the *on-disk* 0.1.0 format (postcard `Credential` + `secret: KeyId`
+# in /oath/), reads it via raw store access, and exports it as paged plaintext
+# otpauth:// lines for the host to re-import into secrets-app. It then offers a
+# DELETE to reclaim the space once the user has verified the migration. No crypto
+# runs on the device — confidentiality of the seeds is the host's responsibility
+# (pipe straight into re-import, or encrypt at rest with the real `age` tool).
+
+[dependencies]
+apdu-dispatch.workspace = true
+defmt        .workspace = true
+heapless     .workspace = true
+iso7816      .workspace = true
+littlefs2    .workspace = true
+trussed      .workspace = true
+
+serde = { version = "1", default-features = false, features = ["derive"] }
+# MUST match the EXACT wire format the legacy data was written with: oath-authenticator
+# 0.1.0 serialized via trussed 0.1.0's `postcard_serialize` = postcard 0.7.3 (the
+# 2.964.0 release). The on-disk legacy format is frozen at 0.7.3 forever, so this is
+# pinned EXACT (`=0.7.3`) on purpose: any bump — including a trussed change that drags
+# postcard forward — MUST fail the build and force a human to re-verify the format
+# against a real device. postcard 1.x is NOT wire-compatible. Never relax this to a
+# caret range or to "1".
+postcard = { version = "=0.7.3", default-features = false }
+
+[features]
+default = []
+log-all = []

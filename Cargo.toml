@@ -7,6 +7,7 @@ members = [
     "components/nfc-device",
     "components/fm11nc08",
     "components/provisioner-app",
+    "components/oath-export",
 ]
 # Host-buildable members only. The lpc55 runner/board, fm11nc08, and
 # provisioner-app (via lpc55-hal) / nfc-device (via embedded deps) all require an
@@ -34,6 +35,7 @@ ndef-app         = { path = "components/ndef-app" }
 fm11nc08         = { path = "components/fm11nc08" }
 nfc-device       = { path = "components/nfc-device" }
 provisioner-app  = { path = "components/provisioner-app" }
+oath-export      = { path = "components/oath-export" }
 
 # ── RTIC framework ────────────────────────────────────────────────────────────
 rtic              = "2.0.0"

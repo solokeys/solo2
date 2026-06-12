@@ -128,7 +128,7 @@ pub fn init_board(
         everything.basic.perf_timer.elapsed().0 / 1000
     );
 
-    #[cfg(feature = "provisioner-app")]
+    #[cfg(any(feature = "provisioner-app", feature = "oath-export"))]
     let store = everything.filesystem.store;
     #[cfg(feature = "provisioner-app")]
     let internal_fs = everything.filesystem.internal_storage_fs;
@@ -155,6 +155,8 @@ pub fn init_board(
                 nfc_powered: _is_passive_mode,
             }
         },
+        #[cfg(feature = "oath-export")]
+        store,
     );
 
     (

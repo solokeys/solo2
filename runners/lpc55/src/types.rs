@@ -213,7 +213,13 @@ const_ram_storage!(
 
 pub type ExternalStorage = board::flash::Solo2ExtFlash;
 
+// On real hardware secrets-app lives on the external flash chip; this RAM
+// fallback is only used when no chip is present (e.g. a bare EVK). On such
+// boards enlarge it so the migration import test can actually store creds.
+#[cfg(not(feature = "no-encrypted-storage"))]
 const_ram_storage!(ExternalFallbackStorage, 4096);
+#[cfg(feature = "no-encrypted-storage")]
+const_ram_storage!(ExternalFallbackStorage, 32768);
 
 /// Store implementation using three mounted littlefs2 filesystems.
 #[derive(Clone, Copy)]
@@ -583,6 +589,8 @@ pub type PivApp = piv_authenticator::Authenticator<TrussedClient>;
 pub type OpcardApp = opcard::Card<TrussedClient>;
 #[cfg(feature = "oath")]
 pub type SecretsApp = secrets_app::Authenticator<TrussedClient>;
+#[cfg(feature = "oath-export")]
+pub type OathExportApp = oath_export::OathExport<Store, TrussedClient>;
 #[cfg(feature = "fido-authenticator")]
 pub type FidoApp = fido_authenticator::Authenticator<fido_authenticator::Conforming, TrussedClient>;
 #[cfg(feature = "fido-authenticator")]
@@ -620,6 +628,7 @@ mod client_tag {
     pub const PIV: ClientTag = 5;
     pub const OPCARD: ClientTag = 6;
     pub const PROVISIONER: ClientTag = 7;
+    pub const OATH_EXPORT: ClientTag = 8;
 }
 
 #[cfg(feature = "admin-app")]
@@ -634,6 +643,8 @@ static OPCARD_INTERRUPT: InterruptFlag = InterruptFlag::new();
 static PROVISIONER_INTERRUPT: InterruptFlag = InterruptFlag::new();
 #[cfg(feature = "oath")]
 static SECRETS_INTERRUPT: InterruptFlag = InterruptFlag::new();
+#[cfg(feature = "oath-export")]
+static OATH_EXPORT_INTERRUPT: InterruptFlag = InterruptFlag::new();
 
 /// Register a multiplexed client with the shared trussed service and return
 /// the corresponding `MultiplexedClient`. The runner contributes the
@@ -678,12 +689,15 @@ pub struct Apps {
     pub opcard: OpcardApp,
     #[cfg(feature = "provisioner-app")]
     pub provisioner: ProvisionerApp,
+    #[cfg(feature = "oath-export")]
+    pub oath_export: OathExportApp,
 }
 
 impl Apps {
     pub fn new(
         trussed: &mut Trussed,
         #[cfg(feature = "provisioner-app")] provisioner_np: ProvisionerNonPortable,
+        #[cfg(feature = "oath-export")] store: Store,
     ) -> Self {
         #[cfg(feature = "admin-app")]
         let admin = {
@@ -719,7 +733,7 @@ impl Apps {
                 FidoConfig {
                     max_msg_size: ctaphid_dispatch::DEFAULT_MESSAGE_SIZE,
                     skip_up_timeout: None,
-                    max_resident_credential_count: Some(50),
+                    max_resident_credential_count: Some(100),
                     // CTAP 2.1 §6.10: minimum array size is 1024.
                     large_blobs: Some(fido_authenticator::LargeBlobsConfig {
                         location: trussed::types::Location::External,
@@ -787,7 +801,7 @@ impl Apps {
                     0, // custom_status_reverse_hotp_success
                     1, // custom_status_reverse_hotp_error
                     [uuid[0], uuid[1], uuid[2], uuid[3]],
-                    50, // max_resident_credentials_allowed
+                    100, // max_resident_credentials_allowed
                 ),
             )
         };
@@ -812,6 +826,18 @@ impl Apps {
             ProvisionerApp::new(client, store, stolen_filesystem, nfc_powered)
         };
 
+        #[cfg(feature = "oath-export")]
+        let oath_export = {
+            let client = make_client(
+                client_tag::OATH_EXPORT,
+                littlefs2::path!("oathmig"),
+                trussed,
+                Some(&OATH_EXPORT_INTERRUPT),
+                &STAGING_BACKENDS,
+            );
+            OathExportApp::new(client, store)
+        };
+
         Self {
             #[cfg(feature = "admin-app")]
             admin,
@@ -827,6 +853,8 @@ impl Apps {
             opcard,
             #[cfg(feature = "provisioner-app")]
             provisioner,
+            #[cfg(feature = "oath-export")]
+            oath_export,
         }
     }
 
@@ -850,6 +878,8 @@ impl Apps {
             &mut self.admin,
             #[cfg(feature = "provisioner-app")]
             &mut self.provisioner,
+            #[cfg(feature = "oath-export")]
+            &mut self.oath_export,
         ])
     }
 
