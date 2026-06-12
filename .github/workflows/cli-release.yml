@@ -1,0 +1,105 @@
+name: cli release binaries
+
+# Builds the host CLI (package `solo2`, in cli/) for each platform, and on a
+# `v*` tag push publishes the binaries + completions + udev rules to the release.
+
+on: [push, pull_request]
+
+jobs:
+  binaries:
+    name: ${{ matrix.os }} for ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: target/x86_64-unknown-linux-gnu/release/solo2
+            release_name: x86_64-unknown-linux-gnu
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: target/x86_64-pc-windows-msvc/release/solo2.exe
+            release_name: x86_64-pc-windows-msvc.exe
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: target/aarch64-apple-darwin/release/solo2
+            release_name: aarch64-apple-darwin
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Ubuntu dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y libpcsclite-dev libudev-dev
+
+      # The toolchain channel (1.94) comes from rust-toolchain.toml; add the target.
+      - name: Add target
+        run: rustup target add ${{ matrix.target }}
+
+      - name: cargo build
+        run: cargo build -p solo2 --release --locked --features dev-pki --target=${{ matrix.target }}
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: solo2-${{ matrix.release_name }}
+          path: ${{ matrix.artifact_name }}
+
+      - name: udev rules
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: 70-solo2.rules
+          path: cli/70-solo2.rules
+
+      - name: Completions
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: solo2.completions
+          path: |
+            target/${{ matrix.target }}/release/solo2.bash
+            target/${{ matrix.target }}/release/solo2.fish
+            target/${{ matrix.target }}/release/_solo2.ps1
+            target/${{ matrix.target }}/release/_solo2
+
+      ###
+      # Below this line, steps only run when a v* tag was pushed.
+      ###
+
+      - name: Get tag name
+        id: tag_name
+        run: echo "current_version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+        shell: bash
+        if: startsWith(github.ref, 'refs/tags/v')
+
+      - name: Get CHANGELOG.md entry
+        id: changelog_reader
+        uses: mindsers/changelog-reader-action@v2
+        with:
+          version: ${{ steps.tag_name.outputs.current_version }}
+          path: ./cli/CHANGELOG.md
+        if: startsWith(github.ref, 'refs/tags/v')
+
+      - name: Publish binary
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: ${{ matrix.artifact_name }}
+          tag: ${{ github.ref }}
+          asset_name: solo2-$tag-${{ matrix.release_name }}
+          body: ${{ steps.changelog_reader.outputs.changes }}
+        if: startsWith(github.ref, 'refs/tags/v')
+
+      - name: Publish udev rules
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: cli/70-solo2.rules
+          tag: ${{ github.ref }}
+          asset_name: 70-solo2.rules
+          body: ${{ steps.changelog_reader.outputs.changes }}
+        if: startsWith(github.ref, 'refs/tags/v') && matrix.os == 'ubuntu-latest'

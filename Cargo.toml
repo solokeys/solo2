@@ -8,20 +8,22 @@ members = [
     "components/fm11nc08",
     "components/provisioner-app",
     "components/oath-export",
+    "cli",
 ]
-# Host-buildable members only. The lpc55 runner/board, fm11nc08, and
-# provisioner-app (via lpc55-hal) / nfc-device (via embedded deps) all require an
-# ARM target and can't link on the host, so they're excluded from default
-# commands like `cargo test`.
+# `cargo run` / `cargo build` / `cargo test` at the workspace root operate on the
+# host CLI. `runners/pc` also ships binaries, so the CLI must be the *sole*
+# default member for `cargo run` to be unambiguous. Build the firmware explicitly
+# with `cargo build -p runner --target thumbv8m.main-none-eabi ...` (or from
+# `runners/lpc55/`); test other host members with `cargo test -p <name>`.
 default-members = [
-    "runners/pc",
-    "components/ndef-app",
+    "cli",
 ]
 resolver = "2"
 
 [workspace.package]
 version = "2.2362.0"
 edition = "2021"
+rust-version = "1.94"
 authors = [
     "Nicolas Stalder <n@stalder.io>",
     "Conor Patrick <conor@solokeys.com>",
@@ -113,13 +115,42 @@ opcard             = { git = "https://github.com/Nitrokey/opcard-rs", tag = "v1.
 
 # ── PC test-only dependencies ─────────────────────────────────────────────────
 serial_test = "3"
-hidapi      = "2"
+# default-features off + static hidraw: shared by runners/pc and the host cli.
+hidapi      = { version = "2", default-features = false, features = ["linux-static-hidraw"] }
 aes         = "0.8"
 cbc         = "0.1"
 sha2        = "0.10"
 hmac        = "0.12"
 cosey       = "0.4"
 p256        = { version = "0.13", features = ["ecdh"] }
+
+# ── CLI (host) — used only by the `cli` member ───────────────────────────────
+# (hex, sha2, rand_core, p256, iso7816, hidapi are deduped onto the entries above)
+anyhow              = "1"
+log                 = "0.4"
+data-encoding       = "2"
+flexiber            = { version = "0.1", features = ["std"] }
+getrandom           = "0.2"
+hex-literal         = "0.4"
+lpc55               = "0.2"
+pcsc                = "2"
+serde_json          = "1"
+sha-1               = "0.10"
+time                = "0.3"
+x509-parser         = { version = "0.14", features = ["verify"] }
+dialoguer           = "0.10"
+indicatif           = "0.18"
+ureq                = { version = "2", features = ["json"] }
+webbrowser          = "1"
+clap                = { version = "4", features = ["cargo", "derive"] }
+clap_complete       = "4"
+clap-verbosity-flag = "2"
+ctrlc               = "3"
+lazy_static         = "1"
+pretty_env_logger   = "0.5"
+pkcs8               = { version = "0.10", features = ["alloc"] }
+rcgen               = "0.10"
+yasna               = "0.6"
 
 # ── Release profile ───────────────────────────────────────────────────────────
 [profile.release]
@@ -143,3 +174,5 @@ admin-app = { git = "https://github.com/Nitrokey/admin-app.git", tag = "v0.1.0-n
 littlefs2-core = { git = "https://github.com/trussed-dev/littlefs2.git", tag = "core-0.1.2" }
 # Extension backends needed by fido-authenticator (FsInfo, Hkdf, etc.)
 trussed-staging = { git = "https://github.com/trussed-dev/trussed-staging.git", tag = "v0.4.0" }
+# Forked lpc55 (host) with the BCD CalVer-minor>999 version fix, used by the cli.
+lpc55 = { git = "https://github.com/0x0ece/lpc55-host", rev = "2a8a24e3df9ab9734f66ed2d7a56bc69101f531c" }

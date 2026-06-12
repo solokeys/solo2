@@ -1,0 +1,39 @@
+# This is a configuration file for the bacon tool
+# More info at <https://github.com/Canop/bacon>
+
+default_job = "cli"
+
+[jobs]
+
+[jobs.build]
+command = ["cargo", "build", "--color", "always"]
+need_stdout = false
+
+[jobs.cli]
+command = ["cargo", "check", "--features", "cli", "--bin", "solo2", "--color", "always"]
+need_stdout = false
+
+[jobs.dev-pki]
+command = ["cargo", "check", "--features", "dev-pki", "--bin", "solo2", "--color", "always"]
+need_stdout = false
+
+[jobs.ctap-list]
+command = ["cargo", "build", "--example", "list-ctap", "--color", "always"]
+need_stdout = false
+
+[jobs.check-lib]
+command = ["cargo", "check", "--color", "always"]
+need_stdout = false
+
+[jobs.clippy]
+command = ["cargo", "clippy", "--color", "always"]
+need_stdout = false
+
+[jobs.doc]
+command = ["cargo", "doc", "--color", "always"]
+need_stdout = false
+
+[jobs.test]
+command = ["cargo", "test", "--color", "always"]
+need_stdout = true
+

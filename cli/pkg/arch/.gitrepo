@@ -1,0 +1,12 @@
+; DO NOT EDIT (unless you know what you are doing)
+;
+; This subdirectory is a git "subrepo", and this file is maintained by the
+; git-subrepo command. See https://github.com/git-commands/git-subrepo#readme
+;
+[subrepo]
+	remote = ssh://aur@aur.archlinux.org/solo2-cli.git
+	branch = master
+	commit = 44eca59f75469c279adab1bb4ebfd7a31e8868e3
+	method = merge
+	cmdver = 0.4.3
+	parent = 9c07ce8bfc00e06c033c3d257caf3ab2801140e3

@@ -1,0 +1,74 @@
+[package]
+name = "solo2"
+version = "0.3.0"
+authors = ["SoloKeys, built with Trussed®."]
+edition = "2021"
+rust-version.workspace = true
+repository = "https://github.com/solokeys/solo2-cli"
+description = "Library and CLI for the SoloKeys Solo 2 security key"
+license = "Apache-2.0 OR MIT"
+readme = "README.md"
+documentation = "https://docs.rs/solo2"
+
+[[bin]]
+name = "solo2"
+required-features = ["cli"]
+
+[dependencies]
+# All versions live in the workspace root Cargo.toml ([workspace.dependencies]).
+log.workspace = true
+anyhow.workspace = true
+data-encoding.workspace = true
+flexiber.workspace = true
+getrandom.workspace = true
+hex.workspace = true
+hex-literal.workspace = true
+hidapi.workspace = true
+iso7816.workspace = true
+lpc55.workspace = true
+pcsc.workspace = true
+serde_json.workspace = true
+sha-1.workspace = true
+sha2.workspace = true
+time.workspace = true
+x509-parser.workspace = true
+
+# download
+dialoguer.workspace = true
+indicatif.workspace = true
+ureq.workspace = true
+webbrowser.workspace = true
+
+# cli (optional, gated by the `cli` feature)
+clap = { workspace = true, optional = true }
+clap_complete = { workspace = true, optional = true }
+clap-verbosity-flag = { workspace = true, optional = true }
+ctrlc = { workspace = true, optional = true }
+lazy_static = { workspace = true, optional = true }
+pretty_env_logger = { workspace = true, optional = true }
+
+# dev-pki (optional)
+p256 = { workspace = true, optional = true, features = ["pkcs8"] }
+pkcs8 = { workspace = true, optional = true }
+rand_core = { workspace = true, optional = true }
+rcgen = { workspace = true, optional = true }
+yasna = { workspace = true, optional = true }
+
+# needed in build.rs
+[build-dependencies]
+clap = { workspace = true }
+clap_complete.workspace = true
+clap-verbosity-flag.workspace = true
+lazy_static.workspace = true
+
+[features]
+default = ["cli"]
+cli = ["clap", "clap_complete", "clap-verbosity-flag", "ctrlc", "lazy_static", "pretty_env_logger"]
+dev-pki = ["p256", "pkcs8", "rand_core", "rcgen", "yasna"]
+# It's not allowed to use the network when building for docs.rs, and the same
+# for most corporate networks. The tests behind this flag do things like downloading
+# certificates from Solo 2 PKI public data.
+network-tests = []
+
+# NOTE: the lpc55 patch lives in the workspace root Cargo.toml ([patch.crates-io]),
+# since cargo ignores [patch] declared in non-root workspace members.

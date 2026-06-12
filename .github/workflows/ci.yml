@@ -23,7 +23,7 @@ jobs:
           - board-solo2
           # - board-okdoe1
         rust:
-          - "1.94"
+          - "1.94.1"
     defaults:
       run:
         working-directory: runners/lpc55
@@ -93,7 +93,7 @@ jobs:
           # TODO: some build issue currently
           # - macos-latest
         rust:
-          - "1.94"
+          - "1.94.1"
     defaults:
       run:
         working-directory: runners/pc
@@ -135,7 +135,7 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: "1.94"
+          toolchain: "1.94.1"
           override: true
       - name: Run tests (solo-pc, all targets)
         run: cargo test
@@ -148,14 +148,15 @@ jobs:
         shell: bash
         run: |
           apt-get update && apt-get install sudo
-          sudo apt update -y -qq && sudo apt install -y -qq $UBUNTU_BASE_DEPS $UBUNTU_LPC55_EXTRA_DEPS
+          # libpcsclite-dev: `make check` clippy also lints the host cli (pcsc).
+          sudo apt update -y -qq && sudo apt install -y -qq $UBUNTU_BASE_DEPS $UBUNTU_LPC55_EXTRA_DEPS libpcsclite-dev
       - uses: fiam/arm-none-eabi-gcc@v1.0.4
         with:
           release: "9-2020-q2"
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: "1.94"
+          toolchain: "1.94.1"
           target: thumbv8m.main-none-eabi
           override: true
           components: rustfmt, clippy

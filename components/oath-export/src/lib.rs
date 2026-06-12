@@ -167,7 +167,8 @@ where
         };
         macro_rules! push {
             ($b:expr) => {
-                out.extend_from_slice($b).map_err(|_| Status::NotEnoughMemory)?
+                out.extend_from_slice($b)
+                    .map_err(|_| Status::NotEnoughMemory)?
             };
         }
         push!(b"otpauth://");
@@ -396,7 +397,8 @@ fn base32_encode<const N: usize>(input: &[u8], out: &mut Vec<u8, N>) {
         }
     }
     if bits > 0 {
-        out.push(ALPHABET[((buffer << (5 - bits)) & 0x1f) as usize]).ok();
+        out.push(ALPHABET[((buffer << (5 - bits)) & 0x1f) as usize])
+            .ok();
     }
 }
 
@@ -427,8 +429,10 @@ fn percent_encode<const N: usize>(input: &[u8], out: &mut Vec<u8, N>) -> Result<
             out.push(b).map_err(|_| Status::NotEnoughMemory)?;
         } else {
             out.push(b'%').map_err(|_| Status::NotEnoughMemory)?;
-            out.push(HEX[(b >> 4) as usize]).map_err(|_| Status::NotEnoughMemory)?;
-            out.push(HEX[(b & 0x0f) as usize]).map_err(|_| Status::NotEnoughMemory)?;
+            out.push(HEX[(b >> 4) as usize])
+                .map_err(|_| Status::NotEnoughMemory)?;
+            out.push(HEX[(b & 0x0f) as usize])
+                .map_err(|_| Status::NotEnoughMemory)?;
         }
     }
     Ok(())

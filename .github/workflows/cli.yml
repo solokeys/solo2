@@ -1,0 +1,34 @@
+name: cli
+
+# Build + test for the host CLI (the `cli/` workspace member, package `solo2`).
+# fmt + clippy are run globally via `make check` (the firmware ci.yml lint job).
+
+on:
+  pull_request:
+  push:
+    branches:
+      - dev
+      - main
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: build + test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y libpcsclite-dev libudev-dev
+      - name: Build
+        run: cargo build -p solo2 --features dev-pki
+      - name: Test
+        run: cargo test -p solo2 --features dev-pki
