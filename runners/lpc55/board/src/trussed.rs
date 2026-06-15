@@ -43,6 +43,13 @@ impl UserPresenceStatus {
     }
 }
 
+/// Transport of the FIDO request currently being dispatched: `true` = NFC
+/// (contactless), `false` = USB/contact. The runner's dispatch sets it before
+/// fido handles a request; `check_user_presence` reads it so an NFC request
+/// takes the tap as presence while USB still requires a button press.
+pub static FIDO_OVER_NFC: core::sync::atomic::AtomicBool =
+    core::sync::atomic::AtomicBool::new(false);
+
 pub struct UserInterface<BUTTONS, RGB>
 where
     BUTTONS: Press + Edge,
@@ -155,6 +162,12 @@ where
                 // 0 / unknown / uninitialized: fall through to real buttons.
                 _ => {}
             }
+        }
+
+        // NFC request: the tap reaching the card IS the user presence — don't
+        // require a button. A USB request falls through to the button below.
+        if FIDO_OVER_NFC.load(core::sync::atomic::Ordering::Relaxed) {
+            return consent::Level::Normal;
         }
 
         match &mut self.buttons {

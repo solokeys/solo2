@@ -154,7 +154,7 @@ where
     fn handle_block(&mut self, packet: &[u8]) -> Result<(), SourceError> {
         let block_header = Block::new(packet);
         match block_header {
-            Block::IBlock(_block_num, _nad, _cid, chaining, offset) => {
+            Block::IBlock(recv_block_num, _nad, _cid, chaining, offset) => {
                 if self.state != Iso14443State::Receiving {
                     self.buffer.clear();
                 }
@@ -162,9 +162,17 @@ where
 
                 self.buffer.extend_from_slice(&packet[offset..]).ok();
 
-                // Rule D. When an I-block is received (independent of its block number),
-                // the PICC shall toggle its block number before sending a block.
-                self.block_num = !self.block_num;
+                // Rule D says toggle our block number on every received I-block. A
+                // correct toggle lands on the reader's block number (PICC starts at 1,
+                // reader's first I-block is 0). But session-start reset_state() — which
+                // re-initializes block_num to 1 (Rule C) — is only reached via
+                // NewSession, which read_packet emits on the Active IRQ. That IRQ is
+                // masked off for the USB RX-reset fix, so a stale block_num from a prior
+                // reader poll never gets reset and the toggle lands wrong → the reader
+                // NAKs/retransmits forever. Syncing directly to the received block
+                // number is identical to the toggle when state is correct, and
+                // self-heals when it isn't.
+                self.block_num = recv_block_num;
 
                 if chaining {
                     self.ack();

@@ -176,3 +176,4 @@ littlefs2-core = { git = "https://github.com/trussed-dev/littlefs2.git", tag = "
 trussed-staging = { git = "https://github.com/trussed-dev/trussed-staging.git", tag = "v0.4.0" }
 # Forked lpc55 (host) with the BCD CalVer-minor>999 version fix, used by the cli.
 lpc55 = { git = "https://github.com/0x0ece/lpc55-host", rev = "2a8a24e3df9ab9734f66ed2d7a56bc69101f531c" }
+apdu-dispatch = { git = "https://github.com/0x0ece/apdu-dispatch", rev = "3531b6b" }

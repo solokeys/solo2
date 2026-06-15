@@ -214,12 +214,8 @@ const_ram_storage!(
 pub type ExternalStorage = board::flash::Solo2ExtFlash;
 
 // On real hardware secrets-app lives on the external flash chip; this RAM
-// fallback is only used when no chip is present (e.g. a bare EVK). On such
-// boards enlarge it so the migration import test can actually store creds.
-#[cfg(not(feature = "no-encrypted-storage"))]
+// fallback is only used when no chip is present (e.g. a bare EVK).
 const_ram_storage!(ExternalFallbackStorage, 4096);
-#[cfg(feature = "no-encrypted-storage")]
-const_ram_storage!(ExternalFallbackStorage, 32768);
 
 /// Store implementation using three mounted littlefs2 filesystems.
 #[derive(Clone, Copy)]
@@ -595,8 +591,135 @@ pub type OathExportApp = oath_export::OathExport<Store, TrussedClient>;
 pub type FidoApp = fido_authenticator::Authenticator<fido_authenticator::Conforming, TrussedClient>;
 #[cfg(feature = "fido-authenticator")]
 pub type FidoConfig = fido_authenticator::Config;
+
+/// FIDO authenticator config, extracted to a const so the regression guard below
+/// is unbypassable. **`nfc_transport` MUST stay `true`:** NFC-on-USB works (see the
+/// lpc55-nfc fixes), so the authenticator must advertise NFC in `getInfo`'s
+/// `transports`, or platforms record credentials as non-NFC and won't offer NFC for
+/// `getAssertion` (symptom: makeCredential works over NFC but getAssertion doesn't).
+/// It regressed to `false` in the trussed-0.2 migration (a0a408a, 2026-03-25) and
+/// was fixed back to `true` in 93a3e35 (2026-06-12); this guard keeps it that way.
+pub const FIDO_CONFIG: FidoConfig = FidoConfig {
+    max_msg_size: ctaphid_dispatch::DEFAULT_MESSAGE_SIZE,
+    skip_up_timeout: None,
+    max_resident_credential_count: Some(100),
+    // CTAP 2.1 §6.10: minimum array size is 1024.
+    large_blobs: Some(fido_authenticator::LargeBlobsConfig {
+        location: trussed::types::Location::External,
+        max_size: 1024,
+    }),
+    nfc_transport: true,
+    ccid_transport: false,
+    // Const struct literal (not `.into()`, which isn't const-callable here).
+    firmware_version: Some(fido_authenticator::FirmwareVersion {
+        default: build_constants::CARGO_PKG_VERSION as usize,
+        credential_id_v1: None,
+        credential_id_v2: None,
+    }),
+    // V2 credential-id format: AES-256-GCM. Applied on a clean
+    // state / after factory reset; existing V1 credentials persist.
+    credential_id_version: Some(fido_authenticator::credential::CredentialIdVersion::V2),
+    long_touch_for_reset: true,
+    fido2_up_timeout: None,
+};
+/// Compile-time regression guard — the lpc55 build fails if NFC advertisement is
+/// ever dropped again (don't just flip this; NFC-on-USB depends on it for GA).
+const _: () = assert!(
+    FIDO_CONFIG.nfc_transport,
+    "FIDO must advertise NFC in getInfo, else getAssertion won't use NFC on phones",
+);
 #[cfg(feature = "ndef-app")]
-pub type NdefApp = ndef_app::App<'static>;
+pub type NdefApp = ndef_app::App<TrussedClient>;
+
+/// NDEF suppression. The NDEF app refuses `SELECT` (so phones don't pop the tag
+/// during/after a FIDO ceremony) while we're within `NDEF_SUPPRESS_SECS` of the last
+/// FIDO command. The timestamp is the always-on 32kHz RTC `COUNT` (1Hz) — independent
+/// of the dynamic CPU clock, so it is a valid timebase in passive too, unlike a
+/// SysTick/Mono counter. `NDEF_LAST_FIDO_SEC` starts `NDEF_SUPPRESS_SECS` "in the
+/// past" so the gap is already `>= NDEF_SUPPRESS_SECS` at boot (NOT suppressed) — the
+/// tag stays readable until an actual FIDO arms the window (the OS does FIDO before
+/// NDEF anyway); a fresh boot (field drop between taps) starts readable again.
+const NDEF_SUPPRESS_SECS: u32 = 7;
+pub static NDEF_LAST_FIDO_SEC: core::sync::atomic::AtomicU32 =
+    core::sync::atomic::AtomicU32::new(0u32.wrapping_sub(NDEF_SUPPRESS_SECS));
+
+/// Seconds from the always-on RTC `COUNT` register, read directly (the RTC handle
+/// lives in the UserInterface, out of reach of these apps).
+fn rtc_secs() -> u32 {
+    // SAFETY: read-only access to a free-running hardware counter; races are benign.
+    unsafe { (*hal::raw::RTC::ptr()).count.read().bits() }
+}
+
+/// Wraps the FIDO app: marks NDEF suppression active on every FIDO select/call.
+pub struct FidoNdefStamp<'a, A>(pub &'a mut A);
+impl<A: apdu_dispatch::iso7816::App> apdu_dispatch::iso7816::App for FidoNdefStamp<'_, A> {
+    fn aid(&self) -> apdu_dispatch::iso7816::Aid {
+        self.0.aid()
+    }
+}
+impl<A: apdu_dispatch::app::App> apdu_dispatch::app::App for FidoNdefStamp<'_, A> {
+    fn select(
+        &mut self,
+        interface: apdu_dispatch::app::Interface,
+        command: apdu_dispatch::app::CommandView<'_>,
+        reply: &mut apdu_dispatch::app::VecView<u8>,
+    ) -> apdu_dispatch::app::Result {
+        NDEF_LAST_FIDO_SEC.store(rtc_secs(), core::sync::atomic::Ordering::Relaxed);
+        self.0.select(interface, command, reply)
+    }
+    fn deselect(&mut self) {
+        self.0.deselect()
+    }
+    fn call(
+        &mut self,
+        interface: apdu_dispatch::app::Interface,
+        command: apdu_dispatch::app::CommandView<'_>,
+        reply: &mut apdu_dispatch::app::VecView<u8>,
+    ) -> apdu_dispatch::app::Result {
+        NDEF_LAST_FIDO_SEC.store(rtc_secs(), core::sync::atomic::Ordering::Relaxed);
+        // Record the transport so check_user_presence takes the tap as presence
+        // for an NFC (contactless) request and requires a button otherwise.
+        board::trussed::FIDO_OVER_NFC.store(
+            matches!(interface, apdu_dispatch::app::Interface::Contactless),
+            core::sync::atomic::Ordering::Relaxed,
+        );
+        self.0.call(interface, command, reply)
+    }
+}
+
+/// Wraps the NDEF app: refuses `SELECT` (so phones see no tag) while suppressed.
+pub struct NdefFidoGate<'a, A>(pub &'a mut A);
+impl<A: apdu_dispatch::iso7816::App> apdu_dispatch::iso7816::App for NdefFidoGate<'_, A> {
+    fn aid(&self) -> apdu_dispatch::iso7816::Aid {
+        self.0.aid()
+    }
+}
+impl<A: apdu_dispatch::app::App> apdu_dispatch::app::App for NdefFidoGate<'_, A> {
+    fn select(
+        &mut self,
+        interface: apdu_dispatch::app::Interface,
+        command: apdu_dispatch::app::CommandView<'_>,
+        reply: &mut apdu_dispatch::app::VecView<u8>,
+    ) -> apdu_dispatch::app::Result {
+        use core::sync::atomic::Ordering::Relaxed;
+        let since = rtc_secs().wrapping_sub(NDEF_LAST_FIDO_SEC.load(Relaxed));
+        if since < NDEF_SUPPRESS_SECS {
+            return Err(apdu_dispatch::iso7816::Status::NotFound);
+        }
+        self.0.select(interface, command, reply)
+    }
+    fn deselect(&mut self) {
+        self.0.deselect()
+    }
+    fn call(
+        &mut self,
+        interface: apdu_dispatch::app::Interface,
+        command: apdu_dispatch::app::CommandView<'_>,
+        reply: &mut apdu_dispatch::app::VecView<u8>,
+    ) -> apdu_dispatch::app::Result {
+        self.0.call(interface, command, reply)
+    }
+}
 #[cfg(feature = "provisioner-app")]
 pub type ProvisionerApp = provisioner_app::Provisioner<Store, FlashStorage, TrussedClient>;
 
@@ -629,10 +752,13 @@ mod client_tag {
     pub const OPCARD: ClientTag = 6;
     pub const PROVISIONER: ClientTag = 7;
     pub const OATH_EXPORT: ClientTag = 8;
+    pub const NDEF: ClientTag = 3;
 }
 
 #[cfg(feature = "admin-app")]
 static ADMIN_INTERRUPT: InterruptFlag = InterruptFlag::new();
+#[cfg(feature = "ndef-app")]
+static NDEF_INTERRUPT: InterruptFlag = InterruptFlag::new();
 #[cfg(feature = "fido-authenticator")]
 static FIDO_INTERRUPT: InterruptFlag = InterruptFlag::new();
 #[cfg(feature = "piv-authenticator")]
@@ -730,26 +856,7 @@ impl Apps {
             fido_authenticator::Authenticator::new(
                 client,
                 fido_authenticator::Conforming {},
-                FidoConfig {
-                    max_msg_size: ctaphid_dispatch::DEFAULT_MESSAGE_SIZE,
-                    skip_up_timeout: None,
-                    max_resident_credential_count: Some(100),
-                    // CTAP 2.1 §6.10: minimum array size is 1024.
-                    large_blobs: Some(fido_authenticator::LargeBlobsConfig {
-                        location: trussed::types::Location::External,
-                        max_size: 1024,
-                    }),
-                    nfc_transport: true,
-                    ccid_transport: false,
-                    firmware_version: Some((build_constants::CARGO_PKG_VERSION as usize).into()),
-                    // V2 credential-id format: AES-256-GCM. Applied on a clean
-                    // state / after factory reset; existing V1 credentials persist.
-                    credential_id_version: Some(
-                        fido_authenticator::credential::CredentialIdVersion::V2,
-                    ),
-                    long_touch_for_reset: true,
-                    fido2_up_timeout: None,
-                },
+                FIDO_CONFIG,
             )
         };
 
@@ -807,7 +914,16 @@ impl Apps {
         };
 
         #[cfg(feature = "ndef-app")]
-        let ndef = NdefApp::new();
+        let ndef = {
+            let client = make_client(
+                client_tag::NDEF,
+                littlefs2::path!("ndef"),
+                trussed,
+                Some(&NDEF_INTERRUPT),
+                &STAGING_BACKENDS,
+            );
+            NdefApp::new(client)
+        };
 
         #[cfg(feature = "provisioner-app")]
         let provisioner = {
@@ -865,7 +981,7 @@ impl Apps {
     {
         f(&mut [
             #[cfg(feature = "ndef-app")]
-            &mut self.ndef,
+            &mut NdefFidoGate(&mut self.ndef),
             #[cfg(feature = "piv-authenticator")]
             &mut self.piv,
             #[cfg(feature = "opcard")]
@@ -873,7 +989,7 @@ impl Apps {
             #[cfg(feature = "oath")]
             &mut self.secrets,
             #[cfg(feature = "fido-authenticator")]
-            &mut self.fido,
+            &mut FidoNdefStamp(&mut self.fido),
             #[cfg(feature = "admin-app")]
             &mut self.admin,
             #[cfg(feature = "provisioner-app")]
@@ -888,6 +1004,9 @@ impl Apps {
     where
         F: FnOnce(&mut [&mut dyn CtaphidApp<'static>]) -> T,
     {
+        // USB transport: a CTAPHID request is never NFC, so user presence
+        // requires a button.
+        board::trussed::FIDO_OVER_NFC.store(false, core::sync::atomic::Ordering::Relaxed);
         f(&mut [
             #[cfg(feature = "admin-app")]
             &mut self.admin,

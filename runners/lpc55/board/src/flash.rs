@@ -23,35 +23,16 @@ pub static SPI_ERASE_COUNT: AtomicU32 = AtomicU32::new(0);
 use crate::hal::{
     self,
     drivers::{pins, Pin, Timer},
-    peripherals::{ctimer, flexcomm::Spi0},
-    time::{DurationExtensions, RateExtensions},
-    traits::wg::{
-        spi::{FullDuplex, Mode, Phase, Polarity},
-        timer::CountDown,
-    },
-    typestates::{
-        init_state::Enabled,
-        pin::{self, flexcomm::NoCs},
-    },
+    peripherals::ctimer,
+    time::DurationExtensions,
+    traits::wg::{spi::FullDuplex, timer::CountDown},
+    typestates::{init_state::Enabled, pin},
     Iocon,
 };
 
-// SPI bus pin / type definitions. The bus (FlexComm0 / Spi0) is shared between
-// this external GD25Q16 flash and the FM11NC08 NFC reader; CS is gated per
-// peripheral. These only define the pins/types; bus init is in the runner.
-
-// Shared SPI bus pins.
-pub type SckPin = pins::Pio0_28;
-pub type MosiPin = pins::Pio0_24;
-pub type MisoPin = pins::Pio0_25;
-
-// External flash dedicated pins.
+// Flash-dedicated pins. The shared SCK/MOSI/MISO bus is owned by `shared_spi`.
 pub type FlashCsPin = pins::Pio0_13;
 pub type FlashPowerPin = pins::Pio0_21;
-
-pub type Sck = Pin<SckPin, pin::state::Special<pin::function::FC0_SCK>>;
-pub type Mosi = Pin<MosiPin, pin::state::Special<pin::function::FC0_RXD_SDA_MOSI_DATA>>;
-pub type Miso = Pin<MisoPin, pin::state::Special<pin::function::FC0_TXD_SCL_MISO_WS>>;
 
 pub type FlashCs = Pin<FlashCsPin, pin::state::Gpio<pin::gpio::direction::Output>>;
 
@@ -60,9 +41,9 @@ pub type FlashCs = Pin<FlashCsPin, pin::state::Gpio<pin::gpio::direction::Output
 /// The default `embedded_hal::blocking::spi::transfer::Default<u8>` impl on
 /// lpc55-hal's `SpiMaster` does a strict byte-by-byte ping-pong: send one byte,
 /// poll RX-not-empty, read one byte, repeat. The LPC55's SPI peripheral has
-/// an 8-deep TX/RX FIFO that the default impl never uses. At 8 MHz SPI the
-/// wire-time per byte is ~1 us but the CPU polling between bytes costs ~3 us,
-/// so the bus sits idle ~75% of the time.
+/// an 8-deep TX/RX FIFO that the default impl never uses. At the bus's 2 MHz a
+/// byte is ~4 us on the wire while the CPU polling between bytes costs ~3 us,
+/// so the default impl leaves the bus idle a large fraction of the time.
 ///
 /// This wrapper keeps up to `FIFO_AHEAD` bytes outstanding in TX, draining RX
 /// opportunistically. `FIFO_AHEAD = 4` stays well inside the 8-entry FIFO so
@@ -119,19 +100,8 @@ where
 }
 
 /// Concrete `ExtFlashStorage` for the Solo 2 wiring.
-pub type Solo2ExtFlash = ExtFlashStorage<
-    BurstSpi<
-        hal::drivers::SpiMaster<
-            SckPin,
-            MosiPin,
-            MisoPin,
-            hal::typestates::pin::flexcomm::NoPio,
-            Spi0,
-            (Sck, Mosi, Miso, NoCs),
-        >,
-    >,
-    FlashCs,
->;
+pub type Solo2ExtFlash =
+    ExtFlashStorage<BurstSpi<crate::shared_spi::BusProxy>, crate::shared_spi::LockCs<FlashCs>>;
 
 struct FlashProperties {
     size: usize,
@@ -388,14 +358,13 @@ where
 }
 
 /// Bring up the external flash: drive `FLASH_POWER` high, wait for the
-/// chip to settle, configure Spi0 in mode-0 at 8 MHz, JEDEC-probe.
+/// chip to settle, then JEDEC-probe over the shared Spi0 bus.
 /// Returns `(None, selftest)` if the chip is absent or unresponsive —
 /// the caller is expected to fall back to RAM-backed external storage.
 ///
 /// Never panics. Every pin `take()` and bus operation is fallible and
 /// returns the zero selftest on failure rather than aborting.
 pub fn try_setup<CT>(
-    spi: Spi0<Enabled>,
     gpio: &mut hal::Gpio<Enabled>,
     iocon: &mut Iocon<Enabled>,
     delay: &mut Timer<CT>,
@@ -415,33 +384,16 @@ where
     delay.start(200_000u32.microseconds());
     let _ = nb::block!(delay.wait());
 
-    let sck = match SckPin::take() {
-        Some(p) => p.into_spi0_sck_pin(iocon),
-        None => return (None, SelftestResult::ZERO),
-    };
-    let mosi = match MosiPin::take() {
-        Some(p) => p.into_spi0_mosi_pin(iocon),
-        None => return (None, SelftestResult::ZERO),
-    };
-    let miso = match MisoPin::take() {
-        Some(p) => p.into_spi0_miso_pin(iocon),
-        None => return (None, SelftestResult::ZERO),
-    };
+    // The shared Spi0 bus is already installed via `shared_spi::setup`. The CS
+    // is wrapped in `LockCs` so each flash transaction is atomic against a
+    // concurrent NFC transaction. `false` = SPI mode 0 (CPHA=0), required by
+    // the SPI-NOR flash.
     let cs = match FlashCsPin::take() {
-        Some(p) => p.into_gpio_pin(iocon, gpio).into_output_high(),
+        Some(p) => {
+            crate::shared_spi::LockCs::new(p.into_gpio_pin(iocon, gpio).into_output_high(), false)
+        }
         None => return (None, SelftestResult::ZERO),
     };
 
-    let mode = Mode {
-        polarity: Polarity::IdleLow,
-        phase: Phase::CaptureOnFirstTransition,
-    };
-    let spi_master = hal::drivers::SpiMaster::new(
-        spi,
-        (sck, mosi, miso, pin::flexcomm::NoCs),
-        8_000_000_u32.Hz(),
-        mode,
-    );
-
-    ExtFlashStorage::try_new(BurstSpi(spi_master), cs)
+    ExtFlashStorage::try_new(BurstSpi(crate::shared_spi::BusProxy), cs)
 }

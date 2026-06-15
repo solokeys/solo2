@@ -280,6 +280,10 @@ impl Initializer {
         let syscon = &mut self.syscon;
         let spi = flexcomm0.enabled_as_spi(syscon, &token);
 
+        // Install the shared Spi0 bus before NFC or flash bring-up; both reach
+        // it through `shared_spi::BusProxy`.
+        board::shared_spi::setup(spi, iocon);
+
         // TODO save these so they can be released later
         let mut mux = inputmux.enabled(syscon);
         let mut pint = pint.enabled(syscon);
@@ -293,7 +297,7 @@ impl Initializer {
 
         let force_nfc_reconfig = cfg!(feature = "reconfigure-nfc");
 
-        board::nfc::try_setup(spi, gpio, iocon, nfc_irq, delay_timer, force_nfc_reconfig)
+        board::nfc::try_setup(gpio, iocon, nfc_irq, delay_timer, force_nfc_reconfig)
     }
 
     pub fn initialize_clocks(
@@ -456,20 +460,6 @@ impl Initializer {
             .split()
             .expect("could not setup iso14443 ApduInterchange");
 
-        {
-            if !self.is_nfc_passive {
-                let _ = mux;
-                let _ = pint;
-                let token = clock_stage.clocks.support_flexcomm_token().unwrap();
-                let spi = flexcomm0.enabled_as_spi(&mut self.syscon, &token);
-                return stages::Nfc {
-                    iso14443: None,
-                    contactless_responder: Some(contactless_responder),
-                    flash_spi: Some(spi),
-                };
-            }
-        }
-
         let nfc_chip = if self.config.nfc_enabled {
             self.try_enable_fm11nc08(
                 &clock_stage.clocks,
@@ -508,7 +498,6 @@ impl Initializer {
         stages::Nfc {
             iso14443,
             contactless_responder: Some(contactless_responder),
-            flash_spi: None,
         }
     }
 
@@ -603,9 +592,10 @@ impl Initializer {
                 UsbProductName::UsePfr => get_product_string(&mut basic_stage.pfr),
             };
             let serial_number = get_serial_number();
+            let manufacturer_string = usb_config.manufacturer_name;
 
             let usbd = UsbDeviceBuilder::new(usb_bus, usb_config.vid_pid)
-                .manufacturer(usb_config.manufacturer_name)
+                .manufacturer(manufacturer_string)
                 .product(product_string)
                 .serial_number(serial_number)
                 .device_release(device_release)
@@ -770,11 +760,11 @@ impl Initializer {
             .unwrap(),
         );
 
-        // Probe the GD25Q16 at runtime. If present,
-        // mount it as the external FS. If absent (EVK without the chip,
-        // dead chip, missing `flash_spi`), fall back to a RAM-backed
-        // stand-in so the device still enumerates and is reachable —
-        // never panics, never bricks the device.
+        // Active mode: probe the GD25Q16 and mount it as the external FS. If
+        // absent (EVK without the chip, dead chip) or in passive mode (chip
+        // left unpowered to save field energy), fall back to a RAM-backed
+        // stand-in so the device still enumerates and is reachable — never
+        // panics, never bricks the device.
         let external_fs: &'static dyn trussed::store::DynFilesystem = {
             use types::ExternalFallbackStorage;
 
@@ -788,14 +778,18 @@ impl Initializer {
             static EXT_RAM_FS: StaticCell<Filesystem<'static, ExternalFallbackStorage>> =
                 StaticCell::new();
 
-            let (chip, _selftest) = match nfc_stage.flash_spi.take() {
-                Some(spi) => board::flash::try_setup(
-                    spi,
+            // Passive (RF-powered) can't afford the flash chip's draw + boot-time
+            // mount reads — it browns out the field and NFC stops. So passive runs
+            // on the RAM fallback with the chip left unpowered; only active/USB
+            // probes and uses the flash.
+            let (chip, _selftest) = if self.is_nfc_passive {
+                (None, board::flash::SelftestResult::ZERO)
+            } else {
+                board::flash::try_setup(
                     &mut clock_stage.gpio,
                     &mut clock_stage.iocon,
                     &mut basic_stage.delay_timer,
-                ),
-                None => (None, board::flash::SelftestResult::ZERO),
+                )
             };
 
             match chip {

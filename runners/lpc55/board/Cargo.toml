@@ -6,6 +6,7 @@ edition.workspace = true
 
 [dependencies]
 admin-app     .workspace = true
+critical-section = "1"
 defmt         .workspace = true
 embedded-hal  .workspace = true
 fm11nc08      .workspace = true

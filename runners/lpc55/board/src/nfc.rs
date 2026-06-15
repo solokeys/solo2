@@ -2,11 +2,9 @@ use crate::hal::{
     self,
     drivers::{
         pins::{self, Pin},
-        SpiMaster, Timer,
+        Timer,
     },
-    peripherals::flexcomm::Spi0,
-    time::RateExtensions,
-    typestates::pin::{self, flexcomm::NoPio},
+    typestates::pin,
     Enabled,
 };
 
@@ -14,60 +12,36 @@ use defmt::info;
 
 use fm11nc08::{Configuration, Register, FM11NC08};
 
-pub type NfcSckPin = pins::Pio0_28;
-pub type NfcMosiPin = pins::Pio0_24;
-pub type NfcMisoPin = pins::Pio0_25;
 pub type NfcCsPin = pins::Pio1_20;
 pub type NfcIrqPin = pins::Pio0_19;
 
 pub type NfcChip = FM11NC08<
-    SpiMaster<
-        NfcSckPin,
-        NfcMosiPin,
-        NfcMisoPin,
-        NoPio,
-        Spi0,
-        (
-            Pin<NfcSckPin, pin::state::Special<pin::function::FC0_SCK>>,
-            Pin<NfcMosiPin, pin::state::Special<pin::function::FC0_RXD_SDA_MOSI_DATA>>,
-            Pin<NfcMisoPin, pin::state::Special<pin::function::FC0_TXD_SCL_MISO_WS>>,
-            pin::flexcomm::NoCs,
-        ),
-    >,
-    Pin<NfcCsPin, pin::state::Gpio<pin::gpio::direction::Output>>,
+    crate::shared_spi::BusProxy,
+    crate::shared_spi::LockCs<Pin<NfcCsPin, pin::state::Gpio<pin::gpio::direction::Output>>>,
     Pin<NfcIrqPin, pin::state::Gpio<pin::gpio::direction::Input>>,
 >;
 
 pub fn try_setup(
-    spi: Spi0<Enabled>,
     gpio: &mut hal::Gpio<Enabled>,
     iocon: &mut hal::Iocon<Enabled>,
     nfc_irq: Pin<NfcIrqPin, pin::state::Gpio<pin::gpio::direction::Input>>,
-    // fm: &mut NfcChip,
     timer: &mut Timer<impl hal::peripherals::ctimer::Ctimer<hal::typestates::init_state::Enabled>>,
     always_reconfig: bool,
 ) -> Option<NfcChip> {
-    let sck = NfcSckPin::take().unwrap().into_spi0_sck_pin(iocon);
-    let mosi = NfcMosiPin::take().unwrap().into_spi0_mosi_pin(iocon);
-    let miso = NfcMisoPin::take().unwrap().into_spi0_miso_pin(iocon);
-    let spi_mode = hal::traits::wg::spi::Mode {
-        polarity: hal::traits::wg::spi::Polarity::IdleLow,
-        phase: hal::traits::wg::spi::Phase::CaptureOnSecondTransition,
-    };
-    let spi = SpiMaster::new(
-        spi,
-        (sck, mosi, miso, hal::typestates::pin::flexcomm::NoCs),
-        2_000_000u32.Hz(),
-        spi_mode,
+    // The shared Spi0 bus must already be installed via `shared_spi::setup`.
+    // The CS is wrapped in `LockCs` (mode 1 / CPHA=1 for the FM11NC08) so each
+    // NFC transaction is atomic against a concurrent flash transaction.
+    // Start unselected.
+    // `true` = SPI mode 1 (CPHA=1), required by the FM11NC08.
+    let nfc_cs = crate::shared_spi::LockCs::new(
+        NfcCsPin::take()
+            .unwrap()
+            .into_gpio_pin(iocon, gpio)
+            .into_output_high(),
+        true,
     );
 
-    // Start unselected.
-    let nfc_cs = NfcCsPin::take()
-        .unwrap()
-        .into_gpio_pin(iocon, gpio)
-        .into_output_high();
-
-    let mut fm = FM11NC08::new(spi, nfc_cs, nfc_irq).enabled();
+    let mut fm = FM11NC08::new(crate::shared_spi::BusProxy, nfc_cs, nfc_irq).enabled();
 
     //                      no limit      2mA resistor    3.3V
     const REGU_CONFIG: u8 = (0b11 << 4) | (0b10 << 2) | 0b11;
@@ -130,14 +104,17 @@ pub fn try_setup(
         ^ (1 << 3) /* water-level */
         ^ (1 << 1), /* fifo-full */
     );
+    // Only fire on RxDone (+ TxDone, Fifo) — NOT Active/RxStart. Under USB power
+    // (VCC), reading MainIrq mid-reception resets the contactless RX state via
+    // contact/contactless arbitration, so firing on Active/RxStart made the
+    // firmware poll *during* RX and self-reset in a tight loop (MainIrq always
+    // 0x00, I-block never received). Firing only on RxDone lets reception finish
+    // before the first SPI read. Passive mode is unaffected (RxDone still fires).
     fm.write_reg(
         Register::MainIrqMask,
-        // 0x0
-        0xff ^ fm11nc08::device::Interrupt::RxStart as u8
-            ^ fm11nc08::device::Interrupt::RxDone as u8
+        0xff ^ fm11nc08::device::Interrupt::RxDone as u8
             ^ fm11nc08::device::Interrupt::TxDone as u8
-            ^ fm11nc08::device::Interrupt::Fifo as u8
-            ^ fm11nc08::device::Interrupt::Active as u8,
+            ^ fm11nc08::device::Interrupt::Fifo as u8,
     );
 
     //                    no limit    rrfcfg .      3.3V

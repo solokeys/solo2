@@ -26,6 +26,7 @@ pub use specifics::{button::ThreeButtons, led::RgbLed};
 pub mod clock_controller;
 pub mod flash;
 pub mod nfc;
+pub mod shared_spi;
 pub mod trussed;
 
 // pub use rgb_led::RgbLed;

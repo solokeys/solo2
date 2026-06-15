@@ -152,8 +152,7 @@ dependencies = [
 [[package]]
 name = "apdu-dispatch"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3c9f7729cfb0991e556f650a1478e1e8bd8db7fc57ff2dec4a3a67669d406ff"
+source = "git+https://github.com/0x0ece/apdu-dispatch?rev=3531b6b#3531b6bf5fd2ae5bbd749eb5e8e7c2429c82f05f"
 dependencies = [
  "apdu-app",
  "delog",
@@ -355,6 +354,7 @@ name = "board"
 version = "0.1.0-unreleased"
 dependencies = [
  "admin-app",
+ "critical-section",
  "defmt",
  "embedded-hal 0.2.7",
  "fm11nc08",
@@ -2399,8 +2399,11 @@ name = "ndef-app"
 version = "0.1.0"
 dependencies = [
  "apdu-dispatch",
+ "cortex-m",
  "heapless 0.9.2",
  "iso7816",
+ "littlefs2",
+ "trussed-core",
 ]
 
 [[package]]
@@ -3330,16 +3333,13 @@ dependencies = [
  "admin-app",
  "apdu-dispatch",
  "board",
- "cortex-m",
  "ctap-types",
  "ctaphid-dispatch",
  "defmt",
  "defmt-rtt",
  "delog",
  "fido-authenticator",
- "fm11nc08",
  "heapless 0.9.2",
- "interchange",
  "littlefs2",
  "nb 1.1.0",
  "ndef-app",
