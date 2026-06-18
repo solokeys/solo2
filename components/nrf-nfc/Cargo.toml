@@ -1,0 +1,15 @@
+[package]
+name = "nrf-nfc"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "nRF52840 NFC stack: nrfx_nfct chip layer + libnfc_t4t.a Type 4 Tag library + Rust platform glue"
+links = "nrf_nfc"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+cortex-m = { workspace = true }
+cty      = "0.2"
+defmt    = { workspace = true }

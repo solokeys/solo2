@@ -1,0 +1,27 @@
+[package]
+name = "solo-apps"
+version = "0.1.0"
+authors.workspace = true
+edition = "2024"
+
+# Shared CTAP/NFC/apps building blocks for the lpc55 + nrf52840dk runners:
+# trussed dispatch, the canonical FIDO config, the client/backend plumbing, and
+# the generic NDEF-suppression wrappers. Board-specific assembly (storage, HAL,
+# timebase, UserInterface, Apps::new) stays in each runner.
+
+[dependencies]
+apdu-dispatch            .workspace = true
+ctaphid-dispatch         .workspace = true
+fido-authenticator       .workspace = true
+littlefs2                .workspace = true
+trussed                  .workspace = true
+trussed-auth             .workspace = true
+trussed-auth-backend     .workspace = true
+trussed-chunked          .workspace = true
+trussed-core             .workspace = true
+trussed-fs-info          .workspace = true
+trussed-hkdf             .workspace = true
+trussed-hpke             .workspace = true
+trussed-manage           .workspace = true
+trussed-staging          .workspace = true
+trussed-wrap-key-to-file .workspace = true

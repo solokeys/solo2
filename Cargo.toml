@@ -2,12 +2,15 @@
 members = [
     "runners/lpc55",
     "runners/lpc55/board",
+    "runners/nrf52840dk",
     "runners/pc",
     "components/ndef-app",
     "components/nfc-device",
     "components/fm11nc08",
+    "components/nrf-nfc",
     "components/provisioner-app",
     "components/oath-export",
+    "components/solo-apps",
     "cli",
 ]
 # `cargo run` / `cargo build` / `cargo test` at the workspace root operate on the
@@ -36,8 +39,10 @@ board            = { path = "runners/lpc55/board" }
 ndef-app         = { path = "components/ndef-app" }
 fm11nc08         = { path = "components/fm11nc08" }
 nfc-device       = { path = "components/nfc-device" }
+nrf-nfc          = { path = "components/nrf-nfc" }
 provisioner-app  = { path = "components/provisioner-app" }
 oath-export      = { path = "components/oath-export" }
+solo-apps        = { path = "components/solo-apps" }
 
 # ── RTIC framework ────────────────────────────────────────────────────────────
 rtic              = "2.0.0"
@@ -157,8 +162,12 @@ yasna               = "0.6"
 codegen-units = 1
 lto           = true
 opt-level     = "z"
+panic         = "abort"
 incremental   = false
 debug         = true
+
+[profile.dev]
+panic = "abort"
 
 [profile.release.package.salty]
 opt-level = 2
@@ -177,3 +186,7 @@ trussed-staging = { git = "https://github.com/trussed-dev/trussed-staging.git", 
 # Forked lpc55 (host) with the BCD CalVer-minor>999 version fix, used by the cli.
 lpc55 = { git = "https://github.com/0x0ece/lpc55-host", rev = "2a8a24e3df9ab9734f66ed2d7a56bc69101f531c" }
 apdu-dispatch = { git = "https://github.com/0x0ece/apdu-dispatch", rev = "3531b6b" }
+# libcrux-ml-dsa with #[inline(always)] downgraded to #[inline] on the portable
+# path — ~80 KB smaller .text on Cortex-M33 (no perf regression), lets all-apps +
+# ML-DSA-44 fit on the LPC55. Only ml-dsa is patched; sha3/intrinsics unchanged.
+libcrux-ml-dsa = { git = "https://github.com/0x0ece/libcrux", rev = "ee890a77" }

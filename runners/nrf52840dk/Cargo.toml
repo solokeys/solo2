@@ -1,0 +1,97 @@
+[package]
+name = "runner-nrf52840dk"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "Solo2 firmware port to Nordic nRF52840-DK"
+
+[[bin]]
+name = "runner-nrf52840dk"
+path = "src/main.rs"
+
+[features]
+default = ["board-dk", "ccid"]
+# Pick exactly one of these to target a board. Mutually exclusive — see
+# the compile_error! in src/board/mod.rs.
+board-dk    = []          # Nordic nRF52840-DK (PCA10056) dev board
+board-solo  = []          # SoloKeys USB custom board
+
+# USB-CCID (contact smartcard) alongside CTAPHID. ON by default. CCID's USB
+# EasyDMA traffic contends with NFCT EasyDMA on the RAM bus, which makes NFC
+# flaky on strict bench readers (e.g. ACR1252, ~3/5) — but phones retry through
+# it, so FIDO2-over-NFC including registration works. For max NFC reliability
+# (no contact reader; solid on strict readers too) build NFC-only by omitting
+# this feature — see the `build-dk-nfc-only` make target.
+ccid = ["dep:usbd-ccid"]
+
+# Replaces button-driven user presence with a probe-rs-writable static
+# (`UP_CONTROL` in `board::mod`). Used by the integration tests in
+# `runners/pc/tests` to drive `approve`/`deny` from the host over JTAG.
+# Off by default; NEVER enable on firmware shipped to users.
+test-up-control = []
+
+# Compile out the CTAP2 reset 10s-after-boot window so the device-test
+# harness can authenticatorReset between cases (long-touch / Strong consent).
+# Test/dev builds only — NEVER ship.
+no-reset-time-window = ["fido-authenticator/disable-reset-time-window"]
+
+[dependencies]
+cortex-m    .workspace = true
+cortex-m-rt = "0.7"
+defmt       .workspace = true
+defmt-rtt   .workspace = true
+panic-halt  .workspace = true
+rtic            = { version = "2.0.0", features = ["thumbv7-backend"] }
+rtic-monotonics .workspace = true
+rtic-sync       .workspace = true
+embedded-time   = "0.12"
+
+embedded-hal     .workspace = true
+embedded-storage = "0.3"
+
+# USB + CTAPHID + APDU dispatch
+usb-device       .workspace = true
+usbd-ctaphid     .workspace = true
+usbd-ccid        = { workspace = true, optional = true }
+ctaphid-dispatch .workspace = true
+apdu-dispatch    .workspace = true
+interchange      .workspace = true
+
+# Shared CTAP/NFC/apps building blocks (dispatch, fido config, ndef wrappers).
+solo-apps        .workspace = true
+
+# NFC stack — chip layer (libnrfx_nfct.a) + Type 4 Tag library
+# (libnfc_t4t.a) + Rust platform glue.
+nrf-nfc  .workspace = true
+
+# Trussed + storage + apps
+littlefs2                 .workspace = true
+# `mldsa44` (CTAP 2.3) is opt-in per runner — see workspace Cargo.toml.
+# DK has plenty of headroom; LPC55 doesn't fit it.
+trussed                   = { workspace = true, features = ["mldsa44"] }
+trussed-core              = { workspace = true, features = ["mldsa44"] }
+trussed-staging           .workspace = true
+trussed-fs-info           .workspace = true
+trussed-hkdf              .workspace = true
+trussed-manage            .workspace = true
+trussed-chunked           .workspace = true
+trussed-hpke              .workspace = true
+trussed-wrap-key-to-file  .workspace = true
+trussed-auth              .workspace = true
+trussed-auth-backend      .workspace = true
+fido-authenticator        = { workspace = true, features = ["mldsa44"] }
+admin-app                 .workspace = true
+ndef-app                  .workspace = true
+secrets-app               .workspace = true
+piv-authenticator         .workspace = true
+opcard                    .workspace = true
+heapless                  .workspace = true
+generic-array             = "0.14"
+static_cell               .workspace = true
+
+# nRF52840 HAL/PAC. Pinned for usb-device 0.2 + usbd-ctaphid 0.4 compatibility:
+# nrf-usbd 0.1 is the only usb-device 0.2-compatible nRF USB driver, and it
+# pairs with nrf52840-hal 0.15.1. nrf-hal-common 0.15.1 accepts cortex-m-rt 0.7.
+nrf52840-hal = "0.15.1"
+nrf52840-pac = "0.11"
+nrf-usbd     = "0.1"

@@ -1,29 +1,24 @@
-# LPC55 runner
+# solo2 on NXP LPC55S69
 
-The entire firmware that runs all the things.
+### the open source FIDO2 security key — built with Trussed®
 
-## Solo 2 Hacker builds
+<a href="https://solokeys.com"><img src="https://solokeys.com/cdn/shop/files/USBCHacker_600x600.jpg?v=1682534858" alt="Solo 2C Hacker" height="220"></a>
+&nbsp;&nbsp;
+<a href="https://www.nxp.com/products/processors-and-microcontrollers/arm-based-processors-and-mcus/lpc-cortex-m-mcus/lpc5500-cortex-m33/lpcxpresso55s69-development-board:LPC55S69-EVK"><img src="https://compoindia.com/wp-content/uploads/2022/09/LPC55S69-EVK__56222.jpg" alt="LPCXpresso55S69-EVK" height="220"></a>
 
-For a standalone Solo 2 Hacker, the safest custom-firmware path is the `develop`
-variant because it disables encrypted storage (`no-encrypted-storage`).
+This is the firmware for the **LPC55S69** — the NXP Cortex-M33 silicon inside
+the shipping **[Solo 2](https://solokeys.com)**. It runs on two boards:
 
-- `make build-hacker`
-  Builds `board-solo2,develop` and writes `app-solo2.bin`.
-- `make build-hacker-recovery`
-  Builds `board-solo2,develop,format-filesystem` and forces a filesystem format on first boot.
-- `make build-release`
-  Builds the PRINCE/PUF-backed production-style image. Use this only if the device is
-  provisioned for encrypted storage.
+- **Solo 2 Hacker** — the real SoloKeys device, unlocked for developers
+  (PRINCE-encrypted storage, no debug port). Get one from
+  [solokeys.com](https://solokeys.com).
+- **LPCXpresso55S69-EVK** — NXP's evaluation board with the same chip and an
+  onboard J-Link, for recoverable development. Get one from
+  [nxp.com](https://www.nxp.com/products/processors-and-microcontrollers/arm-based-processors-and-mcus/lpc-cortex-m-mcus/lpc5500-cortex-m33/lpcxpresso55s69-development-board:LPC55S69-EVK).
 
+## Build
 
-### Logging
-
-The easy + fast way to log is to use the `log-rtt` feature.
-Listening on port `19021` (e.g. via `netcat localhost 19021`) outputs the RTT message output
-from `JLinkGDBServer -strict -device LPC55S69 -if SWD -vd`.
-
-The slower alternative (although not so bad due to `delog` bundling) is to use the `log-semihosting` feature.
-Both at once does not work, neither does `log-serial`.
-
-Additionally, logging features need to be turned on.
-An example invocation: `cargo run --release --features board-lpcxpresso55,develop,log-rtt,fido-authenticator/log-all` 
+```
+make build-dev      # EVK / development build (plain storage)
+make build-release  # Solo 2 Hacker, PRINCE-encrypted (provisioned devices)
+```

@@ -1,0 +1,15 @@
+[build]
+target = "thumbv7em-none-eabihf"
+
+[target.thumbv7em-none-eabihf]
+# cortex-m-rt 0.7+ injects -Tlink.x itself via build.rs; nrf52840-hal's build.rs
+# adds memory.x to the link search path. Don't duplicate either here.
+rustflags = [
+  "-C", "linker=flip-link",
+]
+
+[env]
+# defmt 1.x defaults to Error level when DEFMT_LOG is unset — info!/debug!/trace!
+# get compiled to nothing and the RTT buffer stays silent. Pin it to info for
+# this runner so bring-up logs (USB init, NFCT state machine, etc.) reach RTT.
+DEFMT_LOG = "info"
