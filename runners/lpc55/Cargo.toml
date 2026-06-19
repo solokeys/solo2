@@ -70,9 +70,12 @@ panic-halt.workspace = true
 littlefs2.workspace = true
 
 [features]
-# ndef-app is an annoyance on some mobile platforms
-default = ["admin-app", "fido-authenticator", "ndef-app", "oath", "oath-export", "opcard", "piv-authenticator"]
-# OATH/TOTP/HOTP via secrets-app (replaces incompatible oath-authenticator 0.1)
+# Solo 2 Secure
+default = ["admin-app", "fido-authenticator", "ndef-app", "oath", "oath-export", "opcard", "piv-authenticator", "mldsa44-piv"]
+# Solo 2 Hacker (additional features)
+hacker = ["mldsa44-fido"]
+
+# OATH/TOTP/HOTP via secrets-app
 oath = ["dep:secrets-app"]
 # One-shot migration: export oath-authenticator 0.1 creds (age-encrypted), then delete
 oath-export = ["dep:oath-export"]
@@ -102,19 +105,14 @@ no-reset-time-window = ["fido-authenticator/disable-reset-time-window"]
 # Format filesystem anyway
 format-filesystem = []
 
-mldsa44 = [
-    "fido-authenticator/mldsa44",
-    "trussed/mldsa44",
-    "trussed-core/mldsa44",
-    "ctap-types/mldsa44",
-    # Only activates if piv-authenticator is also enabled.
-    "piv-authenticator?/mldsa44",
-]
+mldsa44-backend = ["trussed/mldsa44", "trussed-core/mldsa44", "ctap-types/mldsa44"]
+mldsa44-piv = ["mldsa44-backend", "piv-authenticator?/mldsa44"]
+mldsa44-fido = ["mldsa44-backend", "fido-authenticator/mldsa44"]
 
 # TODO: get rid of these (depends on moving "initialize_basic" &friends into `board`
+board-solo2        = ["board/solo2"]
 board-lpcxpresso55 = ["board/lpcxpresso55"]
 board-okdoe1       = ["board/okdoe1", "usbfs-peripheral"]
-board-solo2        = ["board/solo2"]
 
 test-up-control    = ["board/test-up-control"]
 
