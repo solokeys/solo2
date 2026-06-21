@@ -84,6 +84,39 @@ macro_rules! pcsc_app(
     }
 );
 
+/// App over the Ledger-style HID transport (the wallet app), opened directly
+/// by VID/PID rather than through Solo 2 enumeration.
+#[macro_export]
+macro_rules! wallet_app(
+    () => {
+        pub struct App {
+            device: $crate::transport::wallet::Device,
+        }
+
+        impl App {
+            pub fn open() -> $crate::Result<Self> {
+                let device = $crate::transport::wallet::Device::open_wallet()?;
+                Ok(Self { device })
+            }
+        }
+
+        impl core::ops::Deref for App {
+            type Target = $crate::transport::wallet::Device;
+            fn deref(&self) -> &Self::Target {
+                &self.device
+            }
+        }
+
+        impl core::ops::DerefMut for App {
+            fn deref_mut(&mut self) -> &mut Self::Target {
+                &mut self.device
+            }
+        }
+    }
+);
+
+pub mod wallet;
+pub use wallet::App as Wallet;
 pub mod admin;
 pub use admin::App as Admin;
 pub mod fido;

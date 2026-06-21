@@ -1,4 +1,4 @@
-# FIDO2 with a SoloKey
+# FIDO2 with a Solo key
 
 > **Works on: Secure + Hacker.** Core FIDO2/WebAuthn.
 

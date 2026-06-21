@@ -11,22 +11,25 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 [[package]]
 name = "admin-app"
 version = "0.1.0"
-source = "git+https://github.com/Nitrokey/admin-app.git?tag=v0.1.0-nitrokey.21#261c47d791f7862a8fd1b52d485860ff82216478"
 dependencies = [
  "apdu-app",
  "cbor-smol",
  "ctaphid-app",
  "delog",
+ "embedded-hal 0.2.7",
  "heapless 0.9.2",
  "heapless-bytes",
  "hex-literal 0.4.1",
  "iso7816",
+ "littlefs2",
  "littlefs2-core",
+ "rand_chacha",
  "serde",
  "strum_macros",
  "trussed",
  "trussed-core",
  "trussed-manage",
+ "trussed-se050-manage",
 ]
 
 [[package]]
@@ -160,6 +163,12 @@ dependencies = [
  "interchange",
  "iso7816",
 ]
+
+[[package]]
+name = "arrayvec"
+version = "0.7.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 
 [[package]]
 name = "ascii"
@@ -322,6 +331,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "bip39"
+version = "2.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "90dbd31c98227229239363921e60fcf5e558e43ec69094d46fc4996f08d1d5bc"
+dependencies = [
+ "bitcoin_hashes",
+ "serde",
+ "unicode-normalization",
+]
+
+[[package]]
+name = "bitcoin_hashes"
+version = "0.14.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ed83caece3afc59919481b33b472e1432d1abc4641ed9100be142ef5110b406"
+dependencies = [
+ "hex-conservative",
+]
+
+[[package]]
 name = "bitfield"
 version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -380,6 +409,7 @@ name = "board"
 version = "0.1.0-unreleased"
 dependencies = [
  "admin-app",
+ "cortex-m",
  "critical-section",
  "defmt",
  "embedded-hal 0.2.7",
@@ -392,6 +422,15 @@ dependencies = [
  "rtic",
  "spi-memory",
  "trussed",
+]
+
+[[package]]
+name = "bs58"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf88ba1141d185c399bee5288d850d63b8369520c1eafc32a0430b5b6c287bf4"
+dependencies = [
+ "tinyvec",
 ]
 
 [[package]]
@@ -1138,6 +1177,15 @@ dependencies = [
 
 [[package]]
 name = "ed25519"
+version = "1.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "91cff35c70bba8a626e3185d8cd48cc11b5437e1a5bcd15b9b5fa3c64b6dfee7"
+dependencies = [
+ "signature 1.3.2",
+]
+
+[[package]]
+name = "ed25519"
 version = "2.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "115531babc129696a58c64a4fef0a8bf9e9698629fb97e9e40767d235cfbcd53"
@@ -1776,6 +1824,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
+name = "hex-conservative"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fda06d18ac606267c40c04e41b9947729bf8b9efe74bd4e82b61a5f26a510b9f"
+dependencies = [
+ "arrayvec",
+]
+
+[[package]]
 name = "hex-literal"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2133,6 +2190,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "k256"
+version = "0.13.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f6e3919bbaa2945715f0bb6d3934a173d1e9a59ac23767fbaaef277265a7411b"
+dependencies = [
+ "cfg-if",
+ "ecdsa 0.16.9",
+ "elliptic-curve 0.13.8",
+ "sha2 0.10.9",
+]
+
+[[package]]
+name = "keccak"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb26cec98cce3a3d96cbb7bced3c4b16e3d13f27ec56dbd62cbc8f39cfb9d653"
+dependencies = [
+ "cpufeatures 0.2.17",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2469,7 +2547,6 @@ name = "ndef-app"
 version = "0.1.0"
 dependencies = [
  "apdu-dispatch",
- "cortex-m",
  "heapless 0.9.2",
  "iso7816",
  "littlefs2",
@@ -3185,7 +3262,7 @@ dependencies = [
  "littlefs2",
  "lpc55-hal",
  "p256 0.9.0",
- "salty",
+ "salty 0.3.0",
  "trussed",
 ]
 
@@ -3486,6 +3563,7 @@ dependencies = [
  "rtic-monotonics",
  "rtic-sync",
  "secrets-app",
+ "serde",
  "solo-apps",
  "static_cell",
  "systick-monotonic",
@@ -3504,6 +3582,7 @@ dependencies = [
  "usbd-ccid",
  "usbd-ctaphid",
  "usbd-serial",
+ "wallet-app",
 ]
 
 [[package]]
@@ -3537,6 +3616,7 @@ dependencies = [
  "rtic-monotonics",
  "rtic-sync",
  "secrets-app",
+ "serde",
  "solo-apps",
  "static_cell",
  "trussed",
@@ -3553,6 +3633,7 @@ dependencies = [
  "usb-device",
  "usbd-ccid",
  "usbd-ctaphid",
+ "wallet-app",
 ]
 
 [[package]]
@@ -3656,11 +3737,22 @@ checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 
 [[package]]
 name = "salty"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77cdd38ed8bfe51e53ee991aae0791b94349d0a05cfdecd283835a8a965d4c37"
+dependencies = [
+ "ed25519 1.5.3",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
+name = "salty"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b947325a585e90733e0e9ec097228f40b637cc346f9bd68f84d5c6297d0fcfef"
 dependencies = [
- "ed25519",
+ "ed25519 2.2.3",
  "subtle",
  "zeroize",
 ]
@@ -3937,6 +4029,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "sha3"
+version = "0.10.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77fd7028345d415a4034cf8777cd4f8ab1851274233b45f84e3d955502d93874"
+dependencies = [
+ "digest 0.10.7",
+ "keccak",
+]
+
+[[package]]
 name = "sharded-slab"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4055,6 +4157,8 @@ dependencies = [
  "hidapi",
  "hmac 0.12.1",
  "interchange",
+ "iso7816",
+ "k256",
  "littlefs2",
  "nb 1.1.0",
  "ndef-app",
@@ -4064,11 +4168,13 @@ dependencies = [
  "piv-authenticator",
  "rand 0.8.6",
  "rand_core 0.6.4",
+ "salty 0.2.0",
  "serde",
  "serde_bytes",
  "serde_cbor",
  "serial_test",
  "sha2 0.10.9",
+ "sha3",
  "trussed",
  "trussed-auth",
  "trussed-auth-backend",
@@ -4083,6 +4189,7 @@ dependencies = [
  "usb-device",
  "usbd-ccid",
  "usbd-ctaphid",
+ "wallet-app",
 ]
 
 [[package]]
@@ -4090,6 +4197,8 @@ name = "solo2"
 version = "0.3.0"
 dependencies = [
  "anyhow",
+ "bip39",
+ "bs58",
  "clap",
  "clap-verbosity-flag",
  "clap_complete",
@@ -4112,9 +4221,11 @@ dependencies = [
  "pretty_env_logger",
  "rand_core 0.6.4",
  "rcgen",
+ "salty 0.2.0",
  "serde_json",
  "sha-1",
  "sha2 0.10.9",
+ "sha3",
  "time",
  "ureq",
  "webbrowser",
@@ -4388,6 +4499,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "tinyvec"
+version = "1.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3e61e67053d25a4e82c844e8424039d9745781b3fc4f32b8d55ed50f5f667ef3"
+dependencies = [
+ "tinyvec_macros",
+]
+
+[[package]]
+name = "tinyvec_macros"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
+
+[[package]]
 name = "toml"
 version = "0.5.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4491,7 +4617,7 @@ dependencies = [
  "postcard",
  "rand_chacha",
  "rand_core 0.6.4",
- "salty",
+ "salty 0.3.0",
  "serde",
  "sha-1",
  "sha2 0.10.9",
@@ -4596,6 +4722,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "trussed-se050-manage"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "94d5f46ac87ea5209b78334d24418120d89fe7a5c387b638a5d5112dfe56f17b"
+dependencies = [
+ "serde",
+ "trussed-core",
+]
+
+[[package]]
 name = "trussed-staging"
 version = "0.4.0"
 source = "git+https://github.com/trussed-dev/trussed-staging.git?tag=v0.4.0#bda6a9afec4f3ceeaf096002f95126653066615e"
@@ -4610,7 +4746,7 @@ dependencies = [
  "hkdf",
  "littlefs2-core",
  "rand_core 0.6.4",
- "salty",
+ "salty 0.3.0",
  "serde",
  "serde-byte-array",
  "sha2 0.10.9",
@@ -4644,6 +4780,15 @@ name = "unicode-ident"
 version = "1.0.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
+
+[[package]]
+name = "unicode-normalization"
+version = "0.1.25"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5fd4f6878c9cb28d874b009da9e8d183b5abc80117c40bbd187a1fde336be6e8"
+dependencies = [
+ "tinyvec",
+]
 
 [[package]]
 name = "unicode-width"
@@ -4842,6 +4987,30 @@ checksum = "29790946404f91d9c5d06f9874efddea1dc06c5efe94541a7d6863108e3a5e4b"
 dependencies = [
  "same-file",
  "winapi-util",
+]
+
+[[package]]
+name = "wallet-app"
+version = "2.2362.0"
+dependencies = [
+ "base64 0.22.1",
+ "delog",
+ "heapless 0.9.2",
+ "hex-literal 0.3.4",
+ "hmac 0.12.1",
+ "interchange",
+ "iso7816",
+ "k256",
+ "littlefs2-core",
+ "ndef-app",
+ "postcard",
+ "salty 0.2.0",
+ "serde",
+ "sha2 0.10.9",
+ "sha3",
+ "trussed",
+ "trussed-core",
+ "usb-device",
 ]
 
 [[package]]

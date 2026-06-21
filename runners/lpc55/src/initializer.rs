@@ -507,6 +507,7 @@ impl Initializer {
         basic_stage: &mut stages::Basic,
         _usbhs: hal::peripherals::usbhs::Usbhs<Unknown>,
         _usbfs: hal::peripherals::usbfs::Usbfs<Unknown>,
+        #[cfg(feature = "admin-app")] store: types::RunnerStore,
     ) -> stages::Usb {
         let syscon = &mut self.syscon;
         let pmc = &mut self.pmc;
@@ -526,6 +527,8 @@ impl Initializer {
         );
 
         let mut usb_classes: Option<types::UsbClasses> = None;
+        #[cfg(feature = "wallet")]
+        let mut wallet_responder: Option<types::WalletResponder> = None;
 
         if !self.is_nfc_passive {
             let iocon = &mut clock_stage.iocon;
@@ -559,10 +562,27 @@ impl Initializer {
             let usb_bus = USB_BUS.init(hal::drivers::UsbBus::new(usbd, usb0_vbus_pin));
 
             // our USB classes (must be allocated in order that they're passed in `.poll(...)` later!)
+            // Interface numbers are assigned in allocation order; the Wallet HID
+            // class is allocated FIRST so it lands on interface 0, which the
+            // agave `solana` CLI requires (it matches HID by
+            // `usage_page == 0xFF00 || interface_number == 0`).
             //
+            // Allocated before the `UsbDeviceBuilder::build()` below, since
+            // usb-device requires every class to claim its endpoints before the
+            // device is built.
+            #[cfg(feature = "wallet")]
+            let wallet_hid = {
+                let (wallet_rq, wallet_rp) = types::WALLET_HID_CHANNEL
+                    .split()
+                    .expect("wallet hid channel already split");
+                wallet_responder = Some(wallet_rp);
+                wallet_app::usbd::WalletHid::new(usb_bus, wallet_rq)
+            };
+
             // NB: Card issuer's data can be at most 13 bytes (otherwise the constructor panics).
             // So for instance "Hacker Solo 2" would work, but "Solo 2 (custom)" would not.
             let ccid = usbd_ccid::Ccid::new(usb_bus, contact_requester, Some(b"Solo 2"));
+
             let current_time = basic_stage.perf_timer.elapsed().0 / 1000;
             let mut ctaphid = usbd_ctaphid::CtapHid::with_interrupt(
                 usb_bus,
@@ -587,14 +607,65 @@ impl Initializer {
                 | build_constants::CARGO_PKG_VERSION_MINOR;
 
             // our composite USB device
-            let product_string = match usb_config.product_name {
+            let default_product = match usb_config.product_name {
                 UsbProductName::Custom(name) => name,
                 UsbProductName::UsePfr => get_product_string(&mut basic_stage.pfr),
             };
             let serial_number = get_serial_number();
-            let manufacturer_string = usb_config.manufacturer_name;
 
-            let usbd = UsbDeviceBuilder::new(usb_bus, usb_config.vid_pid)
+            // A persisted DeviceConfig (admin-app SET_CONFIG) drives the status
+            // LED on every build; the USB vid/pid + descriptor strings are only
+            // overridden on a `hacker` build (secure stays the firmware default).
+            #[cfg(feature = "admin-app")]
+            let (vid_pid, manufacturer_string, product_string) = {
+                let mut fs = trussed::store::filestore::ClientFilestore::new(
+                    littlefs2::path!("admin").into(),
+                    store,
+                );
+                let dc = admin_app::config::load::<_, crate::device_config::DeviceConfig>(&mut fs)
+                    .unwrap_or_default();
+                // Push the configured status-LED colors to the board UI.
+                use core::sync::atomic::Ordering;
+                board::trussed::LED_IDLE_RGB.store(dc.led.idle, Ordering::Relaxed);
+                board::trussed::LED_UP_RGB.store(dc.led.up, Ordering::Relaxed);
+
+                #[cfg(feature = "hacker")]
+                {
+                    let manufacturer_string: &'static str = if dc.usb.manufacturer.is_empty() {
+                        usb_config.manufacturer_name
+                    } else {
+                        static M: StaticCell<admin_app::ConfigString> = StaticCell::new();
+                        M.init(dc.usb.manufacturer)
+                    };
+                    let product_string: &'static str = if dc.usb.product.is_empty() {
+                        default_product
+                    } else {
+                        static P: StaticCell<admin_app::ConfigString> = StaticCell::new();
+                        P.init(dc.usb.product)
+                    };
+                    (
+                        UsbVidPid(dc.usb.vid, dc.usb.pid),
+                        manufacturer_string,
+                        product_string,
+                    )
+                }
+                #[cfg(not(feature = "hacker"))]
+                {
+                    (
+                        usb_config.vid_pid,
+                        usb_config.manufacturer_name,
+                        default_product,
+                    )
+                }
+            };
+            #[cfg(not(feature = "admin-app"))]
+            let (vid_pid, manufacturer_string, product_string) = (
+                usb_config.vid_pid,
+                usb_config.manufacturer_name,
+                default_product,
+            );
+
+            let usbd = UsbDeviceBuilder::new(usb_bus, vid_pid)
                 .manufacturer(manufacturer_string)
                 .product(product_string)
                 .serial_number(serial_number)
@@ -603,7 +674,13 @@ impl Initializer {
                 .composite_with_iads()
                 .build();
 
-            usb_classes = Some(types::UsbClasses::new(usbd, ccid, ctaphid)); //, /*keyboard,*/ serial));
+            usb_classes = Some(types::UsbClasses::new(
+                usbd,
+                ccid,
+                ctaphid,
+                #[cfg(feature = "wallet")]
+                wallet_hid,
+            ));
         }
 
         // Cancel any possible outstanding use in delay timing
@@ -613,6 +690,8 @@ impl Initializer {
             usb_classes,
             contact_responder: Some(contact_responder),
             ctaphid_responder: Some(ctaphid_responder),
+            #[cfg(feature = "wallet")]
+            wallet_responder,
         }
     }
 
@@ -931,9 +1010,11 @@ impl Initializer {
             basic_stage.rgb.take()
         };
 
-        let three_buttons = basic_stage.three_buttons.take();
+        // Buttons stay in `basic_stage` (hoisted to the idle loop by the
+        // runner); the UI only needs to know whether they're present.
+        let has_buttons = basic_stage.three_buttons.is_some();
 
-        let mut solobee_interface = board::trussed::UserInterface::new(rtc, three_buttons, rgb);
+        let mut solobee_interface = board::trussed::UserInterface::new(rtc, has_buttons, rgb);
         solobee_interface.set_status(trussed::platform::ui::Status::Idle);
 
         let rng = flash_stage.rng.take().unwrap();
@@ -988,8 +1069,11 @@ impl Initializer {
         let mut nfc_stage =
             self.initialize_nfc(&mut clock_stage, &mut basic_stage, flexcomm0, mux, pint);
 
-        let mut usb_stage = self.initialize_usb(&mut clock_stage, &mut basic_stage, usbhs, usbfs);
-        let interfaces_stage = self.initialize_interfaces(&mut nfc_stage, &mut usb_stage);
+        // Flash + filesystem come up before USB so the USB descriptor (vid/pid)
+        // can be chosen from persisted config on the mounted FS at enumeration
+        // time. NB: this puts the (slow, occasionally-hang-prone) FS mount ahead
+        // of USB — only safe where a corrupt-FS hang is recoverable (EVK / a key
+        // with a PIO0_5 button).
         let mut flash_stage = self.initialize_flash(rng, prince, flash);
         let mut filesystem_stage = self.initialize_filesystem(
             &mut clock_stage,
@@ -997,6 +1081,15 @@ impl Initializer {
             &mut nfc_stage,
             &mut flash_stage,
         );
+        let mut usb_stage = self.initialize_usb(
+            &mut clock_stage,
+            &mut basic_stage,
+            usbhs,
+            usbfs,
+            #[cfg(feature = "admin-app")]
+            filesystem_stage.store,
+        );
+        let interfaces_stage = self.initialize_interfaces(&mut nfc_stage, &mut usb_stage);
 
         let trussed = self.initialize_trussed(
             &mut clock_stage,

@@ -58,9 +58,19 @@ impl Buttons {
 pub fn init(p0_periph: P0) -> (Leds, Buttons) {
     let parts = p0::Parts::new(p0_periph);
 
-    let leds = Leds {
+    let mut leds = Leds {
         led: parts.p0_03.into_push_pull_output(Level::Low).degrade(),
     };
+
+    // Boot indication: 3 quick LED blinks (sync). Moved here from
+    // `UserInterface::new` when the LEDs were hoisted to the idle loop.
+    const BLINK_CYCLES: u32 = 64_000_000 / 5 / 4; // ~200 ms at 64 MHz
+    for _ in 0..3 {
+        leds.set_brightness(255);
+        cortex_m::asm::delay(BLINK_CYCLES);
+        leds.set_brightness(0);
+        cortex_m::asm::delay(BLINK_CYCLES);
+    }
 
     let mut touch1 = CapTouchPad::new(2);
     let mut touch2 = CapTouchPad::new(31);

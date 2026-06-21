@@ -51,6 +51,11 @@ mod app {
         updates: u32,
         ccid_wait_extension_receiver: Receiver<'static, Milliseconds, 1>,
         ctaphid_keep_alive_receiver: Receiver<'static, Milliseconds, 1>,
+        // Buttons hoisted out of trussed's UserInterface: the idle loop polls
+        // them via `board::trussed::poll_buttons` and latches gestures into a
+        // global consumed by `check_user_presence` (FIDO) and `confirm_user_present_non_blocking`
+        // (wallet). Owned exclusively by idle. `None` in passive/NFC boot.
+        buttons: Option<runner::types::ThreeButtons>,
     }
 
     #[shared]
@@ -69,6 +74,12 @@ mod app {
         /// All the applications that the device serves.
         #[lock_free]
         apps: runner::types::Apps,
+
+        /// Wallet hardware-wallet app + its HID dispatch. Kept off the
+        /// `apps` lock so its blocking sign path doesn't stall other apps.
+        /// `WalletSlot` is `Option<Wallet>` with the `wallet` feature on and
+        /// `()` off, so this resource is always present for RTIC.
+        wallet: runner::types::WalletSlot,
 
         /// The USB driver classes
         usb_classes: Option<runner::types::UsbClasses>,
@@ -135,11 +146,13 @@ mod app {
             ctaphid_dispatch,
             trussed,
             apps,
+            wallet,
             usb_classes,
             contactless,
             perf_timer,
             clock_ctrl,
             wait_extender,
+            buttons,
         ) = runner::init_board(c.device);
 
         Mono::start(c.core.SYST, CLOCK_FREQ);
@@ -167,6 +180,8 @@ mod app {
 
                 apps,
 
+                wallet,
+
                 usb_classes,
                 contactless,
 
@@ -182,14 +197,23 @@ mod app {
                 updates: 1,
                 ccid_wait_extension_receiver,
                 ctaphid_keep_alive_receiver,
+                buttons,
             },
         )
     }
 
-    #[idle(shared = [apdu_dispatch, ctaphid_dispatch, apps, perf_timer, usb_classes, ccid_wait_extension_sender, ctaphid_keep_alive_sender])]
+    #[idle(shared = [apdu_dispatch, ctaphid_dispatch, apps, perf_timer, usb_classes, ccid_wait_extension_sender, ctaphid_keep_alive_sender, wallet], local = [buttons])]
     fn idle(mut c: idle::Context) -> ! {
         info!("inside IDLE, initial SP = {:08X}", msp());
         loop {
+            // Poll the hoisted buttons every pass and latch any committed
+            // gesture into the global consumed by `check_user_presence` (FIDO)
+            // and `confirm_user_present_non_blocking` (wallet). Runs regardless of `wallet` — FIDO
+            // needs fresh gestures too. lpc55 buttons are fast GPIO, no throttle.
+            if let Some(buttons) = c.local.buttons.as_mut() {
+                board::trussed::poll_buttons(buttons);
+            }
+
             let mut time = 0;
             c.shared.perf_timer.lock(|perf_timer| {
                 time = perf_timer.elapsed().0;
@@ -256,6 +280,36 @@ mod app {
                 .ctaphid_dispatch(|apps| c.shared.ctaphid_dispatch.poll(apps))
             {
                 rtic::pend(USB_INTERRUPT);
+            }
+
+            // Fill the wallet consent result from the idle-reachable inputs
+            // (monotonic clock + NFC field) — the non-blocking UP check. Uses the
+            // systick `Mono` (real 1 kHz ms), not `perf_timer` (a CTIMER not
+            // calibrated to real ms), so the 30 s consent timeout is accurate.
+            #[cfg(feature = "wallet")]
+            runner::confirm_user_present_non_blocking(
+                Mono::now().duration_since_epoch().to_millis() as u32,
+            );
+
+            // Mirror a waiting wallet sign into the LED driver so the UP
+            // indicator lights during a wallet sign (the wallet path never
+            // calls trussed's `set_status`). The board-crate LED driver
+            // (`update_ui` task) ORs this with trussed's own status.
+            #[cfg(feature = "wallet")]
+            board::trussed::set_wallet_up_requested(wallet_app::consent::is_up_requested());
+
+            // Drive the wallet HID transport. Polled outside the
+            // `usb_classes`/`apps` locks because a sign-message doesn't block;
+            // pend USB if it produced a response.
+            #[cfg(feature = "wallet")]
+            {
+                let pending = c
+                    .shared
+                    .wallet
+                    .lock(|wallet| wallet.as_mut().map(|s| s.poll()).unwrap_or(false));
+                if pending {
+                    rtic::pend(USB_INTERRUPT);
+                }
             }
         }
     }

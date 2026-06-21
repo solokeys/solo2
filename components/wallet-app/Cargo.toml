@@ -1,0 +1,54 @@
+[package]
+name = "wallet-app"
+version.workspace = true
+authors = ["Emanuele Cesena <ec@solokeys.com>"]
+edition = "2021"
+license = "Apache-2.0 OR MIT"
+description = "Multi-chain hardware-wallet Trussed app (Solana/Ethereum) — APDU + Ledger-style HID transport for solo2 hardware"
+
+[dependencies]
+delog          = "0.1.2"
+heapless       .workspace = true
+hex-literal    = "0.3"
+interchange    .workspace = true
+iso7816        .workspace = true
+# SLIP-10 (Ed25519 BIP-32-style) derivation in `key_derivation.rs`:
+# HMAC-SHA512 chained per path component. Pin versions directly instead
+# of going through `workspace = true` because the workspace entries
+# don't set `default-features = false` (FIDO PC tests need std there);
+# `workspace = true` ignores per-member default-features overrides and
+# would drag std into our embedded build.
+sha2             = { version = "0.10", default-features = false }
+hmac             = { version = "0.12", default-features = false }
+# secp256k1 (Ethereum): BIP-32 derivation in `key_derivation.rs`
+# (scalar add / point mul) + ECDSA signing in `authenticator.rs`. no_std,
+# no alloc — recoverable signatures give Ethereum its `v`.
+k256             = { version = "0.13", default-features = false, features = ["ecdsa", "arithmetic"] }
+# Keccak-256 for Ethereum (tx digest + address).
+sha3             = { version = "0.10", default-features = false }
+littlefs2-core = "0.1"
+postcard       = "0.7"
+salty          = { version = "0.2", default-features = false }
+serde          = { version = "1", default-features = false, features = ["derive"] }
+trussed        .workspace = true
+trussed-core   .workspace = true
+usb-device     = { workspace = true, optional = true }
+# NFC handover — sign-message publishes a Solana Explorer "tx inspector"
+# URL containing the base64-encoded transaction message to ndef-app's
+# override slot, so a phone tap during the user-presence prompt opens the
+# explorer page for that tx.
+ndef-app       .workspace = true
+base64         = { version = "0.22", default-features = false }
+
+[features]
+default = ["dispatch", "usbd"]
+dispatch = []
+usbd = ["usb-device"]
+
+log-all = []
+log-none = []
+log-info = []
+log-debug = []
+log-warn = []
+log-error = []
+log-trace = []

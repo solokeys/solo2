@@ -13,6 +13,7 @@ use panic_halt as _;
 
 mod board;
 mod cap_touch;
+mod device_config;
 mod dispatch;
 mod flash;
 mod initializer;
@@ -68,9 +69,9 @@ mod app {
     use super::SYSTICK_FREQ_HZ;
     use rtic_monotonics::systick::prelude::*;
     systick_monotonic!(Mono, 1000);
-    use crate::initializer::{init_board, CcidClass, CtapHidClass, UsbBus};
+    use crate::initializer::{init_board, CcidClass, CtapHidClass, UsbBus, WalletHidClass};
     use crate::nfct;
-    use crate::types::{Apps, Trussed};
+    use crate::types::{Apps, Trussed, WalletSlot};
     use apdu_dispatch::dispatch::ApduDispatch;
     use apdu_dispatch::interchanges as apdu_interchanges;
     use ctaphid_dispatch::DefaultDispatch as CtaphidDispatchDefault;
@@ -92,6 +93,8 @@ mod app {
         usbd: UsbDevice<'static, UsbBus>,
         ctaphid: CtapHidClass,
         ccid: CcidClass,
+        wallet_hid: WalletHidClass,
+        wallet: WalletSlot,
         // CTAPHID KEEPALIVE channel — mirrors the LPC55 runner's
         // pattern. Idle + on_usb call `ctaphid.did_start_processing()`
         // when a new CBOR command arrives; that returns
@@ -110,6 +113,16 @@ mod app {
     struct Local {
         power: POWER,
         ctaphid_keepalive_receiver: Receiver<'static, Milliseconds, 1>,
+        // Buttons hoisted out of trussed's UserInterface: the idle loop polls
+        // them via `board::poll_buttons` and latches gestures into a global
+        // that both `check_user_presence` (FIDO) and `confirm_user_present_non_blocking` (wallet)
+        // consume. Owned exclusively by idle, so plain Local (no lock).
+        buttons: crate::board::Buttons,
+        gesture: crate::board::GestureDetector,
+        // UP-indicator LEDs hoisted out of trussed's UserInterface: the idle
+        // loop drives them via `board::refresh_up_led` (ORing trussed status
+        // and a waiting wallet sign). Owned exclusively by idle, so plain Local.
+        leds: crate::board::Leds,
     }
 
     #[init]
@@ -134,11 +147,16 @@ mod app {
                 usbd: board.usbd,
                 ctaphid: board.ctaphid,
                 ccid: board.ccid,
+                wallet_hid: board.wallet_hid,
+                wallet: board.wallet,
                 ctaphid_keepalive_sender,
             },
             Local {
                 power: board.power,
                 ctaphid_keepalive_receiver,
+                buttons: board.buttons,
+                gesture: crate::board::GestureDetector::new(),
+                leds: board.leds,
             },
         )
     }
@@ -146,9 +164,23 @@ mod app {
     /// Idle: drain NFC + APDU + CTAPHID + USB. The contactless drain also
     /// runs in a separate `nfc_drain` task so reader reads don't have to
     /// wait for the idle loop to come around.
-    #[idle(shared = [apps, ctaphid_dispatch, apdu_dispatch, nfc_apdu_rq, usbd, ctaphid, #[cfg(feature = "ccid")] ccid, ctaphid_keepalive_sender])]
+    #[idle(shared = [apps, ctaphid_dispatch, apdu_dispatch, nfc_apdu_rq, usbd, ctaphid, #[cfg(feature = "ccid")] ccid, #[cfg(feature = "wallet")] wallet, #[cfg(feature = "wallet")] wallet_hid, ctaphid_keepalive_sender], local = [buttons, gesture, leds])]
     fn idle(mut ctx: idle::Context) -> ! {
         loop {
+            // Poll the hoisted buttons every pass and latch any committed
+            // gesture into the global consumed by `check_user_presence` (FIDO)
+            // and `confirm_user_present_non_blocking` (wallet). Cheap except the throttled cap-touch
+            // read. Runs regardless of `wallet` — FIDO needs fresh gestures too.
+            {
+                use rtic_monotonics::Monotonic;
+                let now_ms = crate::app::Mono::now().duration_since_epoch().to_millis();
+                crate::board::poll_buttons(ctx.local.buttons, ctx.local.gesture, now_ms);
+            }
+
+            // Drive the UP/"waiting" LED: on when trussed is waiting (FIDO) or
+            // a wallet sign is waiting. Cheap (atomic loads + one GPIO write).
+            crate::board::refresh_up_led(ctx.local.leds);
+
             // Run the contactless drain inline once per loop too, in
             // case nfc_drain raced and an APDU is sitting in the
             // mailbox without an IRQ pending it.
@@ -172,13 +204,48 @@ mod app {
                 rtic::pend(nrf52840_pac::Interrupt::USBD);
             }
 
+            // Fill the wallet consent result from the idle-reachable inputs
+            // (monotonic clock + NFC field) — the non-blocking UP check.
+            #[cfg(feature = "wallet")]
+            {
+                use rtic_monotonics::Monotonic;
+                let now_ms = crate::app::Mono::now().duration_since_epoch().to_millis();
+                crate::board::confirm_user_present_non_blocking(now_ms);
+            }
+
+            // Drive the wallet HID transport (its own dispatch, outside `apps`).
+            #[cfg(feature = "wallet")]
+            {
+                let wallet_pending = ctx
+                    .shared
+                    .wallet
+                    .lock(|w| w.as_mut().map(|s| s.poll()).unwrap_or(false));
+                if wallet_pending {
+                    rtic::pend(nrf52840_pac::Interrupt::USBD);
+                }
+            }
+
             let ka_status = ctx.shared.usbd.lock(|usbd| {
                 ctx.shared.ctaphid.lock(|ctaphid| {
                     ctaphid.check_for_app_response();
-                    #[cfg(feature = "ccid")]
-                    let _ = ctx.shared.ccid.lock(|ccid| usbd.poll(&mut [ctaphid, ccid]));
-                    #[cfg(not(feature = "ccid"))]
-                    let _ = usbd.poll(&mut [ctaphid]);
+                    #[cfg(feature = "wallet")]
+                    ctx.shared.wallet_hid.lock(|wallet_hid| {
+                        wallet_hid.check_for_app_response();
+                        #[cfg(feature = "ccid")]
+                        let _ = ctx
+                            .shared
+                            .ccid
+                            .lock(|ccid| usbd.poll(&mut [ctaphid, ccid, wallet_hid]));
+                        #[cfg(not(feature = "ccid"))]
+                        let _ = usbd.poll(&mut [ctaphid, wallet_hid]);
+                    });
+                    #[cfg(not(feature = "wallet"))]
+                    {
+                        #[cfg(feature = "ccid")]
+                        let _ = ctx.shared.ccid.lock(|ccid| usbd.poll(&mut [ctaphid, ccid]));
+                        #[cfg(not(feature = "ccid"))]
+                        let _ = usbd.poll(&mut [ctaphid]);
+                    }
                     ctaphid.did_start_processing()
                 })
             });
@@ -190,14 +257,27 @@ mod app {
         }
     }
 
-    #[task(binds = USBD, priority = 6, shared = [usbd, ctaphid, #[cfg(feature = "ccid")] ccid, ctaphid_keepalive_sender])]
+    #[task(binds = USBD, priority = 6, shared = [usbd, ctaphid, #[cfg(feature = "ccid")] ccid, #[cfg(feature = "wallet")] wallet_hid, ctaphid_keepalive_sender])]
     fn on_usb(mut ctx: on_usb::Context) {
         let ka_status = ctx.shared.usbd.lock(|usbd| {
             ctx.shared.ctaphid.lock(|ctaphid| {
-                #[cfg(feature = "ccid")]
-                let _ = ctx.shared.ccid.lock(|ccid| usbd.poll(&mut [ctaphid, ccid]));
-                #[cfg(not(feature = "ccid"))]
-                let _ = usbd.poll(&mut [ctaphid]);
+                #[cfg(feature = "wallet")]
+                ctx.shared.wallet_hid.lock(|wallet_hid| {
+                    #[cfg(feature = "ccid")]
+                    let _ = ctx
+                        .shared
+                        .ccid
+                        .lock(|ccid| usbd.poll(&mut [ctaphid, ccid, wallet_hid]));
+                    #[cfg(not(feature = "ccid"))]
+                    let _ = usbd.poll(&mut [ctaphid, wallet_hid]);
+                });
+                #[cfg(not(feature = "wallet"))]
+                {
+                    #[cfg(feature = "ccid")]
+                    let _ = ctx.shared.ccid.lock(|ccid| usbd.poll(&mut [ctaphid, ccid]));
+                    #[cfg(not(feature = "ccid"))]
+                    let _ = usbd.poll(&mut [ctaphid]);
+                }
                 ctaphid.did_start_processing()
             })
         });

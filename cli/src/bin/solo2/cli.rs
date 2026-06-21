@@ -173,6 +173,57 @@ pub enum Apps {
     Provision(Provision),
     #[clap(subcommand)]
     Qa(Qa),
+    #[clap(subcommand)]
+    Wallet(Wallet),
+}
+
+#[derive(Subcommand)]
+#[clap(infer_subcommands = true)]
+/// Multi-chain hardware wallet app (over the Ledger-style HID transport)
+pub enum Wallet {
+    /// Public key / address for a chain, using its default derivation path
+    Pubkey {
+        /// Solana address (base58) — the default
+        #[clap(long)]
+        sol: bool,
+        /// Ethereum address (EIP-55 0x…)
+        #[clap(long)]
+        eth: bool,
+        /// Override the derivation path (e.g. "m/44'/501'/0'/0'")
+        #[clap(long, short)]
+        path: Option<String>,
+    },
+    /// Reset secret to zero private key
+    Reset,
+    /// Generate a new seed
+    Keygen {
+        /// Silent mode (don't show BIP39 words)
+        #[clap(long, short)]
+        silent: bool,
+    },
+    /// Set seed from BIP39 words or read secret type
+    Seed {
+        /// Read the secret type instead of setting a seed
+        #[clap(long, short)]
+        read: bool,
+        /// BIP39 words (24 words)
+        words: Vec<String>,
+    },
+    /// Set private key from a file (JSON array of 64 bytes)
+    Privkey {
+        /// Path to the key file (solana keygen format)
+        file: String,
+    },
+    /// Select the active chain the device presents to wallets (resets to
+    /// Solana when the device is unplugged)
+    SetChain {
+        /// Solana — the default
+        #[clap(long)]
+        sol: bool,
+        /// Ethereum / EVM
+        #[clap(long)]
+        eth: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -195,6 +246,68 @@ pub enum Admin {
     Version,
     /// Wink the device
     Wink,
+    /// Get/set raw device-config values by key (e.g. led.idle, usb.vid)
+    Config {
+        #[clap(subcommand)]
+        cmd: AdminConfig,
+    },
+    /// Set the device identity (LED colors / USB), high-level helpers
+    Set {
+        #[clap(subcommand)]
+        cmd: AdminSet,
+    },
+}
+
+#[derive(Subcommand)]
+#[clap(infer_subcommands = true)]
+pub enum AdminConfig {
+    /// Read a config value (keys: led.idle, led.up, usb.vid, usb.pid,
+    /// usb.manufacturer, usb.product)
+    Get {
+        /// Config key, e.g. `led.idle`
+        key: String,
+    },
+    /// Write a config value (numbers accept 0x-hex or decimal; usb.* needs a replug)
+    Set {
+        /// Config key, e.g. `usb.vid`
+        key: String,
+        /// Value, e.g. `0x2c97`
+        value: String,
+    },
+}
+
+#[derive(Subcommand)]
+#[clap(infer_subcommands = true)]
+pub enum AdminSet {
+    /// Set LED colors as `RRGGBB` hex: <IDLE> <UP>. Default: 00ff00 (green) 0000ff (blue).
+    /// Example: `set led 000000 0000ff` = off when idle, blue on user presence.
+    Led {
+        /// idle color, RRGGBB hex (e.g. 000000 = off)
+        idle: Option<String>,
+        /// user-presence color, RRGGBB hex (e.g. 0000ff = blue)
+        up: Option<String>,
+        /// reset both LED colors to the firmware default (00ff00 / 0000ff)
+        #[clap(long)]
+        default: bool,
+    },
+    /// Set USB identity (reboots to apply). Default: vid 0x1209 pid 0xbeee (SoloKeys).
+    Usb {
+        /// vendor id, hex (e.g. 2c97 for Ledger)
+        #[clap(long)]
+        vid: Option<String>,
+        /// product id, hex (e.g. 7000 for Ledger)
+        #[clap(long)]
+        pid: Option<String>,
+        /// manufacturer string (empty = firmware default "SoloKeys")
+        #[clap(long)]
+        manufacturer: Option<String>,
+        /// product string (empty = firmware default from PFR)
+        #[clap(long)]
+        product: Option<String>,
+        /// reset USB identity to the firmware default (0x1209:0xbeee, default strings)
+        #[clap(long)]
+        default: bool,
+    },
 }
 
 #[derive(Subcommand)]

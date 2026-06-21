@@ -7,7 +7,6 @@ edition = "2024"
 [dependencies]
 heapless       .workspace = true
 apdu-dispatch  .workspace = true
-cortex-m       .workspace = true
 iso7816        .workspace = true
 littlefs2      .workspace = true
 trussed-core   = { workspace = true, features = ["filesystem-client"] }

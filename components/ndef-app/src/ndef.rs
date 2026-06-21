@@ -1,7 +1,7 @@
 use apdu_dispatch::app;
 use apdu_dispatch::app::{CommandView, Interface, VecView};
-use core::cell::RefCell;
-use cortex_m::interrupt::{Mutex, free as cs_free};
+use core::cell::UnsafeCell;
+use core::sync::atomic::{AtomicUsize, Ordering};
 use heapless::Vec;
 use iso7816::{Instruction, Status};
 use littlefs2::path::Path;
@@ -21,51 +21,46 @@ const PERSIST_LOCATION: Location = Location::Internal;
 /// File holding the persisted NDEF, under the ndef client's namespace.
 const PERSIST_FILE: &Path = littlefs2::path!("url");
 
-/// Generic single-slot override mailbox. Any caller can publish a URL
-/// that the NDEF reader serves instead of the persisted/default file
-/// until it's cleared. Callers are small/static contexts (e.g. the
-/// solana-app during sign-message); the slot is interrupt-safe so an
-/// NFCT IRQ that arrives mid-write sees a consistent state. This is
-/// transient (RAM) — it is not persisted.
-struct Override {
-    buf: [u8; NDEF_FILE_MAX],
-    len: usize,
-}
-
-static OVERRIDE: Mutex<RefCell<Override>> = Mutex::new(RefCell::new(Override {
-    buf: [0; NDEF_FILE_MAX],
-    len: 0,
-}));
+/// Generic single-slot override mailbox. Any caller can publish a URL that the
+/// NDEF reader serves instead of the persisted/default file until it's cleared.
+/// Callers are small/static contexts (e.g. the wallet-app during sign-message).
+/// `OVERRIDE_LEN` gates visibility: it is 0 while `OVERRIDE_BUF` is being filled
+/// and the byte count once the file is complete, so a reader never observes a
+/// half-written buffer. Transient (RAM) — not persisted.
+struct OverrideBuf(UnsafeCell<[u8; NDEF_FILE_MAX]>);
+// SAFETY: single-core, cooperative access — the writer (wallet sign-message) and
+// the reader (NDEF ReadBinary) run in the same idle context and never truly
+// overlap; the `OVERRIDE_LEN` gate makes a torn read impossible. No lock needed.
+unsafe impl Sync for OverrideBuf {}
+static OVERRIDE_BUF: OverrideBuf = OverrideBuf(UnsafeCell::new([0; NDEF_FILE_MAX]));
+static OVERRIDE_LEN: AtomicUsize = AtomicUsize::new(0);
 
 /// Publish an override URL. Returns `false` if the assembled NDEF file
 /// (NLEN + short-form URI record) wouldn't fit in the override buffer.
 /// Only `https://`-prefixed URLs are accepted (the URI prefix
 /// abbreviation 0x04 swallows it on the wire).
 pub fn set_override_url(url: &str) -> bool {
-    cs_free(|cs| {
-        let mut slot = OVERRIDE.borrow(cs).borrow_mut();
-        match build_url_ndef_file(url, &mut slot.buf) {
-            Some(n) => {
-                slot.len = n;
-                true
-            }
-            None => {
-                slot.len = 0;
-                false
-            }
+    OVERRIDE_LEN.store(0, Ordering::Release); // hide while writing
+    // SAFETY: LEN==0 now, so no reader will read OVERRIDE_BUF; single writer.
+    let buf = unsafe { &mut *OVERRIDE_BUF.0.get() };
+    match build_url_ndef_file(url, buf) {
+        Some(n) => {
+            OVERRIDE_LEN.store(n, Ordering::Release); // publish
+            true
         }
-    })
+        None => false,
+    }
 }
 
 /// Drop any pending override URL — the reader falls back to the
 /// persisted file (or the static default).
 pub fn clear_override() {
-    cs_free(|cs| OVERRIDE.borrow(cs).borrow_mut().len = 0);
+    OVERRIDE_LEN.store(0, Ordering::Release);
 }
 
 /// Cheap check — `true` while an override URL is currently published.
 pub fn has_override() -> bool {
-    cs_free(|cs| OVERRIDE.borrow(cs).borrow().len > 0)
+    OVERRIDE_LEN.load(Ordering::Acquire) > 0
 }
 
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -161,18 +156,23 @@ impl<C: FilesystemClient> App<C> {
     }
 
     fn select_ndef(&mut self) {
-        self.ensure_loaded();
         self.file.clear();
         // Priority: transient app override > persisted file > static default.
-        let from_override = cs_free(|cs| {
-            let slot = OVERRIDE.borrow(cs).borrow();
-            if slot.len == 0 {
-                return false;
-            }
-            let _ = self.file.extend_from_slice(&slot.buf[..slot.len]);
+        // The override lives in RAM and needs no flash, so check it *before*
+        // `ensure_loaded` — an NFC read taken during a wallet sign (when the
+        // trussed service is busy in the user-presence consent loop) must serve
+        // it without blocking on a flash `try_syscall` that can't complete yet.
+        let n = OVERRIDE_LEN.load(Ordering::Acquire);
+        // SAFETY: LEN>0 means OVERRIDE_BUF holds a complete file; cooperative read.
+        let from_override = if n > 0 {
+            let slot = unsafe { &*OVERRIDE_BUF.0.get() };
+            let _ = self.file.extend_from_slice(&slot[..n]);
             true
-        });
+        } else {
+            false
+        };
         if !from_override {
+            self.ensure_loaded();
             if self.persisted_len > 0 {
                 let _ = self
                     .file
@@ -229,15 +229,8 @@ impl<C: FilesystemClient> app::App for App<C> {
                 }
             }
             Instruction::ReadBinary => {
-                let offset = (((p1 & 0xef) as usize) << 8) | p2 as usize;
-                let len_to_read = if expected > (self.file.len() - offset) {
-                    self.file.len() - offset
-                } else if expected > 0 {
-                    expected
-                } else {
-                    self.file.len() - offset
-                };
-
+                let raw_offset = (((p1 & 0xef) as usize) << 8) | p2 as usize;
+                let (offset, len_to_read) = read_window(self.file.len(), raw_offset, expected);
                 reply
                     .extend_from_slice(&self.file[offset..offset + len_to_read])
                     .ok();
@@ -274,6 +267,23 @@ impl<C: FilesystemClient> app::App for App<C> {
             _ => Err(Status::ConditionsOfUseNotSatisfied),
         }
     }
+}
+
+/// Bounds for serving a `ReadBinary`: clamp `offset` to `file_len` and the
+/// length to what's available. The served file can change size between reads
+/// (the transient override appears/disappears around a wallet sign), so a stale
+/// or over-large offset must never underflow `file_len - offset` or index out
+/// of bounds — that would panic the firmware on an otherwise-harmless NFC read.
+/// Guarantees `offset + len <= file_len`.
+fn read_window(file_len: usize, offset: usize, expected: usize) -> (usize, usize) {
+    let offset = offset.min(file_len);
+    let avail = file_len - offset;
+    let len = if expected > 0 && expected < avail {
+        expected
+    } else {
+        avail
+    };
+    (offset, len)
 }
 
 /// Build a URI NDEF file (NLEN + record) into `out`. Switches between
@@ -319,5 +329,36 @@ fn build_url_ndef_file(url: &str, out: &mut [u8; NDEF_FILE_MAX]) -> Option<usize
         out[9] = URI_PREFIX_HTTPS;
         out[10..10 + body.len()].copy_from_slice(body.as_bytes());
         Some(file_len)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::read_window;
+
+    /// A `ReadBinary` window must never let `offset + len` exceed the file —
+    /// any over-large offset (e.g. a reader continuing past a now-shrunk file
+    /// after the override cleared) must clamp, not underflow / index OOB.
+    #[test]
+    fn read_window_never_exceeds_file() {
+        // offset past EOF → empty, no panic (the regression: file shrank 88→18).
+        assert_eq!(read_window(18, 50, 86), (18, 0));
+        assert_eq!(read_window(88, 2, 86), (2, 86)); // exact read of override
+        assert_eq!(read_window(18, 2, 86), (2, 16)); // length clamped to avail
+        assert_eq!(read_window(18, 18, 0), (18, 0)); // offset == len
+        assert_eq!(read_window(88, 0, 0), (0, 88)); // expected 0 → whole file
+
+        // Exhaustive: no (len, offset, expected) yields offset + len > file_len.
+        for file_len in [0usize, 1, 2, 18, 88, 1024] {
+            for offset in 0..file_len + 20 {
+                for expected in [0usize, 1, file_len, file_len + 5, 9999] {
+                    let (o, l) = read_window(file_len, offset, expected);
+                    assert!(
+                        o + l <= file_len,
+                        "fl={file_len} off={offset} exp={expected}"
+                    );
+                }
+            }
+        }
     }
 }

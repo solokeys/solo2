@@ -59,6 +59,7 @@ pub mod client_tag {
     pub const OPCARD: ClientTag = 6;
     pub const PROVISIONER: ClientTag = 7;
     pub const OATH_EXPORT: ClientTag = 8;
+    pub const WALLET: ClientTag = 9;
 }
 
 /// Wrapper around the trussed `Service` that owns the multiplexed endpoint.

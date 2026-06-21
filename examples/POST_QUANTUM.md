@@ -1,4 +1,4 @@
-# Post-Quantum signing with a SoloKey (ML-DSA-44)
+# Post-Quantum signing with a Solo key (ML-DSA-44)
 
 > **Works on:** PIV ML-DSA — **Secure + Hacker**; FIDO2 ML-DSA (`-50`) — **Hacker only**. ML-DSA needs the ML-DSA firmware; the FIDO2 `-50` algorithm is pre-standard CTAP, so it's excluded from the certified Secure build, while PIV ML-DSA is part of the Secure baseline.
 
@@ -65,7 +65,7 @@ openssl pkeyutl -verify -pubin -inkey pub.der -keyform DER \
         -rawin -in msg.bin -sigfile sig.bin                  # -> Signature Verified Successfully
 ```
 
-`-rawin` makes OpenSSL run pure ML-DSA.Verify over the message with the (default) empty context — byte-for-byte what the SoloKey computes.
+`-rawin` makes OpenSSL run pure ML-DSA.Verify over the message with the (default) empty context — byte-for-byte what the Solo key computes.
 
 ### Verify with liboqs (Python)
 ```python

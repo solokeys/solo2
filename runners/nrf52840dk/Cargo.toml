@@ -24,6 +24,9 @@ board-solo  = []          # SoloKeys USB custom board
 # this feature — see the `build-dk-nfc-only` make target.
 ccid = ["dep:usbd-ccid"]
 
+# Multi-chain hardware-wallet app over Ledger-style HID (usage 0xFFA0).
+wallet = ["dep:wallet-app"]
+
 # Replaces button-driven user presence with a probe-rs-writable static
 # (`UP_CONTROL` in `board::mod`). Used by the integration tests in
 # `runners/pc/tests` to drive `approve`/`deny` from the host over JTAG.
@@ -85,8 +88,13 @@ ndef-app                  .workspace = true
 secrets-app               .workspace = true
 piv-authenticator         .workspace = true
 opcard                    .workspace = true
+# Multi-chain hardware-wallet app (Solana/Ethereum), Ledger-style HID. Optional
+# so a no-wallet DK build stays lean.
+wallet-app                = { workspace = true, optional = true }
 heapless                  .workspace = true
 generic-array             = "0.14"
+# DeviceConfig (persisted USB identity) derives Serialize/Deserialize.
+serde                     = { version = "1", default-features = false, features = ["derive"] }
 static_cell               .workspace = true
 
 # nRF52840 HAL/PAC. Pinned for usb-device 0.2 + usbd-ctaphid 0.4 compatibility:

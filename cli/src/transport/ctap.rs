@@ -87,7 +87,10 @@ impl From<u8> for Code {
             0x3F => Error,
             0x3B => Keepalive,
             vendor_code @ 0x40..=0x7F => Vendor(VendorCode::new(vendor_code)),
-            _ => panic!(),
+            // Defensive: an out-of-range/unknown code must never crash the CLI
+            // (commands are 7-bit; a caller passing e.g. 0x83 is a bug, but we
+            // surface it as a normal error instead of panicking).
+            _ => Error,
         }
     }
 }

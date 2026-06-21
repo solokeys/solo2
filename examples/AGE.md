@@ -1,4 +1,4 @@
-# File encryption with a SoloKey + age
+# File encryption with a Solo key + age
 
 > **Works on: Secure + Hacker.** Uses FIDO2 `hmac-secret`.
 

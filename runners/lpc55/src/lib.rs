@@ -15,6 +15,7 @@ use usb_device::device::UsbVidPid; // re-export for convenience
 #[allow(unused_imports)]
 use hal::drivers::timer::Elapsed;
 
+pub mod device_config;
 pub mod initializer;
 pub mod types;
 
@@ -35,6 +36,63 @@ delog!(Delogger, 3, 2048, Flusher);
 #[cfg(feature = "log-defmt")]
 static FLUSHER: Flusher = Flusher {};
 
+// ── Wallet consent: runner-driven, non-blocking user-presence ────────────────
+//
+// A wallet sign arms `wallet_app::consent` (request) and polls the result; the
+// idle loop calls `confirm_user_present_non_blocking(now_ms)` once per pass to fill the result from
+// the idle-reachable inputs (monotonic clock + NFC field). This is the
+// non-blocking analogue of `check_user_presence` for the wallet path only
+// (FIDO keeps using `check_user_presence`).
+//
+// A button gesture latched by the idle `board::trussed::poll_buttons` is
+// consumed here too: any committed press (Approve/Strong) grants.
+//
+// Thin wrapper over the shared `board::trussed::read_presence`. lpc55 has no
+// explicit-deny button, so the only outcomes are Grant/Pending. The non-blocking
+// wallet path passes `has_buttons = true` (the no-buttons auto-approve only
+// applies to the blocking FIDO path) and the NDEF suppression flag (a phone tap
+// during a sign reads the override URL instead of granting).
+#[cfg(feature = "wallet")]
+pub fn confirm_user_present_non_blocking(now_ms: u32) {
+    use board::trussed::{read_presence, Presence};
+    use core::sync::atomic::{AtomicU32, Ordering};
+    use wallet_app::consent;
+
+    // First-seen `now_ms` of the in-flight request; `u32::MAX` = none (sentinel).
+    static CONSENT_START: AtomicU32 = AtomicU32::new(u32::MAX);
+
+    if !consent::is_up_requested() {
+        CONSENT_START.store(u32::MAX, Ordering::Relaxed);
+        return;
+    }
+
+    let start = match CONSENT_START.compare_exchange(
+        u32::MAX,
+        now_ms,
+        Ordering::Relaxed,
+        Ordering::Relaxed,
+    ) {
+        Ok(_) => now_ms,
+        Err(existing) => existing,
+    };
+
+    #[cfg(feature = "ndef-app")]
+    let suppressed = ndef_app::has_override();
+    #[cfg(not(feature = "ndef-app"))]
+    let suppressed = false;
+
+    match read_presence(true, suppressed) {
+        Presence::Grant(_) => consent::set_up_result(consent::GRANTED),
+        Presence::Pending => {
+            if now_ms.wrapping_sub(start) > 30_000 {
+                consent::set_up_result(consent::TIMED_OUT);
+            } else {
+                consent::set_up_result(consent::WAITING);
+            }
+        }
+    }
+}
+
 // TODO: move board-specifics to BSPs
 #[allow(clippy::type_complexity)]
 pub fn init_board(
@@ -45,11 +103,15 @@ pub fn init_board(
     types::CtaphidDispatch,
     types::Trussed,
     types::Apps,
+    types::WalletSlot,
     Option<types::UsbClasses>,
     Option<types::Iso14443>,
     types::PerformanceTimer,
     Option<clock_controller::DynamicClockController>,
     types::NfcWaitExtender,
+    // Buttons, hoisted out of the trussed `UserInterface` so the idle loop can
+    // poll them (FIDO presence + wallet consent). `None` in passive/NFC boot.
+    Option<types::ThreeButtons>,
 ) {
     #[cfg(feature = "log-defmt")]
     Delogger::init_default(delog::LevelFilter::Debug, &FLUSHER).ok();
@@ -71,6 +133,10 @@ pub fn init_board(
         nfc_enabled: true,
         require_prince,
         boot_to_bootrom: true,
+        // USB identity: the standard SoloKeys Solo 2 (VID 0x1209), product
+        // string from the PFR. A user-supplied vid/pid (persisted on the FS,
+        // which mounts before USB) can override this later; the default is
+        // SoloKeys for every build.
         usb_config: Some(initializer::UsbConfig {
             manufacturer_name: "SoloKeys",
             product_name: initializer::UsbProductName::UsePfr,
@@ -128,7 +194,11 @@ pub fn init_board(
         everything.basic.perf_timer.elapsed().0 / 1000
     );
 
-    #[cfg(any(feature = "provisioner-app", feature = "oath-export"))]
+    #[cfg(any(
+        feature = "provisioner-app",
+        feature = "oath-export",
+        feature = "admin-app"
+    ))]
     let store = everything.filesystem.store;
     #[cfg(feature = "provisioner-app")]
     let internal_fs = everything.filesystem.internal_storage_fs;
@@ -155,19 +225,37 @@ pub fn init_board(
                 nfc_powered: _is_passive_mode,
             }
         },
-        #[cfg(feature = "oath-export")]
+        #[cfg(any(feature = "admin-app", feature = "oath-export"))]
         store,
     );
+
+    // Wallet lives outside `Apps`: its sign path blocks on user presence and
+    // must not hold the shared `apps` lock for the duration. Present only when
+    // USB came up (passive/NFC-only boot has no WalletHid responder).
+    #[cfg(feature = "wallet")]
+    let wallet = everything
+        .usb
+        .wallet_responder
+        .take()
+        .map(|responder| types::Wallet::new(&mut everything.trussed, responder));
+    #[cfg(not(feature = "wallet"))]
+    let wallet: types::WalletSlot = ();
+
+    // Buttons left in `basic` by `initialize_trussed` (the UI doesn't own them);
+    // hand them to the runner so the idle loop can poll them.
+    let buttons = everything.basic.three_buttons.take();
 
     (
         everything.interfaces.apdu_dispatch,
         everything.interfaces.ctaphid_dispatch,
         everything.trussed,
         apps,
+        wallet,
         everything.usb.usb_classes,
         everything.nfc.iso14443,
         everything.basic.perf_timer,
         clock_controller,
         everything.basic.delay_timer,
+        buttons,
     )
 }

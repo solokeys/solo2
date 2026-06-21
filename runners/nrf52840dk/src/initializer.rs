@@ -44,6 +44,13 @@ pub type CcidClass = Ccid<'static, 'static, UsbBus, { apdu_dispatch::interchange
 #[cfg(not(feature = "ccid"))]
 pub type CcidClass = ();
 
+// Wallet HID transport (Ledger-style, usage page 0xFFA0). Optional; unit
+// placeholder when off, same pattern as CCID.
+#[cfg(feature = "wallet")]
+pub type WalletHidClass = wallet_app::usbd::WalletHid<'static, 'static, UsbBus>;
+#[cfg(not(feature = "wallet"))]
+pub type WalletHidClass = ();
+
 /// Everything `init_board` builds from the device peripherals. The RTIC
 /// `#[init]` splits these across the `Shared` / `Local` resource structs.
 pub struct BoardComponents {
@@ -55,7 +62,15 @@ pub struct BoardComponents {
     pub usbd: UsbDevice<'static, UsbBus>,
     pub ctaphid: CtapHidClass,
     pub ccid: CcidClass,
+    pub wallet_hid: WalletHidClass,
+    pub wallet: crate::types::WalletSlot,
     pub power: POWER,
+    /// Buttons, hoisted out of the trussed `UserInterface` so the idle loop
+    /// can poll them (for both FIDO presence and wallet consent).
+    pub buttons: crate::board::Buttons,
+    /// UP-indicator LEDs, hoisted out of the trussed `UserInterface` so the
+    /// idle loop can drive them for both FIDO presence and wallet consent.
+    pub leds: crate::board::Leds,
 }
 
 pub fn init_board(dp: nrf52840_pac::Peripherals) -> BoardComponents {
@@ -157,20 +172,28 @@ pub fn init_board(dp: nrf52840_pac::Peripherals) -> BoardComponents {
     // requester is dropped (apdu_dispatch keeps the responder half so the
     // contactless NFC path still works).
     #[cfg(not(feature = "ccid"))]
+    #[allow(clippy::let_unit_value)] // CcidClass is `()` here — intentional placeholder
     let ccid: CcidClass = {
         let _ = usb_apdu_rq;
     };
 
+    // Wallet HID USB class (Ledger-style, usage page 0xFFA0). Built before the
+    // UsbDevice so its interface is enumerated; the responder half is handed to
+    // the Wallet app (built after trussed, below).
+    #[cfg(feature = "wallet")]
+    let (wallet_hid, wallet_responder) = {
+        let (wallet_rq, wallet_rp) = crate::types::WALLET_HID_CHANNEL.split().unwrap();
+        let hid: WalletHidClass = wallet_app::usbd::WalletHid::new(usb_bus, wallet_rq);
+        (hid, wallet_rp)
+    };
+    #[cfg(not(feature = "wallet"))]
+    let wallet_hid: WalletHidClass = ();
+
     let ctaphid_dispatch = CtaphidDispatchDefault::new(ctaphid_rp);
 
-    let usbd = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0x1209, 0xbeee))
-        .manufacturer("SoloKeys (port)")
-        .product("solo2-nrf52840dk")
-        .serial_number(serial_number)
-        .device_release(0x0001)
-        .max_packet_size_0(64)
-        .composite_with_iads()
-        .build();
+    // NOTE: the UsbDevice is built later (after the FS mount + DeviceConfig
+    // load) so the persisted USB vid/pid/strings can drive enumeration — the USB
+    // *classes* above only need the bus, but the *device* identity needs FS.
 
     let (leds, buttons) = crate::board::init(dp.P0);
 
@@ -234,6 +257,38 @@ pub fn init_board(dp: nrf52840_pac::Peripherals) -> BoardComponents {
     // efs aliased to the same NVMC filesystem as ifs.
     let store = RunnerStore::new(internal_fs, internal_fs, volatile_fs);
 
+    // USB identity from the persisted DeviceConfig (admin SET_CONFIG), read now
+    // that the FS is mounted. Defaults to SoloKeys 0x1209:0xbeee; a `wallet`
+    // build can be set to emulate Ledger (0x2c97:0x7000) for host tools.
+    let usbd = {
+        let mut fs = trussed::store::filestore::ClientFilestore::new(
+            littlefs2::path!("admin").into(),
+            store,
+        );
+        let dc = admin_app::config::load::<_, crate::device_config::DeviceConfig>(&mut fs)
+            .unwrap_or_default();
+        let manufacturer: &'static str = if dc.usb.manufacturer.is_empty() {
+            "SoloKeys (port)"
+        } else {
+            static M: StaticCell<admin_app::ConfigString> = StaticCell::new();
+            M.init(dc.usb.manufacturer)
+        };
+        let product: &'static str = if dc.usb.product.is_empty() {
+            "solo2-nrf52840dk"
+        } else {
+            static P: StaticCell<admin_app::ConfigString> = StaticCell::new();
+            P.init(dc.usb.product)
+        };
+        UsbDeviceBuilder::new(usb_bus, UsbVidPid(dc.usb.vid, dc.usb.pid))
+            .manufacturer(manufacturer)
+            .product(product)
+            .serial_number(serial_number)
+            .device_release(0x0001)
+            .max_packet_size_0(64)
+            .composite_with_iads()
+            .build()
+    };
+
     // Run migrations on persistent state before any app touches the
     // filesystem. Idempotent: safe on every boot, no-op on already-migrated
     // state, no-op on a fresh device whose `fido/dat` directory does not yet
@@ -271,16 +326,20 @@ pub fn init_board(dp: nrf52840_pac::Peripherals) -> BoardComponents {
     }
 
     let dev_rng = Rng::new(dp.RNG);
-    let board = Board::new(
-        dev_rng,
-        store,
-        crate::board::UserInterface::new(leds, buttons),
-    );
+    let board = Board::new(dev_rng, store, crate::board::UserInterface::new());
     let service = trussed::service::Service::with_dispatch(board, Dispatch::default());
     let mut trussed = Trussed::new(service);
 
     let version: u32 = 0;
-    let apps = Apps::new(&mut trussed, uuid, version);
+    let apps = Apps::new(&mut trussed, store, uuid, version);
+
+    // Wallet app lives outside `Apps` (its sign blocks on user presence); build
+    // it here from the responder split off when its HID class was constructed.
+    #[cfg(feature = "wallet")]
+    let wallet: crate::types::WalletSlot =
+        Some(crate::types::Wallet::new(&mut trussed, wallet_responder));
+    #[cfg(not(feature = "wallet"))]
+    let wallet: crate::types::WalletSlot = ();
 
     BoardComponents {
         trussed,
@@ -291,6 +350,10 @@ pub fn init_board(dp: nrf52840_pac::Peripherals) -> BoardComponents {
         usbd,
         ctaphid,
         ccid,
+        wallet_hid,
+        wallet,
         power: dp.POWER,
+        buttons,
+        leds,
     }
 }

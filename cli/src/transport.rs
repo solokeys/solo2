@@ -4,6 +4,7 @@ use crate::{Result, Solo2};
 
 pub mod ctap;
 pub mod pcsc;
+pub mod wallet;
 
 // Applications that only implement single-byte instructions
 // with byte slice responses can be implemented on this

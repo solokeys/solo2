@@ -1,4 +1,4 @@
-# SSH with a SoloKey
+# SSH with a Solo key
 
 > **Works on: Secure + Hacker.** Standard FIDO2 (`-sk` keys); no special firmware.
 

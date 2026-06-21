@@ -1,4 +1,4 @@
-# Post-quantum transparency-log witness with a SoloKey
+# Post-quantum transparency-log witness with a Solo key
 
 > **Works on: Secure + Hacker.** Uses the PIV ML-DSA path, which is part of the Secure baseline (needs the ML-DSA firmware — see [POST_QUANTUM.md](POST_QUANTUM.md)).
 

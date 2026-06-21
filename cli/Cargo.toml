@@ -30,6 +30,11 @@ pcsc.workspace = true
 serde_json.workspace = true
 sha-1.workspace = true
 sha2.workspace = true
+# wallet app: multi-chain pubkey encoding + BIP39 seed handling
+bip39 = "2.0"
+bs58 = "0.5"
+salty = { version = "0.2", default-features = false }
+sha3 = "0.10"
 time.workspace = true
 x509-parser.workspace = true
 

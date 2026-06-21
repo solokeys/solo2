@@ -1,8 +1,8 @@
-# Sign Git commits with a SoloKey
+# Sign Git commits with a Solo key
 
 > **Works on: Secure + Hacker.** Uses standard FIDO2 — no special firmware needed.
 
-Use a SoloKey to sign your Git commits with a hardware-backed **`ed25519-sk`** key (FIDO2). The private key never leaves the Solo, and every signature needs a **touch**. Commits show up as **Verified** on GitHub.
+Use a Solo key to sign your Git commits with a hardware-backed **`ed25519-sk`** key (FIDO2). The private key never leaves the Solo, and every signature needs a **touch**. Commits show up as **Verified** on GitHub.
 
 ## 1. Create the key on the Solo
 ```bash

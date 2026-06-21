@@ -200,9 +200,10 @@ const_ram_storage!(
 
 pub type ExternalStorage = board::flash::Solo2ExtFlash;
 
-// On real hardware secrets-app lives on the external flash chip; this RAM
-// fallback is only used when no chip is present (e.g. a bare EVK).
-const_ram_storage!(ExternalFallbackStorage, 4096);
+// On real hardware secrets-app and piv-authenticator live on the external
+// flash chip; this RAM fallback stands in when no chip is present (e.g. a
+// bare EVK) and must hold their littlefs files.
+const_ram_storage!(ExternalFallbackStorage, 8192);
 
 /// Store implementation using three mounted littlefs2 filesystems.
 #[derive(Clone, Copy)]
@@ -242,7 +243,7 @@ pub type RgbLed = board::RgbLed;
 platform!(Board,
     R: hal::peripherals::rng::Rng<hal::Enabled>,
     S: Store,
-    UI: board::trussed::UserInterface<ThreeButtons, RgbLed>,
+    UI: board::trussed::UserInterface<RgbLed>,
 );
 
 // Trussed extension dispatch — shared with the nrf52840dk runner via `solo-apps`.
@@ -301,7 +302,8 @@ impl admin_app::StatusBytes for AdminStatus {
 }
 
 #[cfg(feature = "admin-app")]
-pub type AdminApp = admin_app::App<TrussedClient, board::Reboot, AdminStatus>;
+pub type AdminApp =
+    admin_app::App<TrussedClient, board::Reboot, AdminStatus, crate::device_config::DeviceConfig>;
 #[cfg(feature = "piv-authenticator")]
 pub type PivApp = piv_authenticator::Authenticator<TrussedClient>;
 #[cfg(feature = "opcard")]
@@ -360,6 +362,17 @@ impl solo_apps::ndef::NfcClock for LpcNfcClock {
 #[cfg(feature = "provisioner-app")]
 pub type ProvisionerApp = provisioner_app::Provisioner<Store, FlashStorage, TrussedClient>;
 
+#[cfg(feature = "wallet")]
+pub type WalletApp = wallet_app::Authenticator<TrussedClient>;
+#[cfg(feature = "wallet")]
+pub const WALLET_HID_MESSAGE_SIZE: usize = wallet_app::dispatch::DEFAULT_MESSAGE_SIZE;
+#[cfg(feature = "wallet")]
+pub type WalletHidChannel = wallet_app::dispatch::Channel<WALLET_HID_MESSAGE_SIZE>;
+#[cfg(feature = "wallet")]
+pub type WalletDispatch = wallet_app::dispatch::Dispatch<'static, WALLET_HID_MESSAGE_SIZE>;
+#[cfg(feature = "wallet")]
+pub type WalletResponder = wallet_app::dispatch::Responder<'static, WALLET_HID_MESSAGE_SIZE>;
+
 use apdu_dispatch::App as ApduApp;
 use ctaphid_dispatch::app::App as CtaphidApp;
 
@@ -383,11 +396,56 @@ static PROVISIONER_INTERRUPT: InterruptFlag = InterruptFlag::new();
 static SECRETS_INTERRUPT: InterruptFlag = InterruptFlag::new();
 #[cfg(feature = "oath-export")]
 static OATH_EXPORT_INTERRUPT: InterruptFlag = InterruptFlag::new();
+#[cfg(feature = "wallet")]
+static WALLET_INTERRUPT: InterruptFlag = InterruptFlag::new();
+#[cfg(feature = "wallet")]
+pub static WALLET_HID_CHANNEL: WalletHidChannel = WalletHidChannel::new();
 
 pub struct ProvisionerNonPortable {
     pub store: Store,
     pub stolen_filesystem: &'static mut FlashStorage,
     pub nfc_powered: bool,
+}
+
+/// Wallet app + its HID dispatch are intentionally NOT inside `Apps`.
+/// Sign-message blocks the calling task on `confirm_user_present`; keeping
+/// the wallet app on its own resource lets other apps run during that wait instead
+/// of deadlocking behind the `apps` lock.
+#[cfg(feature = "wallet")]
+pub struct Wallet {
+    pub app: WalletApp,
+    pub dispatch: WalletDispatch,
+}
+
+/// Return-position slot for the optional Wallet app. Resolves to
+/// `Option<Wallet>` with the feature on and the unit type `()` off, so the
+/// `init_board` return tuple type is valid either way.
+#[cfg(feature = "wallet")]
+pub type WalletSlot = Option<Wallet>;
+#[cfg(not(feature = "wallet"))]
+pub type WalletSlot = ();
+
+#[cfg(feature = "wallet")]
+impl Wallet {
+    pub fn new(trussed: &mut Trussed, responder: WalletResponder) -> Self {
+        let client = make_client(
+            client_tag::WALLET,
+            littlefs2::path!("solana"),
+            trussed,
+            Some(&WALLET_INTERRUPT),
+            &solo_apps::client::STAGING_BACKENDS,
+        );
+        let app = WalletApp::with_interrupt(client, Some(&WALLET_INTERRUPT));
+        let dispatch = WalletDispatch::new(responder);
+        Self { app, dispatch }
+    }
+
+    /// Single-shot poll of the WalletHid transport. Returns true if a
+    /// response was produced (caller should pend USB).
+    #[inline(never)]
+    pub fn poll(&mut self) -> bool {
+        self.dispatch.poll(&mut self.app)
+    }
 }
 
 pub struct Apps {
@@ -413,7 +471,7 @@ impl Apps {
     pub fn new(
         trussed: &mut Trussed,
         #[cfg(feature = "provisioner-app")] provisioner_np: ProvisionerNonPortable,
-        #[cfg(feature = "oath-export")] store: Store,
+        #[cfg(any(feature = "admin-app", feature = "oath-export"))] store: Store,
     ) -> Self {
         #[cfg(feature = "admin-app")]
         let admin = {
@@ -424,14 +482,31 @@ impl Apps {
                 Some(&ADMIN_INTERRUPT),
                 &solo_apps::client::STAGING_BACKENDS,
             );
-            AdminApp::with_default_config(
+            let mut filestore = trussed::store::filestore::ClientFilestore::new(
+                littlefs2::path!("admin").into(),
+                store,
+            );
+            // Load the persisted DeviceConfig (vid/pid/strings + LED) so a
+            // SET_CONFIG survives reboot; fall back to defaults on any error.
+            AdminApp::load_config(
                 client,
+                &mut filestore,
                 hal::uuid(),
                 build_constants::CARGO_PKG_VERSION,
                 env!("CARGO_PKG_VERSION"),
                 AdminStatus::default(),
                 &[],
             )
+            .unwrap_or_else(|(client, _err)| {
+                AdminApp::with_default_config(
+                    client,
+                    hal::uuid(),
+                    build_constants::CARGO_PKG_VERSION,
+                    env!("CARGO_PKG_VERSION"),
+                    AdminStatus::default(),
+                    &[],
+                )
+            })
         };
 
         #[cfg(feature = "fido-authenticator")]

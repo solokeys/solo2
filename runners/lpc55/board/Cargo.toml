@@ -6,6 +6,10 @@ edition.workspace = true
 
 [dependencies]
 admin-app     .workspace = true
+# Provides the single-core `critical-section` impl (`_critical_section_1_0_*`)
+# that rtic/rtic-monotonics need on the LPC55; the feature lives on the
+# workspace cortex-m dep.
+cortex-m      .workspace = true
 critical-section = "1"
 defmt         .workspace = true
 embedded-hal  .workspace = true

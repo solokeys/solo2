@@ -157,12 +157,25 @@ impl admin_app::StatusBytes for AdminStatus {
     }
 }
 
-pub type AdminApp = admin_app::App<TrussedClient, Reboot, AdminStatus>;
+pub type AdminApp =
+    admin_app::App<TrussedClient, Reboot, AdminStatus, crate::device_config::DeviceConfig>;
 pub type FidoApp = fido_authenticator::Authenticator<fido_authenticator::Conforming, TrussedClient>;
 pub type NdefApp = ndef_app::App<TrussedClient>;
 pub type SecretsApp = secrets_app::Authenticator<TrussedClient>;
 pub type PivApp = piv_authenticator::Authenticator<TrussedClient>;
 pub type OpcardApp = opcard::Card<TrussedClient>;
+
+// ── Wallet app (kept OUTSIDE `Apps`; its sign blocks on user presence) ────────
+#[cfg(feature = "wallet")]
+pub type WalletApp = wallet_app::Authenticator<TrussedClient>;
+#[cfg(feature = "wallet")]
+pub const WALLET_HID_MESSAGE_SIZE: usize = wallet_app::dispatch::DEFAULT_MESSAGE_SIZE;
+#[cfg(feature = "wallet")]
+pub type WalletHidChannel = wallet_app::dispatch::Channel<WALLET_HID_MESSAGE_SIZE>;
+#[cfg(feature = "wallet")]
+pub type WalletDispatch = wallet_app::dispatch::Dispatch<'static, WALLET_HID_MESSAGE_SIZE>;
+#[cfg(feature = "wallet")]
+pub type WalletResponder = wallet_app::dispatch::Responder<'static, WALLET_HID_MESSAGE_SIZE>;
 
 /// NDEF-suppression clock. The NDEF app refuses `SELECT` (so phones don't pop
 /// the tag during/after a FIDO ceremony) while we're within `NDEF_SUPPRESS_MS`
@@ -199,6 +212,10 @@ static SECRETS_INTERRUPT: InterruptFlag = InterruptFlag::new();
 static PIV_INTERRUPT: InterruptFlag = InterruptFlag::new();
 static OPCARD_INTERRUPT: InterruptFlag = InterruptFlag::new();
 static NDEF_INTERRUPT: InterruptFlag = InterruptFlag::new();
+#[cfg(feature = "wallet")]
+static WALLET_INTERRUPT: InterruptFlag = InterruptFlag::new();
+#[cfg(feature = "wallet")]
+pub static WALLET_HID_CHANNEL: WalletHidChannel = WalletHidChannel::new();
 
 /// Fire the user-cancel interrupt on every Trussed app. Trussed checks
 /// these between syscalls and aborts any in-flight `confirm_user_present`
@@ -212,6 +229,47 @@ pub fn interrupt_all_apps() {
     PIV_INTERRUPT.interrupt();
     OPCARD_INTERRUPT.interrupt();
     NDEF_INTERRUPT.interrupt();
+    #[cfg(feature = "wallet")]
+    WALLET_INTERRUPT.interrupt();
+}
+
+/// Wallet app + its HID dispatch — intentionally NOT inside `Apps`. Its
+/// sign-message blocks the calling task on `confirm_user_present`; keeping it
+/// on its own resource lets the other apps run during that wait.
+#[cfg(feature = "wallet")]
+pub struct Wallet {
+    pub app: WalletApp,
+    pub dispatch: WalletDispatch,
+}
+
+/// Return-position slot for the optional Wallet: `Option<Wallet>` with the
+/// feature on, unit `()` off, so the init return type is valid either way.
+#[cfg(feature = "wallet")]
+pub type WalletSlot = Option<Wallet>;
+#[cfg(not(feature = "wallet"))]
+pub type WalletSlot = ();
+
+#[cfg(feature = "wallet")]
+impl Wallet {
+    pub fn new(trussed: &mut Trussed, responder: WalletResponder) -> Self {
+        let client = make_client(
+            client_tag::WALLET,
+            littlefs2::path!("solana"),
+            trussed,
+            Some(&WALLET_INTERRUPT),
+            &solo_apps::client::STAGING_BACKENDS,
+        );
+        let app = WalletApp::with_interrupt(client, Some(&WALLET_INTERRUPT));
+        let dispatch = WalletDispatch::new(responder);
+        Self { app, dispatch }
+    }
+
+    /// Single-shot poll of the WalletHid transport. Returns true if a response
+    /// was produced (caller should pend USB).
+    #[inline(never)]
+    pub fn poll(&mut self) -> bool {
+        self.dispatch.poll(&mut self.app)
+    }
 }
 
 pub struct Apps {
@@ -224,7 +282,7 @@ pub struct Apps {
 }
 
 impl Apps {
-    pub fn new(trussed: &mut Trussed, uuid: [u8; 16], version: u32) -> Self {
+    pub fn new(trussed: &mut Trussed, store: RunnerStore, uuid: [u8; 16], version: u32) -> Self {
         let admin_client = make_client(
             client_tag::ADMIN,
             littlefs2::path!("admin"),
@@ -232,14 +290,31 @@ impl Apps {
             Some(&ADMIN_INTERRUPT),
             &solo_apps::client::STAGING_BACKENDS,
         );
-        let admin = AdminApp::with_default_config(
+        // Load the persisted DeviceConfig (usb vid/pid/strings) so a SET_CONFIG
+        // survives reboot; fall back to defaults on any error.
+        let mut admin_fs = trussed::store::filestore::ClientFilestore::new(
+            littlefs2::path!("admin").into(),
+            store,
+        );
+        let admin = AdminApp::load_config(
             admin_client,
+            &mut admin_fs,
             uuid,
             version,
             env!("CARGO_PKG_VERSION"),
             AdminStatus::default(),
             &[],
-        );
+        )
+        .unwrap_or_else(|(client, _err)| {
+            AdminApp::with_default_config(
+                client,
+                uuid,
+                version,
+                env!("CARGO_PKG_VERSION"),
+                AdminStatus::default(),
+                &[],
+            )
+        });
 
         let fido_client = make_client(
             client_tag::FIDO,

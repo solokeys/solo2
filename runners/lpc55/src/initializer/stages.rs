@@ -51,6 +51,8 @@ pub struct Usb {
     pub contact_responder: Option<apdu_dispatch::interchanges::Responder<'static>>,
     pub ctaphid_responder:
         Option<ctaphid_dispatch::Responder<'static, { ctaphid_dispatch::DEFAULT_MESSAGE_SIZE }>>,
+    #[cfg(feature = "wallet")]
+    pub wallet_responder: Option<types::WalletResponder>,
 }
 
 /// Initialized apdu + ctaphid dispatches

@@ -40,6 +40,60 @@ fn try_main(args: cli::Cli) -> anyhow::Result<()> {
     use cli::Apps::*;
     match args.subcommand {
         cli::Subcommands::App(app) => {
+            // The wallet app uses the Ledger-style HID transport directly,
+            // not Solo 2 enumeration.
+            if let Wallet(cmd) = &app {
+                use cli::Wallet::*;
+                use solo2::apps::wallet::Chain;
+
+                let mut wallet = solo2::apps::Wallet::open()?;
+                match cmd {
+                    Pubkey { eth, path, .. } => {
+                        let chain = if *eth { Chain::Eth } else { Chain::Sol };
+                        println!("{}", wallet.pubkey(chain, path.as_deref())?);
+                    }
+                    Reset => {
+                        wallet.reset()?;
+                        println!("Secret reset to zero private key");
+                    }
+                    Keygen { silent } => {
+                        let words = wallet.keygen(!silent)?;
+                        if !silent {
+                            println!("Generated seed. Write down these 24 words:");
+                            for (i, word) in words.iter().enumerate() {
+                                print!("{} ", word);
+                                if (i + 1) % 6 == 0 {
+                                    println!();
+                                }
+                            }
+                            if words.len() % 6 != 0 {
+                                println!();
+                            }
+                        }
+                    }
+                    Seed { read, words } => {
+                        if *read {
+                            println!("{}", wallet.seed_read()?);
+                        } else if words.len() != 24 {
+                            return Err(anyhow!("Seed must be 24 words, got {}", words.len()));
+                        } else {
+                            wallet.seed(words.clone())?;
+                            println!("Seed set successfully");
+                        }
+                    }
+                    Privkey { file } => {
+                        wallet.privkey(file)?;
+                        println!("Private key set successfully");
+                    }
+                    SetChain { eth, .. } => {
+                        let chain = if *eth { Chain::Eth } else { Chain::Sol };
+                        wallet.set_chain(chain)?;
+                        println!("Active chain: {}", if *eth { "Ethereum" } else { "Solana" });
+                    }
+                }
+                return Ok(());
+            }
+
             let solo2s: Vec<Solo2> =
                 all_or_unwrap_or_interactively_select(uuid, args.global_options.all, "Solo 2")?;
 
@@ -83,6 +137,72 @@ fn try_main(args: cli::Cli) -> anyhow::Result<()> {
                             }
                             Wink => {
                                 app.wink()?;
+                            }
+                            Config { cmd } => {
+                                use cli::AdminConfig::*;
+                                match cmd {
+                                    Get { key } => println!("{}", app.get_config(key)?),
+                                    Set { key, value } => {
+                                        app.set_config(key, value)?;
+                                        println!("set {key} = {value}");
+                                    }
+                                }
+                            }
+                            Set { cmd } => {
+                                use cli::AdminSet::*;
+                                match cmd {
+                                    Led { idle, up, default } => {
+                                        let (i, u) = if *default {
+                                            (Admin::DEFAULT_LED_IDLE, Admin::DEFAULT_LED_UP)
+                                        } else {
+                                            let rgb = |s: &str| -> anyhow::Result<u32> {
+                                                u32::from_str_radix(s.trim_start_matches("0x"), 16)
+                                                    .map_err(|_| anyhow!("invalid RRGGBB hex: {}", s))
+                                            };
+                                            let need = || {
+                                                anyhow!("need <IDLE> <UP> as RRGGBB hex, or --default")
+                                            };
+                                            let idle = idle.as_deref().ok_or_else(need)?;
+                                            let up = up.as_deref().ok_or_else(need)?;
+                                            (rgb(idle)?, rgb(up)?)
+                                        };
+                                        app.set_led(i, u)?;
+                                        println!(
+                                            "LED set: idle {:06x}, up {:06x} — device rebooted to apply",
+                                            i & 0xff_ffff,
+                                            u & 0xff_ffff
+                                        );
+                                    }
+                                    Usb { vid, pid, manufacturer, product, default } => {
+                                        let (v, p, m, pr) = if *default {
+                                            (
+                                                Admin::DEFAULT_USB_VID,
+                                                Admin::DEFAULT_USB_PID,
+                                                String::new(),
+                                                String::new(),
+                                            )
+                                        } else {
+                                            let u16hex = |s: &str| -> anyhow::Result<u16> {
+                                                u16::from_str_radix(s.trim_start_matches("0x"), 16)
+                                                    .map_err(|_| anyhow!("invalid hex: {}", s))
+                                            };
+                                            (
+                                                vid.as_deref()
+                                                    .map(u16hex)
+                                                    .transpose()?
+                                                    .unwrap_or(Admin::DEFAULT_USB_VID),
+                                                pid.as_deref()
+                                                    .map(u16hex)
+                                                    .transpose()?
+                                                    .unwrap_or(Admin::DEFAULT_USB_PID),
+                                                manufacturer.clone().unwrap_or_default(),
+                                                product.clone().unwrap_or_default(),
+                                            )
+                                        };
+                                        app.set_usb(v, p, &m, &pr)?;
+                                        println!("USB set: {v:04x}:{p:04x} — device rebooted to apply");
+                                    }
+                                }
                             }
                         }
                         Ok(())
@@ -419,6 +539,7 @@ fn try_main(args: cli::Cli) -> anyhow::Result<()> {
                         }
                         Ok(())
                     }
+                    Wallet(_) => unreachable!("wallet handled before Solo 2 enumeration"),
                 }
             })?;
         }

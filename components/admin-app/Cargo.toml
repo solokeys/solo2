@@ -1,0 +1,50 @@
+[package]
+name = "admin-app"
+version = "0.1.0"
+authors = ["Conor Patrick <conor@solokeys.com>", "Nicolas Stalder <nicolas@solokeys.com>"]
+repository = "https://github.com/solokeys/admin-app"
+edition = "2021"
+license = "Apache-2.0 OR MIT"
+description = "Administrative Trussed app for SoloKeys Solo 2 security keys"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+apdu-app = "0.2"
+cbor-smol = { version = "0.5.0", features = ["heapless-v0-9", "heapless-bytes-v0-5"] }
+ctaphid-app = "0.2"
+delog = "0.1"
+heapless = "0.9"
+heapless-bytes = { version = "0.5", features = ["heapless-0.9"] }
+iso7816 = "0.2"
+littlefs2 = { version = "0.7", optional = true }
+littlefs2-core = { version = "0.1", features = ["heapless-bytes05"] }
+serde = { version = "1.0.180", default-features = false }
+strum_macros = "0.25.2"
+trussed = { version = "0.1", default-features = false }
+trussed-core = { version = "0.2", features = ["crypto-client", "filesystem-client", "management-client", "ui-client"] }
+
+embedded-hal = { version = "0.2.7", optional = true }
+hex-literal = "0.4.1"
+rand_chacha = { version = "0.3.1", optional = true, default-features = false }
+trussed-manage = { version = "0.3" }
+trussed-se050-manage = { version = "0.3.0", optional = true }
+
+[features]
+default = []
+se050 = ["trussed-se050-manage"]
+
+factory-reset = []
+log-all = []
+log-trace = []
+log-none = []
+log-info = []
+log-debug = []
+log-warn = []
+log-error = []
+
+# Utils to test migration
+migration-tests = ["dep:littlefs2"]
+
+# NB: vendored into the solo2 workspace; trussed is patched at the workspace
+# root, so the upstream [patch.crates-io] is dropped here (ignored for members).

@@ -47,8 +47,10 @@ fido-authenticator  = { workspace = true, optional = true }
 secrets-app        = { workspace = true, optional = true }
 piv-authenticator  = { workspace = true, optional = true }
 opcard             = { workspace = true, optional = true }
+wallet-app         = { workspace = true, optional = true }
 trussed            .workspace = true
 trussed-core       .workspace = true
+serde              = { version = "1", default-features = false, features = ["derive"] }
 
 # board
 board.workspace = true
@@ -72,8 +74,8 @@ littlefs2.workspace = true
 [features]
 # Solo 2 Secure
 default = ["admin-app", "fido-authenticator", "ndef-app", "oath", "oath-export", "opcard", "piv-authenticator", "mldsa44-piv"]
-# Solo 2 Hacker (additional features)
-hacker = ["mldsa44-fido"]
+# Solo 2 Hacker (additional features): FIDO ML-DSA-44 + the multi-chain wallet.
+hacker = ["mldsa44-fido", "wallet"]
 
 # OATH/TOTP/HOTP via secrets-app
 oath = ["dep:secrets-app"]
@@ -84,6 +86,10 @@ oath-export = ["dep:oath-export"]
 # develop = ["no-encrypted-storage", "no-reset-time-window"]
 # develop = ["no-encrypted-storage", "no-buttons"]
 develop = ["no-encrypted-storage", "log-defmt", "no-buttons", "no-reset-time-window"]
+
+# Multi-chain hardware-wallet app (Solana/Ethereum/Bitcoin), Ledger-style HID.
+# Not used directly — pulled in by the `hacker` feature.
+wallet = ["dep:wallet-app"]
 
 develop-provisioner = ["develop", "provisioner-app"]
 develop-secrets     = ["develop", "oath"]

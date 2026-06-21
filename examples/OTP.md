@@ -1,4 +1,4 @@
-# TOTP / HOTP with a SoloKey
+# TOTP / HOTP with a Solo key
 
 > **Works on: Secure + Hacker.** OATH applet (secrets-app).
 

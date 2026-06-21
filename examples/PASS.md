@@ -1,4 +1,4 @@
-# Password & secret management with a SoloKey
+# Password & secret management with a Solo key
 
 > **Works on: Secure + Hacker.**
 

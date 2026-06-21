@@ -11,6 +11,8 @@ members = [
     "components/provisioner-app",
     "components/oath-export",
     "components/solo-apps",
+    "components/wallet-app",
+    "components/admin-app",
     "cli",
 ]
 # `cargo run` / `cargo build` / `cargo test` at the workspace root operate on the
@@ -111,12 +113,13 @@ trussed-auth             = "0.5"
 trussed-auth-backend     = { git = "https://github.com/trussed-dev/trussed-auth", tag = "backend-v0.1.0" }
 
 # ── Applications ─────────────────────────────────────────────────────────────
-admin-app          = "0.1"
+admin-app          = { path = "components/admin-app" }
 fido-authenticator = { version = "=0.4.0-rc.3", features = ["dispatch", "chunked", "credential-id-format-v2"] }
 salty              = "0.3"
 secrets-app        = { git = "https://github.com/leetronics/trussed-secrets-app", branch = "fix-pin-protection-isolation", features = ["apdu-dispatch", "ctaphid", "log-all"] }
 piv-authenticator  = { git = "https://github.com/0x0ece/piv-authenticator", rev = "cd93aee", features = ["apdu-dispatch"] }
 opcard             = { git = "https://github.com/Nitrokey/opcard-rs", tag = "v1.7.0", features = ["apdu-dispatch", "delog"] }
+wallet-app         = { path = "components/wallet-app", features = ["dispatch", "usbd"] }
 
 # ── PC test-only dependencies ─────────────────────────────────────────────────
 serial_test = "3"
@@ -178,7 +181,6 @@ ctap-types         = { git = "https://github.com/0x0ece/ctap-types",         rev
 trussed            = { git = "https://github.com/0x0ece/trussed",            rev = "a1b33c46eb16ef7fa5f6324f7c099ff339fe21e7" }
 trussed-core       = { git = "https://github.com/0x0ece/trussed",            rev = "a1b33c46eb16ef7fa5f6324f7c099ff339fe21e7" }
 fido-authenticator = { git = "https://github.com/0x0ece/fido-authenticator", rev = "015c310541eb2e977e6efa6167a149f3c3b295da" }
-admin-app = { git = "https://github.com/Nitrokey/admin-app.git", tag = "v0.1.0-nitrokey.21" }
 # Force all crates to use littlefs2-core 0.1.2 which has heapless-bytes05 support
 littlefs2-core = { git = "https://github.com/trussed-dev/littlefs2.git", tag = "core-0.1.2" }
 # Extension backends needed by fido-authenticator (FsInfo, Hkdf, etc.)

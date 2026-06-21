@@ -75,11 +75,21 @@ pub fn init(p0_periph: P0) -> (Leds, Buttons) {
     let _ = parts.p0_13.into_push_pull_output(Level::High).degrade();
     let _ = parts.p0_14.into_push_pull_output(Level::High).degrade();
 
-    let leds = Leds {
+    let mut leds = Leds {
         // LED3 owned but never touched again — pin held LOW = always on.
         _led3: parts.p0_15.into_push_pull_output(Level::Low).degrade(),
         led4: parts.p0_16.into_push_pull_output(Level::High).degrade(),
     };
+
+    // Boot indication: 3 quick LED4 blinks (sync). Moved here from
+    // `UserInterface::new` when the LEDs were hoisted to the idle loop.
+    const BLINK_CYCLES: u32 = 64_000_000 / 5 / 4; // ~200 ms at 64 MHz
+    for _ in 0..3 {
+        leds.set_brightness(255);
+        cortex_m::asm::delay(BLINK_CYCLES);
+        leds.set_brightness(0);
+        cortex_m::asm::delay(BLINK_CYCLES);
+    }
 
     let mut touch1 = CapTouchPad::new(3);
     let mut touch2 = CapTouchPad::new(4);
