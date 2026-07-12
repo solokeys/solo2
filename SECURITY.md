@@ -32,7 +32,7 @@ We do **not** currently run a paid bug bounty program.
 
 **Out of scope:**
 
-- **Solo 3 Hacker keys.** Hacker keys are intentionally unlocked and run arbitrary, unsigned firmware. Findings that rely on a Hacker's unlocked state (custom/unsigned firmware, no secure boot seal, debug access) are **by design, not vulnerabilities** — that's the difference from the locked Secure model.
+- **Hacker keys.** Hacker keys are intentionally unlocked and run arbitrary, unsigned firmware. Findings that rely on a Hacker's unlocked state (custom/unsigned firmware, no secure boot seal, debug access) are **by design, not vulnerabilities** — that's the difference from the locked Secure model.
 - Physical attacks requiring destructive decapsulation, or attacks already mitigated by the documented threat model.
 - Vulnerabilities in third-party host tools we merely interoperate with (report those upstream).
 

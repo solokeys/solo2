@@ -78,7 +78,7 @@ The CLI also drives the apps directly — e.g. `solo2 app oath list`, `solo2 app
 
 On a **Hacker** key you can build and flash your own firmware. (On a Secure key this is impossible by design — it only accepts SoloKeys-signed updates.)
 
-> ⚠️ A Hacker flash has **no J-Link recovery** — a bad image can brick the key. If you have an **EVK/DK dev board, always validate there first** (see [Developers](#developers)). The full, safe procedure — including checking lock state and recovery — is in the [`flash-solo-hacker`](skills/flash-solo-hacker) skill.
+> ⚠️ A Hacker has **no easy J-Link recovery** — SWD is present but not readily accessible (not over USB like on a dev board), so a bad image can brick the key. If you have an **EVK/DK dev board, always validate there first** (see [Developers](#developers)). The full, safe procedure — including checking lock state and recovery — is in the [`flash-solo-hacker`](skills/flash-solo-hacker) skill.
 
 **1. Build the firmware** (check out the release you want to reproduce):
 

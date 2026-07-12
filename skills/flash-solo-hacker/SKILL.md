@@ -5,7 +5,7 @@ description: Use this to build and flash custom firmware onto a Solo 2 Hacker ke
 
 # Build & flash a Solo 2 Hacker — safely
 
-⚠️ **A Hacker key has no debug probe (no J-Link). A flash that doesn't boot + enumerate is permanently bricked — unrecoverable.** Read this whole skill before writing anything to a Hacker.
+⚠️ **A Hacker key has no easily accessible debug probe (SWD exists but isn't broken out over USB like a dev board's J-Link). A flash that doesn't boot + enumerate is effectively permanently bricked — unrecoverable in practice.** Read this whole skill before writing anything to a Hacker.
 
 ## Golden rules
 
@@ -46,7 +46,7 @@ This check is binary and exhaustive — do it before *every* Hacker flash.
 
 ## 3. Flash
 
-The Hacker has **no J-Link** — flash via the LPC55 ROM bootloader with `lpc55 write-flash`:
+The Hacker has **no easily usable J-Link** (SWD isn't broken out like on a dev board) — flash via the LPC55 ROM bootloader with `lpc55 write-flash`:
 
 ```bash
 solo2 app admin maintenance             # reboot Hacker into the LPC55 bootloader
