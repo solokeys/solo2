@@ -51,11 +51,6 @@ mod app {
         updates: u32,
         ccid_wait_extension_receiver: Receiver<'static, Milliseconds, 1>,
         ctaphid_keep_alive_receiver: Receiver<'static, Milliseconds, 1>,
-        // Buttons hoisted out of trussed's UserInterface: the idle loop polls
-        // them via `board::trussed::poll_buttons` and latches gestures into a
-        // global consumed by `check_user_presence` (FIDO) and `confirm_user_present_non_blocking`
-        // (wallet). Owned exclusively by idle. `None` in passive/NFC boot.
-        buttons: Option<runner::types::ThreeButtons>,
     }
 
     #[shared]
@@ -152,7 +147,6 @@ mod app {
             perf_timer,
             clock_ctrl,
             wait_extender,
-            buttons,
         ) = runner::init_board(c.device);
 
         Mono::start(c.core.SYST, CLOCK_FREQ);
@@ -197,23 +191,17 @@ mod app {
                 updates: 1,
                 ccid_wait_extension_receiver,
                 ctaphid_keep_alive_receiver,
-                buttons,
             },
         )
     }
 
-    #[idle(shared = [apdu_dispatch, ctaphid_dispatch, apps, perf_timer, usb_classes, ccid_wait_extension_sender, ctaphid_keep_alive_sender, wallet], local = [buttons])]
+    #[idle(shared = [apdu_dispatch, ctaphid_dispatch, apps, perf_timer, usb_classes, ccid_wait_extension_sender, ctaphid_keep_alive_sender, wallet])]
     fn idle(mut c: idle::Context) -> ! {
         info!("inside IDLE, initial SP = {:08X}", msp());
+        // Last time (perf_timer µs) the NFC frontend was polled — used to throttle the
+        // poll rate so constant I2C traffic doesn't starve the RF interface.
+        let mut last_nfc_poll: u32 = 0;
         loop {
-            // Poll the hoisted buttons every pass and latch any committed
-            // gesture into the global consumed by `check_user_presence` (FIDO)
-            // and `confirm_user_present_non_blocking` (wallet). Runs regardless of `wallet` — FIDO
-            // needs fresh gestures too. lpc55 buttons are fast GPIO, no throttle.
-            if let Some(buttons) = c.local.buttons.as_mut() {
-                board::trussed::poll_buttons(buttons);
-            }
-
             let mut time = 0;
             c.shared.perf_timer.lock(|perf_timer| {
                 time = perf_timer.elapsed().0;
@@ -223,6 +211,18 @@ mod app {
             });
             if time > 1_200_000 {
                 runner::Delogger::flush();
+            }
+
+            // Drive the contactless (NFC) frontend. The FM11 IRQ (PINT Slot0 -> nfc_irq)
+            // reads on RxDone; this is only a slow ~3 ms fallback pend in case the IRQ
+            // line isn't wired/working (e.g. the EVK 082C). 082C-only: an NC08 poll
+            // reads clear-on-read MAIN_IRQ over SPI, and shipping Hackers are
+            // IRQ-driven — don't change their behavior.
+            if runner::NFC_IDLE_POLL.load(core::sync::atomic::Ordering::Relaxed)
+                && time.wrapping_sub(last_nfc_poll) >= 3_000
+            {
+                last_nfc_poll = time;
+                rtic::pend(NFC_INTERRUPT);
             }
 
             let apdu_result = c
@@ -288,7 +288,7 @@ mod app {
             // calibrated to real ms), so the 30 s consent timeout is accurate.
             #[cfg(feature = "wallet")]
             runner::confirm_user_present_non_blocking(
-                Mono::now().duration_since_epoch().to_millis() as u32,
+                Mono::now().duration_since_epoch().to_millis(),
             );
 
             // Mirror a waiting wallet sign into the LED driver so the UP
@@ -361,24 +361,6 @@ mod app {
         // if length > 10_000 {
         //     // debug!("poll took {:?} cycles", length);
         // }
-        let inten = usb.inten.read().bits();
-        let intstat = usb.intstat.read().bits();
-        let mask = inten & intstat;
-        if mask != 0 {
-            for i in 0..5 {
-                if mask & (1 << (2 * i)) != 0 {
-                    // debug!("EP{}OUT", i);
-                }
-                if mask & (1 << (2 * i + 1)) != 0 {
-                    // debug!("EP{}IN", i);
-                }
-            }
-            // Serial sends a stray 0x70 ("p") to CDC-ACM "data" OUT endpoint (3)
-            // Need to fix that at the management, for now just clear that interrupt.
-            usb.intstat.write(|w| unsafe { w.bits(64) });
-            // usb.intstat.write(|w| unsafe{ w.bits( usb.intstat.read().bits() ) });
-        }
-
         // if remaining < 60_000 {
         //     debug_now!("USB interrupt done: {} bytes", remaining);
         // }
@@ -486,7 +468,11 @@ mod app {
     )]
     fn nfc_irq(mut c: nfc_irq::Context) {
         c.shared.perf_timer.lock(|perf_timer| {
-            let contactless = c.shared.contactless.as_mut().unwrap();
+            // No contactless frontend (USB-only boot, or NFC chip absent): the idle
+            // fallback still pends NFC_INTERRUPT every 3 ms, so bail instead of panicking.
+            let Some(contactless) = c.shared.contactless.as_mut() else {
+                return;
+            };
             let _starttime = perf_timer.elapsed().0 / 100;
 
             info!("[");

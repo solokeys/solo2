@@ -12,6 +12,10 @@ use defmt::info;
 
 use fm11nc08::{Configuration, Register, FM11NC08};
 
+use crate::nfc_i2c::BoundedI2c;
+use fm11nt082c::FM11NT082C;
+use nfc_device::traits::nfc;
+
 pub type NfcCsPin = pins::Pio1_20;
 pub type NfcIrqPin = pins::Pio0_19;
 
@@ -34,8 +38,14 @@ pub fn try_setup(
     // Start unselected.
     // `true` = SPI mode 1 (CPHA=1), required by the FM11NC08.
     let nfc_cs = crate::shared_spi::LockCs::new(
-        NfcCsPin::take()
-            .unwrap()
+        // SAFETY / why `steal` not `take`: exactly one NFC frontend is ever live. The 082C
+        // autodetect (`nfc_i2c`) `take`s PIO1_20 as its I2C SCL; when no 082C answers and
+        // we fall back to the NC08, that I2C is dead and the NC08 reclaims PIO1_20 as its
+        // chip-select. A `take().unwrap()` here would hit `None` (pin already taken) and
+        // panic during early init -> `panic_halt` -> a real Solo 2 bricks dark before USB
+        // (there is no recovery). `steal` cannot fail; the pad is re-driven as a GPIO
+        // output below, disconnecting the dead Flexcomm4 SCL.
+        unsafe { NfcCsPin::steal() }
             .into_gpio_pin(iocon, gpio)
             .into_output_high(),
         true,
@@ -121,5 +131,88 @@ pub fn try_setup(
     // let regu_powered = (0b11 << 4) | (0b10 << 2) | (0b11 << 0);
     // fm.write_reg(Register::ReguCfg, regu_powered);
 
+    Some(fm)
+}
+
+// ─── FM11NT082C (I2C) frontend ─────────────────────────────────────────────────
+
+/// The FM11 IRQ pin (open-drain, active-low). A PINT on it (Slot0 -> the nfc_irq task)
+/// drives reads on RxDone. EVK: P20 pin 8 = PIO1_22. Solo board: PIO0_19.
+#[cfg(feature = "lpcxpresso55")]
+pub type NfcI2cIrqPin = pins::Pio1_22;
+#[cfg(not(feature = "lpcxpresso55"))]
+pub type NfcI2cIrqPin = pins::Pio0_19;
+
+pub type Nfc082cChip =
+    FM11NT082C<BoundedI2c, Pin<NfcI2cIrqPin, pin::state::Gpio<pin::gpio::direction::Input>>>;
+
+/// Runtime-selected NFC frontend for ONE universal firmware: the new FM11NT082C (I2C)
+/// or the legacy FM11NC08 (SPI), whichever the board has. Delegates the `nfc::Device`
+/// contract to the active driver so the ISO14443/apdu stack above is chip-agnostic.
+pub enum NfcFrontend {
+    Fm11nc08(NfcChip),
+    Fm11nt082c(Nfc082cChip),
+}
+
+impl nfc::Device for NfcFrontend {
+    fn read(&mut self, buf: &mut [u8]) -> Result<nfc::State, nfc::Error> {
+        match self {
+            NfcFrontend::Fm11nc08(c) => c.read(buf),
+            NfcFrontend::Fm11nt082c(c) => c.read(buf),
+        }
+    }
+    fn send(&mut self, buf: &[u8]) -> Result<(), nfc::Error> {
+        match self {
+            NfcFrontend::Fm11nc08(c) => c.send(buf),
+            NfcFrontend::Fm11nt082c(c) => c.send(buf),
+        }
+    }
+    fn frame_size(&self) -> usize {
+        match self {
+            NfcFrontend::Fm11nc08(c) => c.frame_size(),
+            NfcFrontend::Fm11nt082c(c) => c.frame_size(),
+        }
+    }
+}
+
+/// Detect + configure the FM11NT082C on the board's I2C bus. Returns None if no chip
+/// ACKs (so the caller falls back to the FM11NC08). The NC/ISO14443-4 config is written
+/// to EEPROM and applied live by a soft-reset inside `configure()`.
+pub fn try_setup_082c(
+    i2c: BoundedI2c,
+    int: Pin<NfcI2cIrqPin, pin::state::Gpio<pin::gpio::direction::Input>>,
+    timer: &mut Timer<impl hal::peripherals::ctimer::Ctimer<hal::typestates::init_state::Enabled>>,
+) -> Option<Nfc082cChip> {
+    let mut fm = FM11NT082C::new(i2c, fm11nt082c::DEFAULT_ADDR, int).enabled();
+
+    if !fm.is_present() {
+        info!("No FM11NT082C on I2C");
+        return None;
+    }
+    info!("FM11NT082C present");
+
+    // NC-mode + ISO14443-4 config (contact-side EEPROM write, no Fudan auth), applied by
+    // the soft-reset inside configure():
+    //   CFG0 0x91 (OP_MODE_SELECT=NC), CFG1 0x82 (NFC_mode[3:2]=00=ISO14443-4),
+    //   CFG2 0x98 (FCFS arbitration bits[5:4]=01 + never-sleep bits[3:0]=0x8);
+    //   ATQA 0x0044, SAK T4T 0x20, ATS from the FM11NC08 setup.
+    let _ = fm.configure(
+        fm11nt082c::Configuration {
+            user_cfg0: 0x91,
+            user_cfg1: 0x82,
+            user_cfg2: 0x98,
+            atqa: 0x0044,
+            sak1: 0x00,
+            sak2: 0x20,
+            tl: 0x05,
+            t0: 0x78,
+            ta: 0b1001_0001,
+            tb: 0x78,
+            tc: 0x00,
+        },
+        timer,
+    );
+
+    fm.arm_interrupts();
     Some(fm)
 }

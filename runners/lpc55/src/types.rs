@@ -269,7 +269,9 @@ pub type TrussedClient = MultiplexedClient<Syscall, Dispatch>;
 // `make_client` are shared with the nrf52840dk runner via `solo_apps::client`.
 pub type Trussed = solo_apps::client::Trussed<Board>;
 
-pub type Iso14443 = nfc_device::Iso14443<'static, board::nfc::NfcChip>;
+// Runtime-selected NFC frontend (FM11NT082C over I2C or FM11NC08 over SPI) — one
+// universal firmware auto-detects which chip the board has. See board::nfc::NfcFrontend.
+pub type Iso14443 = nfc_device::Iso14443<'static, board::nfc::NfcFrontend>;
 
 pub type ExternalInterrupt = hal::Pint<hal::typestates::init_state::Enabled>;
 

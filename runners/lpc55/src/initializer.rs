@@ -452,7 +452,8 @@ impl Initializer {
         &mut self,
         clock_stage: &mut stages::Clock,
         basic_stage: &mut stages::Basic,
-        flexcomm0: hal::peripherals::flexcomm::Flexcomm0<Unknown>,
+        #[allow(unused_variables)] flexcomm0: hal::peripherals::flexcomm::Flexcomm0<Unknown>,
+        flexcomm1: board::nfc_i2c::NfcFlexcomm,
         #[allow(unused_variables)] mux: hal::peripherals::inputmux::InputMux<Unknown>,
         #[allow(unused_variables)] pint: hal::peripherals::pint::Pint<Unknown>,
     ) -> stages::Nfc {
@@ -460,17 +461,66 @@ impl Initializer {
             .split()
             .expect("could not setup iso14443 ApduInterchange");
 
-        let nfc_chip = if self.config.nfc_enabled {
-            self.try_enable_fm11nc08(
+        // NFC chip autodetect: the FM11NT082C ACKs address 0x57 on the board's I2C
+        // bus; otherwise fall back to the FM11NC08 on Flexcomm0 SPI (which itself
+        // returns None if its chip is absent, so there's no separate "no NFC" branch).
+        let nfc_chip: Option<board::nfc::NfcFrontend> = if self.config.nfc_enabled {
+            let mut i2c = board::nfc_i2c::BoundedI2c::setup(
+                flexcomm1,
                 &clock_stage.clocks,
+                &mut self.syscon,
                 &mut clock_stage.iocon,
-                &mut clock_stage.gpio,
-                clock_stage.nfc_irq.take().unwrap(),
-                &mut basic_stage.delay_timer,
-                flexcomm0,
-                mux,
-                pint,
-            )
+            );
+            if i2c.probe(0x57) {
+                // Take the board's FM11 IRQ pin (EVK PIO1_22 = P20 pin 8; solo
+                // PIO0_19) and set up a PINT (Slot0 -> the nfc_irq task, active-low)
+                // so the chip's RxDone interrupt drives reads.
+                #[cfg(feature = "board-lpcxpresso55")]
+                let int = {
+                    let int = pins::Pio1_22::take()
+                        .unwrap()
+                        .into_gpio_pin(&mut clock_stage.iocon, &mut clock_stage.gpio)
+                        .into_input();
+                    // The FM11 IRQ is open-drain active-low; `into_gpio_pin` sets
+                    // no pull, so enable the internal pull-up.
+                    unsafe { &*hal::raw::IOCON::ptr() }
+                        .pio1_22
+                        .modify(|_, w| w.mode().pull_up());
+                    int
+                };
+                #[cfg(not(feature = "board-lpcxpresso55"))]
+                let int = clock_stage.nfc_irq.take().unwrap();
+
+                let mut mux = mux.enabled(&mut self.syscon);
+                let mut pint = pint.enabled(&mut self.syscon);
+                pint.enable_interrupt(
+                    &mut mux,
+                    &int,
+                    hal::peripherals::pint::Slot::Slot0,
+                    hal::peripherals::pint::Mode::ActiveLow,
+                );
+                mux.disabled(&mut self.syscon);
+
+                board::nfc::try_setup_082c(i2c, int, &mut basic_stage.delay_timer).map(|chip| {
+                    // Enable idle's slow NFC poll fallback only for the 082C (see
+                    // `NFC_IDLE_POLL`); legacy NC08 boards stay IRQ-driven.
+                    crate::NFC_IDLE_POLL.store(true, core::sync::atomic::Ordering::Relaxed);
+                    board::nfc::NfcFrontend::Fm11nt082c(chip)
+                })
+            } else {
+                // No 082C on I2C → FM11NC08 on Flexcomm0 SPI.
+                self.try_enable_fm11nc08(
+                    &clock_stage.clocks,
+                    &mut clock_stage.iocon,
+                    &mut clock_stage.gpio,
+                    clock_stage.nfc_irq.take().unwrap(),
+                    &mut basic_stage.delay_timer,
+                    flexcomm0,
+                    mux,
+                    pint,
+                )
+                .map(board::nfc::NfcFrontend::Fm11nc08)
+            }
         } else {
             None
         };
@@ -1042,6 +1092,7 @@ impl Initializer {
         pfr: Pfr<Unknown>,
 
         flexcomm0: hal::peripherals::flexcomm::Flexcomm0<Unknown>,
+        flexcomm1: board::nfc_i2c::NfcFlexcomm,
         mux: hal::peripherals::inputmux::InputMux<Unknown>,
         pint: hal::peripherals::pint::Pint<Unknown>,
 
@@ -1066,8 +1117,14 @@ impl Initializer {
             perf_timer,
             pfr,
         );
-        let mut nfc_stage =
-            self.initialize_nfc(&mut clock_stage, &mut basic_stage, flexcomm0, mux, pint);
+        let mut nfc_stage = self.initialize_nfc(
+            &mut clock_stage,
+            &mut basic_stage,
+            flexcomm0,
+            flexcomm1,
+            mux,
+            pint,
+        );
 
         // Flash + filesystem come up before USB so the USB descriptor (vid/pid)
         // can be chosen from persisted config on the mounted FS at enumeration

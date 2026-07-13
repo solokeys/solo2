@@ -1,0 +1,12 @@
+[package]
+name = "fm11nt082c"
+version = "0.1.0"
+authors.workspace = true
+edition = "2024"
+
+[dependencies]
+defmt         .workspace = true
+embedded-time .workspace = true
+embedded-hal  .workspace = true
+nb            .workspace = true
+nfc-device    .workspace = true

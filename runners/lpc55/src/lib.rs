@@ -36,6 +36,14 @@ delog!(Delogger, 3, 2048, Flusher);
 #[cfg(feature = "log-defmt")]
 static FLUSHER: Flusher = Flusher {};
 
+/// True when the active NFC frontend is the FM11NT082C (I2C). The idle loop's
+/// ~3 ms NFC_INTERRUPT fallback pend is gated on this: on 082C boards it covers
+/// an unwired/wrong IRQ line (EVK adapter), while on legacy FM11NC08 boards it
+/// must stay OFF — the NC08 `read_packet` reads clear-on-read MAIN_IRQ over SPI
+/// on every poll, and shipping Hackers are IRQ-driven (PIN_INT0) only.
+pub static NFC_IDLE_POLL: core::sync::atomic::AtomicBool =
+    core::sync::atomic::AtomicBool::new(false);
+
 // ── Wallet consent: runner-driven, non-blocking user-presence ────────────────
 //
 // A wallet sign arms `wallet_app::consent` (request) and polls the result; the
@@ -54,7 +62,7 @@ static FLUSHER: Flusher = Flusher {};
 // during a sign reads the override URL instead of granting).
 #[cfg(feature = "wallet")]
 pub fn confirm_user_present_non_blocking(now_ms: u32) {
-    use board::trussed::{read_presence, Presence};
+    use board::trussed::{begin_button_request, poll_buttons, read_presence, Presence};
     use core::sync::atomic::{AtomicU32, Ordering};
     use wallet_app::consent;
 
@@ -66,15 +74,26 @@ pub fn confirm_user_present_non_blocking(now_ms: u32) {
         return;
     }
 
-    let start = match CONSENT_START.compare_exchange(
+    let (start, new_request) = match CONSENT_START.compare_exchange(
         u32::MAX,
         now_ms,
         Ordering::Relaxed,
         Ordering::Relaxed,
     ) {
-        Ok(_) => now_ms,
-        Err(existing) => existing,
+        Ok(_) => (now_ms, true),
+        Err(existing) => (existing, false),
     };
+
+    if new_request {
+        begin_button_request();
+        // FIDO_OVER_NFC latches the transport of the last FIDO dispatch and is
+        // only cleared by the next USB/contact FIDO message — the wallet HID
+        // never passes through those, so a contactless FIDO op earlier in the
+        // power session would auto-grant this sign. Clear it at the start of
+        // the consent window; a live tap during the window re-sets it.
+        board::trussed::FIDO_OVER_NFC.store(false, core::sync::atomic::Ordering::Relaxed);
+    }
+    poll_buttons();
 
     #[cfg(feature = "ndef-app")]
     let suppressed = ndef_app::has_override();
@@ -109,9 +128,6 @@ pub fn init_board(
     types::PerformanceTimer,
     Option<clock_controller::DynamicClockController>,
     types::NfcWaitExtender,
-    // Buttons, hoisted out of the trussed `UserInterface` so the idle loop can
-    // poll them (FIDO presence + wallet consent). `None` in passive/NFC boot.
-    Option<types::ThreeButtons>,
 ) {
     #[cfg(feature = "log-defmt")]
     Delogger::init_default(delog::LevelFilter::Debug, &FLUSHER).ok();
@@ -169,6 +185,24 @@ pub fn init_board(
             device_peripherals.I2S0,
             device_peripherals.SPI0,
             device_peripherals.USART0,
+        )),
+        // The FM11 NFC I2C bus is on a different Flexcomm per board: FC1 on the EVK,
+        // FC4 on the solo board.
+        #[cfg(feature = "board-lpcxpresso55")]
+        hal::peripherals::flexcomm::Flexcomm1::from((
+            device_peripherals.FLEXCOMM1,
+            device_peripherals.I2C1,
+            device_peripherals.I2S1,
+            device_peripherals.SPI1,
+            device_peripherals.USART1,
+        )),
+        #[cfg(not(feature = "board-lpcxpresso55"))]
+        hal::peripherals::flexcomm::Flexcomm4::from((
+            device_peripherals.FLEXCOMM4,
+            device_peripherals.I2C4,
+            device_peripherals.I2S4,
+            device_peripherals.SPI4,
+            device_peripherals.USART4,
         )),
         hal::InputMux::from(device_peripherals.INPUTMUX),
         hal::Pint::from(device_peripherals.PINT),
@@ -241,9 +275,10 @@ pub fn init_board(
     #[cfg(not(feature = "wallet"))]
     let wallet: types::WalletSlot = ();
 
-    // Buttons left in `basic` by `initialize_trussed` (the UI doesn't own them);
-    // hand them to the runner so the idle loop can poll them.
+    // A single button owner serves both idle's non-blocking wallet consent and
+    // Trussed's blocking FIDO consent loop.
     let buttons = everything.basic.three_buttons.take();
+    board::trussed::install_buttons(buttons);
 
     (
         everything.interfaces.apdu_dispatch,
@@ -256,6 +291,5 @@ pub fn init_board(
         everything.basic.perf_timer,
         clock_controller,
         everything.basic.delay_timer,
-        buttons,
     )
 }

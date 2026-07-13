@@ -414,11 +414,13 @@ dependencies = [
  "defmt",
  "embedded-hal 0.2.7",
  "fm11nc08",
+ "fm11nt082c",
  "generic-array 0.14.7",
  "littlefs2",
  "lpc55-hal",
  "micromath",
  "nb 1.1.0",
+ "nfc-device",
  "rtic",
  "spi-memory",
  "trussed",
@@ -1477,6 +1479,17 @@ dependencies = [
 
 [[package]]
 name = "fm11nc08"
+version = "0.1.0"
+dependencies = [
+ "defmt",
+ "embedded-hal 0.2.7",
+ "embedded-time",
+ "nb 1.1.0",
+ "nfc-device",
+]
+
+[[package]]
+name = "fm11nt082c"
 version = "0.1.0"
 dependencies = [
  "defmt",

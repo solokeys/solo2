@@ -1,19 +1,23 @@
 //! Implementation of `trussed::Platform` for the board,
 //! using the specific implementation of our `crate::traits`.
 
-use core::time::Duration;
+use core::{
+    cell::RefCell,
+    sync::atomic::{AtomicBool, AtomicU8, Ordering},
+    time::Duration,
+};
 
 use crate::hal::{peripherals::rtc::Rtc, typestates::init_state};
 use crate::traits::buttons::{Edge, Press};
 use crate::traits::rgb_led::{Intensities, RgbLed};
+use crate::ThreeButtons;
+use critical_section::Mutex;
 use defmt::debug;
 use micromath::F32;
 use trussed::platform::{consent, ui};
 
-// Assuming there will only be one way to
-// get user presence, this should be fine.
 // Used for Ctaphid.keepalive message status.
-static mut WAITING: bool = false;
+static WAITING: AtomicBool = AtomicBool::new(false);
 
 /// Probe-rs-writable user-presence override for automated tests.
 ///
@@ -44,10 +48,10 @@ pub static LED_UP_RGB: core::sync::atomic::AtomicU32 =
 pub struct UserPresenceStatus {}
 impl UserPresenceStatus {
     pub(crate) fn set_waiting(waiting: bool) {
-        unsafe { WAITING = waiting };
+        WAITING.store(waiting, Ordering::Release);
     }
     pub fn waiting() -> bool {
-        unsafe { WAITING }
+        WAITING.load(Ordering::Acquire)
     }
 }
 
@@ -67,26 +71,47 @@ pub fn set_wallet_up_requested(requested: bool) {
 
 /// True when *any* source wants the UP indicator: trussed's status
 /// (FIDO etc.) or a waiting wallet sign.
-fn up_indicator_wanted(status: ui::Status) -> bool {
-    matches!(status, ui::Status::WaitingForUserPresence)
-        || UI_WAITING.load(core::sync::atomic::Ordering::Relaxed)
+fn up_indicator_wanted() -> bool {
+    UserPresenceStatus::waiting() || UI_WAITING.load(Ordering::Relaxed)
 }
 
 // ── Latched button-gesture global ────────────────────────────────────────────
 //
-// Buttons are hoisted out of `UserInterface` so the idle loop can poll them.
-// `poll_buttons` (called from idle) latches a committed gesture here; both
-// `check_user_presence` (FIDO, via trussed's UP loop) and the runner's
-// `confirm_user_present_non_blocking` (wallet) drain it via `take_gesture` (one-shot). They never
-// run concurrently (one consent at a time), so a single latch suffices.
-
-use core::sync::atomic::AtomicU8;
+// The button hardware has one owner protected by a critical-section mutex.
+// Idle polls it for non-blocking wallet consent, while `check_user_presence`
+// polls it from Trussed's blocking UP loop. The latter runs above idle's RTIC
+// priority, so idle-only polling cannot service FIDO while UP is pending.
+static BUTTONS: Mutex<RefCell<Option<ThreeButtons>>> = Mutex::new(RefCell::new(None));
 
 const GESTURE_NONE: u8 = 0;
 const GESTURE_APPROVE: u8 = 1;
 const GESTURE_STRONG: u8 = 2;
 
 static BUTTON_GESTURE: AtomicU8 = AtomicU8::new(GESTURE_NONE);
+static BUTTON_ARMED: AtomicBool = AtomicBool::new(false);
+
+/// Install the physical buttons once during board initialization.
+pub fn install_buttons(buttons: Option<ThreeButtons>) {
+    critical_section::with(|cs| {
+        *BUTTONS.borrow(cs).borrow_mut() = buttons;
+    });
+}
+
+/// Poll the physical buttons and latch any newly detected gesture.
+pub fn poll_buttons() {
+    critical_section::with(|cs| {
+        if let Some(buttons) = BUTTONS.borrow(cs).borrow_mut().as_mut() {
+            poll_buttons_inner(buttons);
+        }
+    });
+}
+
+/// Start a new presence window. A release must be observed before a press can
+/// grant it, so a finger held from an earlier operation is not accepted.
+pub fn begin_button_request() {
+    BUTTON_GESTURE.store(GESTURE_NONE, Ordering::Release);
+    BUTTON_ARMED.store(false, Ordering::Release);
+}
 
 /// Committed button gesture. lpc55 has no explicit-deny button, so the only
 /// outcomes are an approve (single press) or a strong approve (A+B squeeze).
@@ -98,7 +123,6 @@ pub enum Gesture {
 }
 
 fn latch_gesture(g: Gesture) {
-    use core::sync::atomic::Ordering;
     match g {
         // Don't downgrade a latched Strong to Approve before it's consumed.
         Gesture::Approve => {
@@ -116,7 +140,6 @@ fn latch_gesture(g: Gesture) {
 
 /// One-shot consume: read the latched gesture and reset to None.
 pub fn take_gesture() -> Gesture {
-    use core::sync::atomic::Ordering;
     match BUTTON_GESTURE.swap(GESTURE_NONE, Ordering::AcqRel) {
         GESTURE_APPROVE => Gesture::Approve,
         GESTURE_STRONG => Gesture::Strong,
@@ -183,20 +206,47 @@ pub fn read_presence(has_buttons: bool, nfc_suppressed: bool) -> Presence {
     }
 }
 
-/// Idle-loop button poll: read the buttons, and on a fresh press latch an
-/// Approve (or Strong on an A+B squeeze). Edge-sensitive via `Edge`, so it
-/// returns Ok only once per press. lpc55 buttons are fast GPIO/cap reads, so
-/// no throttling is needed. Runs every idle pass — FIDO needs fresh gestures
-/// too, not just the wallet path.
-pub fn poll_buttons<B: Press + Edge>(buttons: &mut B) {
-    // Read state before the edge check — reading an edge can clear the state.
+/// Read the buttons and latch Approve, or Strong on an A+B squeeze.
+fn poll_buttons_inner<B: Press + Edge>(buttons: &mut B) {
+    // The GPIO edge tracker detects a press as a transition between two
+    // consecutive calls, so it must be fed on EVERY poll — including while
+    // released — not gated behind the pressed check below. (Debounced read,
+    // ~1 ms per polled button.)
+    #[cfg(feature = "lpcxpresso55")]
+    let edge = buttons.wait_for_any_new_press().is_ok();
+
     let state = buttons.state();
-    if buttons.wait_for_any_new_press().is_ok() {
-        if state.a && state.b {
-            latch_gesture(Gesture::Strong);
+    let pressed = state.a || state.b || state.middle;
+
+    if !pressed {
+        BUTTON_ARMED.store(true, Ordering::Release);
+        return;
+    }
+
+    if !BUTTON_ARMED.load(Ordering::Acquire) {
+        return;
+    }
+
+    // Solo 2's current state is already filtered by the touch driver's
+    // moving-average/confidence check. Unlike its edge result, the active
+    // level remains available for the duration of a human touch.
+    #[cfg(feature = "solo2")]
+    let accepted = true;
+    // The development boards use GPIO buttons, whose edge implementation
+    // provides their debounce.
+    #[cfg(feature = "lpcxpresso55")]
+    let accepted = edge;
+
+    // Stay armed while held: a Strong-gated request (Reset) needs the second
+    // finger of a squeeze to upgrade an already-consumed Approve, and the
+    // fingers of a squeeze land further apart than one poll. Held-finger
+    // protection across requests comes from `begin_button_request` disarming.
+    if accepted {
+        latch_gesture(if state.a && state.b {
+            Gesture::Strong
         } else {
-            latch_gesture(Gesture::Approve);
-        }
+            Gesture::Approve
+        });
     }
 }
 
@@ -207,10 +257,10 @@ pub fn poll_buttons<B: Press + Edge>(buttons: &mut B) {
 pub static FIDO_OVER_NFC: core::sync::atomic::AtomicBool =
     core::sync::atomic::AtomicBool::new(false);
 
-/// Whether this build has physical buttons. The buttons live in the idle loop
-/// (see `poll_buttons`); the UI keeps only this flag so `no-buttons`
-/// builds (NFC / test auto-approve) can still return `Strong` from
-/// `check_user_presence`.
+/// The buttons live in the shared `BUTTONS` mutex (see `install_buttons`),
+/// polled from both trussed's blocking UP loop and idle's wallet consent; the
+/// UI keeps only `has_buttons` so `no-buttons` builds (NFC / test
+/// auto-approve) can still return `Strong` from `check_user_presence`.
 pub struct UserInterface<RGB>
 where
     RGB: RgbLed,
@@ -292,6 +342,9 @@ where
         // `nfc_suppressed = false`. WAITING is driven by set_status() so the
         // periodic keepalive task observes UP_NEEDED for the full UP-wait
         // window.
+        if self.has_buttons {
+            poll_buttons();
+        }
         match read_presence(self.has_buttons, false) {
             Presence::Grant(level) => level,
             Presence::Pending => consent::Level::None,
@@ -299,6 +352,9 @@ where
     }
 
     fn set_status(&mut self, status: ui::Status) {
+        if status == ui::Status::WaitingForUserPresence {
+            begin_button_request();
+        }
         self.status = status;
         // Drive the static WAITING flag from the trussed status so the
         // periodic CTAPHID keepalive task emits STATUS_UPNEEDED for the
@@ -310,7 +366,7 @@ where
         if let Some(rgb) = &mut self.rgb {
             // UP indicator also lights for a waiting wallet sign (UI_WAITING),
             // not just trussed's WaitingForUserPresence.
-            if up_indicator_wanted(status) {
+            if up_indicator_wanted() {
                 rgb.set(BLUE);
             } else {
                 rgb.set(match status {
@@ -335,7 +391,7 @@ where
         if let Some(rgb) = self.rgb.as_mut() {
             // UP indicator also breathes for a waiting wallet sign (UI_WAITING),
             // not just trussed's WaitingForUserPresence.
-            let waiting_for_user = up_indicator_wanted(self.status);
+            let waiting_for_user = up_indicator_wanted();
             let processing = self.status == ui::Status::Processing;
             let winking = uptime < self.wink_until.as_millis() as u32;
             // Colors come from the persisted DeviceConfig (set by the runner):

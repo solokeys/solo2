@@ -39,7 +39,7 @@ pub struct Basic {
 /// share Spi0 via `board::shared_spi`; `iso14443` is `None` only when the NFC
 /// chip is absent.
 pub struct Nfc {
-    pub iso14443: Option<nfc_device::Iso14443<'static, board::nfc::NfcChip>>,
+    pub iso14443: Option<nfc_device::Iso14443<'static, board::nfc::NfcFrontend>>,
 
     pub contactless_responder: Option<apdu_dispatch::interchanges::Responder<'static>>,
 }

@@ -7,6 +7,7 @@ members = [
     "components/ndef-app",
     "components/nfc-device",
     "components/fm11nc08",
+    "components/fm11nt082c",
     "components/nrf-nfc",
     "components/provisioner-app",
     "components/oath-export",
@@ -40,6 +41,7 @@ authors = [
 board            = { path = "runners/lpc55/board" }
 ndef-app         = { path = "components/ndef-app" }
 fm11nc08         = { path = "components/fm11nc08" }
+fm11nt082c       = { path = "components/fm11nt082c" }
 nfc-device       = { path = "components/nfc-device" }
 nrf-nfc          = { path = "components/nrf-nfc" }
 provisioner-app  = { path = "components/provisioner-app" }
