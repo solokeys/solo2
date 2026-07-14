@@ -117,11 +117,11 @@ impl BoundedI2c {
                 .modify(|_, w| w.digimode().digital().od().open_drain());
         }
 
-        // 100 kHz off the 12 MHz Flexcomm clock: clkdiv holds div-1; msttime hold scl-2.
+        // 400 kHz off the 12 MHz Flexcomm clock: 12M/(2+1)=4 MHz, /(3+2 + 3+2)=400 kHz.
         i2c.cfg.modify(|_, w| w.msten().enabled());
-        i2c.clkdiv.modify(|_, w| unsafe { w.divval().bits(9) });
+        i2c.clkdiv.modify(|_, w| unsafe { w.divval().bits(2) });
         i2c.msttime
-            .modify(|_, w| w.mstsclhigh().bits(4).mstscllow().bits(4));
+            .modify(|_, w| w.mstsclhigh().bits(3).mstscllow().bits(3));
 
         Self { i2c }
     }
