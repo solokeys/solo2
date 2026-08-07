@@ -501,12 +501,8 @@ impl Initializer {
                 );
                 mux.disabled(&mut self.syscon);
 
-                board::nfc::try_setup_082c(i2c, int, &mut basic_stage.delay_timer).map(|chip| {
-                    // Enable idle's slow NFC poll fallback only for the 082C (see
-                    // `NFC_IDLE_POLL`); legacy NC08 boards stay IRQ-driven.
-                    crate::NFC_IDLE_POLL.store(true, core::sync::atomic::Ordering::Relaxed);
-                    board::nfc::NfcFrontend::Fm11nt082c(chip)
-                })
+                board::nfc::try_setup_082c(i2c, int, &mut basic_stage.delay_timer)
+                    .map(board::nfc::NfcFrontend::Fm11nt082c)
             } else {
                 // No 082C on I2C → FM11NC08 on Flexcomm0 SPI.
                 self.try_enable_fm11nc08(

@@ -198,9 +198,6 @@ mod app {
     #[idle(shared = [apdu_dispatch, ctaphid_dispatch, apps, perf_timer, usb_classes, ccid_wait_extension_sender, ctaphid_keep_alive_sender, wallet])]
     fn idle(mut c: idle::Context) -> ! {
         info!("inside IDLE, initial SP = {:08X}", msp());
-        // Last time (perf_timer µs) the NFC frontend was polled — used to throttle the
-        // poll rate so constant I2C traffic doesn't starve the RF interface.
-        let mut last_nfc_poll: u32 = 0;
         loop {
             let mut time = 0;
             c.shared.perf_timer.lock(|perf_timer| {
@@ -211,18 +208,6 @@ mod app {
             });
             if time > 1_200_000 {
                 runner::Delogger::flush();
-            }
-
-            // Drive the contactless (NFC) frontend. The FM11 IRQ (PINT Slot0 -> nfc_irq)
-            // reads on RxDone; this is only a slow ~3 ms fallback pend in case the IRQ
-            // line isn't wired/working (e.g. the EVK 082C). 082C-only: an NC08 poll
-            // reads clear-on-read MAIN_IRQ over SPI, and shipping Hackers are
-            // IRQ-driven — don't change their behavior.
-            if runner::NFC_IDLE_POLL.load(core::sync::atomic::Ordering::Relaxed)
-                && time.wrapping_sub(last_nfc_poll) >= 3_000
-            {
-                last_nfc_poll = time;
-                rtic::pend(NFC_INTERRUPT);
             }
 
             let apdu_result = c
@@ -468,8 +453,8 @@ mod app {
     )]
     fn nfc_irq(mut c: nfc_irq::Context) {
         c.shared.perf_timer.lock(|perf_timer| {
-            // No contactless frontend (USB-only boot, or NFC chip absent): the idle
-            // fallback still pends NFC_INTERRUPT every 3 ms, so bail instead of panicking.
+            // No contactless frontend (USB-only boot, or NFC chip absent): the apdu
+            // dispatch loop still pends NFC_INTERRUPT, so bail instead of panicking.
             let Some(contactless) = c.shared.contactless.as_mut() else {
                 return;
             };

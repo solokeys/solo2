@@ -36,14 +36,6 @@ delog!(Delogger, 3, 2048, Flusher);
 #[cfg(feature = "log-defmt")]
 static FLUSHER: Flusher = Flusher {};
 
-/// True when the active NFC frontend is the FM11NT082C (I2C). The idle loop's
-/// ~3 ms NFC_INTERRUPT fallback pend is gated on this: on 082C boards it covers
-/// an unwired/wrong IRQ line (EVK adapter), while on legacy FM11NC08 boards it
-/// must stay OFF — the NC08 `read_packet` reads clear-on-read MAIN_IRQ over SPI
-/// on every poll, and shipping Hackers are IRQ-driven (PIN_INT0) only.
-pub static NFC_IDLE_POLL: core::sync::atomic::AtomicBool =
-    core::sync::atomic::AtomicBool::new(false);
-
 // ── Wallet consent: runner-driven, non-blocking user-presence ────────────────
 //
 // A wallet sign arms `wallet_app::consent` (request) and polls the result; the
