@@ -314,23 +314,6 @@ const BLUE: Intensities = Intensities {
     green: 0,
     blue: 0x7F,
 };
-const TEAL: Intensities = Intensities {
-    red: 0,
-    green: 55,
-    blue: 20,
-};
-#[allow(dead_code)]
-const ORANGE: Intensities = Intensities {
-    red: u8::MAX,
-    green: 0x7e,
-    blue: 0,
-};
-#[allow(dead_code)]
-const WHITE: Intensities = Intensities {
-    red: u8::MAX,
-    green: u8::MAX,
-    blue: u8::MAX,
-};
 
 impl<RGB> trussed::platform::UserInterface for UserInterface<RGB>
 where
@@ -372,8 +355,9 @@ where
                 rgb.set(match status {
                     ui::Status::Idle => GREEN,
                     // ui::Status::Idle => RED,
-                    ui::Status::Processing => TEAL,
-                    // ui::Status::Processing => GREEN,
+                    // Processing renders like Idle (green breathe) so boot
+                    // activity doesn't flicker teal.
+                    ui::Status::Processing => GREEN,
                     ui::Status::Error => RED,
                     _ => BLACK,
                 });
@@ -392,7 +376,6 @@ where
             // UP indicator also breathes for a waiting wallet sign (UI_WAITING),
             // not just trussed's WaitingForUserPresence.
             let waiting_for_user = up_indicator_wanted();
-            let processing = self.status == ui::Status::Processing;
             let winking = uptime < self.wink_until.as_millis() as u32;
             // Colors come from the persisted DeviceConfig (set by the runner):
             // idle is shared with Processing, up with wink; Error stays red.
@@ -416,13 +399,6 @@ where
             let color = if waiting_for_user {
                 // breathe fast, in the UP color
                 scaled(up, calculate_amplitude(uptime, 2, 4, 75))
-            } else if processing {
-                // blink in the idle color
-                if blink_on() {
-                    full(idle)
-                } else {
-                    BLACK
-                }
             } else if winking {
                 // blink rapidly in the UP color
                 if blink_on() {
