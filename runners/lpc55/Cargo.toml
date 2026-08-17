@@ -70,10 +70,12 @@ panic-halt.workspace = true
 
 # storage
 littlefs2.workspace = true
+littlefs2-sys.workspace = true
+tinyrlibc.workspace = true
 
 [features]
 # Solo 2 Secure
-default = ["admin-app", "fido-authenticator", "ndef-app", "oath", "oath-export", "opcard", "piv-authenticator", "mldsa44-piv"]
+default = ["admin-app", "fido-authenticator", "ndef-app", "oath", "oath-export", "opcard", "piv-authenticator", "mldsa44-backend"]
 # Solo 2 Hacker (additional features): FIDO ML-DSA-44 + the multi-chain wallet.
 hacker = ["mldsa44-fido", "wallet"]
 
@@ -111,8 +113,8 @@ no-reset-time-window = ["fido-authenticator/disable-reset-time-window"]
 # Format filesystem anyway
 format-filesystem = []
 
+# PIV always has ML-DSA-44; the backend rides with it. FIDO opts in separately.
 mldsa44-backend = ["trussed/mldsa44", "trussed-core/mldsa44", "ctap-types/mldsa44"]
-mldsa44-piv = ["mldsa44-backend", "piv-authenticator?/mldsa44"]
 mldsa44-fido = ["mldsa44-backend", "fido-authenticator/mldsa44"]
 
 # TODO: get rid of these (depends on moving "initialize_basic" &friends into `board`

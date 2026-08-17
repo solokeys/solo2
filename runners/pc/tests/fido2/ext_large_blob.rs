@@ -63,7 +63,7 @@ fn make_credential_cbor(
     let mut params = FilteredPublicKeyCredentialParameters(heapless::Vec::new());
     params
         .0
-        .push(KnownPublicKeyCredentialParameters { alg: -7 })
+        .push(KnownPublicKeyCredentialParameters::ES256)
         .ok();
 
     let rp = PublicKeyCredentialRpEntity {

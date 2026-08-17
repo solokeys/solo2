@@ -202,7 +202,7 @@ fn make_credential_request_for(
     let mut params = FilteredPublicKeyCredentialParameters(heapless::Vec::new());
     params
         .0
-        .push(KnownPublicKeyCredentialParameters { alg: -7 })
+        .push(KnownPublicKeyCredentialParameters::ES256)
         .ok();
 
     let rp = PublicKeyCredentialRpEntity {
@@ -292,7 +292,11 @@ fn pkcp_for(algs: &[i32]) -> ctap_types::webauthn::FilteredPublicKeyCredentialPa
     };
     let mut inner = heapless::Vec::new();
     for alg in algs {
-        let _ = inner.push(KnownPublicKeyCredentialParameters { alg: *alg });
+        if let Ok(known) = KnownPublicKeyCredentialParameters::try_from(
+            ctap_types::webauthn::PublicKeyCredentialParameters::public_key_with_alg(*alg),
+        ) {
+            let _ = inner.push(known);
+        }
     }
     FilteredPublicKeyCredentialParameters(inner)
 }

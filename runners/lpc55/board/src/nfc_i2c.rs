@@ -19,25 +19,14 @@
 //! The pins MUST be configured before the I2C master is enabled, else the master
 //! latches a stuck bus.
 
-use crate::hal::{
-    self,
-    drivers::{clocks::Clocks, pins},
-    typestates::init_state::{Enabled, Unknown},
-    Iocon, Syscon,
-};
+use crate::hal::{self, drivers::clocks::Clocks, typestates::init_state::Enabled, Iocon, Syscon};
 use embedded_hal::blocking::i2c;
 
 /// The Flexcomm carrying the FM11 I2C, board-specific.
-#[cfg(feature = "lpcxpresso55")]
-pub type NfcFlexcomm = hal::peripherals::flexcomm::Flexcomm1<Unknown>;
-#[cfg(not(feature = "lpcxpresso55"))]
-pub type NfcFlexcomm = hal::peripherals::flexcomm::Flexcomm4<Unknown>;
+pub type NfcFlexcomm = crate::specifics::nfc::Flexcomm;
 
 /// The enabled I2C peripheral, board-specific (both `Deref` to `i2c0::RegisterBlock`).
-#[cfg(feature = "lpcxpresso55")]
-type NfcI2cPeriph = hal::peripherals::flexcomm::I2c1<Enabled>;
-#[cfg(not(feature = "lpcxpresso55"))]
-type NfcI2cPeriph = hal::peripherals::flexcomm::I2c4<Enabled>;
+type NfcI2cPeriph = crate::specifics::nfc::I2cPeriph;
 
 /// Bounded spin for a master-pending wait, ~1.5 ms of CPU time — 16x a 100 kHz
 /// byte (~90 us), so a healthy transfer never trips it. Kept tight because on a
@@ -69,53 +58,7 @@ impl BoundedI2c {
 
         // Configure the pins BEFORE enabling the master (else the master latches a stuck
         // bus while the pads are still GPIO).
-        #[cfg(feature = "lpcxpresso55")]
-        {
-            // EVK true-I2C pads: FUNC1 (FC1 I2C), EGP=I2C, standard slew, 50 ns filter.
-            let _sda = pins::Pio0_13::take().unwrap();
-            let _scl = pins::Pio0_14::take().unwrap();
-            iocon_raw.pio0_13.modify(|_, w| {
-                w.func()
-                    .alt1()
-                    .egp()
-                    .i2c_mode()
-                    .mode()
-                    .inactive()
-                    .digimode()
-                    .digital()
-                    .slew()
-                    .standard()
-                    .i2cfilter()
-                    .fast_mode()
-            });
-            iocon_raw.pio0_14.modify(|_, w| {
-                w.func()
-                    .alt1()
-                    .egp()
-                    .i2c_mode()
-                    .mode()
-                    .inactive()
-                    .digimode()
-                    .digital()
-                    .slew()
-                    .standard()
-                    .i2cfilter()
-                    .fast_mode()
-            });
-        }
-        #[cfg(not(feature = "lpcxpresso55"))]
-        {
-            // Solo FC4 on normal pads: HAL typed conversion sets FUNC, then
-            // force digital + open-drain.
-            let _sda = pins::Pio1_9::take().unwrap().into_i2c4_sda_pin(iocon);
-            let _scl = pins::Pio1_20::take().unwrap().into_i2c4_scl_pin(iocon);
-            iocon_raw
-                .pio1_9
-                .modify(|_, w| w.digimode().digital().od().open_drain());
-            iocon_raw
-                .pio1_20
-                .modify(|_, w| w.digimode().digital().od().open_drain());
-        }
+        crate::specifics::nfc::configure_i2c_pins(iocon, iocon_raw);
 
         // 400 kHz off the 12 MHz Flexcomm clock: 12M/(2+1)=4 MHz, /(3+2 + 3+2)=400 kHz.
         i2c.cfg.modify(|_, w| w.msten().enabled());

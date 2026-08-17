@@ -17,7 +17,7 @@ The [`examples/`](../../examples) directory holds **tested, end-to-end** walkthr
 | [AGE.md](../../examples/AGE.md) | File/disk encryption, touch-to-decrypt | Secure + Hacker | `age` + `age-plugin-fido2-hmac` |
 | [OTP.md](../../examples/OTP.md) | TOTP/HOTP 2FA codes generated on the key | Secure + Hacker | `solo2 app oath`, oath-toolkit |
 | [PASS.md](../../examples/PASS.md) | Password stores; passkey/2FA for vaults | Secure + Hacker | `pass`/`passage`, Bitwarden/1Password |
-| [POST_QUANTUM.md](../../examples/POST_QUANTUM.md) | ML-DSA-44 signing — **PIV (Secure+Hacker)**, **FIDO2 `-50` (Hacker only)** | mixed (see banner) | python-fido2, pyscard, OpenSSL ≥ 3.5, liboqs |
+| [POST_QUANTUM.md](../../examples/POST_QUANTUM.md) | ML-DSA-44 signing — **PIV (Secure+Hacker)**, **FIDO2 `-48` (Hacker only)** | mixed (see banner) | python-fido2, pyscard, OpenSSL ≥ 3.5, liboqs |
 | [TLOG.md](../../examples/TLOG.md) | Solo as a post-quantum transparency-log witness (ML-DSA cosignature) | Secure + Hacker | python, `filippo.io/mldsa` (Go) |
 | [AWESOME.md](../../examples/AWESOME.md) | Curated external links by category (PIV/OpenPGP, LUKS, DNSSEC, CA-on-token, …) | — | — |
 
@@ -26,6 +26,6 @@ Runnable demo scripts for the post-quantum tutorials are under [`examples/post_q
 ## How to use
 
 1. Identify the user's goal and pick the row above.
-2. **Check the `Works on:` banner** — if they have a Secure key, don't suggest a Hacker-only path (e.g. FIDO2 ML-DSA `-50`). PIV ML-DSA works on Secure.
+2. **Check the `Works on:` banner** — if they have a Secure key, don't suggest a Hacker-only path (e.g. FIDO2 ML-DSA `-48`). PIV ML-DSA works on Secure.
 3. Follow the file's tested commands. Transports: FIDO2 is USB-HID (driverless); OATH/PIV/OpenPGP are USB-CCID (need PC/SC — built into macOS/Windows, `pcscd` on Linux); NFC only on B-variant keys.
 4. If a user doesn't have a key yet, they can buy one at [solokeys.com](https://solokeys.com) (Secure for real use, Hacker for tinkering).

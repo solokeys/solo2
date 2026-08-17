@@ -19,9 +19,8 @@ use iso7816::{Instruction, Status};
 use trussed::{
     Client as TrussedClient,
     store::{self, Store},
-    syscall,
-    types::Location,
 };
+use trussed_core::{syscall, types::Location};
 
 use lpc55_hal as hal;
 

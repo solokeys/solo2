@@ -2,7 +2,7 @@ use defmt::info;
 
 use crate::hal;
 use hal::drivers::timer::Elapsed;
-use hal::drivers::{clocks::Clocks, flash::FlashGordon, pins, pins::direction, Pwm, Timer, UsbBus};
+use hal::drivers::{clocks::Clocks, flash::FlashGordon, pins, pins::direction, Timer, UsbBus};
 use hal::peripherals::pfr::Pfr;
 use hal::peripherals::{ctimer, ctimer::Ctimer};
 use hal::prelude::*;
@@ -21,7 +21,7 @@ use board::traits::rgb_led::RgbLed;
 
 use crate::{build_constants, clock_controller, types};
 use ref_swap::OptionRefSwap;
-use trussed::interrupt::InterruptFlag;
+use trussed_core::InterruptFlag;
 
 pub mod stages;
 
@@ -182,7 +182,7 @@ impl Initializer {
             .into_input();
         // Need to enable pullup for NFC IRQ input.
         let iocon = iocon.release();
-        iocon.pio0_19.modify(|_, w| w.mode().pull_up());
+        board::specifics::nfc::set_irq_pullup(&iocon);
         let iocon = hal::Iocon::from(iocon).enabled(&mut self.syscon);
         let is_passive_mode = nfc_irq.is_low().ok().unwrap();
 
@@ -365,52 +365,18 @@ impl Initializer {
         let iocon = &mut clock_stage.iocon;
         let gpio = &mut clock_stage.gpio;
 
-        let rgb = if !self.is_nfc_passive {
-            #[cfg(feature = "board-lpcxpresso55")]
-            let rgb = board::RgbLed::new(
-                Pwm::new(ctimer2.enabled(syscon, clocks.support_1mhz_fro_token().unwrap())),
-                iocon,
-            );
-
-            #[cfg(feature = "board-solo2")]
-            let rgb = board::RgbLed::new(
-                Pwm::new(_ctimer3.enabled(syscon, clocks.support_1mhz_fro_token().unwrap())),
-                iocon,
-            );
-
-            Some(rgb)
-        } else {
-            None
-        };
-
-        let mut three_buttons = if !self.is_nfc_passive {
-            #[cfg(feature = "board-lpcxpresso55")]
-            let three_buttons = board::ThreeButtons::new(
-                Timer::new(ctimer1.enabled(syscon, clocks.support_1mhz_fro_token().unwrap())),
-                gpio,
-                iocon,
-            );
-
-            #[cfg(feature = "board-solo2")]
-            let three_buttons = {
-                // TODO this should get saved somewhere to be released later.
-                let mut dma = _dma.enabled(syscon);
-
-                board::ThreeButtons::new(
-                    adc.take().unwrap(),
-                    ctimer1.enabled(syscon, clocks.support_1mhz_fro_token().unwrap()),
-                    ctimer2.enabled(syscon, clocks.support_1mhz_fro_token().unwrap()),
-                    &mut dma,
-                    clocks.support_touch_token().unwrap(),
-                    gpio,
-                    iocon,
-                )
-            };
-
-            Some(three_buttons)
-        } else {
-            None
-        };
+        let (rgb, mut three_buttons) = board::specifics::new_ui(
+            !self.is_nfc_passive,
+            &mut adc,
+            ctimer1,
+            ctimer2,
+            _ctimer3,
+            _dma,
+            syscon,
+            clocks,
+            gpio,
+            iocon,
+        );
 
         let mut pfr = pfr.enabled(&clocks).unwrap();
         Self::validate_cfpa(
@@ -430,7 +396,7 @@ impl Initializer {
                         rgb.blue(0);
                     }
                     delay_timer.start(100_000.microseconds());
-                    nb::block!(delay_timer.wait()).ok();
+                    board::specifics::hold_blink(&mut delay_timer);
 
                     hal::boot_to_bootrom()
                 }
@@ -475,21 +441,11 @@ impl Initializer {
                 // Take the board's FM11 IRQ pin (EVK PIO1_22 = P20 pin 8; solo
                 // PIO0_19) and set up a PINT (Slot0 -> the nfc_irq task, active-low)
                 // so the chip's RxDone interrupt drives reads.
-                #[cfg(feature = "board-lpcxpresso55")]
-                let int = {
-                    let int = pins::Pio1_22::take()
-                        .unwrap()
-                        .into_gpio_pin(&mut clock_stage.iocon, &mut clock_stage.gpio)
-                        .into_input();
-                    // The FM11 IRQ is open-drain active-low; `into_gpio_pin` sets
-                    // no pull, so enable the internal pull-up.
-                    unsafe { &*hal::raw::IOCON::ptr() }
-                        .pio1_22
-                        .modify(|_, w| w.mode().pull_up());
-                    int
-                };
-                #[cfg(not(feature = "board-lpcxpresso55"))]
-                let int = clock_stage.nfc_irq.take().unwrap();
+                let int = board::specifics::nfc::take_i2c_irq(
+                    &mut clock_stage.nfc_irq,
+                    &mut clock_stage.iocon,
+                    &mut clock_stage.gpio,
+                );
 
                 let mut mux = mux.enabled(&mut self.syscon);
                 let mut pint = pint.enabled(&mut self.syscon);
@@ -664,10 +620,8 @@ impl Initializer {
             // overridden on a `hacker` build (secure stays the firmware default).
             #[cfg(feature = "admin-app")]
             let (vid_pid, manufacturer_string, product_string) = {
-                let mut fs = trussed::store::filestore::ClientFilestore::new(
-                    littlefs2::path!("admin").into(),
-                    store,
-                );
+                let mut fs =
+                    trussed::store::ClientFilestore::new(littlefs2::path!("admin").into(), store);
                 let dc = admin_app::config::load::<_, crate::device_config::DeviceConfig>(&mut fs)
                     .unwrap_or_default();
                 // Push the configured status-LED colors to the board UI.
@@ -891,16 +845,9 @@ impl Initializer {
         // stand-in so the device still enumerates and is reachable — never
         // panics, never bricks the device.
         let external_fs: &'static dyn trussed::store::DynFilesystem = {
-            use types::ExternalFallbackStorage;
-
             static EXT_CHIP_STORAGE: StaticCell<ExternalStorage> = StaticCell::new();
             static EXT_CHIP_ALLOC: StaticCell<Allocation<ExternalStorage>> = StaticCell::new();
             static EXT_CHIP_FS: StaticCell<Filesystem<'static, ExternalStorage>> =
-                StaticCell::new();
-            static EXT_RAM_STORAGE: StaticCell<ExternalFallbackStorage> = StaticCell::new();
-            static EXT_RAM_ALLOC: StaticCell<Allocation<ExternalFallbackStorage>> =
-                StaticCell::new();
-            static EXT_RAM_FS: StaticCell<Filesystem<'static, ExternalFallbackStorage>> =
                 StaticCell::new();
 
             // Passive (RF-powered) can't afford the flash chip's draw + boot-time
@@ -939,7 +886,7 @@ impl Initializer {
                     EXT_CHIP_FS.init(f) as &'static dyn trussed::store::DynFilesystem
                 }
                 None => {
-                    defmt::warn!("external flash absent / JEDEC mismatch — RAM fallback");
+                    defmt::warn!("external flash absent / JEDEC mismatch — aliasing to internal");
                     // Brief red flash so a developer watching a sealed
                     // Solo 2 (no JTAG / no serial) can tell the chip was
                     // not detected. Trussed's UI loop overwrites this
@@ -952,20 +899,11 @@ impl Initializer {
                         let _ = nb::block!(basic_stage.delay_timer.wait());
                         rgb.turn_off();
                     }
-                    let storage = EXT_RAM_STORAGE.init(ExternalFallbackStorage::new())
-                        as *mut ExternalFallbackStorage;
-                    let alloc = EXT_RAM_ALLOC.init(Filesystem::allocate())
-                        as *mut Allocation<ExternalFallbackStorage>;
-                    let f =
-                        match Filesystem::mount(unsafe { &mut *alloc }, unsafe { &mut *storage }) {
-                            Ok(fs) => fs,
-                            Err(_) => {
-                                Filesystem::format(unsafe { &mut *storage }).unwrap();
-                                Filesystem::mount(unsafe { &mut *alloc }, unsafe { &mut *storage })
-                                    .unwrap()
-                            }
-                        };
-                    EXT_RAM_FS.init(f) as &'static dyn trussed::store::DynFilesystem
+                    // Point External at the internal FS: persistent across reboots,
+                    // costs no RAM, and internal is PRINCE-encrypted where external
+                    // is not. Apps keep their own namespaces, so sharing one
+                    // filesystem does not collide.
+                    internal_fs
                 }
             }
         };
@@ -1061,7 +999,7 @@ impl Initializer {
         let has_buttons = basic_stage.three_buttons.is_some();
 
         let mut solobee_interface = board::trussed::UserInterface::new(rtc, has_buttons, rgb);
-        solobee_interface.set_status(trussed::platform::ui::Status::Idle);
+        solobee_interface.set_status(trussed::types::ui::Status::Idle);
 
         let rng = flash_stage.rng.take().unwrap();
         let store = filesystem_stage.store;

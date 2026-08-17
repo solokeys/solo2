@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Post-quantum signing on a SoloKey over FIDO2 (ML-DSA-44 = COSE alg -50),
+"""Post-quantum signing on a SoloKey over FIDO2 (ML-DSA-44 = COSE alg -48),
 then verify the assertion with liboqs + openssl.
 
 Flow:
-  1. get_info  -> confirm the authenticator advertises alg -50 (ML-DSA-44)
-  2. MakeCredential with pubKeyCredParams = [{alg: -50}]   <-- TOUCH the Solo
+  1. get_info  -> confirm the authenticator advertises alg -48 (ML-DSA-44)
+  2. MakeCredential with pubKeyCredParams = [{alg: -48}]   <-- TOUCH the Solo
   3. GetAssertion for that credential                       <-- TOUCH the Solo
   4. verify the assertion signature over (authData || SHA256(clientDataJSON))
      with liboqs and with `openssl pkeyutl`
@@ -12,7 +12,7 @@ Flow:
 FIDO2 mandates user-presence, so MakeCredential and GetAssertion each require a
 physical touch. Requires: python-fido2, liboqs-python (`oqs`), OpenSSL >= 3.5.
 """
-import hashlib, json, subprocess, tempfile
+import hashlib, json, os, subprocess, tempfile
 from fido2.hid import CtapHidDevice
 from fido2.ctap2 import Ctap2
 
@@ -36,15 +36,37 @@ def raw_mldsa_pubkey(cose_key):
             return bytes(v)
     raise SystemExit(f"could not find 1312-byte ML-DSA pubkey in COSE key: {cose_key}")
 
+def pick_ctap():
+    """Pick the key that advertises ML-DSA-44. Enumeration order is not stable,
+    so select by capability; SOLO_AAGUID=<hex prefix> forces a specific key."""
+    want = os.environ.get("SOLO_AAGUID", "").lower()
+    others = []
+    for dev in CtapHidDevice.list_devices():
+        try:
+            ctap = Ctap2(dev)
+            info = ctap.get_info()
+        except Exception:
+            continue
+        aaguid = info.aaguid.hex()
+        algs = [a.get("alg") for a in (info.algorithms or [])]
+        if want:
+            if aaguid.startswith(want):
+                return ctap, algs
+        elif -48 in algs:
+            return ctap, algs
+        others.append(f"{aaguid[:8]} {algs}")
+    raise SystemExit(
+        "no key advertising ML-DSA-44 (-48); found: " + (", ".join(others) or "none")
+        + "\nthis demo needs Hacker firmware (mldsa44-fido)"
+    )
+
 def main():
-    ctap = Ctap2(next(CtapHidDevice.list_devices()))
-    algs = [a.get("alg") for a in (ctap.get_info().algorithms or [])]
+    ctap, algs = pick_ctap()
     print("authenticator algorithms:", algs)
-    assert -50 in algs, "this firmware does not advertise ML-DSA-44 (-50)"
 
     cdh1 = hashlib.sha256(b"pq-fido2-demo-create").digest()
-    print(">> MakeCredential (alg -50) — TOUCH the Solo ...")
-    att = ctap.make_credential(cdh1, RP, USER, [{"type": "public-key", "alg": -50}])
+    print(">> MakeCredential (alg -48) — TOUCH the Solo ...")
+    att = ctap.make_credential(cdh1, RP, USER, [{"type": "public-key", "alg": -48}])
     cd = att.auth_data.credential_data
     pub = raw_mldsa_pubkey(cd.public_key)
     print(f"   credential_id: {len(cd.credential_id)} bytes; ML-DSA pubkey: {len(pub)} bytes")

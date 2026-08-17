@@ -91,8 +91,6 @@ pub mod test_utils {
         block_size = 512,
         block_count = 128,
         lookahead_size_ty = littlefs2::consts::U8,
-        filename_max_plus_one_ty = littlefs2::consts::U256,
-        path_max_plus_one_ty = littlefs2::consts::U256,
     );
 
     pub fn test_migration_one(

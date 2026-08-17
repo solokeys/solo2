@@ -31,9 +31,10 @@ use heapless::Vec;
 use iso7816::{Instruction, Status};
 use trussed::{
     store::{self, Store},
-    types::{KeyId, Location, Message, PathBuf},
+    types::PathBuf,
     Client as TrussedClient,
 };
+use trussed_core::types::{KeyId, Location, Message};
 
 /// SoloKeys private AID for the legacy-OATH migration app.
 /// (provisioner is ...0x01; this is ...0x02)
@@ -77,7 +78,7 @@ const INS_DELETE: u8 = 0xE4;
 /// (serde derive encodes fieldless enums by variant index, not discriminant).
 mod legacy {
     use serde::Deserialize;
-    use trussed::types::KeyId;
+    use trussed_core::types::KeyId;
 
     #[derive(Clone, Copy, Deserialize)]
     pub enum Kind {
@@ -261,7 +262,7 @@ where
     /// Require a physical button press. EXPORT reveals secrets and DELETE is
     /// destructive, so both gate on user presence.
     fn require_touch(&mut self) -> app::Result {
-        trussed::syscall!(self.trussed.confirm_user_present(15_000))
+        trussed_core::syscall!(self.trussed.confirm_user_present(15_000))
             .result
             .map_err(|_| Status::SecurityStatusNotSatisfied)
     }

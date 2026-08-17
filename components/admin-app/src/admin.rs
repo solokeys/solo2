@@ -9,7 +9,7 @@ use iso7816::Status;
 #[cfg(feature = "factory-reset")]
 use littlefs2_core::PathBuf;
 use serde::Deserialize;
-use trussed::store::{filestore::Filestore, Store};
+use trussed::store::{Filestore, Store};
 use trussed_core::{syscall, try_syscall, InterruptFlag};
 
 use crate::config::{self, Config, ConfigError};

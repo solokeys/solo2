@@ -3,7 +3,6 @@ use crate::hal::{
     drivers::pins,
     drivers::pwm,
     peripherals::ctimer,
-    traits::wg::Pwm,
     typestates::{
         init_state,
         pin::{self, function},
@@ -11,13 +10,7 @@ use crate::hal::{
     Iocon,
 };
 
-use crate::traits::rgb_led;
-
-pub enum Color {
-    Red,
-    Green,
-    Blue,
-}
+use crate::led::{HwPwmConfig, HwPwmLed};
 
 pub type RedLedPin = pins::Pio0_5;
 pub type GreenLedPin = pins::Pio1_21;
@@ -38,44 +31,32 @@ type BlueLed = hal::Pin<
 
 type PwmDriver = pwm::Pwm<ctimer::Ctimer3<init_state::Enabled>>;
 
-pub struct RgbLed {
-    pwm: PwmDriver,
+pub struct Config;
+
+impl HwPwmConfig for Config {
+    const CHANNELS: [u8; 3] = [RedLed::CHANNEL, GreenLed::CHANNEL, BlueLed::CHANNEL];
+    const MAX_DUTY_SCALE: u32 = 8;
+
+    fn duty(channel: usize, intensity: u8) -> u16 {
+        match channel {
+            0 => (intensity / 2) as u16,
+            1 => (intensity as u16) * 3,
+            _ => (intensity as u16) * 8,
+        }
+    }
 }
 
+pub type RgbLed = HwPwmLed<ctimer::Ctimer3<init_state::Enabled>, Config>;
+
 impl RgbLed {
-    pub fn new(mut pwm: PwmDriver, iocon: &mut Iocon<init_state::Enabled>) -> RgbLed {
+    pub fn new(pwm: PwmDriver, iocon: &mut Iocon<init_state::Enabled>) -> Self {
         let red = RedLedPin::take().unwrap();
         let green = GreenLedPin::take().unwrap();
         let blue = BlueLedPin::take().unwrap();
-
-        pwm.set_duty(RedLed::CHANNEL, 0);
-        pwm.set_duty(GreenLed::CHANNEL, 0);
-        pwm.set_duty(BlueLed::CHANNEL, 0);
-        pwm.enable(RedLed::CHANNEL);
-        pwm.enable(GreenLed::CHANNEL);
-        pwm.enable(BlueLed::CHANNEL);
-
-        // Don't set to output until after duty cycle is set to zero to save power.
-        red.into_match_output(iocon);
-        green.into_match_output(iocon);
-        blue.into_match_output(iocon);
-
-        pwm.scale_max_duty_by(8);
-
-        Self { pwm }
-    }
-}
-
-impl rgb_led::RgbLed for RgbLed {
-    fn red(&mut self, intensity: u8) {
-        self.pwm.set_duty(RedLed::CHANNEL, (intensity / 2) as u16);
-    }
-
-    fn green(&mut self, intensity: u8) {
-        self.pwm.set_duty(GreenLed::CHANNEL, (intensity as u16) * 3);
-    }
-
-    fn blue(&mut self, intensity: u8) {
-        self.pwm.set_duty(BlueLed::CHANNEL, (intensity as u16) * 8);
+        Self::with_outputs(pwm, || {
+            red.into_match_output(iocon);
+            green.into_match_output(iocon);
+            blue.into_match_output(iocon);
+        })
     }
 }

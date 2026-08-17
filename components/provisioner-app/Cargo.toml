@@ -12,6 +12,7 @@ iso7816       .workspace = true
 lpc55-hal     .workspace = true
 littlefs2     .workspace = true
 trussed       .workspace = true
+trussed-core  .workspace = true
 p256  = { version = "0.9", default-features = false, features = ["arithmetic"] }
 salty         .workspace = true
 

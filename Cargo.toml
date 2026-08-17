@@ -56,7 +56,7 @@ systick-monotonic = "1.0.1"
 
 # ── Cortex-M / embedded ───────────────────────────────────────────────────────
 cortex-m      = { version = "0.7.0", features = ["critical-section-single-core"] }
-lpc55-hal     = "0.5.0"
+lpc55-hal     = "0.6"
 micromath     = "2"
 embedded-time = "0.12"
 embedded-hal  = { version = "0.2.5", features = ["unproven"] }
@@ -92,19 +92,22 @@ chacha20     = { version = "0.7", features = ["rng"] }
 # ── APDU / ISO 7816 stack ─────────────────────────────────────────────────────
 apdu-dispatch    = "0.4"
 ctaphid-dispatch = "0.4"
-ctap-types       = "=0.6.0-rc.4"
+ctap-types       = "0.6.0-rc.5"
 iso7816          = "0.2"
 serde_cbor       = { version = "0.11", default-features = false, features = ["std"] }
 
 # ── Storage ───────────────────────────────────────────────────────────────────
-littlefs2 = { version = "0.7", features = ["c-stubs"] }
+littlefs2 = { version = "0.8" }
+# lfs.c needs strspn/strcspn/strchr; littlefs2 c-stubs lacks them (as Nitrokey does).
+littlefs2-sys = { version = "0.4", features = ["tinyrlibc"] }
+tinyrlibc = { version = "0.5", default-features = false, features = ["strcpy"] }
 
 # ── Trussed core ─────────────────────────────────────────────────────────────
-trussed      = { version = "0.1", features = ["aes256-gcm"] }
+trussed      = { version = "0.2", features = ["aes256-gcm", "default-mechanisms"] }
 trussed-core = { version = "0.2", features = ["aes256-gcm"] }
 
 # ── Trussed extensions ────────────────────────────────────────────────────────
-trussed-staging          = { git = "https://github.com/trussed-dev/trussed-staging.git", tag = "v0.4.0", features = ["hkdf", "fs-info", "manage", "chunked", "hpke", "wrap-key-to-file"] }
+trussed-staging          = { version = "0.5", features = ["hkdf", "fs-info", "manage", "chunked", "hpke", "wrap-key-to-file"] }
 trussed-fs-info          = "0.3"
 trussed-hkdf             = "0.4"
 trussed-manage           = "0.3"
@@ -112,15 +115,16 @@ trussed-chunked          = "0.3"
 trussed-hpke             = "0.3"
 trussed-wrap-key-to-file = "0.3"
 trussed-auth             = "0.5"
-trussed-auth-backend     = { git = "https://github.com/trussed-dev/trussed-auth", tag = "backend-v0.1.0" }
+trussed-auth-backend     = "0.2"
 
 # ── Applications ─────────────────────────────────────────────────────────────
 admin-app          = { path = "components/admin-app" }
 fido-authenticator = { version = "=0.4.0-rc.3", features = ["dispatch", "chunked", "credential-id-format-v2"] }
 salty              = "0.3"
-secrets-app        = { git = "https://github.com/leetronics/trussed-secrets-app", branch = "fix-pin-protection-isolation", features = ["apdu-dispatch", "ctaphid", "log-all"] }
-piv-authenticator  = { git = "https://github.com/0x0ece/piv-authenticator", rev = "cd93aee", features = ["apdu-dispatch"] }
-opcard             = { git = "https://github.com/Nitrokey/opcard-rs", tag = "v1.7.0", features = ["apdu-dispatch", "delog"] }
+secrets-app        = { git = "https://github.com/Nitrokey/trussed-secrets-app", tag = "v0.15.0", features = ["apdu-dispatch", "ctaphid", "log-all"] }
+# https://github.com/trussed-dev/piv-authenticator/tree/v0.7
+piv-authenticator  = { git = "https://github.com/trussed-dev/piv-authenticator", rev = "a4996f5ba6e303d5c2af5517867b413f52cf4c50", features = ["apdu-dispatch", "mldsa44"] }
+opcard             = { git = "https://github.com/Nitrokey/opcard-rs", tag = "v1.8.0", features = ["apdu-dispatch", "delog"] }
 wallet-app         = { path = "components/wallet-app", features = ["dispatch", "usbd"] }
 
 # ── PC test-only dependencies ─────────────────────────────────────────────────
@@ -179,18 +183,23 @@ opt-level = 2
 
 # ── Patches ───────────────────────────────────────────────────────────────────
 [patch.crates-io]
-ctap-types         = { git = "https://github.com/0x0ece/ctap-types",         rev = "1056c78b06fddc1010afebf549434ac097a6db42" }
-trussed            = { git = "https://github.com/0x0ece/trussed",            rev = "a1b33c46eb16ef7fa5f6324f7c099ff339fe21e7" }
-trussed-core       = { git = "https://github.com/0x0ece/trussed",            rev = "a1b33c46eb16ef7fa5f6324f7c099ff339fe21e7" }
-fido-authenticator = { git = "https://github.com/0x0ece/fido-authenticator", rev = "015c310541eb2e977e6efa6167a149f3c3b295da" }
-# Force all crates to use littlefs2-core 0.1.2 which has heapless-bytes05 support
-littlefs2-core = { git = "https://github.com/trussed-dev/littlefs2.git", tag = "core-0.1.2" }
-# Extension backends needed by fido-authenticator (FsInfo, Hkdf, etc.)
-trussed-staging = { git = "https://github.com/trussed-dev/trussed-staging.git", tag = "v0.4.0" }
+# https://github.com/solokeys/usbd-ctaphid/tree/v0.5
+usbd-ctaphid       = { git = "https://github.com/solokeys/usbd-ctaphid", rev = "dd036376536df970310cf9b6406fb165c881aef1" }
+# https://github.com/solokeys/lpc55-hal/tree/v0.7
+lpc55-hal          = { git = "https://github.com/solokeys/lpc55-hal", rev = "16e499a7992d3e035424107b8fb09ec9fc9e8d33" }
+# https://github.com/solokeys/ctap-types/tree/v0.7
+ctap-types         = { git = "https://github.com/solokeys/ctap-types", rev = "3a5bcecb5286630f38dcc3c65a8f500f7abf2d42" }
+# https://github.com/solokeys/fido-authenticator/tree/v0.5
+fido-authenticator = { git = "https://github.com/solokeys/fido-authenticator", rev = "fae4a1ec8f55d9abe53a7405faf310ef90f3eb71" }
+# https://github.com/solokeys/trussed/tree/v0.3
+trussed            = { git = "https://github.com/solokeys/trussed", rev = "2ea719b28245f0e68960e99aab16131f7f14d8ff" }
+trussed-core       = { git = "https://github.com/solokeys/trussed", rev = "2ea719b28245f0e68960e99aab16131f7f14d8ff" }
 # Forked lpc55 (host) with the BCD CalVer-minor>999 version fix, used by the cli.
-lpc55 = { git = "https://github.com/0x0ece/lpc55-host", rev = "2a8a24e3df9ab9734f66ed2d7a56bc69101f531c" }
-apdu-dispatch = { git = "https://github.com/0x0ece/apdu-dispatch", rev = "3531b6b" }
+# https://github.com/solokeys/lpc55-host/tree/v0.3
+lpc55 = { git = "https://github.com/solokeys/lpc55-host", rev = "4c57336ef18b804ae3bf9440edf7fc846e2b9a2b" }
+# https://github.com/solokeys/apdu-dispatch/tree/v0.5
+apdu-dispatch = { git = "https://github.com/solokeys/apdu-dispatch", rev = "730af3a3b0168741a65a2b5f472f99ac5e620216" }
 # libcrux-ml-dsa with #[inline(always)] downgraded to #[inline] on the portable
 # path — ~80 KB smaller .text on Cortex-M33 (no perf regression), lets all-apps +
 # ML-DSA-44 fit on the LPC55. Only ml-dsa is patched; sha3/intrinsics unchanged.
-libcrux-ml-dsa = { git = "https://github.com/0x0ece/libcrux", rev = "ee890a77" }
+libcrux-ml-dsa = { git = "https://github.com/solokeys/libcrux", rev = "31574b2c2cf5544041ce3be1a72b1c8d3d5d9718" }

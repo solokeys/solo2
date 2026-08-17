@@ -5,8 +5,9 @@ use littlefs2::{const_ram_storage, consts};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::{fs::File, io::Write};
 use trussed::platform;
-use trussed::platform::{consent, reboot, ui};
 use trussed::store::DynFilesystem;
+use trussed::types::ui;
+use trussed_core::types::{consent, reboot};
 
 pub use generic_array::{
     typenum::{U1022, U16, U256, U512},
@@ -110,8 +111,6 @@ const_ram_storage!(
     block_size = 128,
     block_count = 8192 / 128,
     lookahead_size_ty = consts::U8,
-    filename_max_plus_one_ty = consts::U256,
-    path_max_plus_one_ty = consts::U256,
 );
 
 const_ram_storage!(ExternalStorage, 1024);
@@ -122,6 +121,10 @@ pub struct RunnerStore {
     efs: &'static dyn DynFilesystem,
     vfs: &'static dyn DynFilesystem,
 }
+
+// `&dyn DynFilesystem` is not auto-Send. The store is moved into the simulator's
+// service thread, which is then the only thread touching the filesystems.
+unsafe impl Send for RunnerStore {}
 
 impl trussed::store::Store for RunnerStore {
     fn ifs(&self) -> &dyn DynFilesystem {

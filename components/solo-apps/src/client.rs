@@ -6,11 +6,12 @@
 
 use crate::dispatch::{BackendIds, Dispatch, RunnerContext};
 use trussed::backend::BackendId;
-use trussed::client::{ClientTag, CurrentTagCell, MultiplexedClient, SharedRequesterCell, Syscall};
-use trussed::interrupt::InterruptFlag;
+use trussed::client::{ClientTag, CurrentTagCell, MultiplexedClient, SharedRequesterCell};
 use trussed::pipe::{MultiplexedEndpoint, TrussedChannel};
 use trussed::platform::Platform;
+use trussed::platform::Syscall;
 use trussed::types::{Context, CoreContext};
+use trussed_core::InterruptFlag;
 
 /// Apps that need only StagingBackend (FsInfo, Hkdf, Manage) + Core.
 /// `BackendId::Core` must be present or standard crypto/filesystem calls return

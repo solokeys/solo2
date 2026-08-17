@@ -5,9 +5,9 @@ use hal::drivers::timer;
 use hal::peripherals::ctimer;
 use littlefs2::{const_ram_storage, consts};
 use trussed::client::MultiplexedClient;
-use trussed::interrupt::InterruptFlag;
 use trussed::platform;
 use trussed::store::DynFilesystem;
+use trussed_core::InterruptFlag;
 
 // Compile time assertion that build_constants::CONFIG_FILESYSTEM_BOUNDARY is 512 byte aligned.
 const _FILESYSTEM_ALIGNED_CHECK: usize = ((core::mem::size_of::<
@@ -194,8 +194,6 @@ const_ram_storage!(
     // block_size=128,
     block_count = 8192 / 104,
     lookahead_size_ty = consts::U8,
-    filename_max_plus_one_ty = consts::U256,
-    path_max_plus_one_ty = consts::U256,
 );
 
 pub type ExternalStorage = board::flash::Solo2ExtFlash;
@@ -203,7 +201,6 @@ pub type ExternalStorage = board::flash::Solo2ExtFlash;
 // On real hardware secrets-app and piv-authenticator live on the external
 // flash chip; this RAM fallback stands in when no chip is present (e.g. a
 // bare EVK) and must hold their littlefs files.
-const_ram_storage!(ExternalFallbackStorage, 8192);
 
 /// Store implementation using three mounted littlefs2 filesystems.
 #[derive(Clone, Copy)]
@@ -212,6 +209,9 @@ pub struct RunnerStore {
     efs: &'static dyn DynFilesystem,
     vfs: &'static dyn DynFilesystem,
 }
+
+// `&dyn DynFilesystem` is not auto-Send; the store is only ever used from one core.
+unsafe impl Send for RunnerStore {}
 
 impl RunnerStore {
     pub fn new(
@@ -254,7 +254,7 @@ use solo_apps::ndef::{FidoNdefStamp, NdefFidoGate};
 #[derive(Default)]
 pub struct Syscall {}
 
-impl trussed::client::Syscall for Syscall {
+impl trussed::platform::Syscall for Syscall {
     #[inline]
     fn syscall(&mut self) {
         rtic::pend(board::hal::raw::Interrupt::OS_EVENT);
@@ -484,10 +484,8 @@ impl Apps {
                 Some(&ADMIN_INTERRUPT),
                 &solo_apps::client::STAGING_BACKENDS,
             );
-            let mut filestore = trussed::store::filestore::ClientFilestore::new(
-                littlefs2::path!("admin").into(),
-                store,
-            );
+            let mut filestore =
+                trussed::store::ClientFilestore::new(littlefs2::path!("admin").into(), store);
             // Load the persisted DeviceConfig (vid/pid/strings + LED) so a
             // SET_CONFIG survives reboot; fall back to defaults on any error.
             AdminApp::load_config(
@@ -538,7 +536,8 @@ impl Apps {
             );
             PivApp::new(
                 client,
-                piv_authenticator::Options::default().storage(trussed::types::Location::External),
+                piv_authenticator::Options::default()
+                    .storage(trussed_core::types::Location::External),
             )
         };
 
@@ -553,7 +552,7 @@ impl Apps {
             );
             {
                 let mut opts = opcard::Options::default();
-                opts.storage = trussed::types::Location::External;
+                opts.storage = trussed_core::types::Location::External;
                 OpcardApp::new(client, opts)
             }
         };
@@ -571,7 +570,7 @@ impl Apps {
             SecretsApp::new(
                 client,
                 secrets_app::Options::new(
-                    trussed::types::Location::External,
+                    trussed_core::types::Location::External,
                     0, // custom_status_reverse_hotp_success
                     1, // custom_status_reverse_hotp_error
                     [uuid[0], uuid[1], uuid[2], uuid[3]],

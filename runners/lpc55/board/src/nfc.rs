@@ -17,7 +17,7 @@ use fm11nt082c::FM11NT082C;
 use nfc_device::traits::nfc;
 
 pub type NfcCsPin = pins::Pio1_20;
-pub type NfcIrqPin = pins::Pio0_19;
+pub type NfcIrqPin = crate::specifics::nfc::IrqPin;
 
 pub type NfcChip = FM11NC08<
     crate::shared_spi::BusProxy,
@@ -138,10 +138,7 @@ pub fn try_setup(
 
 /// The FM11 IRQ pin (open-drain, active-low). A PINT on it (Slot0 -> the nfc_irq task)
 /// drives reads on RxDone. EVK: P20 pin 8 = PIO1_22. Solo board: PIO0_19.
-#[cfg(feature = "lpcxpresso55")]
-pub type NfcI2cIrqPin = pins::Pio1_22;
-#[cfg(not(feature = "lpcxpresso55"))]
-pub type NfcI2cIrqPin = pins::Pio0_19;
+pub type NfcI2cIrqPin = crate::specifics::nfc::I2cIrqPin;
 
 pub type Nfc082cChip =
     FM11NT082C<BoundedI2c, Pin<NfcI2cIrqPin, pin::state::Gpio<pin::gpio::direction::Input>>>;

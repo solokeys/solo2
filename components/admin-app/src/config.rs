@@ -9,7 +9,7 @@ use heapless::VecView;
 use littlefs2_core::{path, Path};
 use serde::{de::DeserializeOwned, Serialize};
 use strum_macros::FromRepr;
-use trussed::store::filestore::Filestore;
+use trussed::store::Filestore;
 use trussed_core::{
     try_syscall,
     types::{Location, Message},
@@ -191,6 +191,19 @@ pub const CONFIG_STRING_CAPACITY: usize = 32;
 /// A fixed-capacity string config value.
 pub type ConfigString = heapless::String<CONFIG_STRING_CAPACITY>;
 
+/// GetConfig echoes values back to host tools, so characters that can alter how
+/// the surrounding output renders must not be storable.
+fn is_forbidden(c: char) -> bool {
+    // Controls, which covers ANSI escape sequences
+    c.is_control()
+        // Line and paragraph separator, categorized as Zl/Zp rather than Cc
+        || matches!(c, '\u{2028}' | '\u{2029}')
+        // Bidirectional formatting
+        || matches!(c, '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
+        // Zero width no-break space
+        || c == '\u{feff}'
+}
+
 #[derive(Serialize)]
 pub struct ConfigField {
     #[serde(rename = "n")]
@@ -272,6 +285,9 @@ impl<'a> ConfigValueMut<'a> {
                 Ok(())
             }
             Self::Str(r) => {
+                if value.chars().any(is_forbidden) {
+                    return Err(ConfigError::InvalidValue);
+                }
                 r.clear();
                 r.push_str(value).map_err(|_| ConfigError::DataTooLong)
             }
@@ -413,11 +429,27 @@ mod tests {
             destructive: true,
             ty: FieldType::Bool,
         }];
-        let mut bytes: trussed::types::Vec<u8, 100> = Default::default();
+        let mut bytes: heapless::Vec<u8, 100> = Default::default();
         cbor_smol::cbor_serialize_to(fields, &mut bytes).unwrap();
         assert_eq!(
             &bytes,
             &hex!("81A5616E69746573745F6E616D656163F56172F46164F5617400")
         );
+    }
+
+    #[test]
+    fn str_field_rejects_forbidden_chars() {
+        let mut s = ConfigString::new();
+        for bad in ["a\u{1b}[31mb", "a\nb", "a\u{202e}b", "a\u{feff}b"] {
+            assert!(
+                matches!(
+                    ConfigValueMut::Str(&mut s).set(bad),
+                    Err(ConfigError::InvalidValue)
+                ),
+                "should reject {bad:?}"
+            );
+        }
+        assert!(ConfigValueMut::Str(&mut s).set("Solo 2").is_ok());
+        assert_eq!(s.as_str(), "Solo 2");
     }
 }

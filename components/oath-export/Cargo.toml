@@ -21,6 +21,7 @@ heapless     .workspace = true
 iso7816      .workspace = true
 littlefs2    .workspace = true
 trussed      .workspace = true
+trussed-core .workspace = true
 
 serde = { version = "1", default-features = false, features = ["derive"] }
 # MUST match the EXACT wire format the legacy data was written with: oath-authenticator

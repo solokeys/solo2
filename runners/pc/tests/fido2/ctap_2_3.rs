@@ -26,7 +26,7 @@ fn get_info(authn: &mut dyn TestAuthenticator) -> ctap2::get_info::Response {
 fn supports_ml_dsa_44(info: &ctap2::get_info::Response) -> bool {
     info.algorithms
         .as_ref()
-        .map(|algs| algs.0.iter().any(|a| a.alg == ALG_ML_DSA_44))
+        .map(|algs| algs.0.iter().any(|a| a.alg() == ALG_ML_DSA_44))
         .unwrap_or(false)
 }
 
@@ -100,7 +100,7 @@ fn ctap23_advertises_ml_dsa_44_when_supported() {
         with_authenticator!(ctap23_mldsa_info, |authn| {
             let info = get_info(authn);
             if let Some(algs) = info.algorithms.as_ref() {
-                if let Some(_entry) = algs.0.iter().find(|a| a.alg == ALG_ML_DSA_44) {
+                if let Some(_entry) = algs.0.iter().find(|a| a.alg() == ALG_ML_DSA_44) {
                     // ctap-types' `KnownPublicKeyCredentialParameters` only
                     // carries `alg`; the `type=public-key` constraint is
                     // already enforced by the enum being CBOR-encoded into
@@ -115,7 +115,11 @@ fn ctap23_advertises_ml_dsa_44_when_supported() {
 fn pkcp(algs: &[i32]) -> FilteredPublicKeyCredentialParameters {
     let mut inner = heapless::Vec::new();
     for alg in algs {
-        let _ = inner.push(KnownPublicKeyCredentialParameters { alg: *alg });
+        if let Ok(known) = KnownPublicKeyCredentialParameters::try_from(
+            ctap_types::webauthn::PublicKeyCredentialParameters::public_key_with_alg(*alg),
+        ) {
+            let _ = inner.push(known);
+        }
     }
     FilteredPublicKeyCredentialParameters(inner)
 }

@@ -14,14 +14,14 @@ apdu-app = "0.2"
 cbor-smol = { version = "0.5.0", features = ["heapless-v0-9", "heapless-bytes-v0-5"] }
 ctaphid-app = "0.2"
 delog = "0.1"
-heapless = "0.9"
+heapless = { version = "0.9", features = ["serde"] }
 heapless-bytes = { version = "0.5", features = ["heapless-0.9"] }
 iso7816 = "0.2"
-littlefs2 = { version = "0.7", optional = true }
+littlefs2 = { workspace = true, optional = true }
 littlefs2-core = { version = "0.1", features = ["heapless-bytes05"] }
 serde = { version = "1.0.180", default-features = false }
 strum_macros = "0.25.2"
-trussed = { version = "0.1", default-features = false }
+trussed = { version = "0.2", default-features = false }
 trussed-core = { version = "0.2", features = ["crypto-client", "filesystem-client", "management-client", "ui-client"] }
 
 embedded-hal = { version = "0.2.7", optional = true }

@@ -25,7 +25,7 @@ impl Default for Dispatch {
         Self {
             staging_backend: StagingBackend::new(),
             auth_backend: AuthBackend::new(
-                trussed::types::Location::Internal,
+                trussed_core::types::Location::Internal,
                 FilesystemLayout::V0,
             ),
         }
@@ -56,8 +56,8 @@ impl From<ExtensionIds> for u8 {
 }
 
 impl TryFrom<u8> for ExtensionIds {
-    type Error = trussed::Error;
-    fn try_from(id: u8) -> Result<Self, trussed::Error> {
+    type Error = trussed_core::Error;
+    fn try_from(id: u8) -> Result<Self, trussed_core::Error> {
         match id {
             0 => Ok(Self::Auth),
             1 => Ok(Self::Hkdf),
@@ -66,7 +66,7 @@ impl TryFrom<u8> for ExtensionIds {
             4 => Ok(Self::FsInfo),
             5 => Ok(Self::Hpke),
             6 => Ok(Self::Chunked),
-            _ => Err(trussed::Error::FunctionNotSupported),
+            _ => Err(trussed_core::Error::FunctionNotSupported),
         }
     }
 }
@@ -115,9 +115,9 @@ impl ExtensionDispatch for Dispatch {
         &mut self,
         backend: &Self::BackendId,
         ctx: &mut trussed::types::Context<Self::Context>,
-        request: &trussed::api::Request,
+        request: &trussed_core::api::Request,
         resources: &mut trussed::service::ServiceResources<P>,
-    ) -> Result<trussed::Reply, trussed::Error> {
+    ) -> Result<trussed_core::api::Reply, trussed_core::Error> {
         use trussed::backend::Backend;
         match backend {
             BackendIds::StagingBackend => self.staging_backend.request(
@@ -138,9 +138,9 @@ impl ExtensionDispatch for Dispatch {
         _backend: &Self::BackendId,
         extension: &Self::ExtensionId,
         ctx: &mut trussed::types::Context<Self::Context>,
-        request: &trussed::api::request::SerdeExtension,
+        request: &trussed_core::api::request::SerdeExtension,
         resources: &mut trussed::service::ServiceResources<P>,
-    ) -> Result<trussed::api::reply::SerdeExtension, trussed::Error> {
+    ) -> Result<trussed_core::api::reply::SerdeExtension, trussed_core::Error> {
         match extension {
             ExtensionIds::Auth => self.auth_backend.extension_request_serialized(
                 &mut ctx.core,

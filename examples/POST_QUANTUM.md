@@ -1,28 +1,28 @@
 # Post-Quantum signing with a Solo key (ML-DSA-44)
 
-> **Works on:** PIV ML-DSA — **Secure + Hacker**; FIDO2 ML-DSA (`-50`) — **Hacker only**. ML-DSA needs the ML-DSA firmware; the FIDO2 `-50` algorithm is pre-standard CTAP, so it's excluded from the certified Secure build, while PIV ML-DSA is part of the Secure baseline.
+> **Works on:** PIV ML-DSA — **Secure + Hacker**; FIDO2 ML-DSA (`-48`) — **Hacker only**. ML-DSA needs the ML-DSA firmware; the FIDO2 `-48` algorithm is pre-standard CTAP, so it's excluded from the certified Secure build, while PIV ML-DSA is part of the Secure baseline.
 
-Solo 2 supports **ML-DSA-44** (FIPS-204) signatures via both **FIDO2** (COSE alg `-50`) and **PIV**, powered by [libcrux](https://github.com/cryspen/libcrux).
+Solo 2 supports **ML-DSA-44** (FIPS-204) signatures via both **FIDO2** (COSE alg `-48`) and **PIV**, powered by [libcrux](https://github.com/cryspen/libcrux).
 
 The key signs; **standard tooling verifies** — the signatures are plain FIPS-204 ML-DSA (empty context), so OpenSSL ≥ 3.5 and liboqs verify them directly.
 
 ## Prerequisites
-- Firmware with ML-DSA: PIV (`mldsa44-piv`) is in the **Secure** baseline; FIDO2 `-50` (`mldsa44-fido`) is **Hacker** only.
+- Firmware with ML-DSA: PIV always has it, including the **Secure** baseline; FIDO2 `-48` (`mldsa44-fido`) is **Hacker** only.
 - Host tools: `python-fido2`, `pyscard`, [`liboqs-python`](https://github.com/open-quantum-safe/liboqs-python) (`oqs`), and **OpenSSL ≥ 3.5** (native ML-DSA — `openssl list -signature-algorithms | grep ML-DSA`).
 - Scripts: [`pq_fido2_demo.py`](post_quantum/pq_fido2_demo.py), [`pq_piv_demo.py`](post_quantum/pq_piv_demo.py).
 
 ---
 
-## FIDO2 demo (alg -50) — Hacker only
+## FIDO2 demo (alg -48) — Hacker only
 
-FIDO2 mandates user-presence, so **MakeCredential** and **GetAssertion** each require a **physical touch**. The script: confirms the authenticator advertises `-50`, makes an ML-DSA credential, gets an assertion, and verifies the assertion signature — computed over `authData || SHA256(clientDataJSON)` — with liboqs and openssl.
+FIDO2 mandates user-presence, so **MakeCredential** and **GetAssertion** each require a **physical touch**. The script: confirms the authenticator advertises `-48`, makes an ML-DSA credential, gets an assertion, and verifies the assertion signature — computed over `authData || SHA256(clientDataJSON)` — with liboqs and openssl.
 
 ```bash
 python post_quantum/pq_fido2_demo.py
 ```
 ```
-authenticator algorithms: [-7, -8, -50]
->> MakeCredential (alg -50) — TOUCH the Solo ...
+authenticator algorithms: [-7, -8, -48]
+>> MakeCredential (alg -48) — TOUCH the Solo ...
    credential_id: 159 bytes; ML-DSA pubkey: 1312 bytes
 >> GetAssertion — TOUCH the Solo ...
    signature: 2420 bytes over (authData || clientDataHash)
@@ -30,7 +30,7 @@ authenticator algorithms: [-7, -8, -50]
    openssl verify: Signature Verified Successfully
 ```
 
-The 1312-byte public key and 2420-byte signature are the ML-DSA-44 sizes. To do it by hand, a `MakeCredential` with `pubKeyCredParams = [{"type":"public-key","alg":-50}]` returns the ML-DSA COSE key in `authData`; a `GetAssertion` returns the raw ML-DSA signature.
+The 1312-byte public key and 2420-byte signature are the ML-DSA-44 sizes. To do it by hand, a `MakeCredential` with `pubKeyCredParams = [{"type":"public-key","alg":-48}]` returns the ML-DSA COSE key in `authData`; a `GetAssertion` returns the raw ML-DSA signature.
 
 ---
 

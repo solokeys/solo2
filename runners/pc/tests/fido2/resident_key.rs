@@ -301,7 +301,7 @@ fn make_credential_request_with_max_user(
     let mut params = FilteredPublicKeyCredentialParameters(heapless::Vec::new());
     params
         .0
-        .push(KnownPublicKeyCredentialParameters { alg: -7 })
+        .push(KnownPublicKeyCredentialParameters::ES256)
         .ok();
 
     // CTAP 2.1 §6.1.1 spec doesn't pin exact maxes; fido2-tests uses 64-byte

@@ -77,8 +77,6 @@ const_ram_storage!(
     block_size = 128,
     block_count = 8192 / 104,
     lookahead_size_ty = U8,
-    filename_max_plus_one_ty = generic_array::typenum::U256,
-    path_max_plus_one_ty = generic_array::typenum::U256,
 );
 
 // External storage is aliased to the same NVMC-backed filesystem as

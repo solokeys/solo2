@@ -1,6 +1,6 @@
 use iso7816::Status;
 use littlefs2_core::{path, Path};
-use trussed::{
+use trussed_core::{
     syscall, try_syscall,
     types::{Location, Message, PathBuf},
 };

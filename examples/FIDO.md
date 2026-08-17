@@ -24,7 +24,7 @@ from fido2.hid import CtapHidDevice
 from fido2.ctap2 import Ctap2
 
 ctap = Ctap2(next(CtapHidDevice.list_devices()))
-print("algorithms:", [a["alg"] for a in ctap.get_info().algorithms])   # [-7, -8, -50]
+print("algorithms:", [a["alg"] for a in ctap.get_info().algorithms])   # [-7, -8, -48]
 
 rp   = {"id": "fido.demo", "name": "FIDO Demo"}
 user = {"id": b"u1", "name": "u", "displayName": "u"}
@@ -34,7 +34,7 @@ for alg in (-7, -8):          # ES256, EdDSA  -- touch for each
     att = ctap.make_credential(cdh, rp, user, [{"type": "public-key", "alg": alg}])
     print(f"alg {alg}: credential_id {len(att.auth_data.credential_data.credential_id)} bytes")
 ```
-(`-50` is ML-DSA-44, **Hacker only** — see [POST_QUANTUM.md](POST_QUANTUM.md).)
+(`-48` is ML-DSA-44, **Hacker only** — see [POST_QUANTUM.md](POST_QUANTUM.md).)
 
 ## hmac-secret
 `hmac-secret` lets the host derive a stable 32-byte secret from the credential + a salt, computed on the key (HMAC-SHA256). It's how FIDO2 powers symmetric encryption without storing keys on the host.

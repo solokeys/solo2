@@ -81,7 +81,7 @@ where
 
         // `ctaphid_app::App::call` writes into `&mut BytesView`. We obtain one
         // by coercing an owned `Bytes<N>` via `as_mut_view()`.
-        let mut backing = ctap_types::heapless_bytes::Bytes::<3072>::new();
+        let mut backing = ctap_types::Bytes::<3072>::new();
         App::call(
             self,
             Command::Cbor,
@@ -99,7 +99,7 @@ where
     fn call_ctap1_apdu(&mut self, apdu: &[u8]) -> Result<(u16, Vec<u8>), ctap2::Error> {
         use ctaphid_dispatch::app::{App, Command};
 
-        let mut backing = ctap_types::heapless_bytes::Bytes::<3072>::new();
+        let mut backing = ctap_types::Bytes::<3072>::new();
         App::call(self, Command::Msg, apdu, backing.as_mut_view())
             .map_err(|_| ctap2::Error::Other)?;
 

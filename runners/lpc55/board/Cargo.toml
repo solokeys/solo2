@@ -24,6 +24,7 @@ micromath     .workspace = true
 nb            .workspace = true
 spi-memory    .workspace = true
 trussed       .workspace = true
+trussed-core  .workspace = true
 
 [features]
 lpcxpresso55 = []

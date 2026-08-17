@@ -17,7 +17,7 @@ from smartcard.System import readers
 
 PIV_AID = bytes.fromhex("A000000308000010000100")
 DEFAULT_MGMT_KEY = bytes.fromhex("010203040506070801020304050607080102030405060708")
-ALG_MLDSA44 = 0xE0
+ALG_MLDSA44 = 0xE2
 SLOT_9A = 0x9A
 OID_MLDSA44_DER = bytes.fromhex("0609608648016503040311")  # 2.16.840.1.101.3.4.3.17
 
@@ -89,9 +89,20 @@ def spki_der(raw_pub):  # wrap raw ML-DSA-44 pubkey into a SubjectPublicKeyInfo
     tlv = lambda t, v: bytes([t]) + ber_len(len(v)) + v
     return tlv(0x30, tlv(0x30, OID_MLDSA44_DER) + tlv(0x03, b"\x00" + raw_pub))
 
+def pick_reader():
+    """Reader 0 by default; set SOLO_READER_INDEX when several keys are plugged in."""
+    rs = readers()
+    i = int(os.environ.get("SOLO_READER_INDEX", "0"))
+    if len(rs) > 1 and "SOLO_READER_INDEX" not in os.environ:
+        print(f"note: {len(rs)} readers, using [0]; set SOLO_READER_INDEX to choose")
+        for n, r in enumerate(rs):
+            print(f"  [{n}] {r}")
+    return rs[i]
+
 def main():
-    conn = readers()[0].createConnection(); conn.connect()
-    print("Connected:", readers()[0])
+    reader = pick_reader()
+    conn = reader.createConnection(); conn.connect()
+    print("Connected:", reader)
     send(conn, [0x00, 0xA4, 0x04, 0x00, len(PIV_AID)] + list(PIV_AID) + [0x00], "SELECT PIV")
     admin_auth(conn)
     change_pin(conn, OLD_PIN, NEW_PIN)            # <-- set up a real PIN first

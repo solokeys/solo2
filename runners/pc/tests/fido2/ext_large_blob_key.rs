@@ -31,7 +31,7 @@ fn mc_cbor_with_large_blob_key(
     let mut params = FilteredPublicKeyCredentialParameters(heapless::Vec::new());
     params
         .0
-        .push(KnownPublicKeyCredentialParameters { alg: -7 })
+        .push(KnownPublicKeyCredentialParameters::ES256)
         .ok();
     let rp = PublicKeyCredentialRpEntity {
         id: rp_id.try_into().unwrap(),

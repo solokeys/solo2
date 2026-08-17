@@ -1,7 +1,7 @@
 use crate::{command::Command, key_derivation::derive_keypair, state::State, WALLET_AID};
 use iso7816::{Data, Status};
-use trussed::interrupt::InterruptFlag;
-use trussed::syscall;
+use trussed_core::syscall;
+use trussed_core::InterruptFlag;
 
 #[cfg(feature = "dispatch")]
 use crate::dispatch::{

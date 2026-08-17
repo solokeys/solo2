@@ -14,7 +14,8 @@ use crate::ThreeButtons;
 use critical_section::Mutex;
 use defmt::debug;
 use micromath::F32;
-use trussed::platform::{consent, ui};
+use trussed::types::ui;
+use trussed_core::types::consent;
 
 // Used for Ctaphid.keepalive message status.
 static WAITING: AtomicBool = AtomicBool::new(false);
@@ -328,6 +329,11 @@ where
         if self.has_buttons {
             poll_buttons();
         }
+        // The UP wait blocks inside trussed, so `update_ui` (priority 1) cannot
+        // take the lock and `refresh` never runs — without this the indicator
+        // stays on the flat colour `set_status` wrote. This is polled for the
+        // whole window, so drive the breathing from here.
+        self.refresh();
         match read_presence(self.has_buttons, false) {
             Presence::Grant(level) => level,
             Presence::Pending => consent::Level::None,
@@ -354,7 +360,6 @@ where
             } else {
                 rgb.set(match status {
                     ui::Status::Idle => GREEN,
-                    // ui::Status::Idle => RED,
                     // Processing renders like Idle (green breathe) so boot
                     // activity doesn't flicker teal.
                     ui::Status::Processing => GREEN,
@@ -396,6 +401,7 @@ where
             };
             let blink_on = || !((F32(uptime as f32) / 250.0).round().0 as u32).is_multiple_of(2);
 
+            #[allow(unused_mut, unused_assignments)]
             let color = if waiting_for_user {
                 // breathe fast, in the UP color
                 scaled(up, calculate_amplitude(uptime, 2, 4, 75))

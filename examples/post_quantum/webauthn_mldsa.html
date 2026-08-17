@@ -1,0 +1,120 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>ML-DSA-44 over WebAuthn</title>
+<style>
+  body { font: 14px/1.5 -apple-system, system-ui, sans-serif; max-width: 46rem; margin: 2rem auto; padding: 0 1rem; }
+  button { font: inherit; padding: .5rem 1rem; margin: .25rem .25rem .25rem 0; }
+  pre { background: #f4f4f4; padding: .75rem; overflow-x: auto; white-space: pre-wrap; }
+  .ok { color: #0a7d28; font-weight: 600; }
+  .bad { color: #b00; font-weight: 600; }
+</style>
+<h1>ML-DSA-44 over WebAuthn</h1>
+<p>Requests a credential with COSE alg <b>-48</b> (ML-DSA-44) and reports which
+algorithm the authenticator actually returned. A silent fallback to ES256 shows
+up as <code>-7</code>.</p>
+
+<button onclick="mk(-48)">Create with -48 (ML-DSA-44)</button>
+<button onclick="mk(-7)">Create with -7 (ES256, control)</button>
+<button onclick="mk(null)">Create with [-48, -7] (negotiate)</button>
+<button onclick="ga()">Get assertion + VERIFY (liboqs)</button>
+<label style="margin-left:1rem"><input type="checkbox" id="rk"> discoverable (resident) key</label>
+<pre id="out">ready</pre>
+
+<script>
+const out = document.getElementById('out');
+const log = (s, cls) => out.innerHTML += (cls ? `<span class="${cls}">${s}</span>` : s) + "\n";
+let lastId = null;
+
+const COSE = { '-7': 'ES256', '-8': 'EdDSA', '-48': 'ML-DSA-44', '-49': 'ML-DSA-65', '-50': 'ML-DSA-87' };
+
+// authData: rpIdHash(32) flags(1) counter(4) aaguid(16) credIdLen(2) credId COSEkey
+function credKeyLen(attObjB64) {
+  try {
+    const b = Uint8Array.from(atob(attObjB64), c => c.charCodeAt(0));
+    const i = indexOfSeq(b, [0x68, 0x61, 0x75, 0x74, 0x68, 0x44, 0x61, 0x74, 0x61]); // "hauthData"
+    if (i < 0) return null;
+    let p = i + 9;
+    if (b[p] === 0x58) p += 2; else if (b[p] === 0x59) p += 3; else return null;
+    const idLen = (b[p + 53] << 8) | b[p + 54];
+    return { credIdLen: idLen, coseBytes: b.length - (p + 55 + idLen) };
+  } catch (e) { return null; }
+}
+function indexOfSeq(hay, needle) {
+  outer: for (let i = 0; i <= hay.length - needle.length; i++) {
+    for (let j = 0; j < needle.length; j++) if (hay[i + j] !== needle[j]) continue outer;
+    return i;
+  }
+  return -1;
+}
+const b64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const b64u = buf => b64(buf).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+const bufHex = buf => [...new Uint8Array(buf)].map(x=>x.toString(16).padStart(2,'0')).join('');
+async function post(path, body) {
+  const r = await fetch(path, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  return r.json();
+}
+let lastCredId = null;
+
+async function mk(alg) {
+  out.textContent = '';
+  const params = alg === null
+    ? [{ type: 'public-key', alg: -48 }, { type: 'public-key', alg: -7 }]
+    : [{ type: 'public-key', alg }];
+  log(`requesting pubKeyCredParams = ${JSON.stringify(params.map(p => p.alg))}`);
+  try {
+    const cred = await navigator.credentials.create({ publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      rp: { name: 'ML-DSA test' },
+      user: { id: crypto.getRandomValues(new Uint8Array(16)), name: 'test', displayName: 'test' },
+      pubKeyCredParams: params,
+      authenticatorSelection: { userVerification: 'discouraged',
+        residentKey: document.getElementById('rk').checked ? 'required' : 'discouraged',
+        requireResidentKey: document.getElementById('rk').checked },
+      timeout: 60000,
+      attestation: 'none',
+    }});
+    lastId = cred.rawId;
+    const got = cred.response.getPublicKeyAlgorithm ? cred.response.getPublicKeyAlgorithm() : '(unavailable)';
+    log(`\ncredential created, id = ${cred.id.slice(0, 24)}...`);
+    log(`getPublicKeyAlgorithm() = ${got}  (${COSE[String(got)] || 'unknown'})`,
+        String(got) === '-48' ? 'ok' : 'bad');
+    const info = credKeyLen(b64(cred.response.attestationObject));
+    if (info) log(`credentialId ${info.credIdLen} B, COSE key blob ~${info.coseBytes} B  (ML-DSA-44 pubkey is 1312 B; P-256 is ~77 B)`);
+    const spki = cred.response.getPublicKey ? cred.response.getPublicKey() : null;
+    log(`getPublicKey() = ${spki ? spki.byteLength + ' B SPKI' : 'null (browser cannot parse this key type)'}`);
+    const reg = await post('/register', { attestationObject: b64u(cred.response.attestationObject) });
+    log(`\nserver parsed: alg=${reg.alg} kty=${reg.kty} pubkey=${reg.pubkey_len} B  (${reg.note || reg.error || ''})`,
+        reg.alg === -48 ? 'ok' : 'bad');
+    lastCredId = reg.cred_id_full || null;
+    if (String(got) === '-48') log('ML-DSA-44 CONFIRMED by the authenticator.', 'ok');
+    else log('NOT ML-DSA — the browser negotiated another algorithm.', 'bad');
+  } catch (e) {
+    log(`\n${e.name}: ${e.message}`, 'bad');
+    log('(NotAllowedError can mean timeout/no touch; NotSupportedError means the alg was rejected)');
+  }
+}
+
+async function ga() {
+  out.textContent = '';
+  if (!lastId) { log('create a credential first', 'bad'); return; }
+  try {
+    const a = await navigator.credentials.get({ publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      allowCredentials: [{ type: 'public-key', id: lastId }],
+      userVerification: 'discouraged',
+      timeout: 60000,
+    }});
+    const n = new Uint8Array(a.response.signature).length;
+    log(`assertion OK, signature ${n} B  (ML-DSA-44 = 2420 B, P-256 = ~70-72 B)`);
+    const v = await post('/verify', {
+      credId: bufHex(a.rawId),
+      authenticatorData: b64u(a.response.authenticatorData),
+      clientDataJSON: b64u(a.response.clientDataJSON),
+      signature: b64u(a.response.signature),
+    });
+    if (v.error) log(`server: ${v.error}`, 'bad');
+    else log(`\nliboqs ML-DSA-44 verify = ${v.verified ? 'VALID' : 'INVALID'}  (sig ${v.sig_len} B over ${v.signed_len} B)`,
+             v.verified ? 'ok' : 'bad');
+  } catch (e) { log(`${e.name}: ${e.message}`, 'bad'); }
+}
+</script>
