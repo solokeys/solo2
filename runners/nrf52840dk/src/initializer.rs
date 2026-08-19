@@ -265,18 +265,18 @@ pub fn init_board(dp: nrf52840_pac::Peripherals) -> BoardComponents {
             littlefs2::path!("admin").into(),
             store,
         );
-        let dc = admin_app::config::load::<_, crate::device_config::DeviceConfig>(&mut fs)
+        let dc = admin_app::load_config::<_, crate::device_config::DeviceConfig>(&mut fs)
             .unwrap_or_default();
         let manufacturer: &'static str = if dc.usb.manufacturer.is_empty() {
             "SoloKeys (port)"
         } else {
-            static M: StaticCell<admin_app::ConfigString> = StaticCell::new();
+            static M: StaticCell<crate::device_config::ConfigString> = StaticCell::new();
             M.init(dc.usb.manufacturer)
         };
         let product: &'static str = if dc.usb.product.is_empty() {
             "solo2-nrf52840dk"
         } else {
-            static P: StaticCell<admin_app::ConfigString> = StaticCell::new();
+            static P: StaticCell<crate::device_config::ConfigString> = StaticCell::new();
             P.init(dc.usb.product)
         };
         UsbDeviceBuilder::new(usb_bus, UsbVidPid(dc.usb.vid, dc.usb.pid))

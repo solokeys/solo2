@@ -262,7 +262,7 @@ pub enum Admin {
 #[clap(infer_subcommands = true)]
 pub enum AdminConfig {
     /// Read a config value (keys: led.idle, led.up, usb.vid, usb.pid,
-    /// usb.manufacturer, usb.product)
+    /// usb.manufacturer, usb.product). Numbers print as 0x-hex.
     Get {
         /// Config key, e.g. `led.idle`
         key: String,

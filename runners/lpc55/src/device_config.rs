@@ -5,7 +5,11 @@
 //! the status-LED UI (idle/UP colors). Defaults reproduce the stock behavior:
 //! SoloKeys `0x1209:0xbeee`, product string from PFR, idle green / UP blue.
 
-use admin_app::{Config, ConfigField, ConfigString, ConfigValueMut, FieldType};
+use admin_app::{Config, ConfigField, ConfigValueMut, FieldType};
+
+/// USB descriptor strings. Capacity is ours: admin-app's `String` field takes a
+/// `StringView`, so any `heapless::String<N>` works.
+pub type ConfigString = heapless::String<32>;
 use serde::{Deserialize, Serialize};
 
 /// USB descriptor identity.
@@ -72,8 +76,8 @@ const fn field(name: &'static str, requires_reboot: bool, ty: FieldType) -> Conf
 static FIELDS: &[ConfigField] = &[
     field("usb.vid", true, FieldType::U16),
     field("usb.pid", true, FieldType::U16),
-    field("usb.manufacturer", true, FieldType::Str),
-    field("usb.product", true, FieldType::Str),
+    field("usb.manufacturer", true, FieldType::String),
+    field("usb.product", true, FieldType::String),
     field("led.idle", false, FieldType::U32),
     field("led.up", false, FieldType::U32),
 ];
@@ -91,9 +95,9 @@ impl Config for DeviceConfig {
             #[cfg(feature = "hacker")]
             "usb.pid" => ConfigValueMut::U16(&mut self.usb.pid),
             #[cfg(feature = "hacker")]
-            "usb.manufacturer" => ConfigValueMut::Str(&mut self.usb.manufacturer),
+            "usb.manufacturer" => ConfigValueMut::String(self.usb.manufacturer.as_mut_view()),
             #[cfg(feature = "hacker")]
-            "usb.product" => ConfigValueMut::Str(&mut self.usb.product),
+            "usb.product" => ConfigValueMut::String(self.usb.product.as_mut_view()),
             "led.idle" => ConfigValueMut::U32(&mut self.led.idle),
             "led.up" => ConfigValueMut::U32(&mut self.led.up),
             _ => return None,

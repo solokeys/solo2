@@ -1,13 +1,11 @@
 [package]
 name = "admin-app"
-version = "0.1.0"
+version = "0.3.0"
 authors = ["Conor Patrick <conor@solokeys.com>", "Nicolas Stalder <nicolas@solokeys.com>"]
 repository = "https://github.com/solokeys/admin-app"
 edition = "2021"
 license = "Apache-2.0 OR MIT"
 description = "Administrative Trussed app for SoloKeys Solo 2 security keys"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 apdu-app = "0.2"
@@ -46,5 +44,5 @@ log-error = []
 # Utils to test migration
 migration-tests = ["dep:littlefs2"]
 
-# NB: vendored into the solo2 workspace; trussed is patched at the workspace
-# root, so the upstream [patch.crates-io] is dropped here (ignored for members).
+# NB: vendored from trussed-dev/admin-app 0.3.0 + our U16/U32 config fields
+# (forks/admin-app branch v0.4). trussed is patched at the workspace root.

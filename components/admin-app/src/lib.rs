@@ -13,13 +13,13 @@ extern crate delog;
 generate_macros!();
 
 mod admin;
-pub mod config;
+mod config;
 pub mod migrations;
 
 pub use admin::{App, Reboot, StatusBytes};
 pub use config::{
-    Config, ConfigError, ConfigField, ConfigString, ConfigValueMut, FieldType, ResetConfigResult,
-    ResetSignal, ResetSignalAllocation, CONFIG_STRING_CAPACITY,
+    load as load_config, Config, ConfigError, ConfigField, ConfigValueMut, FieldType,
+    ResetConfigResult, ResetSignal, ResetSignalAllocation,
 };
 use trussed_manage::ManageClient;
 #[cfg(feature = "se050")]

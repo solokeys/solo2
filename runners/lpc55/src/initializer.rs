@@ -622,7 +622,7 @@ impl Initializer {
             let (vid_pid, manufacturer_string, product_string) = {
                 let mut fs =
                     trussed::store::ClientFilestore::new(littlefs2::path!("admin").into(), store);
-                let dc = admin_app::config::load::<_, crate::device_config::DeviceConfig>(&mut fs)
+                let dc = admin_app::load_config::<_, crate::device_config::DeviceConfig>(&mut fs)
                     .unwrap_or_default();
                 // Push the configured status-LED colors to the board UI.
                 use core::sync::atomic::Ordering;
@@ -634,13 +634,15 @@ impl Initializer {
                     let manufacturer_string: &'static str = if dc.usb.manufacturer.is_empty() {
                         usb_config.manufacturer_name
                     } else {
-                        static M: StaticCell<admin_app::ConfigString> = StaticCell::new();
+                        static M: StaticCell<crate::device_config::ConfigString> =
+                            StaticCell::new();
                         M.init(dc.usb.manufacturer)
                     };
                     let product_string: &'static str = if dc.usb.product.is_empty() {
                         default_product
                     } else {
-                        static P: StaticCell<admin_app::ConfigString> = StaticCell::new();
+                        static P: StaticCell<crate::device_config::ConfigString> =
+                            StaticCell::new();
                         P.init(dc.usb.product)
                     };
                     (

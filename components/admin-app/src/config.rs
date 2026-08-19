@@ -5,7 +5,7 @@ use core::{
 };
 
 use cbor_smol::{cbor_deserialize, cbor_serialize_to};
-use heapless::VecView;
+use heapless::{string::StringView, VecView};
 use littlefs2_core::{path, Path};
 use serde::{de::DeserializeOwned, Serialize};
 use strum_macros::FromRepr;
@@ -175,33 +175,19 @@ pub trait Config: Default + PartialEq + DeserializeOwned + Serialize {
 }
 
 // No need to rename, cbor-smol already packs enum using ids
+//
+// As the variants are serialized as their index, new variants may only be appended
 #[derive(Serialize)]
 #[non_exhaustive]
 pub enum FieldType {
     Bool,
     U8,
+    /// A UTF-8 string
+    ///
+    /// The maximum length is defined by the config struct holding the value, not by this type
+    String,
     U16,
     U32,
-    Str,
-}
-
-/// Capacity of a string-typed config field (e.g. USB descriptor strings).
-pub const CONFIG_STRING_CAPACITY: usize = 32;
-
-/// A fixed-capacity string config value.
-pub type ConfigString = heapless::String<CONFIG_STRING_CAPACITY>;
-
-/// GetConfig echoes values back to host tools, so characters that can alter how
-/// the surrounding output renders must not be storable.
-fn is_forbidden(c: char) -> bool {
-    // Controls, which covers ANSI escape sequences
-    c.is_control()
-        // Line and paragraph separator, categorized as Zl/Zp rather than Cc
-        || matches!(c, '\u{2028}' | '\u{2029}')
-        // Bidirectional formatting
-        || matches!(c, '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
-        // Zero width no-break space
-        || c == '\u{feff}'
 }
 
 #[derive(Serialize)]
@@ -245,12 +231,14 @@ impl Config for () {
 }
 
 #[derive(Debug, Serialize)]
+#[non_exhaustive]
 pub enum ConfigValueMut<'a> {
     Bool(&'a mut bool),
     U8(&'a mut u8),
+    /// A string of any capacity, obtained from a `heapless::String<N>` with `as_mut_view`
+    String(&'a mut StringView),
     U16(&'a mut u16),
     U32(&'a mut u32),
-    Str(&'a mut ConfigString),
 }
 
 impl<'a> ConfigValueMut<'a> {
@@ -259,8 +247,8 @@ impl<'a> ConfigValueMut<'a> {
             *target = s.parse().map_err(|_| ConfigError::InvalidValue)?;
             Ok(())
         }
-        // Integer fields accept decimal or `0x`-prefixed hex (vid/pid/colors
-        // read naturally as hex).
+
+        // Integers accept decimal or `0x`-prefixed hex, so ids and colours read naturally.
         fn parse_uint(s: &str) -> Result<u32, ConfigError> {
             let s = s.trim();
             match s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
@@ -272,10 +260,7 @@ impl<'a> ConfigValueMut<'a> {
 
         match self {
             Self::Bool(r) => set_value(*r, value),
-            Self::U8(r) => {
-                **r = u8::try_from(parse_uint(value)?).map_err(|_| ConfigError::InvalidValue)?;
-                Ok(())
-            }
+            Self::U8(r) => set_value(*r, value),
             Self::U16(r) => {
                 **r = u16::try_from(parse_uint(value)?).map_err(|_| ConfigError::InvalidValue)?;
                 Ok(())
@@ -284,9 +269,11 @@ impl<'a> ConfigValueMut<'a> {
                 **r = parse_uint(value)?;
                 Ok(())
             }
-            Self::Str(r) => {
-                if value.chars().any(is_forbidden) {
-                    return Err(ConfigError::InvalidValue);
+            Self::String(r) => {
+                // Check the capacity before clearing so that a rejected value leaves the stored
+                // one intact
+                if value.len() > r.capacity() {
+                    return Err(ConfigError::DataTooLong);
                 }
                 r.clear();
                 r.push_str(value).map_err(|_| ConfigError::DataTooLong)
@@ -298,11 +285,12 @@ impl<'a> ConfigValueMut<'a> {
 impl<'a> Display for ConfigValueMut<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Bool(value) => write!(f, "{}", value),
-            Self::U8(value) => write!(f, "{}", value),
-            Self::U16(value) => write!(f, "{}", value),
-            Self::U32(value) => write!(f, "{}", value),
-            Self::Str(value) => write!(f, "{}", value.as_str()),
+            Self::Bool(value) => write!(f, "{value}"),
+            Self::U8(value) => write!(f, "{value}"),
+            Self::String(value) => f.write_str(value),
+            // Hex, matching how `set` accepts them and how hosts read ids/colours.
+            Self::U16(value) => write!(f, "0x{value:04x}"),
+            Self::U32(value) => write!(f, "0x{value:08x}"),
         }
     }
 }
@@ -337,7 +325,7 @@ pub fn get<C: Config>(
     response: &mut VecView<u8>,
 ) -> Result<(), ConfigError> {
     let field = config.field(key).ok_or(ConfigError::InvalidKey)?;
-    write!(response, "{}", field).map_err(|_| ConfigError::DataTooLong)
+    write!(response, "{field}").map_err(|_| ConfigError::DataTooLong)
 }
 
 pub fn set<C: Config>(config: &mut C, key: &str, value: &str) -> Result<(), ConfigError> {
@@ -437,19 +425,130 @@ mod tests {
         );
     }
 
+    // The field types are parsed as integers by the hosts, so their values may never change
     #[test]
-    fn str_field_rejects_forbidden_chars() {
-        let mut s = ConfigString::new();
-        for bad in ["a\u{1b}[31mb", "a\nb", "a\u{202e}b", "a\u{feff}b"] {
-            assert!(
-                matches!(
-                    ConfigValueMut::Str(&mut s).set(bad),
-                    Err(ConfigError::InvalidValue)
-                ),
-                "should reject {bad:?}"
-            );
+    fn field_type_ids() {
+        for (ty, id) in [
+            (FieldType::Bool, hex!("00").as_slice()),
+            (FieldType::U8, hex!("01").as_slice()),
+            (FieldType::String, hex!("02").as_slice()),
+        ] {
+            let mut bytes: heapless::Vec<u8, 8> = Default::default();
+            cbor_smol::cbor_serialize_to(&ty, &mut bytes).unwrap();
+            assert_eq!(bytes.as_slice(), id);
         }
-        assert!(ConfigValueMut::Str(&mut s).set("Solo 2").is_ok());
-        assert_eq!(s.as_str(), "Solo 2");
+    }
+
+    #[derive(Default, PartialEq, serde::Deserialize, serde::Serialize)]
+    struct TestConfig {
+        label: heapless::String<8>,
+    }
+
+    impl Config for TestConfig {
+        fn field(&mut self, key: &str) -> Option<ConfigValueMut<'_>> {
+            match key {
+                "label" => Some(ConfigValueMut::String(self.label.as_mut_view())),
+                _ => None,
+            }
+        }
+
+        fn migration_version(&self) -> Option<u32> {
+            None
+        }
+
+        fn set_migration_version(&mut self, _version: u32) -> bool {
+            false
+        }
+
+        fn list_available_fields(&self) -> &'static [ConfigField] {
+            &[]
+        }
+    }
+
+    fn get_field(config: &mut TestConfig, key: &str) -> Result<heapless::String<32>, ConfigError> {
+        let mut response: heapless::Vec<u8, 32> = Default::default();
+        get(config, key, response.as_mut_view())?;
+        Ok(core::str::from_utf8(&response).unwrap().try_into().unwrap())
+    }
+
+    #[test]
+    fn string_field() {
+        let mut config = TestConfig::default();
+        assert_eq!(get_field(&mut config, "label").unwrap(), "");
+
+        set(&mut config, "label", "Backup").unwrap();
+        assert_eq!(config.label, "Backup");
+        assert_eq!(get_field(&mut config, "label").unwrap(), "Backup");
+
+        set(&mut config, "label", "12345678").unwrap();
+        assert_eq!(config.label, "12345678");
+        set(&mut config, "label", "").unwrap();
+        assert_eq!(config.label, "");
+    }
+
+    #[test]
+    fn string_field_too_long() {
+        let mut config = TestConfig::default();
+        set(&mut config, "label", "old").unwrap();
+
+        let error = set(&mut config, "label", "123456789").unwrap_err();
+        assert!(matches!(error, ConfigError::DataTooLong), "{error:?}");
+        // A rejected value must not destroy the stored one
+        assert_eq!(config.label, "old");
+    }
+
+    // The firmware stores arbitrary UTF-8, clients sanitize the value before displaying it
+    #[test]
+    fn string_field_arbitrary_utf8() {
+        let mut config = TestConfig::default();
+
+        for value in ["a\nb", "\x1b[2J", "\u{202e}", "\u{2028}", "עבר"] {
+            set(&mut config, "label", value).unwrap_or_else(|e| panic!("{value:?}: {e:?}"));
+            assert_eq!(config.label, value);
+        }
+    }
+
+    // Values are bounded by their length in bytes, not in characters
+    #[test]
+    fn string_field_multibyte() {
+        let mut config = TestConfig::default();
+
+        // The capacity is 8 bytes: two 4-byte characters fit, three 3-byte ones do not
+        set(&mut config, "label", "🔑🔑").unwrap();
+        assert_eq!(config.label, "🔑🔑");
+        assert_eq!(config.label.len(), 8);
+
+        let error = set(&mut config, "label", "中中中").unwrap_err();
+        assert!(matches!(error, ConfigError::DataTooLong), "{error:?}");
+        assert_eq!(config.label, "🔑🔑");
+    }
+
+    #[test]
+    fn uint_fields_accept_decimal_and_hex() {
+        let mut v: u16 = 0;
+        assert!(ConfigValueMut::U16(&mut v).set("0x1209").is_ok());
+        assert_eq!(v, 0x1209);
+        assert!(ConfigValueMut::U16(&mut v).set("4617").is_ok());
+        assert_eq!(v, 4617);
+        // Out of range for u16, and not a number at all.
+        assert!(ConfigValueMut::U16(&mut v).set("0x10000").is_err());
+        assert!(ConfigValueMut::U16(&mut v).set("nope").is_err());
+
+        let mut c: u32 = 0;
+        assert!(ConfigValueMut::U32(&mut c).set("0x00FF7F").is_ok());
+        assert_eq!(c, 0x0000_FF7F);
+    }
+
+    #[test]
+    fn uint_fields_display_as_hex() {
+        fn shown(v: ConfigValueMut<'_>) -> heapless::String<16> {
+            let mut s = heapless::String::new();
+            write!(s, "{v}").unwrap();
+            s
+        }
+        let mut v: u16 = 0x1209;
+        let mut c: u32 = 0x0000_3F00;
+        assert_eq!(shown(ConfigValueMut::U16(&mut v)), "0x1209");
+        assert_eq!(shown(ConfigValueMut::U32(&mut c)), "0x00003f00");
     }
 }

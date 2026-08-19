@@ -99,6 +99,7 @@ impl App<'_> {
     pub const DEFAULT_USB_PID: u16 = 0xbeee;
 
     /// Read a raw device-config value by key (e.g. `led.idle`, `usb.vid`).
+    /// Numeric values come back as `0x`-hex, matching what `set_config` accepts.
     pub fn get_config(&mut self, key: &str) -> Result<String> {
         let response = self
             .transport
