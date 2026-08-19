@@ -122,8 +122,8 @@ admin-app          = { path = "components/admin-app" }
 fido-authenticator = { version = "=0.4.0-rc.3", features = ["dispatch", "chunked", "credential-id-format-v2"] }
 salty              = "0.3"
 secrets-app        = { git = "https://github.com/Nitrokey/trussed-secrets-app", tag = "v0.15.0", features = ["apdu-dispatch", "ctaphid", "log-all"] }
-# https://github.com/trussed-dev/piv-authenticator/tree/v0.7
-piv-authenticator  = { git = "https://github.com/trussed-dev/piv-authenticator", rev = "a4996f5ba6e303d5c2af5517867b413f52cf4c50", features = ["apdu-dispatch", "mldsa44"] }
+# https://github.com/trussed-dev/piv-authenticator/tree/v0.8
+piv-authenticator  = { git = "https://github.com/trussed-dev/piv-authenticator", rev = "32636de6177b011f127f88cdf8aae9b2d9cd0ad2", features = ["apdu-dispatch", "mldsa44"] }
 opcard             = { git = "https://github.com/Nitrokey/opcard-rs", tag = "v1.8.0", features = ["apdu-dispatch", "delog"] }
 wallet-app         = { path = "components/wallet-app", features = ["dispatch", "usbd"] }
 

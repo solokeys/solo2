@@ -3055,8 +3055,8 @@ checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 
 [[package]]
 name = "piv-authenticator"
-version = "0.6.0"
-source = "git+https://github.com/trussed-dev/piv-authenticator?rev=a4996f5ba6e303d5c2af5517867b413f52cf4c50#a4996f5ba6e303d5c2af5517867b413f52cf4c50"
+version = "0.7.0"
+source = "git+https://github.com/trussed-dev/piv-authenticator?rev=32636de6177b011f127f88cdf8aae9b2d9cd0ad2#32636de6177b011f127f88cdf8aae9b2d9cd0ad2"
 dependencies = [
  "apdu-app",
  "cbor-smol",
