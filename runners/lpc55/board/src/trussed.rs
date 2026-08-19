@@ -25,11 +25,11 @@ static WAITING: AtomicBool = AtomicBool::new(false);
 /// Value semantics (see the match in `check_user_presence` below):
 ///   1   = approve once (Normal), consumed after one read
 ///   2   = approve once (Strong), consumed after one read
+///   128 = deny sticky until reset to 0; the op times out
 ///   129 = approve sticky (Normal) until reset to 0
 ///   130 = approve sticky (Strong) until reset to 0
 ///   0 / any other value (incl. uninitialized) = no override; falls
-///         through to real button polling. A host "deny" is expressed
-///         this way (no tap within the window = timeout).
+///         through to real button polling.
 ///
 /// Placed in `.uninit` with `no_mangle` so its address is stable and
 /// discoverable via the ELF symbol table.
@@ -181,6 +181,7 @@ pub fn read_presence(has_buttons: bool, nfc_suppressed: bool) -> Presence {
                 unsafe { core::ptr::write_volatile(&raw mut UP_CONTROL, 0) };
                 return Presence::Grant(consent::Level::Strong);
             }
+            128 => return Presence::Pending,
             129 => return Presence::Grant(consent::Level::Normal),
             130 => return Presence::Grant(consent::Level::Strong),
             // 0 / unknown / uninitialized: fall through to real buttons.

@@ -79,10 +79,15 @@ where
     CTIMER: ctimer::Ctimer<init_state::Enabled>,
 {
     fn get_status_debounced(&mut self) -> State {
-        // first, remove jitter
+        // Settle must stay under the 1 ms SysTick period: the caller holds a
+        // critical section, so a longer wait drops `Mono` ticks.
         let mut new_state = self.state();
-        self.timer.start(1_000.microseconds());
-        nb::block!(self.timer.wait()).ok();
+        self.timer.start(50.microseconds());
+        for _ in 0..10_000 {
+            if self.timer.wait().is_ok() {
+                break;
+            }
+        }
         let new_state2 = self.state();
 
         if new_state.a != new_state2.a {

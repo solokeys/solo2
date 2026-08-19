@@ -142,8 +142,10 @@ where
 
             let mut buffer = Message::new();
             if packet.len() > 7 {
+                // The last packet is zero-padded; take only what's still needed.
                 let payload = &packet[7..];
-                buffer.extend_from_slice(payload).ok();
+                let take = payload.len().min(total_len);
+                buffer.extend_from_slice(&payload[..take]).ok();
             }
 
             if buffer.len() >= total_len {
@@ -179,7 +181,11 @@ where
 
                     if packet.len() > 5 {
                         let payload = &packet[5..];
-                        buffer.extend_from_slice(payload).ok();
+                        let take = payload.len().min(total_len.saturating_sub(buffer.len()));
+                        if buffer.extend_from_slice(&payload[..take]).is_err() {
+                            self.receive_state = ReceiveState::Idle;
+                            return;
+                        }
                     }
 
                     *sequence = seq + 1;
