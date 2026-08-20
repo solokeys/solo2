@@ -12,10 +12,13 @@ env:
   # do not set RUSTFLAGES, would overrides .cargo/config (linker script, flip-link)
   UBUNTU_BASE_DEPS: llvm libclang-dev build-essential clang pkg-config libudev-dev
   UBUNTU_LPC55_EXTRA_DEPS: libc6-dev-i386 git
+  # apt: bounded retries + network timeout so a mirror stall fails fast instead of hanging
+  APT_OPTS: -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30
 
 jobs:
   build-lpc55:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     strategy:
       matrix:
         board:
@@ -32,8 +35,8 @@ jobs:
       - name: Install littlefs2-sys/micro-ecc-sys build dependencies
         shell: bash
         run: |
-          apt-get update && apt-get install sudo
-          env && pwd && sudo apt-get update -y -qq && sudo apt-get install -y -qq $UBUNTU_BASE_DEPS $UBUNTU_LPC55_EXTRA_DEPS
+          apt-get $APT_OPTS update && apt-get install sudo
+          env && pwd && sudo apt-get $APT_OPTS update -y -qq && sudo apt-get install -y -qq $UBUNTU_BASE_DEPS $UBUNTU_LPC55_EXTRA_DEPS
       - uses: fiam/arm-none-eabi-gcc@v1.0.4
         with:
           release: "9-2020-q2"
@@ -86,6 +89,7 @@ jobs:
 
   build-pc:
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     strategy:
       matrix:
         os:
@@ -103,8 +107,8 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         shell: bash
         run: |
-          apt-get update && apt-get install sudo
-          sudo apt update -y -qq && sudo apt install -y -qq $UBUNTU_BASE_DEPS
+          apt-get $APT_OPTS update && apt-get install sudo
+          sudo apt $APT_OPTS update -y -qq && sudo apt install -y -qq $UBUNTU_BASE_DEPS
 
       # this is already installed
       # - name: Install macOS build dependencies
@@ -122,6 +126,7 @@ jobs:
 
   test-pc:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: runners/pc
@@ -130,8 +135,8 @@ jobs:
       - name: Install Linux build dependencies
         shell: bash
         run: |
-          apt-get update && apt-get install sudo
-          sudo apt update -y -qq && sudo apt install -y -qq $UBUNTU_BASE_DEPS
+          apt-get $APT_OPTS update && apt-get install sudo
+          sudo apt $APT_OPTS update -y -qq && sudo apt install -y -qq $UBUNTU_BASE_DEPS
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
@@ -142,14 +147,15 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v1
       - name: Install Linux build dependencies
         shell: bash
         run: |
-          apt-get update && apt-get install sudo
+          apt-get $APT_OPTS update && apt-get install sudo
           # libpcsclite-dev: `make check` clippy also lints the host cli (pcsc).
-          sudo apt update -y -qq && sudo apt install -y -qq $UBUNTU_BASE_DEPS $UBUNTU_LPC55_EXTRA_DEPS libpcsclite-dev
+          sudo apt $APT_OPTS update -y -qq && sudo apt install -y -qq $UBUNTU_BASE_DEPS $UBUNTU_LPC55_EXTRA_DEPS libpcsclite-dev
       - uses: fiam/arm-none-eabi-gcc@v1.0.4
         with:
           release: "9-2020-q2"
