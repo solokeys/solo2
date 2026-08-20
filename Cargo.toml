@@ -121,9 +121,8 @@ trussed-auth-backend     = "0.2"
 admin-app          = { path = "components/admin-app" }
 fido-authenticator = { version = "=0.4.0-rc.3", features = ["dispatch", "chunked", "credential-id-format-v2"] }
 salty              = "0.3"
-secrets-app        = { git = "https://github.com/Nitrokey/trussed-secrets-app", tag = "v0.15.0", features = ["apdu-dispatch", "ctaphid", "log-all"] }
-# https://github.com/trussed-dev/piv-authenticator/tree/v0.8
-piv-authenticator  = { git = "https://github.com/trussed-dev/piv-authenticator", rev = "32636de6177b011f127f88cdf8aae9b2d9cd0ad2", features = ["apdu-dispatch", "mldsa44"] }
+secrets-app        = { version = "=0.15.0", features = ["apdu-dispatch", "ctaphid", "log-all"] }
+piv-authenticator  = { version = "=0.7.0", features = ["apdu-dispatch", "mldsa44"] }
 opcard             = { git = "https://github.com/Nitrokey/opcard-rs", tag = "v1.8.0", features = ["apdu-dispatch", "delog"] }
 wallet-app         = { path = "components/wallet-app", features = ["dispatch", "usbd"] }
 
@@ -199,6 +198,10 @@ trussed-core       = { git = "https://github.com/solokeys/trussed", rev = "2ea71
 lpc55 = { git = "https://github.com/solokeys/lpc55-host", rev = "4c57336ef18b804ae3bf9440edf7fc846e2b9a2b" }
 # https://github.com/solokeys/apdu-dispatch/tree/v0.5
 apdu-dispatch = { git = "https://github.com/solokeys/apdu-dispatch", rev = "730af3a3b0168741a65a2b5f472f99ac5e620216" }
+# https://github.com/solokeys/piv-authenticator/tree/v0.8
+piv-authenticator = { git = "https://github.com/solokeys/piv-authenticator", rev = "4bd37ef8c962dccf0a2cf65658438171b3d04ebf" }
+# https://github.com/leetronics/trussed-secrets-app/tree/fix-pin-protection-isolation
+secrets-app = { git = "https://github.com/leetronics/trussed-secrets-app", rev = "30106e147559a72e849aa9ec17690e5167d04f8a" }
 # libcrux-ml-dsa with #[inline(always)] downgraded to #[inline] on the portable
 # path — ~80 KB smaller .text on Cortex-M33 (no perf regression), lets all-apps +
 # ML-DSA-44 fit on the LPC55. Only ml-dsa is patched; sha3/intrinsics unchanged.

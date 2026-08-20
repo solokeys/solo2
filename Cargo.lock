@@ -1316,7 +1316,7 @@ checksum = "34aa73646ffb006b8f5147f3dc182bd4bcb190227ce861fc4a4844bf8e3cb2c0"
 [[package]]
 name = "encrypted_container"
 version = "0.1.0"
-source = "git+https://github.com/Nitrokey/trussed-secrets-app?tag=v0.15.0#b22216f86a6c72827fb0900f38f1363c55b2619e"
+source = "git+https://github.com/leetronics/trussed-secrets-app?rev=30106e147559a72e849aa9ec17690e5167d04f8a#30106e147559a72e849aa9ec17690e5167d04f8a"
 dependencies = [
  "cbor-smol",
  "delog",
@@ -3056,7 +3056,7 @@ checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 [[package]]
 name = "piv-authenticator"
 version = "0.7.0"
-source = "git+https://github.com/trussed-dev/piv-authenticator?rev=32636de6177b011f127f88cdf8aae9b2d9cd0ad2#32636de6177b011f127f88cdf8aae9b2d9cd0ad2"
+source = "git+https://github.com/solokeys/piv-authenticator?rev=4bd37ef8c962dccf0a2cf65658438171b3d04ebf#4bd37ef8c962dccf0a2cf65658438171b3d04ebf"
 dependencies = [
  "apdu-app",
  "cbor-smol",
@@ -3830,7 +3830,7 @@ dependencies = [
 [[package]]
 name = "secrets-app"
 version = "0.15.0"
-source = "git+https://github.com/Nitrokey/trussed-secrets-app?tag=v0.15.0#b22216f86a6c72827fb0900f38f1363c55b2619e"
+source = "git+https://github.com/leetronics/trussed-secrets-app?rev=30106e147559a72e849aa9ec17690e5167d04f8a#30106e147559a72e849aa9ec17690e5167d04f8a"
 dependencies = [
  "apdu-app",
  "bitflags 2.11.0",
