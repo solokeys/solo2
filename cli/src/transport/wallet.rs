@@ -1,6 +1,6 @@
 //! Ledger HID transport implementation for the wallet app
 
-use crate::Result;
+use crate::{Result, Uuid};
 use anyhow::anyhow;
 use std::cmp::min;
 
@@ -46,20 +46,23 @@ impl Device {
         })
     }
 
-    /// Find and open the wallet HID interface by its vendor usage page
-    /// (`0xFFA0`). Selecting on usage page (not just VID/PID) is required on a
-    /// composite device, where the FIDO interface (`0xF1D0`) shares the VID/PID
-    /// and `open(vid, pid)` may pick the wrong one.
-    pub fn open_wallet() -> Result<Self> {
+    /// Find and open the wallet HID interface for a Solo 2 UUID.
+    pub fn open_wallet(uuid: Uuid) -> Result<Self> {
         const WALLET_USAGE_PAGE: u16 = 0xFFA0;
 
         let session = Session::new()?;
         let path = session
             .api
             .device_list()
-            .find(|d| d.usage_page() == WALLET_USAGE_PAGE)
-            .map(|d| d.path().to_owned())
-            .ok_or_else(|| anyhow!("No wallet HID interface (usage page 0xFFA0) found"))?;
+            .find(|device| {
+                device.usage_page() == WALLET_USAGE_PAGE
+                    && device
+                        .serial_number()
+                        .and_then(|serial| Uuid::parse_str(serial).ok())
+                        == Some(uuid)
+            })
+            .map(|device| device.path().to_owned())
+            .ok_or_else(|| anyhow!("No wallet HID interface for UUID {:X} found", uuid.simple()))?;
         let device = session.api.open_path(&path)?;
         Ok(Self {
             _session: session,

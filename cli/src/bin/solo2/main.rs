@@ -26,7 +26,8 @@ fn try_main(args: cli::Cli) -> anyhow::Result<()> {
     let uuid: Option<Uuid> = args
         .global_options
         .uuid
-        .map(|uuid| uuid.parse())
+        .as_deref()
+        .map(str::parse)
         .transpose()?;
 
     if args.global_options.ctap {
@@ -40,60 +41,6 @@ fn try_main(args: cli::Cli) -> anyhow::Result<()> {
     use cli::Apps::*;
     match args.subcommand {
         cli::Subcommands::App(app) => {
-            // The wallet app uses the Ledger-style HID transport directly,
-            // not Solo 2 enumeration.
-            if let Wallet(cmd) = &app {
-                use cli::Wallet::*;
-                use solo2::apps::wallet::Chain;
-
-                let mut wallet = solo2::apps::Wallet::open()?;
-                match cmd {
-                    Pubkey { eth, path, .. } => {
-                        let chain = if *eth { Chain::Eth } else { Chain::Sol };
-                        println!("{}", wallet.pubkey(chain, path.as_deref())?);
-                    }
-                    Reset => {
-                        wallet.reset()?;
-                        println!("Secret reset to zero private key");
-                    }
-                    Keygen { silent } => {
-                        let words = wallet.keygen(!silent)?;
-                        if !silent {
-                            println!("Generated seed. Write down these 24 words:");
-                            for (i, word) in words.iter().enumerate() {
-                                print!("{} ", word);
-                                if (i + 1) % 6 == 0 {
-                                    println!();
-                                }
-                            }
-                            if words.len() % 6 != 0 {
-                                println!();
-                            }
-                        }
-                    }
-                    Seed { read, words } => {
-                        if *read {
-                            println!("{}", wallet.seed_read()?);
-                        } else if words.len() != 24 {
-                            return Err(anyhow!("Seed must be 24 words, got {}", words.len()));
-                        } else {
-                            wallet.seed(words.clone())?;
-                            println!("Seed set successfully");
-                        }
-                    }
-                    Privkey { file } => {
-                        wallet.privkey(file)?;
-                        println!("Private key set successfully");
-                    }
-                    SetChain { eth, .. } => {
-                        let chain = if *eth { Chain::Eth } else { Chain::Sol };
-                        wallet.set_chain(chain)?;
-                        println!("Active chain: {}", if *eth { "Ethereum" } else { "Solana" });
-                    }
-                }
-                return Ok(());
-            }
-
             let solo2s: Vec<Solo2> =
                 all_or_unwrap_or_interactively_select(uuid, args.global_options.all, "Solo 2")?;
 
@@ -539,7 +486,63 @@ fn try_main(args: cli::Cli) -> anyhow::Result<()> {
                         }
                         Ok(())
                     }
-                    Wallet(_) => unreachable!("wallet handled before Solo 2 enumeration"),
+                    Wallet(cmd) => {
+                        use cli::Wallet::*;
+                        use solo2::apps::wallet::Chain;
+
+                        let mut wallet = solo2::apps::Wallet::open(solo2.uuid())?;
+                        match cmd {
+                            Pubkey { eth, path, .. } => {
+                                let chain = if *eth { Chain::Eth } else { Chain::Sol };
+                                println!("{}", wallet.pubkey(chain, path.as_deref())?);
+                            }
+                            Reset => {
+                                wallet.reset()?;
+                                println!("Secret reset to zero private key");
+                            }
+                            Keygen { silent } => {
+                                let words = wallet.keygen(!silent)?;
+                                if !silent {
+                                    println!("Generated seed. Write down these 24 words:");
+                                    for (i, word) in words.iter().enumerate() {
+                                        print!("{} ", word);
+                                        if (i + 1) % 6 == 0 {
+                                            println!();
+                                        }
+                                    }
+                                    if words.len() % 6 != 0 {
+                                        println!();
+                                    }
+                                }
+                            }
+                            Seed { read, words } => {
+                                if *read {
+                                    println!("{}", wallet.seed_read()?);
+                                } else if words.len() != 24 {
+                                    return Err(anyhow!(
+                                        "Seed must be 24 words, got {}",
+                                        words.len()
+                                    ));
+                                } else {
+                                    wallet.seed(words.clone())?;
+                                    println!("Seed set successfully");
+                                }
+                            }
+                            Privkey { file } => {
+                                wallet.privkey(file)?;
+                                println!("Private key set successfully");
+                            }
+                            SetChain { eth, .. } => {
+                                let chain = if *eth { Chain::Eth } else { Chain::Sol };
+                                wallet.set_chain(chain)?;
+                                println!(
+                                    "Active chain: {}",
+                                    if *eth { "Ethereum" } else { "Solana" }
+                                );
+                            }
+                        }
+                        Ok(())
+                    }
                 }
             })?;
         }
